@@ -1,0 +1,50 @@
+{
+  "python_syntax": "PASS",
+  "glb_reload": "PASS",
+  "triangle_count": 80448,
+  "texture_resolution_px": 2048,
+  "palette_sampled_from_concept": true,
+  "palette": {
+    "exterior_black_rgb": [
+      24,
+      16,
+      16
+    ],
+    "upper_housing_rgb": [
+      11,
+      12,
+      16
+    ],
+    "inner_enamel_rgb": [
+      221,
+      161,
+      108
+    ],
+    "bulb_rgb": [
+      252,
+      229,
+      194
+    ],
+    "bulb_emission_rgb": [
+      254,
+      247,
+      232
+    ]
+  },
+  "godot_axis": "Y-up",
+  "hang_direction": "-Y",
+  "SOCKET_Light": [
+    0.0,
+    -0.23,
+    0.0
+  ],
+  "SOCKET_Aim": [
+    0.0,
+    -1.23,
+    0.0
+  ],
+  "root_identity": true,
+  "collision_node_present": true,
+  "punctual_light_absent": true,
+  "all_concept_baseColorFactors_unity": true
+}

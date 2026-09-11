@@ -1,0 +1,37 @@
+{
+  "ProjectShinrai_Road02_Base_A_1m_GodotYUp.glb": {
+    "reload": "PASS",
+    "triangles": 24,
+    "root_identity": true,
+    "surface": "+Y / Y-up",
+    "collision_colonly": true
+  },
+  "ProjectShinrai_Road02_Base_B_1m_GodotYUp.glb": {
+    "reload": "PASS",
+    "triangles": 24,
+    "root_identity": true,
+    "surface": "+Y / Y-up",
+    "collision_colonly": true
+  },
+  "ProjectShinrai_Road02_Base_C_1m_GodotYUp.glb": {
+    "reload": "PASS",
+    "triangles": 24,
+    "root_identity": true,
+    "surface": "+Y / Y-up",
+    "collision_colonly": true
+  },
+  "ProjectShinrai_Road02_Sewer600_1m_GodotYUp.glb": {
+    "reload": "PASS",
+    "triangles": 20408,
+    "root_identity": true,
+    "surface": "+Y / Y-up",
+    "collision_colonly": true
+  },
+  "ProjectShinrai_Road02_WaterValve220_1m_GodotYUp.glb": {
+    "reload": "PASS",
+    "triangles": 3864,
+    "root_identity": true,
+    "surface": "+Y / Y-up",
+    "collision_colonly": true
+  }
+}

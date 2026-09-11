@@ -1,0 +1,19 @@
+[gd_resource type="ORMMaterial3D" load_steps=4 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/environment/roads/shinrai_road/repairs/SHINRAI_PotholeRepair_WetVariant_Albedo_1K.png" id="1_albedo"]
+[ext_resource type="Texture2D" path="res://assets/environment/roads/shinrai_road/repairs/SHINRAI_PotholeRepair_WetVariant_ORM_1K.png" id="2_orm"]
+[ext_resource type="Texture2D" path="res://assets/environment/roads/shinrai_road/repairs/SHINRAI_PotholeRepair_WetVariant_NormalGL_1K.png" id="3_normal"]
+
+[resource]
+resource_name = "M_SHINRAI_PotholeRepair_WetVariant"
+transparency = 4
+albedo_texture = ExtResource("1_albedo")
+orm_texture = ExtResource("2_orm")
+metallic = 0.0
+metallic_specular = 0.45
+roughness = 0.68
+ao_enabled = true
+normal_enabled = true
+normal_scale = 0.20
+normal_texture = ExtResource("3_normal")
+texture_filter = 5

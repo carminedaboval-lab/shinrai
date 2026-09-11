@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/japanese_yakitori_lantern/japanese_yakitori_lantern.glb" id="1_model"]
+
+[sub_resource type="CapsuleShape3D" id="Capsule_lantern"]
+radius = 0.18
+height = 0.90
+
+[node name="JapaneseYakitoriLantern" type="Node3D"]
+
+[node name="Model" parent="." instance=ExtResource("1_model")]
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+position = Vector3(0, 0, 0)
+shape = SubResource("Capsule_lantern")

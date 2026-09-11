@@ -1,0 +1,12 @@
+# Godot-generated cache
+.godot/
+**/.godot/
+.import/
+**/.import/
+
+# Temporary and packaged builds
+*.tmp
+*.log
+*.zip
+*.pck
+*.exe

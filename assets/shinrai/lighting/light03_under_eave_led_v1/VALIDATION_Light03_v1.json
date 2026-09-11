@@ -1,0 +1,52 @@
+{
+  "python_syntax": "PASS",
+  "glb_reload": "PASS",
+  "triangle_count": 23640,
+  "texture_resolution_px": 2048,
+  "godot_axis": "Y-up",
+  "body_recess_direction": "+Y into roof",
+  "light_direction": "-Y",
+  "SOCKET_RoofPlane": [
+    0,
+    0,
+    0
+  ],
+  "SOCKET_Light": [
+    0.0,
+    -0.006,
+    0.0
+  ],
+  "SOCKET_Aim": [
+    0.0,
+    -1.006,
+    0.0
+  ],
+  "root_identity": true,
+  "collision_node_present": true,
+  "punctual_light_absent": true,
+  "all_baseColorFactors_unity": true,
+  "outer_diameter_m": 0.087,
+  "cutout_diameter_m": 0.075,
+  "recess_depth_m": 0.072,
+  "recommended_kelvin": 3000,
+  "recommended_lumens": 300,
+  "recommended_beam_angle_deg": 50,
+  "artwork_palette": {
+    "trim_rgb": [
+      52,
+      23,
+      3
+    ],
+    "emitter_median_rgb": [
+      250,
+      213,
+      134
+    ],
+    "emitter_highlight_rgb": [
+      255,
+      232,
+      181
+    ],
+    "target_kelvin": 3000
+  }
+}

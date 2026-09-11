@@ -1,0 +1,21 @@
+PROJECT SHINRAI — v10.27a static validation
+
+PASS town_main.gd delimiter counts balanced
+PASS 178 function declarations, no duplicate function names
+PASS Yakitori building scene preload added once
+PASS replacement called immediately after _build_city_blocks()
+PASS original target finder reused for the locked storefront
+PASS authored model kept at scale 1
+PASS entrance aligned using authored SOCKET_Entrance Z = -0.72 m
+PASS old procedural root removed before replacement enters the tree
+PASS old budgeted shop-interior light allocation released
+PASS replacement exposes StoreThreshold and EntranceLintel compatibility anchors
+PASS main.tscn byte-identical to submitted current file
+PASS project.godot byte-identical to submitted current file
+PASS town_rng reference count unchanged: 56
+PASS Godot wrapper resolves to bundled GLB
+PASS GLB SHA-256: 3543af15f7cabd6e8dbdb67b23a1f1c557a67e4e0b839d3d6c2b0e33d75894b6
+
+NOT EXECUTED
+Godot parse/import/runtime testing is unavailable in this environment. User runtime
+confirmation is required before any further art or integration change.

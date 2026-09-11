@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[resource]
+resource_name = "M_SHINRAI_DrainBed_Dry"
+albedo_color = Color(0.018, 0.02, 0.022, 1)
+metallic = 0.0
+metallic_specular = 0.08
+roughness = 1.0

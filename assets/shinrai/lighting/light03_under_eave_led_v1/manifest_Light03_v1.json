@@ -1,0 +1,23 @@
+{
+  "asset": "PS_LGT03_UnderEaveLED",
+  "version": 1,
+  "type": "recessed under-eave LED",
+  "outer_diameter_m": 0.087,
+  "cutout_diameter_m": 0.075,
+  "recess_depth_m": 0.072,
+  "texture_resolution_px": 2048,
+  "runtime_light": {
+    "type": "SpotLight3D",
+    "kelvin": 3000,
+    "lumens_reference": 300,
+    "range_m": 3.0,
+    "angle_deg": 50,
+    "socket": "SOCKET_Light",
+    "aim": "SOCKET_Aim"
+  },
+  "root": "underside soffit plane",
+  "godot_axis": "Y-up",
+  "light_direction": "-Y",
+  "artwork_color_sampled": true,
+  "punctual_light_in_glb": false
+}

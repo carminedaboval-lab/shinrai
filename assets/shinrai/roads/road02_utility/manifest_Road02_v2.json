@@ -1,0 +1,22 @@
+{
+  "asset": "PS_ROAD02",
+  "version": "v2 real-Japan",
+  "road_surface": "Kyoto-style stone-pattern water-retentive asphalt",
+  "tile_size_m": [
+    1,
+    1
+  ],
+  "sewer_cover_diameter_m": 0.6,
+  "water_valve_cover_diameter_m": 0.22,
+  "godot_axis": "Y-up",
+  "surface_normal": "+Y",
+  "variants": [
+    "Base_A",
+    "Base_B",
+    "Base_C",
+    "Sewer600",
+    "WaterValve220"
+  ],
+  "source_road_texture_px": 4096,
+  "source_sewer_texture_px": 2048
+}

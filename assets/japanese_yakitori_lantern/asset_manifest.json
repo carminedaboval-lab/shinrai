@@ -1,0 +1,22 @@
+{
+  "paper_vertices": 113594,
+  "paper_triangles": 226304,
+  "rib_vertices": 65295,
+  "rib_triangles": 121856,
+  "metal_vertices": 48188,
+  "metal_triangles": 94200,
+  "total_triangles": 446776,
+  "glb_bytes": 20584380,
+  "texture_resolution_paper": [
+    1024,
+    2048
+  ],
+  "texture_resolution_metal": [
+    512,
+    512
+  ],
+  "texture_resolution_bamboo": [
+    512,
+    512
+  ]
+}
