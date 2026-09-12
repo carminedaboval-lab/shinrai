@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://jd44l6hpac8x"
-path.s3tc="res://.godot/imported/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp_4.png-28ae83741ea519fa8b4e62358411b220.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp_4.png-8696ddcbc94770e439c8cf0eef2982e4.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://shinrai/roads/road02_utility/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp_4.png"
-dest_files=["res://.godot/imported/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp_4.png-28ae83741ea519fa8b4e62358411b220.s3tc.ctex"]
+source_file="res://assets/shinrai/roads/road02_utility/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp_4.png"
+dest_files=["res://.godot/imported/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp_4.png-8696ddcbc94770e439c8cf0eef2982e4.s3tc.ctex"]
 
 [params]
 

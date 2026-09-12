@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://o5sy5k4q67cb"
-path="res://.godot/imported/ProjectShinrai_RoofEave_v17_Modular.glb-f716ba8d12e550920a972199b4f8566c.scn"
+path="res://.godot/imported/ProjectShinrai_RoofEave_v17_Modular.glb-5302683e4cf641e8e710f70769038747.scn"
 
 [deps]
 
-source_file="res://shinrai/ProjectShinrai_RoofEave_v17_Modular.glb"
-dest_files=["res://.godot/imported/ProjectShinrai_RoofEave_v17_Modular.glb-f716ba8d12e550920a972199b4f8566c.scn"]
+source_file="res://assets/shinrai/ProjectShinrai_RoofEave_v17_Modular.glb"
+dest_files=["res://.godot/imported/ProjectShinrai_RoofEave_v17_Modular.glb-5302683e4cf641e8e710f70769038747.scn"]
 
 [params]
 

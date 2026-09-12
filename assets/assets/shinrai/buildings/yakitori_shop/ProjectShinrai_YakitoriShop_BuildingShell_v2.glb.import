@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://bknsu4dlwjuce"
-path="res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2.glb-c10c68060cad3a3f439d6040fdd0f7ce.scn"
+path="res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2.glb-f031e27de2045443a3d425287970fcd9.scn"
 
 [deps]
 
-source_file="res://assets/shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2.glb"
-dest_files=["res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2.glb-c10c68060cad3a3f439d6040fdd0f7ce.scn"]
+source_file="res://assets/assets/shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2.glb"
+dest_files=["res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2.glb-f031e27de2045443a3d425287970fcd9.scn"]
 
 [params]
 

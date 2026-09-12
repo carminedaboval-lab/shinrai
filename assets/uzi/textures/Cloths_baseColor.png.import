@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bydyhlv4pmjoj"
-path.s3tc="res://.godot/imported/Cloths_baseColor.png-73bafa9e976173160386866a8da49069.s3tc.ctex"
+path.s3tc="res://.godot/imported/Cloths_baseColor.png-98e062370b3742af4d7246242a5ee0e1.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://uzi/textures/Cloths_baseColor.png"
-dest_files=["res://.godot/imported/Cloths_baseColor.png-73bafa9e976173160386866a8da49069.s3tc.ctex"]
+source_file="res://assets/uzi/textures/Cloths_baseColor.png"
+dest_files=["res://.godot/imported/Cloths_baseColor.png-98e062370b3742af4d7246242a5ee0e1.s3tc.ctex"]
 
 [params]
 

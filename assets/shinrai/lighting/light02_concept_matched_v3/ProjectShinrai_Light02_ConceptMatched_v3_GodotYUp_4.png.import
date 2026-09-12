@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dvpo7s7tex8i2"
-path.s3tc="res://.godot/imported/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp_4.png-d3d741d35343fca4c31348e48fd6cfbd.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp_4.png-2ebf71bb9d80ea0a0998f397a72c55d0.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://shinrai/lighting/light02_concept_matched_v3/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp_4.png"
-dest_files=["res://.godot/imported/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp_4.png-d3d741d35343fca4c31348e48fd6cfbd.s3tc.ctex"]
+source_file="res://assets/shinrai/lighting/light02_concept_matched_v3/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp_4.png"
+dest_files=["res://.godot/imported/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp_4.png-2ebf71bb9d80ea0a0998f397a72c55d0.s3tc.ctex"]
 
 [params]
 

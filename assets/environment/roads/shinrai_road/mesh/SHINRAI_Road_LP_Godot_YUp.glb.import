@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://bxij22j26r1gi"
-path="res://.godot/imported/SHINRAI_Road_LP_Godot_YUp.glb-bf598dd558d73b8cab06d654e21c7dfc.scn"
+path="res://.godot/imported/SHINRAI_Road_LP_Godot_YUp.glb-42207a290c38dc607b2c7e9fa3d609e2.scn"
 
 [deps]
 
-source_file="res://environment/roads/shinrai_road/mesh/SHINRAI_Road_LP_Godot_YUp.glb"
-dest_files=["res://.godot/imported/SHINRAI_Road_LP_Godot_YUp.glb-bf598dd558d73b8cab06d654e21c7dfc.scn"]
+source_file="res://assets/environment/roads/shinrai_road/mesh/SHINRAI_Road_LP_Godot_YUp.glb"
+dest_files=["res://.godot/imported/SHINRAI_Road_LP_Godot_YUp.glb-42207a290c38dc607b2c7e9fa3d609e2.scn"]
 
 [params]
 

@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bpr7nnrp3posn"
-path.s3tc="res://.godot/imported/UZI_Magazine_and_Bullet_baseColor.png-5144b2c114d8befc38a3a7cd8658044d.s3tc.ctex"
+path.s3tc="res://.godot/imported/UZI_Magazine_and_Bullet_baseColor.png-b07cc9fc72ae9a9d6b03f80d63fb7c8f.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://uzi/textures/UZI_Magazine_and_Bullet_baseColor.png"
-dest_files=["res://.godot/imported/UZI_Magazine_and_Bullet_baseColor.png-5144b2c114d8befc38a3a7cd8658044d.s3tc.ctex"]
+source_file="res://assets/uzi/textures/UZI_Magazine_and_Bullet_baseColor.png"
+dest_files=["res://.godot/imported/UZI_Magazine_and_Bullet_baseColor.png-b07cc9fc72ae9a9d6b03f80d63fb7c8f.s3tc.ctex"]
 
 [params]
 

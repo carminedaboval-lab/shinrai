@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b5d663l77h4cx"
-path.s3tc="res://.godot/imported/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp_3.png-51e7693d9564baf0d4976f745d1589e4.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp_3.png-1795aafeb6e4f34a74fad5f4a89a3e70.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://shinrai/lighting/light03_under_eave_led_v1/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp_3.png"
-dest_files=["res://.godot/imported/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp_3.png-51e7693d9564baf0d4976f745d1589e4.s3tc.ctex"]
+source_file="res://assets/shinrai/lighting/light03_under_eave_led_v1/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp_3.png"
+dest_files=["res://.godot/imported/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp_3.png-1795aafeb6e4f34a74fad5f4a89a3e70.s3tc.ctex"]
 
 [params]
 

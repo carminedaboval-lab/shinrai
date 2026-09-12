@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d3pduuotvbyq7"
-path.s3tc="res://.godot/imported/Watch_baseColor.png-eb359c4a56045da315adfa43e6e2e12b.s3tc.ctex"
+path.s3tc="res://.godot/imported/Watch_baseColor.png-8a67d1eb5a9169a0320ffa8d7d98754d.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://uzi/textures/Watch_baseColor.png"
-dest_files=["res://.godot/imported/Watch_baseColor.png-eb359c4a56045da315adfa43e6e2e12b.s3tc.ctex"]
+source_file="res://assets/uzi/textures/Watch_baseColor.png"
+dest_files=["res://.godot/imported/Watch_baseColor.png-8a67d1eb5a9169a0320ffa8d7d98754d.s3tc.ctex"]
 
 [params]
 

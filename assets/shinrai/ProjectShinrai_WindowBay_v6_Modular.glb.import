@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://b4rily3d50lgw"
-path="res://.godot/imported/ProjectShinrai_WindowBay_v6_Modular.glb-265b45b8b79cd7f33bff7bde1e3c5d6b.scn"
+path="res://.godot/imported/ProjectShinrai_WindowBay_v6_Modular.glb-cb2940bb07bf42f3e454c732eae0bccf.scn"
 
 [deps]
 
-source_file="res://shinrai/ProjectShinrai_WindowBay_v6_Modular.glb"
-dest_files=["res://.godot/imported/ProjectShinrai_WindowBay_v6_Modular.glb-265b45b8b79cd7f33bff7bde1e3c5d6b.scn"]
+source_file="res://assets/shinrai/ProjectShinrai_WindowBay_v6_Modular.glb"
+dest_files=["res://.godot/imported/ProjectShinrai_WindowBay_v6_Modular.glb-cb2940bb07bf42f3e454c732eae0bccf.scn"]
 
 [params]
 

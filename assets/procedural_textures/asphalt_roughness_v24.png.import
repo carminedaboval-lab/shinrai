@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b2r8t3fqso2sx"
-path="res://.godot/imported/asphalt_roughness_v24.png-355295f9a87c547205f9db3072580a7c.ctex"
+path="res://.godot/imported/asphalt_roughness_v24.png-c6e379fbac4433d28c6940e4c4e30935.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://procedural_textures/asphalt_roughness_v24.png"
-dest_files=["res://.godot/imported/asphalt_roughness_v24.png-355295f9a87c547205f9db3072580a7c.ctex"]
+source_file="res://assets/procedural_textures/asphalt_roughness_v24.png"
+dest_files=["res://.godot/imported/asphalt_roughness_v24.png-c6e379fbac4433d28c6940e4c4e30935.ctex"]
 
 [params]
 

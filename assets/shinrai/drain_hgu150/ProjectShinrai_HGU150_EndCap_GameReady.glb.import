@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://dfxjlxfwl1q43"
-path="res://.godot/imported/ProjectShinrai_HGU150_EndCap_GameReady.glb-9bccd165d1729def3271e82260feb742.scn"
+path="res://.godot/imported/ProjectShinrai_HGU150_EndCap_GameReady.glb-22379eb29db6861f411464ba02b0ef0b.scn"
 
 [deps]
 
-source_file="res://shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady.glb"
-dest_files=["res://.godot/imported/ProjectShinrai_HGU150_EndCap_GameReady.glb-9bccd165d1729def3271e82260feb742.scn"]
+source_file="res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady.glb"
+dest_files=["res://.godot/imported/ProjectShinrai_HGU150_EndCap_GameReady.glb-22379eb29db6861f411464ba02b0ef0b.scn"]
 
 [params]
 

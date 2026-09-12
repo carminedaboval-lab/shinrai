@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bgdiqishu3v2a"
-path.s3tc="res://.godot/imported/japanese_yakitori_lantern_9.png-fd4033f601f9a7d4aa49c11e461213ca.s3tc.ctex"
+path.s3tc="res://.godot/imported/japanese_yakitori_lantern_9.png-4316fb2bf12f4d694c6d109db72c9d70.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://japanese_yakitori_lantern/japanese_yakitori_lantern_9.png"
-dest_files=["res://.godot/imported/japanese_yakitori_lantern_9.png-fd4033f601f9a7d4aa49c11e461213ca.s3tc.ctex"]
+source_file="res://assets/japanese_yakitori_lantern/japanese_yakitori_lantern_9.png"
+dest_files=["res://.godot/imported/japanese_yakitori_lantern_9.png-4316fb2bf12f4d694c6d109db72c9d70.s3tc.ctex"]
 
 [params]
 

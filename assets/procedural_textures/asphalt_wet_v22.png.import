@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://baok5hujx8fk3"
-path="res://.godot/imported/asphalt_wet_v22.png-893437b48827d5aa5ce64cdd12a650aa.ctex"
+path="res://.godot/imported/asphalt_wet_v22.png-ae29db5e2cc23778cc97f9df025db17a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://procedural_textures/asphalt_wet_v22.png"
-dest_files=["res://.godot/imported/asphalt_wet_v22.png-893437b48827d5aa5ce64cdd12a650aa.ctex"]
+source_file="res://assets/procedural_textures/asphalt_wet_v22.png"
+dest_files=["res://.godot/imported/asphalt_wet_v22.png-ae29db5e2cc23778cc97f9df025db17a.ctex"]
 
 [params]
 

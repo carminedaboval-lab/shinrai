@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://fk41ckidoui3"
-path.s3tc="res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_AgedPlaster_NormalGL.png-e52728b445036d40f53fa907d5489991.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_AgedPlaster_NormalGL.png-c1fb77f08b76bf52e024571548c99539.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -14,8 +14,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_AgedPlaster_NormalGL.png"
-dest_files=["res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_AgedPlaster_NormalGL.png-e52728b445036d40f53fa907d5489991.s3tc.ctex"]
+source_file="res://assets/shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_AgedPlaster_NormalGL.png"
+dest_files=["res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_AgedPlaster_NormalGL.png-c1fb77f08b76bf52e024571548c99539.s3tc.ctex"]
 
 [params]
 

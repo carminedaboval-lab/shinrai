@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://7mhtkxgn1770"
-path.s3tc="res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_CompactedJoint_BaseColor_1K.png-b52e1abde9b7377871529e03ca2a29d8.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_CompactedJoint_BaseColor_1K.png-7bdf6b04c8bb9d9f4ba075638601c227.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -14,8 +14,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_CompactedJoint_BaseColor_1K.png"
-dest_files=["res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_CompactedJoint_BaseColor_1K.png-b52e1abde9b7377871529e03ca2a29d8.s3tc.ctex"]
+source_file="res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_CompactedJoint_BaseColor_1K.png"
+dest_files=["res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_CompactedJoint_BaseColor_1K.png-7bdf6b04c8bb9d9f4ba075638601c227.s3tc.ctex"]
 
 [params]
 

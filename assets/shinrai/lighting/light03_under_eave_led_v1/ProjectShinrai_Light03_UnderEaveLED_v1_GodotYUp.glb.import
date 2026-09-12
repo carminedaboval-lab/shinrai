@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://debciyaiet42d"
-path="res://.godot/imported/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp.glb-20b15b57240b74ffc46e843874417c54.scn"
+path="res://.godot/imported/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp.glb-3b26d4ce4c9e5cb4f2146bdc7e91a4cb.scn"
 
 [deps]
 
-source_file="res://shinrai/lighting/light03_under_eave_led_v1/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp.glb"
-dest_files=["res://.godot/imported/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp.glb-20b15b57240b74ffc46e843874417c54.scn"]
+source_file="res://assets/shinrai/lighting/light03_under_eave_led_v1/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp.glb"
+dest_files=["res://.godot/imported/ProjectShinrai_Light03_UnderEaveLED_v1_GodotYUp.glb-3b26d4ce4c9e5cb4f2146bdc7e91a4cb.scn"]
 
 [params]
 

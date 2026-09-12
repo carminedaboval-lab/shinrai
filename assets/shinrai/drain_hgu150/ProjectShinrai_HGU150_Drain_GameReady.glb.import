@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://1s6hy2nfg155"
-path="res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady.glb-0aa419a4ac9b791212d80f37b3efaca3.scn"
+path="res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady.glb-d88789c986812ee78f5b415a0ebd0b53.scn"
 
 [deps]
 
-source_file="res://shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady.glb"
-dest_files=["res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady.glb-0aa419a4ac9b791212d80f37b3efaca3.scn"]
+source_file="res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady.glb"
+dest_files=["res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady.glb-d88789c986812ee78f5b415a0ebd0b53.scn"]
 
 [params]
 

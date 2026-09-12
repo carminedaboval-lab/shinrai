@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cky4sw3qber0k"
-path.s3tc="res://.godot/imported/SHINRAI_CrackSeal_ORM_1K.png-8a25b1db7a03f1c724556f0670f9ac84.s3tc.ctex"
+path.s3tc="res://.godot/imported/SHINRAI_CrackSeal_ORM_1K.png-f6a09784bc2847506b3960b1ac12eb9a.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://environment/roads/shinrai_road/repairs/SHINRAI_CrackSeal_ORM_1K.png"
-dest_files=["res://.godot/imported/SHINRAI_CrackSeal_ORM_1K.png-8a25b1db7a03f1c724556f0670f9ac84.s3tc.ctex"]
+source_file="res://assets/environment/roads/shinrai_road/repairs/SHINRAI_CrackSeal_ORM_1K.png"
+dest_files=["res://.godot/imported/SHINRAI_CrackSeal_ORM_1K.png-f6a09784bc2847506b3960b1ac12eb9a.s3tc.ctex"]
 
 [params]
 

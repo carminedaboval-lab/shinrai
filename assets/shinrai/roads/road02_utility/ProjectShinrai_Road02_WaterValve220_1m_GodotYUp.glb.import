@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://decqb21pw53s3"
-path="res://.godot/imported/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp.glb-b33b5d6c5887408b666517b2d27f1bd6.scn"
+path="res://.godot/imported/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp.glb-9ade616594d43fdc75cf63da53f0f520.scn"
 
 [deps]
 
-source_file="res://shinrai/roads/road02_utility/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp.glb"
-dest_files=["res://.godot/imported/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp.glb-b33b5d6c5887408b666517b2d27f1bd6.scn"]
+source_file="res://assets/shinrai/roads/road02_utility/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp.glb"
+dest_files=["res://.godot/imported/ProjectShinrai_Road02_WaterValve220_1m_GodotYUp.glb-9ade616594d43fdc75cf63da53f0f520.scn"]
 
 [params]
 

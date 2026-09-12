@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c8h0cirxns25o"
-path.s3tc="res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_DryAsphalt_NormalGL_1K.png-fd8165fe4dbad2cefaa404d30a57b3f9.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_DryAsphalt_NormalGL_1K.png-d08bf4ed5e923aef69d594680a643e22.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -14,8 +14,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_DryAsphalt_NormalGL_1K.png"
-dest_files=["res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_DryAsphalt_NormalGL_1K.png-fd8165fe4dbad2cefaa404d30a57b3f9.s3tc.ctex"]
+source_file="res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_DryAsphalt_NormalGL_1K.png"
+dest_files=["res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_DryAsphalt_NormalGL_1K.png-d08bf4ed5e923aef69d594680a643e22.s3tc.ctex"]
 
 [params]
 

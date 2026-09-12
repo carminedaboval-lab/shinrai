@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bgacm2rykxflr"
-path.s3tc="res://.godot/imported/Cloths_emissive.png-e5a28426d1a5e0866f6b2f68bfd8aa1e.s3tc.ctex"
+path.s3tc="res://.godot/imported/Cloths_emissive.png-0abdb0bd26cd20fe2b5c7cb9aa42279c.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://uzi/textures/Cloths_emissive.png"
-dest_files=["res://.godot/imported/Cloths_emissive.png-e5a28426d1a5e0866f6b2f68bfd8aa1e.s3tc.ctex"]
+source_file="res://assets/uzi/textures/Cloths_emissive.png"
+dest_files=["res://.godot/imported/Cloths_emissive.png-0abdb0bd26cd20fe2b5c7cb9aa42279c.s3tc.ctex"]
 
 [params]
 

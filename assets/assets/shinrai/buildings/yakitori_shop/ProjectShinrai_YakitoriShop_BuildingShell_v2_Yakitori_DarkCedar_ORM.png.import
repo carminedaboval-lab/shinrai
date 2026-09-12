@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dvs16ar0jxt3q"
-path.s3tc="res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_DarkCedar_ORM.png-b125e349b096469d19f66ad769bc1118.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_DarkCedar_ORM.png-0269e8f3222b8b0b8422ecdca07e1e00.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -14,8 +14,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://assets/shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_DarkCedar_ORM.png"
-dest_files=["res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_DarkCedar_ORM.png-b125e349b096469d19f66ad769bc1118.s3tc.ctex"]
+source_file="res://assets/assets/shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_DarkCedar_ORM.png"
+dest_files=["res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_DarkCedar_ORM.png-0269e8f3222b8b0b8422ecdca07e1e00.s3tc.ctex"]
 
 [params]
 

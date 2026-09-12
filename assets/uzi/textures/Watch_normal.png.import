@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b5ulvdeakrmph"
-path.s3tc="res://.godot/imported/Watch_normal.png-9278a3df2f85539c99622d29068d01fc.s3tc.ctex"
+path.s3tc="res://.godot/imported/Watch_normal.png-d73609a24f9311055f5da2cfe0c931cc.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://uzi/textures/Watch_normal.png"
-dest_files=["res://.godot/imported/Watch_normal.png-9278a3df2f85539c99622d29068d01fc.s3tc.ctex"]
+source_file="res://assets/uzi/textures/Watch_normal.png"
+dest_files=["res://.godot/imported/Watch_normal.png-d73609a24f9311055f5da2cfe0c931cc.s3tc.ctex"]
 
 [params]
 

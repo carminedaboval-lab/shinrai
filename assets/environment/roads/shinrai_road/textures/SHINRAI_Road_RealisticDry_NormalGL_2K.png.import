@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cutmittm736y7"
-path.s3tc="res://.godot/imported/SHINRAI_Road_RealisticDry_NormalGL_2K.png-5531e43e14523955695ad096c1b00b4a.s3tc.ctex"
+path.s3tc="res://.godot/imported/SHINRAI_Road_RealisticDry_NormalGL_2K.png-2c73cf1da887282f0d4590cb6fd9e6e8.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://environment/roads/shinrai_road/textures/SHINRAI_Road_RealisticDry_NormalGL_2K.png"
-dest_files=["res://.godot/imported/SHINRAI_Road_RealisticDry_NormalGL_2K.png-5531e43e14523955695ad096c1b00b4a.s3tc.ctex"]
+source_file="res://assets/environment/roads/shinrai_road/textures/SHINRAI_Road_RealisticDry_NormalGL_2K.png"
+dest_files=["res://.godot/imported/SHINRAI_Road_RealisticDry_NormalGL_2K.png-2c73cf1da887282f0d4590cb6fd9e6e8.s3tc.ctex"]
 
 [params]
 

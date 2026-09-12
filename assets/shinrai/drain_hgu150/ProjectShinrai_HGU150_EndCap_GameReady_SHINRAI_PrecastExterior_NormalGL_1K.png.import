@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bkrnbxoh1kv2"
-path.s3tc="res://.godot/imported/ProjectShinrai_HGU150_EndCap_GameReady_SHINRAI_PrecastExterior_NormalGL_1K.png-436708ca72a2e4cb4b63c30e882b69c0.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_HGU150_EndCap_GameReady_SHINRAI_PrecastExterior_NormalGL_1K.png-1662edaf2c60abb32d911096052ea882.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -14,8 +14,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady_SHINRAI_PrecastExterior_NormalGL_1K.png"
-dest_files=["res://.godot/imported/ProjectShinrai_HGU150_EndCap_GameReady_SHINRAI_PrecastExterior_NormalGL_1K.png-436708ca72a2e4cb4b63c30e882b69c0.s3tc.ctex"]
+source_file="res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady_SHINRAI_PrecastExterior_NormalGL_1K.png"
+dest_files=["res://.godot/imported/ProjectShinrai_HGU150_EndCap_GameReady_SHINRAI_PrecastExterior_NormalGL_1K.png-1662edaf2c60abb32d911096052ea882.s3tc.ctex"]
 
 [params]
 

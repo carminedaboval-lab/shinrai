@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ccqlb8jkofjtn"
-path.s3tc="res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_ThresholdConcrete_NormalGL.png-2df97f29939f9f10d43a85965df87058.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_ThresholdConcrete_NormalGL.png-a93a179e31b0a2c5e5194ad939b34a84.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -14,8 +14,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_ThresholdConcrete_NormalGL.png"
-dest_files=["res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_ThresholdConcrete_NormalGL.png-2df97f29939f9f10d43a85965df87058.s3tc.ctex"]
+source_file="res://assets/shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_ThresholdConcrete_NormalGL.png"
+dest_files=["res://.godot/imported/ProjectShinrai_YakitoriShop_BuildingShell_v2_Yakitori_ThresholdConcrete_NormalGL.png-a93a179e31b0a2c5e5194ad939b34a84.s3tc.ctex"]
 
 [params]
 

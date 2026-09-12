@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://gunerge31uwt"
-path="res://.godot/imported/moss_detail.png-9084ccbfb1b3ab23febb414934a66653.ctex"
+path="res://.godot/imported/moss_detail.png-a94f4318fe0628c2670cedf9c657427e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://procedural_textures/moss_detail.png"
-dest_files=["res://.godot/imported/moss_detail.png-9084ccbfb1b3ab23febb414934a66653.ctex"]
+source_file="res://assets/procedural_textures/moss_detail.png"
+dest_files=["res://.godot/imported/moss_detail.png-a94f4318fe0628c2670cedf9c657427e.ctex"]
 
 [params]
 

@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cqrcd1bo7yalj"
-path.s3tc="res://.godot/imported/SHINRAI_ManholeCover_NormalGL_1K.png-ec7745aa1a3e47610c97c3314f5c2ade.s3tc.ctex"
+path.s3tc="res://.godot/imported/SHINRAI_ManholeCover_NormalGL_1K.png-3dd7eb0db6bc5ed4a6f06a97aa5d2365.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://environment/roads/shinrai_road/repairs/SHINRAI_ManholeCover_NormalGL_1K.png"
-dest_files=["res://.godot/imported/SHINRAI_ManholeCover_NormalGL_1K.png-ec7745aa1a3e47610c97c3314f5c2ade.s3tc.ctex"]
+source_file="res://assets/environment/roads/shinrai_road/repairs/SHINRAI_ManholeCover_NormalGL_1K.png"
+dest_files=["res://.godot/imported/SHINRAI_ManholeCover_NormalGL_1K.png-3dd7eb0db6bc5ed4a6f06a97aa5d2365.s3tc.ctex"]
 
 [params]
 

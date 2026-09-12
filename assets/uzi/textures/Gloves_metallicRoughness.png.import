@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://nl2hpxr8bg42"
-path.s3tc="res://.godot/imported/Gloves_metallicRoughness.png-85e3b66f8cf08980d1acd3372ba3f7ce.s3tc.ctex"
+path.s3tc="res://.godot/imported/Gloves_metallicRoughness.png-b7bb4d0e941893193f247f454a9c1a10.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://uzi/textures/Gloves_metallicRoughness.png"
-dest_files=["res://.godot/imported/Gloves_metallicRoughness.png-85e3b66f8cf08980d1acd3372ba3f7ce.s3tc.ctex"]
+source_file="res://assets/uzi/textures/Gloves_metallicRoughness.png"
+dest_files=["res://.godot/imported/Gloves_metallicRoughness.png-b7bb4d0e941893193f247f454a9c1a10.s3tc.ctex"]
 
 [params]
 

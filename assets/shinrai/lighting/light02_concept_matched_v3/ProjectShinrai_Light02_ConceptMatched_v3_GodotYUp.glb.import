@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://bpi1j81fr3i1n"
-path="res://.godot/imported/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp.glb-c5c0f44220d6c4f336292c711d8f445b.scn"
+path="res://.godot/imported/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp.glb-11731cf9e6df8c5dfb7d978a843ff290.scn"
 
 [deps]
 
-source_file="res://shinrai/lighting/light02_concept_matched_v3/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp.glb"
-dest_files=["res://.godot/imported/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp.glb-c5c0f44220d6c4f336292c711d8f445b.scn"]
+source_file="res://assets/shinrai/lighting/light02_concept_matched_v3/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp.glb"
+dest_files=["res://.godot/imported/ProjectShinrai_Light02_ConceptMatched_v3_GodotYUp.glb-11731cf9e6df8c5dfb7d978a843ff290.scn"]
 
 [params]
 

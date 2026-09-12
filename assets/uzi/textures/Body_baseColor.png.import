@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://djsf38bo2byqb"
-path.s3tc="res://.godot/imported/Body_baseColor.png-fa2182774ff6f1b99a842cb0d1c11e17.s3tc.ctex"
+path.s3tc="res://.godot/imported/Body_baseColor.png-4dd8434ca0faf4b38a8652f7c69811ca.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://uzi/textures/Body_baseColor.png"
-dest_files=["res://.godot/imported/Body_baseColor.png-fa2182774ff6f1b99a842cb0d1c11e17.s3tc.ctex"]
+source_file="res://assets/uzi/textures/Body_baseColor.png"
+dest_files=["res://.godot/imported/Body_baseColor.png-4dd8434ca0faf4b38a8652f7c69811ca.s3tc.ctex"]
 
 [params]
 

@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://co6mj1agsy5vy"
-path.s3tc="res://.godot/imported/ProjectShinrai_Road02_Sewer600_1m_GodotYUp_3.png-3cc925a6f4b06d9e78718a5c3471a06b.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_Road02_Sewer600_1m_GodotYUp_3.png-938f4ca9ba1a88b706ce12df9b4f1619.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://shinrai/roads/road02_utility/ProjectShinrai_Road02_Sewer600_1m_GodotYUp_3.png"
-dest_files=["res://.godot/imported/ProjectShinrai_Road02_Sewer600_1m_GodotYUp_3.png-3cc925a6f4b06d9e78718a5c3471a06b.s3tc.ctex"]
+source_file="res://assets/shinrai/roads/road02_utility/ProjectShinrai_Road02_Sewer600_1m_GodotYUp_3.png"
+dest_files=["res://.godot/imported/ProjectShinrai_Road02_Sewer600_1m_GodotYUp_3.png-938f4ca9ba1a88b706ce12df9b4f1619.s3tc.ctex"]
 
 [params]
 

@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://lnykjg2lec5n"
-path.s3tc="res://.godot/imported/SHINRAI_UtilityCut_Albedo_1K.png-a2cde22b0449dc63c8ad27d814ed9991.s3tc.ctex"
+path.s3tc="res://.godot/imported/SHINRAI_UtilityCut_Albedo_1K.png-b596ee38403347a799d1e0fe3b7ca579.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://environment/roads/shinrai_road/repairs/SHINRAI_UtilityCut_Albedo_1K.png"
-dest_files=["res://.godot/imported/SHINRAI_UtilityCut_Albedo_1K.png-a2cde22b0449dc63c8ad27d814ed9991.s3tc.ctex"]
+source_file="res://assets/environment/roads/shinrai_road/repairs/SHINRAI_UtilityCut_Albedo_1K.png"
+dest_files=["res://.godot/imported/SHINRAI_UtilityCut_Albedo_1K.png-b596ee38403347a799d1e0fe3b7ca579.s3tc.ctex"]
 
 [params]
 

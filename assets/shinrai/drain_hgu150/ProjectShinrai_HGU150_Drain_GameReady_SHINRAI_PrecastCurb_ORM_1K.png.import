@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cq76vvnl4b3r7"
-path.s3tc="res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_PrecastCurb_ORM_1K.png-3cade5334ca62b4507fb8f2a712f9f2a.s3tc.ctex"
+path.s3tc="res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_PrecastCurb_ORM_1K.png-28c9ef69269b8c16d7a42ff3b70d3cb8.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -14,8 +14,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_PrecastCurb_ORM_1K.png"
-dest_files=["res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_PrecastCurb_ORM_1K.png-3cade5334ca62b4507fb8f2a712f9f2a.s3tc.ctex"]
+source_file="res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_PrecastCurb_ORM_1K.png"
+dest_files=["res://.godot/imported/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_PrecastCurb_ORM_1K.png-28c9ef69269b8c16d7a42ff3b70d3cb8.s3tc.ctex"]
 
 [params]
 

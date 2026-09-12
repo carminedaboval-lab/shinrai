@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://do42e6jrngxb"
-path="res://.godot/imported/japanese_yakitori_lantern.glb-ee39c526725a54f46df2e26fa697bbba.scn"
+path="res://.godot/imported/japanese_yakitori_lantern.glb-c47e0aed238572b3fbf833e2fcf9772c.scn"
 
 [deps]
 
-source_file="res://japanese_yakitori_lantern/japanese_yakitori_lantern.glb"
-dest_files=["res://.godot/imported/japanese_yakitori_lantern.glb-ee39c526725a54f46df2e26fa697bbba.scn"]
+source_file="res://assets/japanese_yakitori_lantern/japanese_yakitori_lantern.glb"
+dest_files=["res://.godot/imported/japanese_yakitori_lantern.glb-c47e0aed238572b3fbf833e2fcf9772c.scn"]
 
 [params]
 

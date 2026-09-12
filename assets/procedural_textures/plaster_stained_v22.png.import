@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://sd2ueb5ymomg"
-path="res://.godot/imported/plaster_stained_v22.png-fb2176f19c6ce37fb38a518ea07da7ba.ctex"
+path="res://.godot/imported/plaster_stained_v22.png-98ed743acbfb48f879b48310a5ed7df4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://procedural_textures/plaster_stained_v22.png"
-dest_files=["res://.godot/imported/plaster_stained_v22.png-fb2176f19c6ce37fb38a518ea07da7ba.ctex"]
+source_file="res://assets/procedural_textures/plaster_stained_v22.png"
+dest_files=["res://.godot/imported/plaster_stained_v22.png-98ed743acbfb48f879b48310a5ed7df4.ctex"]
 
 [params]
 

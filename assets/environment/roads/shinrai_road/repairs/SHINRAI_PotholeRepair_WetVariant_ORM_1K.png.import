@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cdtykfcb0pywm"
-path.s3tc="res://.godot/imported/SHINRAI_PotholeRepair_WetVariant_ORM_1K.png-48b40bf4ee9aea36514e3b39e9a24443.s3tc.ctex"
+path.s3tc="res://.godot/imported/SHINRAI_PotholeRepair_WetVariant_ORM_1K.png-2531b274248a33a2fced09371606c3db.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://environment/roads/shinrai_road/repairs/SHINRAI_PotholeRepair_WetVariant_ORM_1K.png"
-dest_files=["res://.godot/imported/SHINRAI_PotholeRepair_WetVariant_ORM_1K.png-48b40bf4ee9aea36514e3b39e9a24443.s3tc.ctex"]
+source_file="res://assets/environment/roads/shinrai_road/repairs/SHINRAI_PotholeRepair_WetVariant_ORM_1K.png"
+dest_files=["res://.godot/imported/SHINRAI_PotholeRepair_WetVariant_ORM_1K.png-2531b274248a33a2fced09371606c3db.s3tc.ctex"]
 
 [params]
 
