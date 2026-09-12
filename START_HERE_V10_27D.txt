@@ -1,0 +1,25 @@
+PROJECT SHINRAI — YAKITORI THRESHOLD STONE PASS v10.27d
+
+This package is cumulative with the v10.27b cedar and v10.27c plaster passes.
+The new change in v10.27d is limited to MAT_Yakitori_ThresholdConcrete.
+
+INSTALL
+1. Close Godot.
+2. Extract this ZIP into the root Shinrai folder that contains project.godot.
+3. When Windows asks, choose Replace the files in the destination.
+4. Reopen project.godot and allow Godot to finish importing.
+
+IMPORTANT
+- Do not extract the ZIP inside the existing assets folder. The ZIP already
+  contains the correct assets/shinrai/... path.
+- Geometry, cedar, plaster, glass, roof, architectural metal, props, and game
+  lighting were not changed in this pass.
+- This package was built from GitHub commit bc3260615fb74539ff1005426495f2d53c228c24.
+
+THRESHOLD MATERIAL
+- Base-colour target: #6D6964 warm medium-dark grey
+- Compact fine mineral aggregate with restrained pores and wear
+- Roughness: 0.62–0.80 (mean approximately 0.689)
+- Metallic: 0.0
+- OpenGL +Y normal map with shallow mineral relief
+- Seamless edges on base colour, normal, and ORM maps

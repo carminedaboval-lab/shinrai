@@ -1,0 +1,25 @@
+PROJECT SHINRAI — YAKITORI ROOF/PARAPET PASS v10.27e
+
+This package is cumulative with the completed cedar, plaster, and threshold passes.
+The new change in v10.27e is limited to MAT_Yakitori_DarkRoof.
+
+INSTALL
+1. Close Godot.
+2. Extract this ZIP into the root Shinrai folder that contains project.godot.
+3. When Windows asks, choose Replace the files in the destination.
+4. Reopen project.godot and allow Godot to finish importing.
+
+IMPORTANT
+- Do not extract the ZIP inside the existing assets folder. The ZIP already
+  contains the correct assets/shinrai/... path.
+- Geometry, cedar, plaster, threshold, glass, architectural metal, props, and
+  game lighting were not changed in this pass.
+- This package was built from GitHub commit bc3260615fb74539ff1005426495f2d53c228c24.
+
+ROOF/PARAPET MATERIAL
+- Base-colour target: #232333 dark charcoal with a subtle cool undertone
+- Fine weatherproof coating/roller texture with restrained wear
+- Roughness: 0.38–0.55 (actual mean approximately 0.463)
+- Metallic: 0.0 through the painted coating
+- OpenGL +Y normal map with shallow coating relief
+- Seamless edges on base colour, normal, and ORM maps

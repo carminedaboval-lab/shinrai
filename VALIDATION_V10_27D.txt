@@ -1,0 +1,15 @@
+PROJECT SHINRAI v10.27d VALIDATION
+
+RESULT: PASS
+
+- Godot version: 4.7.2 stable
+- Fresh asset import: PASS (exit code 0)
+- Main validation scene load: PASS (exit code 0)
+- GLB format: glTF 2.0 binary
+- Authored structure retained: 14 nodes, 8 meshes, 7 materials
+- Threshold texture size: 1024 x 1024 RGB PNG
+- Embedded GLB threshold images match external texture files: PASS
+- Three repository copies of the GLB and threshold maps match: PASS
+- Seam checks for base colour, normal, and ORM: exact edge match
+
+The completed cedar and plaster material passes remain embedded in this package.

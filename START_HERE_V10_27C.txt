@@ -1,0 +1,25 @@
+PROJECT SHINRAI — YAKITORI AGED PLASTER PASS v10.27c
+
+This package is cumulative with the v10.27b dark-cedar pass.
+The new change in v10.27c is limited to MAT_Yakitori_AgedPlaster.
+
+INSTALL
+1. Close Godot.
+2. Extract this ZIP into the root Shinrai folder that contains project.godot.
+3. When Windows asks, choose Replace the files in the destination.
+4. Reopen project.godot and allow Godot to finish importing.
+
+IMPORTANT
+- Do not extract the ZIP inside the existing assets folder. The ZIP already
+  contains the correct assets/shinrai/... path.
+- Geometry, glass, roof, architectural metal, props, and game lighting were not
+  changed in this pass.
+- This package was built from GitHub commit bc3260615fb74539ff1005426495f2d53c228c24.
+
+PLASTER MATERIAL
+- Base-colour target: #78766F warm neutral grey
+- Fine 1–3 mm trowelled cement/aggregate grain
+- Roughness: 0.68–0.84 (mean approximately 0.747)
+- Metallic: 0.0
+- OpenGL +Y normal map, deliberately subtle
+- Seamless edges on base colour, normal, and ORM maps

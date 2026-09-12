@@ -1,0 +1,15 @@
+PROJECT SHINRAI v10.27e VALIDATION
+
+RESULT: PASS
+
+- Godot version: 4.7.2 stable
+- Fresh asset import: PASS (exit code 0)
+- Main validation scene load: PASS (exit code 0)
+- GLB format: glTF 2.0 binary
+- Authored structure retained: 14 nodes, 8 meshes, 7 materials
+- Roof texture size: 1024 x 1024 RGB PNG
+- Embedded GLB roof images match external texture files: PASS
+- Three repository copies of the GLB and roof maps match: PASS
+- Seam checks for base colour, normal, and ORM: exact edge match
+
+The completed cedar, plaster, and threshold material passes remain embedded.
