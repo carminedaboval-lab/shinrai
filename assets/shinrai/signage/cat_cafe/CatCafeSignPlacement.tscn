@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/cat_cafe_sign_placer.gd" id="1_placer"]
+
+[node name="CatCafeSignPlacement" type="Node"]
+script = ExtResource("1_placer")

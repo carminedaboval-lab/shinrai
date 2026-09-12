@@ -1,0 +1,68 @@
+PROJECT SHINRAI — CAT CAFÉ SIGN HQ
+RANDOM BUILDING INTEGRATION
+
+This package is deliberately NON-DESTRUCTIVE:
+- it does not replace town_main.gd
+- it does not replace the Yakitori building
+- it does not touch the locked comparison corridor you have been working on
+- it does not consume town_main.gd's procedural RNG
+
+INSTALL
+1. Close Godot.
+2. Extract this ZIP into the Shinrai project root (the folder containing project.godot).
+3. Reopen Godot and let imports finish.
+4. Open res://scenes/main.tscn.
+5. In the FileSystem dock, find:
+   res://assets/shinrai/signage/cat_cafe/CatCafeSignPlacement.tscn
+6. Drag CatCafeSignPlacement.tscn onto the Blacksite root node.
+7. Save main.tscn and run the game.
+
+THAT IS ALL THE MANUAL PLACEMENT YOU NEED.
+You do NOT position the actual sign yourself.
+
+WHAT THE PLACER DOES
+- waits until the procedural town has generated
+- finds eligible procedural shop buildings
+- prefers a neutral SHOP_RESIDENTIAL_MIX storefront (MixedHeader)
+- rejects shuttered shops
+- rejects the authored Yakitori storefront
+- rejects the entire current locked comparison / Yakitori work area
+- chooses one eligible building using its own stable RNG
+- mounts the sign automatically to the building's local -Z facade
+- keeps the result stable for the current generation_seed
+- does not alter the town's existing random sequence
+
+CURRENT EXCLUSION AREA
+World X: 0.0 to 43.0 m
+World Z: 26.0 to 46.0 m
+This safely covers the current z ~= 36 locked commercial review corridor.
+
+ASSET
+res://assets/shinrai/signage/cat_cafe/SHINRAI_CatCafeSign_HQ.tscn
+
+PLACER
+res://assets/shinrai/signage/cat_cafe/CatCafeSignPlacement.tscn
+
+SIGN DETAILS
+- 0.62 m circular sign
+- black weathered housing/bracket
+- cyan frosted acrylic
+- pink perimeter neon
+- warm-white cat outline / eyes / whiskers
+- authentic Japanese: 猫カフェ
+- one cyan underline
+- CAT CAFE in warm white
+- metal clips, standoffs and bolts
+- rear cable
+- restrained surface scratches and rust accents
+- one small shadowless bounce light
+- geometry range culled at 38 m by the placement script
+
+IF YOU WANT A DIFFERENT RANDOM BUILDING
+Change CAT_CAFE_RANDOM_SALT in:
+res://scripts/cat_cafe_sign_placer.gd
+Do not change generation_seed just to move the sign; that would change the town.
+
+REMOVE IT
+Delete the CatCafeSignPlacement child from res://scenes/main.tscn.
+No town_main.gd changes need to be reverted.

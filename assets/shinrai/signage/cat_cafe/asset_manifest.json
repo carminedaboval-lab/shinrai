@@ -1,0 +1,22 @@
+{
+  "asset": "SHINRAI Cat Caf\u00e9 Sign HQ",
+  "version": "HQ-random-building-v1",
+  "godot": "4.x / GL Compatibility",
+  "front": "-Z",
+  "up": "+Y",
+  "diameter_m": 0.62,
+  "housing_depth_m": 0.11,
+  "wall_projection_m": 0.37,
+  "placement": {
+    "mode": "stable random eligible shop",
+    "preferred_archetype_marker": "MixedHeader",
+    "excludes_authored_yakitori": true,
+    "excludes_recent_locked_corridor": {
+      "x_min": 0.0,
+      "x_max": 43.0,
+      "z_min": 26.0,
+      "z_max": 46.0
+    },
+    "mount_height_m": 3.25
+  }
+}
