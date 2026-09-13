@@ -1,0 +1,34 @@
+SHINRAI CAT CAFÉ SIGN — V10 GAME TEST
+
+This package is intended for the first proper in-game fidelity comparison.
+
+WHAT CHANGED FROM V9
+- cat made slightly wider again while keeping the shorter reference proportions
+- whiskers lengthened slightly
+- cat tube color shifted from yellow/orange to warm ivory-white
+- Japanese 猫カフェ centerlines smoothed for more natural glass-tube curves
+- Japanese tubing remains very fine
+- cyan underline kept thin and clean
+- CAT CAFE stays small, airy and widely spaced
+- pink ring gets an additional near-white hot inner core
+- internal low-level acrylic haze added behind the logo for more frosted depth
+- Godot bounce light reduced to avoid overexposure in GL Compatibility
+
+INSTALL
+1. Close Godot.
+2. Extract this ZIP into your Shinrai project root.
+3. Choose Replace files in destination.
+4. Reopen Godot and let the GLB import.
+5. Run the game and find the same Cat Café location.
+
+This package overwrites ONLY:
+res://assets/shinrai/signage/cat_cafe/SHINRAI_CatCafeSign_HQ.glb
+res://assets/shinrai/signage/cat_cafe/SHINRAI_CatCafeSign_HQ.tscn
+
+It does NOT replace:
+- main.tscn
+- town_main.gd
+- cat_cafe_sign_placer.gd
+- Yakitori assets
+
+So your current working random/nearby placement remains unchanged.

@@ -183,7 +183,7 @@ const YAKITORI_LANTERN_FALLBACK_LIGHT_RANGE: float = 2.5
 # entrance socket is aligned to the removed shop's threshold, so no old walls,
 # roof, collision, interior, utilities or façade pieces remain behind it.
 const YAKITORI_SHOP_ENTRANCE_LOCAL_Z: float = -0.72
-# v10.28m: reserve three of the existing street-light slots for the hero
+# v10.28z: reserve three of the existing street-light slots for the hero
 # storefront's recessed canopy downlights. The town-wide light ceiling remains
 # unchanged; these fixtures simply replace three generic road lights.
 const YAKITORI_CANOPY_LIGHT_COUNT: int = 3
@@ -4176,17 +4176,17 @@ func _yakitori_plaster_material(
 ) -> StandardMaterial3D:
 	var material: StandardMaterial3D = source.duplicate(true) as StandardMaterial3D
 	material.resource_local_to_scene = true
-	# The supplied 1K albedo averages 107.469 / 109.968 / 112.466. These
-	# channel factors land its rendered average on the reference #78766F
-	# plaster instead of the old cold, nearly black modulation.
-	material.albedo_color = Color(1.1166, 1.0730, 0.9870, 1.0)
+	# The bright night environment lifts the supplied 1K albedo substantially in
+	# game. These warmer, lower factors compensate for that exposure so the wall
+	# reads near the reference's aged grey instead of clean white plaster.
+	material.albedo_color = Color(0.86, 0.83, 0.76, 1.0)
 	material.metallic = 0.0
 	material.metallic_specular = 0.24
 	# ORM green averages 222.016/255. A 0.87291 material factor produces an
 	# effective average roughness of 0.760: the middle of the 0.68-0.84 brief.
-	material.roughness = 0.87291
-	material.normal_scale = 0.45
-	material.uv1_scale = Vector3(0.72, 0.72, 0.72)
+	material.roughness = 0.90
+	material.normal_scale = 0.52
+	material.uv1_scale = Vector3(0.60, 0.60, 0.60)
 	material.uv1_triplanar = use_triplanar
 	return material
 
@@ -4222,6 +4222,142 @@ func _add_yakitori_z_grain_box(
 		Vector3(PI * 0.5, 0.0, 0.0)
 	)
 
+func _yakitori_union_find_root(parents: Array[int], item: int) -> int:
+	var root: int = item
+	while parents[root] != root:
+		root = parents[root]
+	var cursor: int = item
+	while parents[cursor] != cursor:
+		var next_cursor: int = parents[cursor]
+		parents[cursor] = root
+		cursor = next_cursor
+	return root
+
+func _yakitori_union_find_join(
+	parents: Array[int],
+	component_sizes: Array[int],
+	a: int,
+	b: int
+) -> void:
+	var root_a: int = _yakitori_union_find_root(parents, a)
+	var root_b: int = _yakitori_union_find_root(parents, b)
+	if root_a == root_b:
+		return
+	if component_sizes[root_a] < component_sizes[root_b]:
+		var swap_root: int = root_a
+		root_a = root_b
+		root_b = swap_root
+	parents[root_b] = root_a
+	component_sizes[root_a] += component_sizes[root_b]
+
+func _yakitori_remove_mesh_components_above(
+	target_mesh: MeshInstance3D,
+	component_floor_cutoff: float
+) -> int:
+	# The supplied one-storey asset combines many bevelled boxes into broad
+	# material meshes. Rebuild their index buffers once at startup, grouping
+	# triangles by coincident positions, so only complete obsolete components are
+	# removed. All vertex attributes, UVs, normals and PBR material assignments
+	# remain unchanged on the retained storefront and canopy.
+	if target_mesh == null:
+		return 0
+	var source_mesh: ArrayMesh = target_mesh.mesh as ArrayMesh
+	if source_mesh == null:
+		return 0
+
+	var filtered_mesh: ArrayMesh = ArrayMesh.new()
+	filtered_mesh.resource_local_to_scene = true
+	var removed_triangle_count: int = 0
+
+	for surface_index: int in range(source_mesh.get_surface_count()):
+		var primitive_type: Mesh.PrimitiveType = source_mesh.surface_get_primitive_type(
+			surface_index
+		)
+		var source_arrays: Array = source_mesh.surface_get_arrays(surface_index)
+		var vertices: PackedVector3Array = source_arrays[Mesh.ARRAY_VERTEX]
+		var indices: PackedInt32Array = source_arrays[Mesh.ARRAY_INDEX]
+		if primitive_type != Mesh.PRIMITIVE_TRIANGLES or indices.is_empty():
+			filtered_mesh.add_surface_from_arrays(primitive_type, source_arrays)
+			filtered_mesh.surface_set_material(
+				filtered_mesh.get_surface_count() - 1,
+				source_mesh.surface_get_material(surface_index)
+			)
+			continue
+
+		var triangle_count: int = indices.size() / 3
+		var parents: Array[int] = []
+		var component_sizes: Array[int] = []
+		parents.resize(triangle_count)
+		component_sizes.resize(triangle_count)
+		for triangle_index: int in range(triangle_count):
+			parents[triangle_index] = triangle_index
+			component_sizes[triangle_index] = 1
+
+		# Imported bevels duplicate vertices between faces, so triangle indices
+		# alone do not reveal connected pieces. Quantized position keys reconnect
+		# those coincident vertices without joining neighbouring separate boards.
+		var first_triangle_by_position: Dictionary = {}
+		for triangle_index: int in range(triangle_count):
+			for corner_index: int in range(3):
+				var vertex: Vector3 = vertices[indices[triangle_index * 3 + corner_index]]
+				var position_key: Vector3i = Vector3i(
+					roundi(vertex.x * 100000.0),
+					roundi(vertex.y * 100000.0),
+					roundi(vertex.z * 100000.0)
+				)
+				if first_triangle_by_position.has(position_key):
+					_yakitori_union_find_join(
+						parents,
+						component_sizes,
+						triangle_index,
+						int(first_triangle_by_position[position_key])
+					)
+				else:
+					first_triangle_by_position[position_key] = triangle_index
+
+		var component_min_y: Dictionary = {}
+		for triangle_index: int in range(triangle_count):
+			var component_root: int = _yakitori_union_find_root(parents, triangle_index)
+			var minimum_y: float = INF
+			for corner_index: int in range(3):
+				minimum_y = minf(
+					minimum_y,
+					vertices[indices[triangle_index * 3 + corner_index]].y
+				)
+			if component_min_y.has(component_root):
+				component_min_y[component_root] = minf(
+					float(component_min_y[component_root]), minimum_y
+				)
+			else:
+				component_min_y[component_root] = minimum_y
+
+		var kept_indices: PackedInt32Array = PackedInt32Array()
+		for triangle_index: int in range(triangle_count):
+			var component_root: int = _yakitori_union_find_root(parents, triangle_index)
+			if float(component_min_y[component_root]) >= component_floor_cutoff:
+				removed_triangle_count += 1
+				continue
+			kept_indices.append(indices[triangle_index * 3])
+			kept_indices.append(indices[triangle_index * 3 + 1])
+			kept_indices.append(indices[triangle_index * 3 + 2])
+
+		var filtered_arrays: Array = source_arrays.duplicate(true)
+		filtered_arrays[Mesh.ARRAY_INDEX] = kept_indices
+		filtered_mesh.add_surface_from_arrays(primitive_type, filtered_arrays)
+		var filtered_surface_index: int = filtered_mesh.get_surface_count() - 1
+		filtered_mesh.surface_set_material(
+			filtered_surface_index,
+			source_mesh.surface_get_material(surface_index)
+		)
+		filtered_mesh.surface_set_name(
+			filtered_surface_index,
+			source_mesh.surface_get_name(surface_index)
+		)
+
+	if removed_triangle_count > 0:
+		target_mesh.mesh = filtered_mesh
+	return removed_triangle_count
+
 func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	# Reuse the authored PBR maps for every new piece so the extension reads as
 	# one manufactured building, not a stack of differently shaded primitives.
@@ -4246,6 +4382,51 @@ func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	var plaster: StandardMaterial3D = _yakitori_plaster_material(
 		plaster_source, true
 	)
+	var wall_grime_low: StandardMaterial3D = plaster.duplicate(true) as StandardMaterial3D
+	wall_grime_low.resource_local_to_scene = true
+	wall_grime_low.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	wall_grime_low.albedo_color = Color(0.30, 0.285, 0.255, 0.18)
+	wall_grime_low.roughness = 0.96
+	wall_grime_low.normal_scale = 0.34
+	var wall_grime_high: StandardMaterial3D = wall_grime_low.duplicate(true) as StandardMaterial3D
+	wall_grime_high.resource_local_to_scene = true
+	wall_grime_high.albedo_color = Color(0.34, 0.325, 0.295, 0.075)
+	var wall_joint: StandardMaterial3D = plaster.duplicate(true) as StandardMaterial3D
+	wall_joint.resource_local_to_scene = true
+	wall_joint.albedo_color = Color(
+		plaster.albedo_color.r * 0.82,
+		plaster.albedo_color.g * 0.83,
+		plaster.albedo_color.b * 0.85,
+		1.0
+	)
+	wall_joint.roughness = 0.84
+	wall_joint.normal_scale = 0.20
+	wall_joint.uv1_scale = Vector3(0.58, 0.58, 0.58)
+	wall_joint.uv1_triplanar = true
+
+	# The source shell uses several bright footing blocks across the frontage.
+	# Preserve its stone texture as the source, then replace that segmented mesh
+	# with one restrained dark course shared by the threshold and wall perimeter.
+	var concrete_base_mesh: MeshInstance3D = authored_model.find_child(
+		"SM_YakitoriShop_ConcreteBase", true, false
+	) as MeshInstance3D
+	var plinth: StandardMaterial3D = StandardMaterial3D.new()
+	if concrete_base_mesh != null:
+		var concrete_base_source: StandardMaterial3D = concrete_base_mesh.get_active_material(0) as StandardMaterial3D
+		if concrete_base_source != null:
+			plinth = concrete_base_source.duplicate(true) as StandardMaterial3D
+	elif mat_stone != null:
+		plinth = mat_stone.duplicate(true) as StandardMaterial3D
+	plinth.resource_local_to_scene = true
+	plinth.albedo_color = Color(0.54, 0.52, 0.48, 1.0)
+	plinth.metallic = 0.0
+	plinth.metallic_specular = 0.22
+	plinth.roughness = 0.78
+	plinth.normal_scale = maxf(plinth.normal_scale, 0.44)
+	plinth.uv1_scale = Vector3(0.76, 0.76, 0.76)
+	plinth.uv1_triplanar = true
+	if concrete_base_mesh != null:
+		concrete_base_mesh.visible = false
 
 	var cedar_source: StandardMaterial3D = _yakitori_runtime_material(
 		authored_model,
@@ -4274,22 +4455,28 @@ func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	var cedar_eave: StandardMaterial3D = _yakitori_wood_material(
 		cedar_source, Color(1.78, 1.93, 2.00, 1.0), 0.54, 0.55, 0.58, true
 	)
-	var cedar_soffit: StandardMaterial3D = _yakitori_wood_material(
-		cedar_source, Color(1.78, 1.93, 2.00, 1.0), 0.52, 0.65, 0.58, true
-	)
 
 	var glass: StandardMaterial3D = _yakitori_runtime_material(
 		authored_model,
 		"SM_YakitoriShop_Glazing",
 		mat_storefront_glass_dark,
 		1.0,
-		0.16,
-		0.0,
-		0.30,
+		0.09,
+		0.08,
+		0.18,
 		false
 	)
-	glass.albedo_color = Color(0.23, 0.29, 0.34, 0.30)
-	glass.metallic_specular = 0.52
+	# Reference swatch #E6E1D6: warm-neutral, lightly dusty glazing rather than
+	# blue-black mirrored panes. Subtle refraction preserves depth without making
+	# the storefront visually wavy.
+	glass.albedo_color = Color(0.902, 0.882, 0.839, 0.18)
+	glass.metallic = 0.0
+	glass.metallic_specular = 0.38
+	glass.roughness = 0.09
+	glass.normal_scale = 0.08
+	glass.refraction_enabled = true
+	glass.refraction_scale = 0.012
+	glass.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 	var interior: StandardMaterial3D = _yakitori_runtime_material(
 		authored_model,
@@ -4312,6 +4499,9 @@ func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 		true
 	)
 	roof.metallic = 0.06
+	var authored_roof_mesh: MeshInstance3D = authored_model.find_child(
+		"SM_YakitoriShop_RoofAndParapet", true, false
+	) as MeshInstance3D
 	var metal: StandardMaterial3D = _yakitori_runtime_material(
 		authored_model,
 		"SM_YakitoriShop_ArchitecturalMetal",
@@ -4325,71 +4515,188 @@ func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	metal.metallic = 0.86
 	metal.metallic_specular = 0.44
 
+	# The source GLB was originally a one-storey shop. Its upper cedar cladding
+	# and roof parapet occupied y=2.67-3.60, becoming a metre-tall belt when the
+	# new upper floor was added. Keep the original ground-floor joinery and thin
+	# projecting canopy, but remove those two obsolete upper components.
+	var removed_cedar_triangles: int = _yakitori_remove_mesh_components_above(
+		cedar_mesh, 2.665
+	)
+	var removed_roof_triangles: int = _yakitori_remove_mesh_components_above(
+		authored_roof_mesh, 3.00
+	)
+	var upper_storey_drop: float = 0.70
+
 	var architecture: Node3D = Node3D.new()
-	architecture.name = "YakitoriArchitecture_v10_28m"
+	architecture.name = "YakitoriArchitecture_v10_28z"
 	architecture.add_to_group("shinrai_yakitori_architecture")
+	architecture.set_meta("removed_legacy_cedar_triangles", removed_cedar_triangles)
+	architecture.set_meta("removed_legacy_roof_triangles", removed_roof_triangles)
 	authored_model.add_child(architecture)
 
 	# Full-depth two-storey masonry shell. The front stays open so the authored
 	# recessed storefront and its original glass remain untouched.
 	_add_local_box(architecture, "PlasterWall_Left",
-		Vector3(-2.02, 3.24, 1.52), Vector3(0.18, 6.30, 4.22), plaster)
+		Vector3(-2.02, 3.24 - upper_storey_drop * 0.5, 1.52),
+		Vector3(0.18, 6.30 - upper_storey_drop, 4.22), plaster)
 	_add_local_box(architecture, "PlasterWall_Right",
-		Vector3(2.02, 3.24, 1.52), Vector3(0.18, 6.30, 4.22), plaster)
+		Vector3(2.02, 3.24 - upper_storey_drop * 0.5, 1.52),
+		Vector3(0.18, 6.30 - upper_storey_drop, 4.22), plaster)
 	_add_local_box(architecture, "PlasterWall_Rear",
-		Vector3(0.0, 3.24, 3.56), Vector3(4.20, 6.30, 0.18), plaster)
-	_add_local_box(architecture, "UpperFacade_LeftPier",
-		Vector3(-1.96, 4.90, -0.56), Vector3(0.30, 2.58, 0.20), plaster)
-	_add_local_box(architecture, "UpperFacade_RightPier",
-		Vector3(1.96, 4.90, -0.56), Vector3(0.30, 2.58, 0.20), plaster)
-	_add_local_box(architecture, "UpperFacade_Back",
-		Vector3(0.0, 4.90, -0.43), Vector3(3.64, 2.56, 0.12), interior)
+		Vector3(0.0, 3.24 - upper_storey_drop * 0.5, 3.56),
+		Vector3(4.20, 6.30 - upper_storey_drop, 0.18), plaster)
 
-	# Upper window wall: one screened bay and two restrained glass bays, matching
-	# the front-view proportions in the supplied building sheet.
+	# Two very transparent textured passes create a soft ground-contact fade on
+	# the side and rear walls. They stop above the stone cap, cast no shadows and
+	# do not alter the building silhouette.
+	var grime_side_x: Array[float] = [-2.114, 2.114]
+	for grime_side_index: int in range(grime_side_x.size()):
+		var side_grime_low: MeshInstance3D = _add_local_box(
+			architecture, "WallGrimeSideLow_%02d" % grime_side_index,
+			Vector3(grime_side_x[grime_side_index], 0.35, 1.52),
+			Vector3(0.008, 0.18, 3.96), wall_grime_low
+		)
+		side_grime_low.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var side_grime_high: MeshInstance3D = _add_local_box(
+			architecture, "WallGrimeSideHigh_%02d" % grime_side_index,
+			Vector3(grime_side_x[grime_side_index], 0.53, 1.52),
+			Vector3(0.008, 0.18, 3.96), wall_grime_high
+		)
+		side_grime_high.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var rear_grime_low: MeshInstance3D = _add_local_box(
+		architecture, "WallGrimeRearLow", Vector3(0.0, 0.35, 3.654),
+		Vector3(3.96, 0.18, 0.008), wall_grime_low
+	)
+	rear_grime_low.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var rear_grime_high: MeshInstance3D = _add_local_box(
+		architecture, "WallGrimeRearHigh", Vector3(0.0, 0.53, 3.654),
+		Vector3(3.96, 0.18, 0.008), wall_grime_high
+	)
+	rear_grime_high.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	# A single compact upper-storey rear opening matches the building-only
+	# reference. It shares the dedicated glazing response with the front windows;
+	# the surrounding cedar and projecting sill complete the architecture.
+	var rear_window_x: float = 1.14
+	var rear_window_y: float = 4.80 - upper_storey_drop
+	_add_local_box(architecture, "RearWindowReveal",
+		Vector3(rear_window_x, rear_window_y, 3.658),
+		Vector3(0.64, 0.88, 0.020), metal)
+	_add_local_box(architecture, "RearWindowGlass",
+		Vector3(rear_window_x, rear_window_y, 3.674),
+		Vector3(0.46, 0.68, 0.026), glass)
+	var rear_window_frame_x: Array[float] = [rear_window_x - 0.28, rear_window_x + 0.28]
+	for rear_frame_index: int in range(rear_window_frame_x.size()):
+		_add_local_box(architecture, "RearWindowFrameVertical_%02d" % rear_frame_index,
+			Vector3(rear_window_frame_x[rear_frame_index], rear_window_y, 3.700),
+			Vector3(0.065, 0.82, 0.070), cedar_frame)
+	_add_yakitori_x_grain_box(architecture, "RearWindowFrameHead",
+		Vector3(rear_window_x, rear_window_y + 0.385, 3.700),
+		Vector3(0.625, 0.065, 0.070), cedar_frame)
+	_add_yakitori_x_grain_box(architecture, "RearWindowFrameSill",
+		Vector3(rear_window_x, rear_window_y - 0.385, 3.725),
+		Vector3(0.68, 0.075, 0.12), cedar_frame)
+
+	# Very fine concrete-panel reveals break up the deep blank shell without
+	# reading as painted lines. The existing cedar floor ledger supplies the one
+	# deliberate horizontal break, so the concrete joints remain vertical only.
+	var side_joint_x: Array[float] = [-2.112, 2.112]
+	var side_joint_z: Array[float] = [0.34, 1.55, 2.76]
+	for side_index: int in range(side_joint_x.size()):
+		for joint_index: int in range(side_joint_z.size()):
+			_add_local_box(architecture,
+				"SideWallVerticalJoint_%02d_%02d" % [side_index, joint_index],
+				Vector3(side_joint_x[side_index],
+					3.23 - upper_storey_drop * 0.5, side_joint_z[joint_index]),
+				Vector3(0.010, 5.72 - upper_storey_drop, 0.012), wall_joint)
+
+	# Keep the formwork seams clear of the new window opening.
+	var rear_joint_x: Array[float] = [-0.72, 1.46]
+	for joint_index: int in range(rear_joint_x.size()):
+		_add_local_box(architecture, "RearWallVerticalJoint_%02d" % joint_index,
+			Vector3(rear_joint_x[joint_index],
+				3.23 - upper_storey_drop * 0.5, 3.652),
+			Vector3(0.012, 5.72 - upper_storey_drop, 0.010), wall_joint)
+
+	# Hairline rear corner profiles and wall-head flashing finish the masonry
+	# intersections without competing with the cedar facade or roof silhouette.
+	var rear_corner_x: Array[float] = [-2.114, 2.114]
+	for corner_index: int in range(rear_corner_x.size()):
+		_add_local_box(architecture, "RearCornerProfile_%02d" % corner_index,
+			Vector3(rear_corner_x[corner_index],
+				3.27 - upper_storey_drop * 0.5, 3.655),
+			Vector3(0.030, 5.78 - upper_storey_drop, 0.030), metal)
+		_add_yakitori_z_grain_box(architecture,
+			"WallHeadSideTrim_%02d" % corner_index,
+			Vector3(side_joint_x[corner_index], 6.275 - upper_storey_drop, 1.52),
+			Vector3(0.032, 0.040, 4.08), metal)
+	_add_yakitori_x_grain_box(architecture, "WallHeadRearTrim",
+		Vector3(0.0, 6.275 - upper_storey_drop, 3.655),
+		Vector3(4.26, 0.040, 0.032), metal)
+
+	# One slim stone course now runs without gaps around all four sides. A single
+	# shallow slab projects beneath the full storefront, replacing the previous
+	# cluster of bright, offset blocks visible in the walkaround.
+	_add_local_box(architecture, "FoundationPlinthFront",
+		Vector3(0.0, 0.10, -0.59), Vector3(4.40, 0.20, 0.28), plinth)
+	_add_local_box(architecture, "EntranceThresholdContinuous",
+		Vector3(0.0, 0.16, -0.82), Vector3(4.54, 0.12, 0.44), plinth)
+	var plinth_side_x: Array[float] = [-2.13, 2.13]
+	for plinth_index: int in range(plinth_side_x.size()):
+		_add_local_box(architecture, "FoundationPlinthSide_%02d" % plinth_index,
+			Vector3(plinth_side_x[plinth_index], 0.10, 1.35),
+			Vector3(0.24, 0.20, 4.60), plinth)
+		_add_local_box(architecture, "FoundationPlinthCapSide_%02d" % plinth_index,
+			Vector3(plinth_side_x[plinth_index], 0.21, 1.35),
+			Vector3(0.28, 0.06, 4.64), plinth)
+	_add_local_box(architecture, "FoundationPlinthRear",
+		Vector3(0.0, 0.10, 3.65), Vector3(4.50, 0.20, 0.24), plinth)
+	_add_local_box(architecture, "FoundationPlinthCapRear",
+		Vector3(0.0, 0.21, 3.65), Vector3(4.54, 0.06, 0.28), plinth)
+	_add_local_box(architecture, "UpperFacade_LeftPier",
+		Vector3(-1.96, 4.90 - upper_storey_drop, -0.56),
+		Vector3(0.30, 2.58, 0.20), plaster)
+	_add_local_box(architecture, "UpperFacade_RightPier",
+		Vector3(1.96, 4.90 - upper_storey_drop, -0.56),
+		Vector3(0.30, 2.58, 0.20), plaster)
+	_add_local_box(architecture, "UpperFacade_Back",
+		Vector3(0.0, 4.90 - upper_storey_drop, -0.43),
+		Vector3(3.64, 2.56, 0.12), interior)
+
+	# Upper window wall: the facade faces local -Z, so positive local X appears
+	# on the viewer's left. Put the screened bay there, followed by a broad
+	# centre pane and a slightly narrower pane on the viewer's right.
 	_add_local_box(architecture, "UpperGlass_Centre",
-		Vector3(0.08, 4.93, -0.61), Vector3(1.12, 2.08, 0.045), glass)
+		Vector3(-0.045, 4.93 - upper_storey_drop, -0.61),
+		Vector3(1.13, 2.08, 0.045), glass)
 	_add_local_box(architecture, "UpperGlass_Right",
-		Vector3(1.23, 4.93, -0.61), Vector3(0.92, 2.08, 0.045), glass)
+		Vector3(-1.26, 4.93 - upper_storey_drop, -0.61),
+		Vector3(0.92, 2.08, 0.045), glass)
 	_add_local_box(architecture, "UpperScreenShadow",
-		Vector3(-1.20, 4.93, -0.60), Vector3(1.04, 2.08, 0.04), glass)
+		Vector3(1.20, 4.93 - upper_storey_drop, -0.60),
+		Vector3(1.04, 2.08, 0.04), glass)
 
 	_add_yakitori_x_grain_box(architecture, "UpperFrame_Sill",
-		Vector3(0.0, 3.78, -0.70), Vector3(3.74, 0.16, 0.16), cedar_upper)
+		Vector3(0.0, 3.78 - upper_storey_drop, -0.70),
+		Vector3(3.74, 0.16, 0.16), cedar_upper)
 	_add_yakitori_x_grain_box(architecture, "UpperFrame_Head",
-		Vector3(0.0, 6.08, -0.70), Vector3(3.74, 0.18, 0.16), cedar_upper)
-	var upper_frame_x: Array[float] = [-1.82, -0.61, 0.70, 1.82]
+		Vector3(0.0, 6.08 - upper_storey_drop, -0.70),
+		Vector3(3.74, 0.18, 0.16), cedar_upper)
+	var upper_frame_x: Array[float] = [-1.82, -0.70, 0.61, 1.82]
 	var upper_frame_width: Array[float] = [0.18, 0.14, 0.14, 0.18]
 	for frame_index: int in range(upper_frame_x.size()):
 		_add_local_box(architecture, "UpperFrame_%02d" % frame_index,
-			Vector3(upper_frame_x[frame_index], 4.93, -0.70),
+			Vector3(upper_frame_x[frame_index], 4.93 - upper_storey_drop, -0.70),
 			Vector3(upper_frame_width[frame_index], 2.46, 0.16), cedar_frame)
 	for slat_index: int in range(8):
-		var slat_x: float = -1.66 + float(slat_index) * 0.135
+		var slat_x: float = 0.715 + float(slat_index) * 0.135
 		_add_local_box(architecture, "UpperScreenSlat_%02d" % slat_index,
-			Vector3(slat_x, 4.94, -0.79), Vector3(0.055, 2.12, 0.075), cedar_frame)
+			Vector3(slat_x, 4.94 - upper_storey_drop, -0.79),
+			Vector3(0.055, 2.12, 0.075), cedar_frame)
 
-	# A layered ground-floor eave with real depth: board soffit, exposed
-	# front-to-back rafters, a cedar fascia, and one thin weathered flashing.
-	for soffit_index: int in range(10):
-		var soffit_x: float = -1.98 + float(soffit_index) * 0.44
-		_add_yakitori_z_grain_box(architecture, "CanopySoffit_%02d" % soffit_index,
-			Vector3(soffit_x, 2.77, -1.13), Vector3(0.39, 0.055, 0.80), cedar_soffit)
-	for rafter_index: int in range(7):
-		var rafter_x: float = -1.80 + float(rafter_index) * 0.60
-		_add_yakitori_z_grain_box(architecture, "CanopyRafter_%02d" % rafter_index,
-			Vector3(rafter_x, 2.69, -1.11), Vector3(0.085, 0.12, 0.82), cedar_eave)
-	_add_yakitori_x_grain_box(architecture, "CanopyFrontFascia",
-		Vector3(0.0, 2.90, -1.55), Vector3(4.62, 0.24, 0.15), cedar_eave)
-	_add_yakitori_x_grain_box(architecture, "CanopyLowerRail",
-		Vector3(0.0, 2.68, -1.48), Vector3(4.50, 0.09, 0.10), cedar_frame)
-	_add_yakitori_x_grain_box(architecture, "CanopyFlashing",
-		Vector3(0.0, 3.06, -1.48), Vector3(4.72, 0.075, 0.16), metal)
-	var bracket_positions: Array[float] = [-1.78, 1.78]
-	for bracket_index: int in range(bracket_positions.size()):
-		_add_yakitori_z_grain_box(architecture, "CanopyBracket_%02d" % bracket_index,
-			Vector3(bracket_positions[bracket_index], 2.55, -1.05),
-			Vector3(0.12, 0.13, 0.52), cedar_frame)
+	# The retained authored canopy is now the single slim break between floors.
+	# Lowering the new upper storey closes the former one-metre cladding belt while
+	# leaving a narrow, believable timber curb above the flashing.
 
 	# Storefront joinery is deliberately fine and shallow so it enriches the
 	# authored sliders rather than rebuilding or covering them.
@@ -4407,39 +4714,64 @@ func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	var side_positions: Array[float] = [-2.13, 2.13]
 	for side_index: int in range(side_positions.size()):
 		_add_yakitori_z_grain_box(architecture, "SideLedgerLow_%02d" % side_index,
-			Vector3(side_positions[side_index], 3.68, 1.50),
+			Vector3(side_positions[side_index], 3.68 - upper_storey_drop, 1.50),
 			Vector3(0.11, 0.16, 4.20), cedar_upper)
 		_add_yakitori_z_grain_box(architecture, "SideLedgerHigh_%02d" % side_index,
-			Vector3(side_positions[side_index], 6.18, 1.50),
+			Vector3(side_positions[side_index], 6.18 - upper_storey_drop, 1.50),
 			Vector3(0.11, 0.14, 4.20), cedar_upper)
 
-	# Low-slope roof, deep front edge and a compact set-back safety rail.
+	# Low-slope roof with a restrained cedar underside and slim metal-capped
+	# front edge. The authored reference uses a shallow roof silhouette rather
+	# than the earlier stack of heavy wood fascia boards.
 	_add_local_box(architecture, "UpperRoofDeck",
-		Vector3(0.0, 6.39, 1.48), Vector3(4.48, 0.20, 4.42), roof)
+		Vector3(0.0, 6.37 - upper_storey_drop, 1.48),
+		Vector3(4.42, 0.14, 4.38), roof)
 	_add_yakitori_x_grain_box(architecture, "UpperRoofFrontEave",
-		Vector3(0.0, 6.34, -0.84), Vector3(4.74, 0.20, 0.52), cedar_eave)
+		Vector3(0.0, 6.31 - upper_storey_drop, -0.82),
+		Vector3(4.58, 0.12, 0.34), cedar_eave)
 	_add_yakitori_x_grain_box(architecture, "UpperRoofFascia",
-		Vector3(0.0, 6.48, -1.07), Vector3(4.86, 0.18, 0.14), cedar_eave)
+		Vector3(0.0, 6.36 - upper_storey_drop, -1.00),
+		Vector3(4.66, 0.12, 0.085), metal)
 	_add_yakitori_x_grain_box(architecture, "UpperRoofFlashing",
-		Vector3(0.0, 6.60, -1.02), Vector3(4.94, 0.07, 0.20), metal)
+		Vector3(0.0, 6.435 - upper_storey_drop, -0.975),
+		Vector3(4.72, 0.045, 0.16), metal)
 
-	var rail_y: float = 6.91
-	var rail_positions: Array[float] = [-1.78, 1.78]
-	for rail_index: int in range(rail_positions.size()):
+	# Two compact rear masonry piers rise above the roofline in the reference and
+	# visually terminate the deeper side walls.
+	var roof_parapet_x: Array[float] = [-1.92, 1.92]
+	for parapet_index: int in range(roof_parapet_x.size()):
+		_add_local_box(architecture, "RoofParapetPier_%02d" % parapet_index,
+			Vector3(roof_parapet_x[parapet_index], 6.76 - upper_storey_drop, 2.98),
+			Vector3(0.18, 0.64, 0.22), plaster)
+		_add_local_box(architecture, "RoofParapetCap_%02d" % parapet_index,
+			Vector3(roof_parapet_x[parapet_index], 7.10 - upper_storey_drop, 2.98),
+			Vector3(0.22, 0.045, 0.26), metal)
+
+	# Seat the low safety rail directly on the roof instead of leaving the old
+	# posts floating above it. A centre post on each run keeps the thin profile
+	# believable without making the roofline busy.
+	var rail_post_y: float = 6.65 - upper_storey_drop
+	var rail_top_y: float = 6.86 - upper_storey_drop
+	var rail_post_x: Array[float] = [-1.72, 0.0, 1.72]
+	for rail_index: int in range(rail_post_x.size()):
 		_add_local_box(architecture, "RoofRailPostFront_%02d" % rail_index,
-			Vector3(rail_positions[rail_index], rail_y, -0.38),
-			Vector3(0.07, 0.58, 0.07), metal)
+			Vector3(rail_post_x[rail_index], rail_post_y, -0.38),
+			Vector3(0.055, 0.40, 0.055), metal)
 		_add_local_box(architecture, "RoofRailPostRear_%02d" % rail_index,
-			Vector3(rail_positions[rail_index], rail_y, 2.86),
-			Vector3(0.07, 0.58, 0.07), metal)
+			Vector3(rail_post_x[rail_index], rail_post_y, 2.86),
+			Vector3(0.055, 0.40, 0.055), metal)
 	_add_yakitori_x_grain_box(architecture, "RoofRailFront",
-		Vector3(0.0, 7.18, -0.38), Vector3(3.64, 0.07, 0.07), metal)
+		Vector3(0.0, rail_top_y, -0.38), Vector3(3.50, 0.055, 0.055), metal)
 	_add_yakitori_x_grain_box(architecture, "RoofRailRear",
-		Vector3(0.0, 7.18, 2.86), Vector3(3.64, 0.07, 0.07), metal)
-	for rail_index: int in range(rail_positions.size()):
+		Vector3(0.0, rail_top_y, 2.86), Vector3(3.50, 0.055, 0.055), metal)
+	var rail_side_x: Array[float] = [-1.72, 1.72]
+	for rail_index: int in range(rail_side_x.size()):
+		_add_local_box(architecture, "RoofRailPostSideMid_%02d" % rail_index,
+			Vector3(rail_side_x[rail_index], rail_post_y, 1.24),
+			Vector3(0.055, 0.40, 0.055), metal)
 		_add_yakitori_z_grain_box(architecture, "RoofRailSide_%02d" % rail_index,
-			Vector3(rail_positions[rail_index], 7.18, 1.24),
-			Vector3(0.07, 0.07, 3.24), metal)
+			Vector3(rail_side_x[rail_index], rail_top_y, 1.24),
+			Vector3(0.055, 0.055, 3.24), metal)
 
 	return architecture
 
@@ -4452,18 +4784,18 @@ func _replace_visual_test_storefront_with_yakitori_shop() -> void:
 	var old_threshold: Node3D = target.get("threshold") as Node3D
 	var old_lintel: Node3D = target.get("lintel") as Node3D
 	if old_root == null or old_threshold == null or old_lintel == null:
-		push_warning("v10.28m Yakitori replacement skipped: locked storefront was not found")
+		push_warning("v10.28z Yakitori replacement skipped: locked storefront was not found")
 		return
 
 	var replacement: Node3D = YakitoriShopBuildingScene.instantiate() as Node3D
 	if replacement == null:
-		push_error("v10.28m Yakitori replacement failed: authored building scene could not instantiate")
+		push_error("v10.28z Yakitori replacement failed: authored building scene could not instantiate")
 		return
 
 	var authored_model: Node3D = replacement.get_node_or_null("Model") as Node3D
 	if authored_model == null:
 		replacement.queue_free()
-		push_error("v10.28m Yakitori replacement failed: authored Model root is missing")
+		push_error("v10.28z Yakitori replacement failed: authored Model root is missing")
 		return
 
 	# Preserve the exact lot transform, but align the authored entrance to the
@@ -4521,9 +4853,11 @@ func _replace_visual_test_storefront_with_yakitori_shop() -> void:
 		shop_interior_light_count = maxi(0, shop_interior_light_count - removed_interior_lights)
 
 	print(
-		"v10.28m Yakitori building: installed %s + %s | calibrated sugi cedar and #78766F aged plaster | released interior lights %d" % [
+		"v10.28z Yakitori building: installed %s + %s | compact offset rear window | unified dark-stone threshold | removed legacy triangles cedar=%d roof=%d | released interior lights %d" % [
 			replacement.name,
 			architecture.name,
+			int(architecture.get_meta("removed_legacy_cedar_triangles", 0)),
+			int(architecture.get_meta("removed_legacy_roof_triangles", 0)),
 			removed_interior_lights,
 		]
 	)
@@ -4614,7 +4948,7 @@ func _visual_test_storefront_fixture_anchor(
 
 func _build_yakitori_canopy_lights(building_root: Node3D) -> int:
 	var architecture: Node3D = building_root.find_child(
-		"YakitoriArchitecture_v10_28m", true, false
+		"YakitoriArchitecture_v10_28z", true, false
 	) as Node3D
 	if architecture == null:
 		return 0
@@ -4670,7 +5004,7 @@ func _build_visual_test_storefront_lamp_coverage() -> void:
 		visual_test_storefront_light_target = building_root.name
 		visual_test_storefront_fixture_target = "Three recessed canopy downlights"
 		print(
-			"v10.28m Yakitori canopy lights: %d recessed fixtures | street pool %d/%d" % [
+			"v10.28z Yakitori canopy lights: %d recessed fixtures | street pool %d/%d" % [
 				canopy_light_count,
 				street_light_count,
 				MAX_STREET_LIGHTS,

@@ -1,0 +1,19 @@
+{
+  "asset": "SHINRAI Cat Cafe Sign",
+  "version": "Replica V10 game-test",
+  "status": "in-game comparison",
+  "dimensions_m": {
+    "diameter": 0.62,
+    "housing_depth": 0.11,
+    "wall_projection": 0.37
+  },
+  "text": {
+    "japanese": "\u732b\u30ab\u30d5\u30a7",
+    "english": "CAT CAFE"
+  },
+  "orientation": {
+    "up": "+Y",
+    "front": "-Z"
+  },
+  "overwrites_only_asset_files": true
+}

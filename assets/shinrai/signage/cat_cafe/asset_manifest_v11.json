@@ -1,0 +1,20 @@
+{
+  "asset": "SHINRAI Cat Cafe Sign",
+  "version": "Replica V11",
+  "reason": "Reference-measured readability correction",
+  "japanese": "猫カフェ",
+  "english": "CAT CAFE",
+  "sign_diameter_m": 0.62,
+  "reference_measured": {
+    "cat_body_width_m": 0.34,
+    "cat_body_height_m": 0.24,
+    "cat_whisker_width_m": 0.43,
+    "japanese_width_m": 0.332,
+    "japanese_height_m": 0.097,
+    "japanese_tube_diameter_m": 0.0106,
+    "underline_width_m": 0.302,
+    "english_width_m": 0.232,
+    "english_height_m": 0.031
+  },
+  "overwrites_only_sign_asset": true
+}

@@ -7,12 +7,12 @@
 [node name="Model" parent="." instance=ExtResource("1_model")]
 
 [node name="NeonBounce" type="OmniLight3D" parent="."]
-position = Vector3(0, 0.01, -0.395)
-light_color = Color(1, 0.13, 0.48, 1)
-light_energy = 0.34
+position = Vector3(0, 0.0, -0.395)
+light_color = Color(1, 0.12, 0.42, 1)
+light_energy = 0.24
 shadow_enabled = false
-omni_range = 2.35
-omni_attenuation = 1.45
+omni_range = 2.15
+omni_attenuation = 1.55
 distance_fade_enabled = true
 distance_fade_begin = 18.0
 distance_fade_length = 8.0

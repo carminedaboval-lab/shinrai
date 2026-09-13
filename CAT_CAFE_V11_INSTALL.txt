@@ -1,0 +1,32 @@
+SHINRAI CAT CAFÉ SIGN — V11 READABILITY / REPLICA FIX
+
+WHY V10 HAD NO VISIBLE WRITING IN GAME
+The text geometry existed, but it was physically much too small.
+
+The supplied master reference was measured directly:
+- Japanese 猫カフェ is roughly 0.33 m wide x 0.10 m high on the 0.62 m sign.
+- V10 used only about 0.23 m x 0.05 m.
+- V10 Japanese tube diameter was only about 2.4 mm, which became sub-pixel
+  at the gameplay distance shown in the screenshot.
+
+V11 FIX
+- 猫カフェ: about 0.332 m wide x 0.097 m high
+- Japanese visible tube diameter: about 10.6 mm
+- underline: about 0.302 m wide
+- CAT CAFE: about 0.232 m wide x 0.031 m high
+- cat body outline: about 0.34 m wide x 0.24 m high
+- whisker-to-whisker width: about 0.43 m
+
+These measurements are based on the supplied master front-view panel rather
+than eyeballing the proportions.
+
+INSTALL
+1. Close Godot.
+2. Extract this ZIP into your Shinrai project root.
+3. Choose Replace files in destination.
+4. Reopen Godot and let the GLB reimport.
+5. Run the game.
+
+ONLY THE SIGN ASSET IS REPLACED.
+Your current placement script, main.tscn, town_main.gd and Yakitori work are
+not changed.
