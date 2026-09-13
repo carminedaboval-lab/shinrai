@@ -183,7 +183,7 @@ const YAKITORI_LANTERN_FALLBACK_LIGHT_RANGE: float = 2.5
 # entrance socket is aligned to the removed shop's threshold, so no old walls,
 # roof, collision, interior, utilities or façade pieces remain behind it.
 const YAKITORI_SHOP_ENTRANCE_LOCAL_Z: float = -0.72
-# v10.28z: reserve three of the existing street-light slots for the hero
+# v10.29a: reserve three of the existing street-light slots for the hero
 # storefront's recessed canopy downlights. The town-wide light ceiling remains
 # unchanged; these fixtures simply replace three generic road lights.
 const YAKITORI_CANOPY_LIGHT_COUNT: int = 3
@@ -4358,6 +4358,120 @@ func _yakitori_remove_mesh_components_above(
 		target_mesh.mesh = filtered_mesh
 	return removed_triangle_count
 
+func _yakitori_remove_mesh_components_inside(
+	target_mesh: MeshInstance3D,
+	selection: AABB
+) -> int:
+	# Remove only complete disconnected pieces contained by a local-space box.
+	# The authored architectural-metal surface combines the two old door pulls
+	# with unrelated trim, so filtering whole components preserves every part
+	# outside the centre-door hardware zone.
+	if target_mesh == null:
+		return 0
+	var source_mesh: ArrayMesh = target_mesh.mesh as ArrayMesh
+	if source_mesh == null:
+		return 0
+
+	var filtered_mesh: ArrayMesh = ArrayMesh.new()
+	filtered_mesh.resource_local_to_scene = true
+	var removed_triangle_count: int = 0
+	var selection_end: Vector3 = selection.position + selection.size
+
+	for surface_index: int in range(source_mesh.get_surface_count()):
+		var primitive_type: Mesh.PrimitiveType = source_mesh.surface_get_primitive_type(
+			surface_index
+		)
+		var source_arrays: Array = source_mesh.surface_get_arrays(surface_index)
+		var vertices: PackedVector3Array = source_arrays[Mesh.ARRAY_VERTEX]
+		var indices: PackedInt32Array = source_arrays[Mesh.ARRAY_INDEX]
+		if primitive_type != Mesh.PRIMITIVE_TRIANGLES or indices.is_empty():
+			filtered_mesh.add_surface_from_arrays(primitive_type, source_arrays)
+			filtered_mesh.surface_set_material(
+				filtered_mesh.get_surface_count() - 1,
+				source_mesh.surface_get_material(surface_index)
+			)
+			continue
+
+		var triangle_count: int = indices.size() / 3
+		var parents: Array[int] = []
+		var component_sizes: Array[int] = []
+		parents.resize(triangle_count)
+		component_sizes.resize(triangle_count)
+		for triangle_index: int in range(triangle_count):
+			parents[triangle_index] = triangle_index
+			component_sizes[triangle_index] = 1
+
+		var first_triangle_by_position: Dictionary = {}
+		for triangle_index: int in range(triangle_count):
+			for corner_index: int in range(3):
+				var vertex: Vector3 = vertices[indices[triangle_index * 3 + corner_index]]
+				var position_key: Vector3i = Vector3i(
+					roundi(vertex.x * 100000.0),
+					roundi(vertex.y * 100000.0),
+					roundi(vertex.z * 100000.0)
+				)
+				if first_triangle_by_position.has(position_key):
+					_yakitori_union_find_join(
+						parents,
+						component_sizes,
+						triangle_index,
+						int(first_triangle_by_position[position_key])
+					)
+				else:
+					first_triangle_by_position[position_key] = triangle_index
+
+		var component_minimum: Dictionary = {}
+		var component_maximum: Dictionary = {}
+		for triangle_index: int in range(triangle_count):
+			var component_root: int = _yakitori_union_find_root(parents, triangle_index)
+			for corner_index: int in range(3):
+				var vertex: Vector3 = vertices[indices[triangle_index * 3 + corner_index]]
+				if component_minimum.has(component_root):
+					var minimum: Vector3 = component_minimum[component_root]
+					var maximum: Vector3 = component_maximum[component_root]
+					component_minimum[component_root] = minimum.min(vertex)
+					component_maximum[component_root] = maximum.max(vertex)
+				else:
+					component_minimum[component_root] = vertex
+					component_maximum[component_root] = vertex
+
+		var kept_indices: PackedInt32Array = PackedInt32Array()
+		for triangle_index: int in range(triangle_count):
+			var component_root: int = _yakitori_union_find_root(parents, triangle_index)
+			var minimum: Vector3 = component_minimum[component_root]
+			var maximum: Vector3 = component_maximum[component_root]
+			var inside_selection: bool = (
+				minimum.x >= selection.position.x
+				and minimum.y >= selection.position.y
+				and minimum.z >= selection.position.z
+				and maximum.x <= selection_end.x
+				and maximum.y <= selection_end.y
+				and maximum.z <= selection_end.z
+			)
+			if inside_selection:
+				removed_triangle_count += 1
+				continue
+			kept_indices.append(indices[triangle_index * 3])
+			kept_indices.append(indices[triangle_index * 3 + 1])
+			kept_indices.append(indices[triangle_index * 3 + 2])
+
+		var filtered_arrays: Array = source_arrays.duplicate(true)
+		filtered_arrays[Mesh.ARRAY_INDEX] = kept_indices
+		filtered_mesh.add_surface_from_arrays(primitive_type, filtered_arrays)
+		var filtered_surface_index: int = filtered_mesh.get_surface_count() - 1
+		filtered_mesh.surface_set_material(
+			filtered_surface_index,
+			source_mesh.surface_get_material(surface_index)
+		)
+		filtered_mesh.surface_set_name(
+			filtered_surface_index,
+			source_mesh.surface_get_name(surface_index)
+		)
+
+	if removed_triangle_count > 0:
+		target_mesh.mesh = filtered_mesh
+	return removed_triangle_count
+
 func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	# Reuse the authored PBR maps for every new piece so the extension reads as
 	# one manufactured building, not a stack of differently shaded primitives.
@@ -4514,6 +4628,33 @@ func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	)
 	metal.metallic = 0.86
 	metal.metallic_specular = 0.44
+	var hardware_metal: StandardMaterial3D = StandardMaterial3D.new()
+	hardware_metal.resource_local_to_scene = true
+	hardware_metal.albedo_color = Color(0.10, 0.105, 0.11, 1.0)
+	hardware_metal.metallic = 0.92
+	hardware_metal.metallic_specular = 0.46
+	hardware_metal.roughness = 0.36
+
+	# Remove only the two original extra-long pull assemblies. If the supplied
+	# asset keeps all handle triangles in one compact mesh instead of separate
+	# components, hide that handle-only mesh as a safe fallback.
+	var architectural_metal_mesh: MeshInstance3D = authored_model.find_child(
+		"SM_YakitoriShop_ArchitecturalMetal", true, false
+	) as MeshInstance3D
+	var removed_handle_triangles: int = _yakitori_remove_mesh_components_inside(
+		architectural_metal_mesh,
+		AABB(Vector3(-0.55, 0.55, -1.05), Vector3(1.10, 1.55, 0.55))
+	)
+	var hidden_handle_only_mesh: bool = false
+	if removed_handle_triangles == 0 and architectural_metal_mesh != null:
+		var architectural_metal_bounds: AABB = architectural_metal_mesh.get_aabb()
+		if (
+			architectural_metal_bounds.size.x <= 1.20
+			and architectural_metal_bounds.size.y <= 1.80
+			and architectural_metal_bounds.size.z <= 0.60
+		):
+			architectural_metal_mesh.visible = false
+			hidden_handle_only_mesh = true
 
 	# The source GLB was originally a one-storey shop. Its upper cedar cladding
 	# and roof parapet occupied y=2.67-3.60, becoming a metre-tall belt when the
@@ -4528,10 +4669,12 @@ func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	var upper_storey_drop: float = 0.70
 
 	var architecture: Node3D = Node3D.new()
-	architecture.name = "YakitoriArchitecture_v10_28z"
+	architecture.name = "YakitoriArchitecture_v10_29a"
 	architecture.add_to_group("shinrai_yakitori_architecture")
 	architecture.set_meta("removed_legacy_cedar_triangles", removed_cedar_triangles)
 	architecture.set_meta("removed_legacy_roof_triangles", removed_roof_triangles)
+	architecture.set_meta("removed_legacy_handle_triangles", removed_handle_triangles)
+	architecture.set_meta("hidden_legacy_handle_mesh", hidden_handle_only_mesh)
 	authored_model.add_child(architecture)
 
 	# Full-depth two-storey masonry shell. The front stays open so the authored
@@ -4710,6 +4853,42 @@ func _upgrade_yakitori_shop_architecture(authored_model: Node3D) -> Node3D:
 	_add_yakitori_x_grain_box(architecture, "StorefrontKickRail",
 		Vector3(0.0, 0.49, -0.735), Vector3(3.72, 0.075, 0.06), cedar_frame)
 
+	# Compact paired pull handles replace the long plain bars on the authored
+	# sliders. Each handle has two flush rosettes, short stand-offs, and one
+	# 240 mm round grip—the proportions shown in the material reference.
+	var door_pull_x: Array[float] = [-0.18, 0.18]
+	var door_pull_y: float = 1.28
+	for pull_index: int in range(door_pull_x.size()):
+		var pull_x: float = door_pull_x[pull_index]
+		for mount_index: int in range(2):
+			var mount_y: float = door_pull_y - 0.10 + float(mount_index) * 0.20
+			_add_local_cylinder(
+				architecture,
+				"DoorPullMount_%02d_%02d" % [pull_index, mount_index],
+				Vector3(pull_x, mount_y, -0.765),
+				0.030,
+				0.018,
+				hardware_metal,
+				Vector3(PI * 0.5, 0.0, 0.0)
+			)
+			_add_local_cylinder(
+				architecture,
+				"DoorPullStandoff_%02d_%02d" % [pull_index, mount_index],
+				Vector3(pull_x, mount_y, -0.810),
+				0.014,
+				0.080,
+				hardware_metal,
+				Vector3(PI * 0.5, 0.0, 0.0)
+			)
+		_add_local_cylinder(
+			architecture,
+			"DoorPullGrip_%02d" % pull_index,
+			Vector3(pull_x, door_pull_y, -0.850),
+			0.018,
+			0.240,
+			hardware_metal
+		)
+
 	# Upper side ledgers visually lock the new level into the deep shell.
 	var side_positions: Array[float] = [-2.13, 2.13]
 	for side_index: int in range(side_positions.size()):
@@ -4784,18 +4963,18 @@ func _replace_visual_test_storefront_with_yakitori_shop() -> void:
 	var old_threshold: Node3D = target.get("threshold") as Node3D
 	var old_lintel: Node3D = target.get("lintel") as Node3D
 	if old_root == null or old_threshold == null or old_lintel == null:
-		push_warning("v10.28z Yakitori replacement skipped: locked storefront was not found")
+		push_warning("v10.29a Yakitori replacement skipped: locked storefront was not found")
 		return
 
 	var replacement: Node3D = YakitoriShopBuildingScene.instantiate() as Node3D
 	if replacement == null:
-		push_error("v10.28z Yakitori replacement failed: authored building scene could not instantiate")
+		push_error("v10.29a Yakitori replacement failed: authored building scene could not instantiate")
 		return
 
 	var authored_model: Node3D = replacement.get_node_or_null("Model") as Node3D
 	if authored_model == null:
 		replacement.queue_free()
-		push_error("v10.28z Yakitori replacement failed: authored Model root is missing")
+		push_error("v10.29a Yakitori replacement failed: authored Model root is missing")
 		return
 
 	# Preserve the exact lot transform, but align the authored entrance to the
@@ -4853,11 +5032,12 @@ func _replace_visual_test_storefront_with_yakitori_shop() -> void:
 		shop_interior_light_count = maxi(0, shop_interior_light_count - removed_interior_lights)
 
 	print(
-		"v10.28z Yakitori building: installed %s + %s | compact offset rear window | unified dark-stone threshold | removed legacy triangles cedar=%d roof=%d | released interior lights %d" % [
+		"v10.29a Yakitori building: installed %s + %s | compact dark-metal door pulls | compact offset rear window | unified dark-stone threshold | removed legacy triangles cedar=%d roof=%d handles=%d | released interior lights %d" % [
 			replacement.name,
 			architecture.name,
 			int(architecture.get_meta("removed_legacy_cedar_triangles", 0)),
 			int(architecture.get_meta("removed_legacy_roof_triangles", 0)),
+			int(architecture.get_meta("removed_legacy_handle_triangles", 0)),
 			removed_interior_lights,
 		]
 	)
@@ -4948,7 +5128,7 @@ func _visual_test_storefront_fixture_anchor(
 
 func _build_yakitori_canopy_lights(building_root: Node3D) -> int:
 	var architecture: Node3D = building_root.find_child(
-		"YakitoriArchitecture_v10_28z", true, false
+		"YakitoriArchitecture_v10_29a", true, false
 	) as Node3D
 	if architecture == null:
 		return 0
@@ -5004,7 +5184,7 @@ func _build_visual_test_storefront_lamp_coverage() -> void:
 		visual_test_storefront_light_target = building_root.name
 		visual_test_storefront_fixture_target = "Three recessed canopy downlights"
 		print(
-			"v10.28z Yakitori canopy lights: %d recessed fixtures | street pool %d/%d" % [
+			"v10.29a Yakitori canopy lights: %d recessed fixtures | street pool %d/%d" % [
 				canopy_light_count,
 				street_light_count,
 				MAX_STREET_LIGHTS,
