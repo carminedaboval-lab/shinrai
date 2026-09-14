@@ -1,7 +1,0 @@
-[gd_scene load_steps=2 format=3]
-
-[ext_resource type="PackedScene" path="res://assets/shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2.glb" id="1_yakitori_shop_v2"]
-
-[node name="ProjectShinrai_YakitoriShop_BuildingShell_v2" type="Node3D"]
-
-[node name="Model" parent="." instance=ExtResource("1_yakitori_shop_v2")]
