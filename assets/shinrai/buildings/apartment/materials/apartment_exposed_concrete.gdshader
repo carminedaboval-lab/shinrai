@@ -5,7 +5,7 @@ shader_type spatial;
 // broad curing clouds, formwork-scale grain, and fine aggregate. All procedural
 // marks remain restrained so the façade reads as cast concrete, not scribbles.
 uniform sampler2D concrete_texture : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
-uniform vec4 concrete_tint : source_color = vec4(0.275, 0.245, 0.205, 1.0);
+uniform vec4 concrete_tint : source_color = vec4(0.305, 0.270, 0.225, 1.0);
 uniform vec4 grime_tint : source_color = vec4(0.055, 0.047, 0.035, 1.0);
 uniform vec4 efflorescence_tint : source_color = vec4(0.43, 0.40, 0.34, 1.0);
 uniform vec4 algae_tint : source_color = vec4(0.070, 0.073, 0.045, 1.0);
@@ -13,7 +13,7 @@ uniform float texture_scale : hint_range(0.10, 1.50, 0.01) = 0.58;
 uniform float panel_width_m : hint_range(1.00, 3.50, 0.01) = 2.10;
 uniform float panel_height_m : hint_range(0.80, 2.50, 0.01) = 1.42;
 uniform float panel_strength : hint_range(0.0, 0.50, 0.01) = 0.12;
-uniform float tie_strength : hint_range(0.0, 1.0, 0.01) = 0.34;
+uniform float tie_strength : hint_range(0.0, 1.0, 0.01) = 0.24;
 uniform float pore_strength : hint_range(0.0, 1.0, 0.01) = 0.32;
 uniform float crack_strength : hint_range(0.0, 0.20, 0.005) = 0.050;
 uniform float rain_strength : hint_range(0.0, 0.20, 0.005) = 0.050;
@@ -21,8 +21,8 @@ uniform float efflorescence_strength : hint_range(0.0, 0.30, 0.005) = 0.075;
 uniform float grime_strength : hint_range(0.0, 0.80, 0.01) = 0.42;
 uniform float algae_strength : hint_range(0.0, 0.30, 0.005) = 0.10;
 uniform float grime_height_m : hint_range(0.20, 2.50, 0.01) = 1.18;
-uniform float detail_normal_strength : hint_range(0.0, 1.0, 0.01) = 0.52;
-uniform float ambient_lift : hint_range(0.0, 0.08, 0.002) = 0.002;
+uniform float detail_normal_strength : hint_range(0.0, 1.0, 0.01) = 0.36;
+uniform float ambient_lift : hint_range(0.0, 0.08, 0.002) = 0.006;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -151,11 +151,11 @@ void fragment() {
 	float fine_luma = luminance(fine_texture);
 	float grain = clamp(
 		1.0
-			+ (macro_luma - 0.94) * 2.20
-			+ (base_luma - 0.94) * 1.10
-			+ (fine_luma - 0.94) * 0.42,
-		0.76,
-		1.16
+			+ (macro_luma - 0.94) * 0.78
+			+ (base_luma - 0.94) * 1.28
+			+ (fine_luma - 0.94) * 0.56,
+		0.84,
+		1.12
 	);
 	float panel_variation = mix(
 		0.958,
@@ -174,28 +174,28 @@ void fragment() {
 	vec2 tie_a = vec2(0.30, tie_y);
 	vec2 tie_b = vec2(panel_width_m - 0.30, tie_y);
 	float tie_core = max(
-		circle_mask(panel_position_m, tie_a, 0.014),
-		circle_mask(panel_position_m, tie_b, 0.014)
+		circle_mask(panel_position_m, tie_a, 0.009),
+		circle_mask(panel_position_m, tie_b, 0.009)
 	) * vertical_surface;
 	float tie_halo = max(
-		circle_mask(panel_position_m, tie_a, 0.034),
-		circle_mask(panel_position_m, tie_b, 0.034)
+		circle_mask(panel_position_m, tie_a, 0.021),
+		circle_mask(panel_position_m, tie_b, 0.021)
 	) * vertical_surface;
 	float tie_outer = max(
-		circle_mask(panel_position_m, tie_a, 0.047),
-		circle_mask(panel_position_m, tie_b, 0.047)
+		circle_mask(panel_position_m, tie_a, 0.029),
+		circle_mask(panel_position_m, tie_b, 0.029)
 	) * vertical_surface;
 	float tie_rim = max(tie_outer - tie_halo, 0.0);
 	surface_color = mix(
 		surface_color,
 		efflorescence_tint.rgb,
-		tie_rim * tie_strength * 0.16
+		tie_rim * tie_strength * 0.10
 	);
 	surface_color *= 1.0 - tie_halo * tie_strength * 0.11;
 	surface_color = mix(
 		surface_color,
 		grime_tint.rgb * 0.92,
-		tie_core * tie_strength * 0.78
+		tie_core * tie_strength * 0.62
 	);
 
 	// Millimetre-scale aggregate pores remain irregular and distance-safe.
