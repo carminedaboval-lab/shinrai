@@ -18,6 +18,7 @@ then performs the final Godot-side architectural finish.
 - Rear-window metal reveal and masonry-pier caps
 - Two slim rear downpipes
 - Existing full two-storey body, timber screen, eaves, collision and sockets retained
+- Timber/concrete intersections corrected with flush pier finishes and shadow reveals
 
 ## Intentionally excluded
 

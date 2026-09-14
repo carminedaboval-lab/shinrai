@@ -120,6 +120,12 @@ func _ready() -> void:
 
 	_replace_combined_edge_mesh(edge_material)
 	_replace_placeholder_interior(interior_material, frame_wood_material)
+	_separate_wood_from_concrete(
+		plaster_material,
+		exterior_wood_material,
+		frame_wood_material,
+		edge_material
+	)
 
 	set_meta("reference_finish_version", 6)
 	set_meta("reference_materials_calibrated", corrected_count == 10)
@@ -198,6 +204,88 @@ func _hide_authored_mesh(mesh_name: String) -> void:
 	) as MeshInstance3D
 	if target_mesh != null:
 		target_mesh.visible = false
+
+
+func _separate_wood_from_concrete(
+	plaster_material: BaseMaterial3D,
+	exterior_wood_material: BaseMaterial3D,
+	frame_wood_material: BaseMaterial3D,
+	reveal_material: BaseMaterial3D
+) -> void:
+	if (
+		plaster_material == null
+		or exterior_wood_material == null
+		or frame_wood_material == null
+		or reveal_material == null
+	):
+		return
+	var model: Node3D = _model_root()
+	if model == null or model.get_node_or_null("ReferenceWoodAlignment") != null:
+		return
+
+	var alignment_root: Node3D = Node3D.new()
+	alignment_root.name = "ReferenceWoodAlignment"
+	model.add_child(alignment_root)
+
+	# The authored upper outer jambs and the ends of the sill/head overlap the
+	# concrete piers by about 55 mm. Small plaster finish strips mask only those
+	# buried ends; the authored wall itself is not moved or replaced.
+	var plaster_patch: BaseMaterial3D = plaster_material.duplicate(
+		true
+	) as BaseMaterial3D
+	plaster_patch.resource_local_to_scene = true
+	plaster_patch.uv1_triplanar = true
+	plaster_patch.uv1_scale = Vector3(0.60, 0.60, 0.60)
+
+	for side_index in range(2):
+		var side_sign: float = -1.0 if side_index == 0 else 1.0
+		_add_box(
+			alignment_root,
+			"UpperConcretePierFinish_%02d" % side_index,
+			Vector3(side_sign * 1.8975, 4.31, -0.809),
+			Vector3(0.055, 2.56, 0.028),
+			plaster_patch
+		)
+
+		# Restore each outer timber jamb entirely inside the 3.74 m masonry
+		# opening. The 6 mm projection and fine dark reveal create a clean,
+		# intentional wood-to-concrete joint instead of an intersection.
+		_add_box(
+			alignment_root,
+			"UpperOuterJambFinish_%02d" % side_index,
+			Vector3(side_sign * 1.785, 4.32, -0.814),
+			Vector3(0.170, 2.42, 0.030),
+			frame_wood_material
+		)
+		_add_box(
+			alignment_root,
+			"UpperJambShadowReveal_%02d" % side_index,
+			Vector3(side_sign * 1.868, 4.32, -0.818),
+			Vector3(0.012, 2.42, 0.016),
+			reveal_material
+		)
+
+	# The side timber belt was partially sunk into the plaster. A thin matching
+	# face seats it on the wall surface while retaining the authored band behind.
+	for side_index in range(2):
+		var side_sign: float = -1.0 if side_index == 0 else 1.0
+		_add_box(
+			alignment_root,
+			"SideLedgerSurface_%02d" % side_index,
+			Vector3(side_sign * 2.174, 2.91, 1.57),
+			Vector3(0.018, 0.14, 4.35),
+			exterior_wood_material
+		)
+
+	# Close the small air gap behind the rear return so the belt meets the rear
+	# concrete wall continuously without being pushed into it.
+	_add_box(
+		alignment_root,
+		"RearLedgerWallSeat",
+		Vector3(0.0, 2.91, 3.7875),
+		Vector3(4.20, 0.14, 0.055),
+		exterior_wood_material
+	)
 
 
 func _replace_combined_edge_mesh(material: Material) -> void:
