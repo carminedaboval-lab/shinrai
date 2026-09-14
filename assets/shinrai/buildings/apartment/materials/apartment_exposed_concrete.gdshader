@@ -7,14 +7,19 @@ shader_type spatial;
 uniform sampler2D concrete_texture : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 uniform vec4 concrete_tint : source_color = vec4(0.275, 0.245, 0.205, 1.0);
 uniform vec4 grime_tint : source_color = vec4(0.055, 0.047, 0.035, 1.0);
+uniform vec4 efflorescence_tint : source_color = vec4(0.43, 0.40, 0.34, 1.0);
+uniform vec4 algae_tint : source_color = vec4(0.070, 0.073, 0.045, 1.0);
 uniform float texture_scale : hint_range(0.10, 1.50, 0.01) = 0.58;
 uniform float panel_width_m : hint_range(1.00, 3.50, 0.01) = 2.10;
 uniform float panel_height_m : hint_range(0.80, 2.50, 0.01) = 1.42;
 uniform float panel_strength : hint_range(0.0, 0.50, 0.01) = 0.12;
 uniform float tie_strength : hint_range(0.0, 1.0, 0.01) = 0.34;
 uniform float pore_strength : hint_range(0.0, 1.0, 0.01) = 0.32;
+uniform float crack_strength : hint_range(0.0, 0.20, 0.005) = 0.050;
 uniform float rain_strength : hint_range(0.0, 0.20, 0.005) = 0.050;
+uniform float efflorescence_strength : hint_range(0.0, 0.30, 0.005) = 0.075;
 uniform float grime_strength : hint_range(0.0, 0.80, 0.01) = 0.42;
+uniform float algae_strength : hint_range(0.0, 0.30, 0.005) = 0.10;
 uniform float grime_height_m : hint_range(0.20, 2.50, 0.01) = 1.18;
 uniform float detail_normal_strength : hint_range(0.0, 1.0, 0.01) = 0.52;
 uniform float ambient_lift : hint_range(0.0, 0.08, 0.002) = 0.002;
@@ -64,6 +69,33 @@ float circle_mask(vec2 position_value, vec2 center_value, float radius_value) {
 		radius_value + antialias_width,
 		distance_value
 	);
+}
+
+float hairline_crack_mask(vec2 position_value) {
+	// One short crack may appear in a large 5.8 x 5.2 m region. It is thin,
+	// softly antialiased and deliberately too sparse to become a scribble field.
+	vec2 crack_cell_size = vec2(5.8, 5.2);
+	vec2 crack_cell = floor(position_value / crack_cell_size);
+	vec2 crack_local = fract(position_value / crack_cell_size);
+	float crack_seed = hash21(crack_cell + vec2(61.4, 13.7));
+	float crack_presence = smoothstep(0.91, 0.985, crack_seed);
+	float crack_path = (
+		0.48
+		+ sin(crack_local.y * 18.0 + crack_seed * 5.0) * 0.050
+		+ sin(crack_local.y * 41.0 + crack_seed * 11.0) * 0.018
+	);
+	float crack_distance = abs(crack_local.x - crack_path);
+	float crack_aa = max(fwidth(crack_local.x) * 0.85, 0.0012);
+	float crack_line = 1.0 - smoothstep(
+		0.0015,
+		0.0030 + crack_aa,
+		crack_distance
+	);
+	float crack_length = (
+		smoothstep(0.16, 0.25, crack_local.y)
+		* (1.0 - smoothstep(0.70, 0.82, crack_local.y))
+	);
+	return crack_line * crack_length * crack_presence;
 }
 
 vec3 perturb_world_normal(
@@ -149,6 +181,16 @@ void fragment() {
 		circle_mask(panel_position_m, tie_a, 0.034),
 		circle_mask(panel_position_m, tie_b, 0.034)
 	) * vertical_surface;
+	float tie_outer = max(
+		circle_mask(panel_position_m, tie_a, 0.047),
+		circle_mask(panel_position_m, tie_b, 0.047)
+	) * vertical_surface;
+	float tie_rim = max(tie_outer - tie_halo, 0.0);
+	surface_color = mix(
+		surface_color,
+		efflorescence_tint.rgb,
+		tie_rim * tie_strength * 0.16
+	);
 	surface_color *= 1.0 - tie_halo * tie_strength * 0.11;
 	surface_color = mix(
 		surface_color,
@@ -199,6 +241,32 @@ void fragment() {
 	);
 	surface_color *= 1.0 - rain_streak * rain_strength;
 
+	// Sparse pale mineral runoff sits beside, rather than directly over, the
+	// dark rain lanes. This creates the reference's subtle efflorescence.
+	float mineral_frequency = 0.92;
+	float mineral_lane = floor((facade_position.x + 1.73) * mineral_frequency);
+	float mineral_seed = hash21(vec2(mineral_lane, 37.2));
+	float mineral_distance = abs(
+		fract((facade_position.x + 1.73) * mineral_frequency) - 0.5
+	);
+	float mineral_shape = 1.0 - smoothstep(0.10, 0.34, mineral_distance);
+	float mineral_presence = smoothstep(0.76, 0.97, mineral_seed);
+	float mineral_breakup = mix(0.38, 1.0, macro_luma);
+	float efflorescence = (
+		mineral_shape
+		* mineral_presence
+		* mineral_breakup
+		* vertical_surface
+	);
+	surface_color = mix(
+		surface_color,
+		efflorescence_tint.rgb,
+		efflorescence * efflorescence_strength
+	);
+
+	float hairline_crack = hairline_crack_mask(facade_position) * vertical_surface;
+	surface_color *= 1.0 - hairline_crack * crack_strength;
+
 	// Damp splashback builds from the pavement upward with irregular aggregate
 	// breakup, matching the reference's ground-contact weathering.
 	float ground_mask = 1.0 - smoothstep(0.08, grime_height_m, world_position.y);
@@ -213,6 +281,21 @@ void fragment() {
 		grime_tint.rgb,
 		ground_grime * grime_strength
 	);
+	float algae_patch = (
+		ground_mask
+		* smoothstep(0.22, 0.78, 1.0 - macro_luma)
+		* mix(
+			0.30,
+			1.0,
+			hash21(vec2(floor(facade_position.x * 0.42), 91.7))
+		)
+		* vertical_surface
+	);
+	surface_color = mix(
+		surface_color,
+		algae_tint.rgb,
+		algae_patch * algae_strength
+	);
 
 	// Derivative-based relief works on every box face without UV stretching.
 	// Seams, tie recesses, aggregate and the real texture all contribute.
@@ -223,6 +306,7 @@ void fragment() {
 		- tie_halo * 0.024
 		- tie_core * 0.038
 		- pore_mask * 0.020
+		- hairline_crack * 0.012
 	);
 	vec3 bumped_world_normal = perturb_world_normal(
 		world_position,
@@ -246,7 +330,9 @@ void fragment() {
 			- seam * 0.075
 			- tie_halo * 0.16
 			- pore_mask * 0.10
-			- ground_grime * 0.12,
+			- hairline_crack * 0.06
+			- ground_grime * 0.12
+			- algae_patch * 0.05,
 		0.54,
 		1.0
 	);
