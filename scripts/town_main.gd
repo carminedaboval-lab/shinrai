@@ -482,7 +482,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete = ShaderMaterial.new()
 	mat_apartment_concrete.shader = ApartmentConcreteShader
 	mat_apartment_concrete.set_shader_parameter("concrete_texture", apartment_concrete_texture)
-	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.275, 0.245, 0.205, 1.0))
+	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.305, 0.270, 0.225, 1.0))
 	mat_apartment_concrete.set_shader_parameter("grime_tint", Color(0.055, 0.047, 0.035, 1.0))
 	mat_apartment_concrete.set_shader_parameter("efflorescence_tint", Color(0.43, 0.40, 0.34, 1.0))
 	mat_apartment_concrete.set_shader_parameter("algae_tint", Color(0.070, 0.073, 0.045, 1.0))
@@ -490,7 +490,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("panel_width_m", 2.10)
 	mat_apartment_concrete.set_shader_parameter("panel_height_m", 1.42)
 	mat_apartment_concrete.set_shader_parameter("panel_strength", 0.12)
-	mat_apartment_concrete.set_shader_parameter("tie_strength", 0.34)
+	mat_apartment_concrete.set_shader_parameter("tie_strength", 0.24)
 	mat_apartment_concrete.set_shader_parameter("pore_strength", 0.32)
 	mat_apartment_concrete.set_shader_parameter("crack_strength", 0.050)
 	mat_apartment_concrete.set_shader_parameter("rain_strength", 0.050)
@@ -498,13 +498,13 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("grime_strength", 0.42)
 	mat_apartment_concrete.set_shader_parameter("algae_strength", 0.10)
 	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.18)
-	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.52)
-	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.002)
+	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.36)
+	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.006)
 
 	mat_apartment_concrete_recess = ShaderMaterial.new()
 	mat_apartment_concrete_recess.shader = ApartmentConcreteShader
 	mat_apartment_concrete_recess.set_shader_parameter("concrete_texture", apartment_concrete_texture)
-	mat_apartment_concrete_recess.set_shader_parameter("concrete_tint", Color(0.150, 0.130, 0.105, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_tint", Color(0.175, 0.150, 0.120, 1.0))
 	mat_apartment_concrete_recess.set_shader_parameter("grime_tint", Color(0.040, 0.034, 0.026, 1.0))
 	mat_apartment_concrete_recess.set_shader_parameter("efflorescence_tint", Color(0.32, 0.29, 0.24, 1.0))
 	mat_apartment_concrete_recess.set_shader_parameter("algae_tint", Color(0.055, 0.058, 0.035, 1.0))
@@ -512,7 +512,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess.set_shader_parameter("panel_width_m", 2.10)
 	mat_apartment_concrete_recess.set_shader_parameter("panel_height_m", 1.42)
 	mat_apartment_concrete_recess.set_shader_parameter("panel_strength", 0.070)
-	mat_apartment_concrete_recess.set_shader_parameter("tie_strength", 0.20)
+	mat_apartment_concrete_recess.set_shader_parameter("tie_strength", 0.16)
 	mat_apartment_concrete_recess.set_shader_parameter("pore_strength", 0.24)
 	mat_apartment_concrete_recess.set_shader_parameter("crack_strength", 0.025)
 	mat_apartment_concrete_recess.set_shader_parameter("rain_strength", 0.025)
@@ -520,8 +520,8 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess.set_shader_parameter("grime_strength", 0.34)
 	mat_apartment_concrete_recess.set_shader_parameter("algae_strength", 0.060)
 	mat_apartment_concrete_recess.set_shader_parameter("grime_height_m", 1.12)
-	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.42)
-	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.001)
+	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.32)
+	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.003)
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
 	mat_dirty_plaster = _material(Color(0.230, 0.225, 0.216), 0.0, 0.98,
@@ -2795,7 +2795,7 @@ func _build_apartment(
 	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
-	root.set_meta("reference_stage", "continuous_corner_reference_concrete_pass")
+	root.set_meta("reference_stage", "concrete_scale_and_tone_refinement")
 	root.set_meta("balcony_clear_side", balcony_side_sign)
 	root.set_meta("balcony_clearance_reserved", true)
 	root.set_meta("balcony_module_width_m", 3.0)
