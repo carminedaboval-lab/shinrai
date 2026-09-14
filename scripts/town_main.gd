@@ -82,6 +82,11 @@ const SECONDARY_ROAD_HALF_WIDTH: int = 0
 const MAIN_ROAD_HALF_WIDTH: int = 1
 const MIN_BLOCK_CELLS: int = 4
 const MIN_ENEMY_PATH_CELLS: int = 14
+# Guarantee one first-wave K17 test encounter near the player while keeping a
+# safe buffer and using only generated walkable, unblocked navigation cells.
+const NEARBY_K17_TARGET_DISTANCE_M: float = 10.0
+const NEARBY_K17_MIN_DISTANCE_M: float = 7.0
+const NEARBY_K17_MAX_DISTANCE_M: float = 13.0
 const VAN_COUNT: int = 2
 const MAX_STREET_LIGHTS: int = 18
 const MAX_INTERIOR_LIGHTS: int = 8
@@ -6408,10 +6413,31 @@ func _get_player_spawn_yaw() -> float:
 func _get_enemy_spawn_positions(count: int) -> Array[Vector3]:
 	var preferred: Array[Vector2i] = []
 	var fallback: Array[Vector2i] = []
+	var nearby_cell: Vector2i = Vector2i(-1, -1)
+	var nearby_score: float = INF
+	var player_spawn_world: Vector3 = _cell_to_world(player_spawn_cell, 0.0)
+
 	for cell: Vector2i in walkable_cells:
 		if cell == player_spawn_cell or blocked_lookup.has(cell):
 			continue
 		var path_to_cell: Array[Vector2i] = path_grid.get_id_path(player_spawn_cell, cell, true)
+		if path_to_cell.size() < 3:
+			continue
+
+		var candidate_world: Vector3 = _cell_to_world(cell, 0.0)
+		var horizontal_distance: float = Vector2(
+			candidate_world.x - player_spawn_world.x,
+			candidate_world.z - player_spawn_world.z
+		).length()
+		if (
+			horizontal_distance >= NEARBY_K17_MIN_DISTANCE_M
+			and horizontal_distance <= NEARBY_K17_MAX_DISTANCE_M
+		):
+			var score: float = absf(horizontal_distance - NEARBY_K17_TARGET_DISTANCE_M)
+			if score < nearby_score:
+				nearby_score = score
+				nearby_cell = cell
+
 		if path_to_cell.size() < 5:
 			continue
 		fallback.append(cell)
@@ -6422,6 +6448,9 @@ func _get_enemy_spawn_positions(count: int) -> Array[Vector3]:
 	_shuffle_cells(fallback)
 
 	var chosen_cells: Array[Vector2i] = []
+	if count > 0 and nearby_score < INF:
+		chosen_cells.append(nearby_cell)
+
 	for cell: Vector2i in preferred:
 		if chosen_cells.size() >= count:
 			break
