@@ -37,6 +37,11 @@ const K17_VISUAL_ROOTS: Array[String] = [
     "res://assets/enemies/k17_drone",
 ]
 const K17_VISUAL_SCENE_CANDIDATES: Array[String] = [
+    # The supplied Stage 35 test wrapper has stale absolute references. Its real
+    # hero mesh is present beside it, so load that authored mesh directly first.
+    "res://assets/enemies/k17_drone/godot_test/K17_Stage34_LOD0.glb",
+    "res://assets/enemies/k17/K17_Stage34_LOD0.glb",
+    "res://assets/enemies/k17_test/K17_Stage34_LOD0.glb",
     "res://assets/enemies/k17/K17_Drone_Static.tscn",
     "res://assets/enemies/k17/ProjectShinrai_K17_Stage36_BODY_CORRECTED_STATIC.tscn",
     "res://assets/enemies/k17/ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.tscn",
