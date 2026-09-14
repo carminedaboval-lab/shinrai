@@ -1,7 +1,9 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/ProjectShinrai_YakitoriShop_ArtworkReplica_v5.glb" id="1_artwork_replica"]
+[ext_resource type="Script" path="res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/reference_material_match.gd" id="2_reference_match"]
 
 [node name="ProjectShinrai_YakitoriShop_ArtworkReplica_v5" type="Node3D"]
+script = ExtResource("2_reference_match")
 
 [node name="Model" parent="." instance=ExtResource("1_artwork_replica")]
