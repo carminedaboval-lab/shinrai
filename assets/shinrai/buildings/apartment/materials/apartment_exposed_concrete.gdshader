@@ -4,17 +4,17 @@ shader_type spatial;
 // World-space triplanar projection keeps the grain at one real-world scale on
 // every procedural box and prevents stretched marks on tall or narrow pieces.
 uniform sampler2D concrete_texture : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
-uniform vec4 concrete_tint : source_color = vec4(0.365, 0.342, 0.310, 1.0);
-uniform vec4 grime_tint : source_color = vec4(0.075, 0.068, 0.057, 1.0);
-uniform float texture_scale : hint_range(0.10, 1.50, 0.01) = 0.54;
+uniform vec4 concrete_tint : source_color = vec4(0.285, 0.268, 0.242, 1.0);
+uniform vec4 grime_tint : source_color = vec4(0.064, 0.059, 0.051, 1.0);
+uniform float texture_scale : hint_range(0.10, 1.50, 0.01) = 0.72;
 uniform float panel_width_m : hint_range(1.00, 3.50, 0.01) = 2.05;
 uniform float panel_height_m : hint_range(0.80, 2.50, 0.01) = 1.36;
-uniform float panel_strength : hint_range(0.0, 0.50, 0.01) = 0.24;
-uniform float tie_strength : hint_range(0.0, 1.0, 0.01) = 0.76;
-uniform float rain_strength : hint_range(0.0, 0.20, 0.005) = 0.05;
-uniform float grime_strength : hint_range(0.0, 0.80, 0.01) = 0.42;
-uniform float grime_height_m : hint_range(0.20, 2.50, 0.01) = 1.22;
-uniform float ambient_lift : hint_range(0.0, 0.08, 0.002) = 0.02;
+uniform float panel_strength : hint_range(0.0, 0.50, 0.01) = 0.085;
+uniform float tie_strength : hint_range(0.0, 1.0, 0.01) = 0.50;
+uniform float rain_strength : hint_range(0.0, 0.20, 0.005) = 0.035;
+uniform float grime_strength : hint_range(0.0, 0.80, 0.01) = 0.48;
+uniform float grime_height_m : hint_range(0.20, 2.50, 0.01) = 1.08;
+uniform float ambient_lift : hint_range(0.0, 0.08, 0.002) = 0.008;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -36,10 +36,11 @@ vec3 sample_concrete_triplanar(vec3 position_value, vec3 normal_value) {
 
 float seam_line(float panel_coordinate) {
 	float edge_distance = min(fract(panel_coordinate), 1.0 - fract(panel_coordinate));
-	float antialias_width = max(fwidth(panel_coordinate) * 1.20, 0.0015);
+	float antialias_width = max(fwidth(panel_coordinate) * 0.65, 0.0007);
+	float seam_half_width = 0.0028;
 	return 1.0 - smoothstep(
-		0.006 + antialias_width,
-		0.014 + antialias_width,
+		seam_half_width,
+		seam_half_width + antialias_width,
 		edge_distance
 	);
 }
@@ -73,8 +74,8 @@ void fragment() {
 
 	vec3 texture_value = sample_concrete_triplanar(world_position, world_normal);
 	float texture_luma = dot(texture_value, vec3(0.299, 0.587, 0.114));
-	float grain = clamp(1.0 + (texture_luma - 0.50) * 0.24, 0.89, 1.11);
-	float panel_variation = mix(0.955, 1.035, hash21(panel_cell + vec2(7.3, 2.1)));
+	float grain = clamp(1.0 + (texture_luma - 0.50) * 0.36, 0.86, 1.13);
+	float panel_variation = mix(0.985, 1.018, hash21(panel_cell + vec2(7.3, 2.1)));
 	vec3 surface_color = concrete_tint.rgb * grain * panel_variation;
 
 	// Thin formwork joints follow the panel rhythm in the detail sheet.
@@ -94,15 +95,45 @@ void fragment() {
 		diagonal
 	);
 	float tie_core = max(
-		circle_mask(panel_position_m, tie_a, 0.026),
-		circle_mask(panel_position_m, tie_b, 0.026)
+		circle_mask(panel_position_m, tie_a, 0.013),
+		circle_mask(panel_position_m, tie_b, 0.013)
 	) * vertical_surface;
 	float tie_halo = max(
-		circle_mask(panel_position_m, tie_a, 0.052),
-		circle_mask(panel_position_m, tie_b, 0.052)
+		circle_mask(panel_position_m, tie_a, 0.029),
+		circle_mask(panel_position_m, tie_b, 0.029)
 	) * vertical_surface;
-	surface_color *= 1.0 - tie_halo * tie_strength * 0.22;
-	surface_color = mix(surface_color, grime_tint.rgb * 0.42, tie_core * tie_strength);
+	surface_color *= 1.0 - tie_halo * tie_strength * 0.085;
+	surface_color = mix(surface_color, grime_tint.rgb * 0.74, tie_core * tie_strength);
+
+	// Fine aggregate pores appear only at close range and fade before they can
+	// alias into distant scribbles. Their irregular spacing matches cast concrete.
+	vec2 pore_grid = facade_position / 0.065;
+	vec2 pore_cell = floor(pore_grid);
+	vec2 pore_local = fract(pore_grid);
+	float pore_seed = hash21(pore_cell + vec2(31.7, 9.2));
+	vec2 pore_center = vec2(
+		hash21(pore_cell + vec2(4.1, 17.8)),
+		hash21(pore_cell + vec2(23.6, 5.7))
+	) * 0.62 + 0.19;
+	float pore_radius = mix(
+		0.035,
+		0.075,
+		hash21(pore_cell + vec2(12.5, 28.4))
+	);
+	float pore_distance = length(pore_local - pore_center);
+	float pore_aa = max(fwidth(pore_distance) * 1.2, 0.004);
+	float pore_shape = 1.0 - smoothstep(
+		pore_radius,
+		pore_radius + pore_aa,
+		pore_distance
+	);
+	float pore_presence = smoothstep(0.955, 0.995, pore_seed);
+	float pore_footprint = max(fwidth(pore_grid.x), fwidth(pore_grid.y));
+	float pore_distance_fade = 1.0 - smoothstep(0.24, 0.68, pore_footprint);
+	float pore_mask = (
+		pore_shape * pore_presence * pore_distance_fade * vertical_surface
+	);
+	surface_color *= 1.0 - pore_mask * 0.38;
 
 	// Sparse low-contrast runoff replaces the oversized crack/scribble pattern.
 	float streak_frequency = 1.72;
@@ -127,8 +158,12 @@ void fragment() {
 
 	ALBEDO = surface_color;
 	METALLIC = 0.0;
-	ROUGHNESS = clamp(0.925 + seam * 0.035 + ground_grime * 0.035, 0.90, 0.99);
-	SPECULAR = 0.22;
-	AO = clamp(1.0 - seam * 0.10 - tie_halo * 0.34 - ground_grime * 0.12, 0.42, 1.0);
+	ROUGHNESS = clamp(0.962 + seam * 0.018 + ground_grime * 0.025, 0.95, 0.995);
+	SPECULAR = 0.14;
+	AO = clamp(
+		1.0 - seam * 0.055 - tie_halo * 0.20 - pore_mask * 0.12 - ground_grime * 0.10,
+		0.50,
+		1.0
+	);
 	EMISSION = surface_color * ambient_lift;
 }
