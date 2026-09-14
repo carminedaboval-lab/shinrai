@@ -444,6 +444,11 @@ func _build_environment() -> void:
 	sun.light_color = Color(0.70, 0.78, 0.94)
 	sun.light_energy = 0.80
 	sun.shadow_enabled = true
+	# The reference uses broad, readable architectural shadows. Keep balcony
+	# occlusion, but soften its edge and let a controlled amount of ambient
+	# light remain so concrete detail does not collapse into a black polygon.
+	sun.shadow_blur = 1.55
+	sun.shadow_opacity = 0.82
 	# Keep the mood but avoid rendering the full 190 m town into the
 	# directional shadow map every frame on the GL Compatibility renderer.
 	sun.directional_shadow_max_distance = 72.0
@@ -499,7 +504,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("algae_strength", 0.10)
 	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.18)
 	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.36)
-	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.006)
+	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.012)
 
 	mat_apartment_concrete_recess = ShaderMaterial.new()
 	mat_apartment_concrete_recess.shader = ApartmentConcreteShader
@@ -521,7 +526,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess.set_shader_parameter("algae_strength", 0.060)
 	mat_apartment_concrete_recess.set_shader_parameter("grime_height_m", 1.12)
 	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.32)
-	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.003)
+	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.006)
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
 	mat_dirty_plaster = _material(Color(0.230, 0.225, 0.216), 0.0, 0.98,
@@ -2795,7 +2800,7 @@ func _build_apartment(
 	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
-	root.set_meta("reference_stage", "concrete_scale_and_tone_refinement")
+	root.set_meta("reference_stage", "soft_shadow_concrete_readability_pass")
 	root.set_meta("balcony_clear_side", balcony_side_sign)
 	root.set_meta("balcony_clearance_reserved", true)
 	root.set_meta("balcony_module_width_m", 3.0)
