@@ -1,16 +1,21 @@
 # K17 drone runtime asset folder
 
-Copy the extracted contents of `ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.zip`
-into this folder without flattening its internal directories. Keep the real
-`.tscn`, `.glb`/`.gltf`, materials, textures, collision resources, LODs, and
-all nine socket nodes together.
+The Stage 35 Godot scene uses absolute project resource paths rooted at
+`res://assets/enemies/k17`.
 
-The game prefers a Godot scene because it preserves the authored hierarchy and
-sockets. It also discovers nested K17 scene/model files automatically, so the
-original package filenames may remain unchanged.
+From the extracted package, locate:
 
-Do not place rendered preview images here as a substitute for the 3D scene or
-model. The runtime loader accepts only `.tscn`, `.glb`, or `.gltf` visuals.
+`godot_test/assets/enemies/k17`
+
+Copy that entire `k17` folder into this game's `assets/enemies` directory so
+the final path is:
+
+`assets/enemies/k17`
+
+Keep its real `.tscn`, `.glb`/`.gltf`, materials, 4K textures, collision
+resources, LODs, and all nine socket nodes together. Do not flatten or rename
+the files. The runtime prefers the Godot `.tscn` scene and never accepts a
+rendered image as a model substitute.
 
 On launch, the console prints the exact production visual path that loaded. If
 no real K17 asset is present, Godot emits a warning and retains the existing
