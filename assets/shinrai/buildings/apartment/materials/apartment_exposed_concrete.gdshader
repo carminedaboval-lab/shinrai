@@ -415,11 +415,11 @@ void fragment() {
 	);
 	NORMAL = normalize((VIEW_MATRIX * vec4(bumped_world_normal, 0.0)).xyz);
 
-	float roughness_variation = clamp((0.94 - fine_luma) * 0.22, -0.025, 0.040);
+	float roughness_variation = clamp((0.94 - fine_luma) * 0.32, -0.055, 0.065);
 	float authored_roughness = mix(
-		0.925,
-		clamp(pbr_orm.g, 0.82, 1.0),
-		pbr_detail_mix * 0.56
+		0.86,
+		clamp(pbr_orm.g, 0.70, 0.96),
+		pbr_detail_mix * 0.78
 	);
 	ALBEDO = surface_color;
 	METALLIC = 0.0;
@@ -428,10 +428,10 @@ void fragment() {
 			+ roughness_variation
 			+ seam * 0.025
 			+ ground_grime * 0.030,
-		0.87,
-		0.995
+		0.72,
+		0.97
 	);
-	SPECULAR = 0.16;
+	SPECULAR = 0.28;
 	AO = clamp(
 		mix(1.0, pbr_orm.r, pbr_detail_mix * 0.70)
 			- seam * 0.075
