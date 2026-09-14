@@ -289,12 +289,11 @@ func _replace_combined_edge_mesh(material: Material) -> void:
 
 	for end_index in range(2):
 		var end_z: float = rail_front_z if end_index == 0 else rail_rear_z
-		for post_index in range(3):
-			var post_x: float = -rail_x + float(post_index) * rail_x
-			_add_box(edge_root,
-				"RoofRailEndPost_%02d_%02d" % [end_index, post_index],
-				Vector3(post_x, _roof_top(end_z) + rail_height * 0.5, end_z),
-				Vector3(0.035, rail_height, 0.035), material)
+		# Side runs already own the four corner posts. Add only the centre post
+		# here so no coplanar duplicate geometry can flicker at the corners.
+		_add_box(edge_root, "RoofRailEndPost_%02d" % end_index,
+			Vector3(0.0, _roof_top(end_z) + rail_height * 0.5, end_z),
+			Vector3(0.035, rail_height, 0.035), material)
 		for rail_index in range(2):
 			var rail_offset: float = 0.12 if rail_index == 0 else rail_height
 			_add_box(edge_root,
