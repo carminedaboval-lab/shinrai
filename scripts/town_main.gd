@@ -22,6 +22,7 @@ const CurbEdgeRepairMaterial: Material = preload("res://assets/environment/roads
 const CurbDrainScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady.tscn")
 const CurbDrainEndCapScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady.tscn")
 const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v6/ProjectShinrai_YakitoriShop_ArtworkReplica_v6.tscn")
+const ApartmentConcreteShader: Shader = preload("res://assets/shinrai/buildings/apartment/materials/apartment_exposed_concrete.gdshader")
 
 const GRID_WIDTH: int = 53
 const GRID_HEIGHT: int = 53
@@ -286,8 +287,8 @@ var mat_dark_concrete: StandardMaterial3D
 # Apartment-only concrete calibration. It reuses the existing town concrete
 # detail maps with a warmer exposed-formwork tint, keeping it distinct from
 # the Yakitori plaster while matching the apartment reference sheet.
-var mat_apartment_concrete: StandardMaterial3D
-var mat_apartment_concrete_recess: StandardMaterial3D
+var mat_apartment_concrete: ShaderMaterial
+var mat_apartment_concrete_recess: ShaderMaterial
 var mat_wood: StandardMaterial3D
 var mat_dark_wood: StandardMaterial3D
 var mat_roof: StandardMaterial3D
@@ -472,15 +473,41 @@ func _build_materials() -> void:
 		Color(0.070, 0.080, 0.096), 0.035)
 	mat_dark_concrete = _material(Color(0.160, 0.175, 0.198), 0.01, 0.88,
 		Color(0.070, 0.084, 0.108), 0.070)
-	# The apartment reference is neutral warm-grey exposed concrete rather
-	# than the cooler blue-grey concrete used elsewhere in the town. These
-	# remain deliberately rough so the façade does not bloom under streetlight.
-	mat_apartment_concrete = _material(Color(0.238, 0.224, 0.205), 0.0, 0.97,
-		Color(0.060, 0.052, 0.042), 0.012)
-	mat_apartment_concrete.metallic_specular = 0.20
-	mat_apartment_concrete_recess = _material(Color(0.152, 0.143, 0.130), 0.0, 0.99,
-		Color(0.036, 0.031, 0.025), 0.008)
-	mat_apartment_concrete_recess.metallic_specular = 0.16
+	# Apartment walls use one dedicated world-space material so texture scale
+	# stays constant across every primitive. The shader adds the formwork grid,
+	# tie holes, subtle runoff and ground grime present in the supplied sheet.
+	var apartment_concrete_texture: Texture2D = load(
+		"res://assets/procedural_textures/concrete_detail.png"
+	) as Texture2D
+	mat_apartment_concrete = ShaderMaterial.new()
+	mat_apartment_concrete.shader = ApartmentConcreteShader
+	mat_apartment_concrete.set_shader_parameter("concrete_texture", apartment_concrete_texture)
+	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.365, 0.342, 0.310, 1.0))
+	mat_apartment_concrete.set_shader_parameter("grime_tint", Color(0.075, 0.068, 0.057, 1.0))
+	mat_apartment_concrete.set_shader_parameter("texture_scale", 0.54)
+	mat_apartment_concrete.set_shader_parameter("panel_width_m", 2.05)
+	mat_apartment_concrete.set_shader_parameter("panel_height_m", 1.36)
+	mat_apartment_concrete.set_shader_parameter("panel_strength", 0.24)
+	mat_apartment_concrete.set_shader_parameter("tie_strength", 0.76)
+	mat_apartment_concrete.set_shader_parameter("rain_strength", 0.050)
+	mat_apartment_concrete.set_shader_parameter("grime_strength", 0.42)
+	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.22)
+	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.020)
+
+	mat_apartment_concrete_recess = ShaderMaterial.new()
+	mat_apartment_concrete_recess.shader = ApartmentConcreteShader
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_texture", apartment_concrete_texture)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_tint", Color(0.205, 0.190, 0.170, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("grime_tint", Color(0.052, 0.046, 0.038, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("texture_scale", 0.60)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_width_m", 2.05)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_height_m", 1.36)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_strength", 0.12)
+	mat_apartment_concrete_recess.set_shader_parameter("tie_strength", 0.28)
+	mat_apartment_concrete_recess.set_shader_parameter("rain_strength", 0.025)
+	mat_apartment_concrete_recess.set_shader_parameter("grime_strength", 0.28)
+	mat_apartment_concrete_recess.set_shader_parameter("grime_height_m", 1.10)
+	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.012)
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
 	mat_dirty_plaster = _material(Color(0.230, 0.225, 0.216), 0.0, 0.98,
@@ -734,10 +761,6 @@ func _build_materials() -> void:
 	_apply_detail_texture(mat_curb, "res://assets/procedural_textures/concrete_detail.png", 2.0)
 	_apply_detail_texture(mat_concrete, "res://assets/procedural_textures/concrete_detail.png", 2.5)
 	_apply_detail_texture(mat_dark_concrete, "res://assets/procedural_textures/concrete_detail.png", 2.8)
-	_apply_detail_texture(mat_apartment_concrete,
-		"res://assets/procedural_textures/concrete_detail.png", 2.75)
-	_apply_detail_texture(mat_apartment_concrete_recess,
-		"res://assets/procedural_textures/concrete_detail.png", 3.10)
 	_apply_detail_texture(mat_plaster, "res://assets/procedural_textures/plaster_detail.png", 2.0)
 	_apply_detail_texture(mat_dirty_plaster, "res://assets/procedural_textures/plaster_detail.png", 2.2)
 	_apply_detail_texture(mat_wood, "res://assets/procedural_textures/wood_detail.png", 2.0)
