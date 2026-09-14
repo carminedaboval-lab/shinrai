@@ -21,7 +21,7 @@ const ManholeCutMaterial: Material = preload("res://assets/environment/roads/shi
 const CurbEdgeRepairMaterial: Material = preload("res://assets/environment/roads/shinrai_road/repairs/M_SHINRAI_CurbEdgeRepair.tres")
 const CurbDrainScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady.tscn")
 const CurbDrainEndCapScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady.tscn")
-const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/ProjectShinrai_YakitoriShop_ArtworkReplica_v5.tscn")
+const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v6/ProjectShinrai_YakitoriShop_ArtworkReplica_v6.tscn")
 
 const GRID_WIDTH: int = 53
 const GRID_HEIGHT: int = 53
