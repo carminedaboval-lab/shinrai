@@ -32,8 +32,17 @@ const PATH_RETARGET_DISTANCE: float = 0.90
 # K17 uses the real authored static scene/model. A .tscn is preferred because it
 # preserves the Stage 35 hierarchy, materials, sockets, collision proxies, and LODs.
 # The runtime loader never treats renders or image files as a model substitute.
-const K17_VISUAL_ROOT: String = "res://assets/enemies/k17_drone"
+const K17_VISUAL_ROOTS: Array[String] = [
+    "res://assets/enemies/k17",
+    "res://assets/enemies/k17_drone",
+]
 const K17_VISUAL_SCENE_CANDIDATES: Array[String] = [
+    "res://assets/enemies/k17/K17_Drone_Static.tscn",
+    "res://assets/enemies/k17/ProjectShinrai_K17_Stage36_BODY_CORRECTED_STATIC.tscn",
+    "res://assets/enemies/k17/ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.tscn",
+    "res://assets/enemies/k17/K17_Drone_Static.glb",
+    "res://assets/enemies/k17/ProjectShinrai_K17_Stage36_BODY_CORRECTED_STATIC.glb",
+    "res://assets/enemies/k17/ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.glb",
     "res://assets/enemies/k17_drone/K17_Drone_Static.tscn",
     "res://assets/enemies/k17_drone/ProjectShinrai_K17_Stage36_BODY_CORRECTED_STATIC.tscn",
     "res://assets/enemies/k17_drone/ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.tscn",
@@ -130,8 +139,8 @@ func _build_visual_socket() -> void:
             return
 
     push_warning(
-        "K17 asset missing. Copy the real Stage 35 .tscn/.glb and all of its " +
-        "dependencies into %s; development proxy is active." % K17_VISUAL_ROOT
+        "K17 asset missing. Copy the real Stage 35 runtime folder to " +
+        "res://assets/enemies/k17; development proxy is active."
     )
     _build_development_proxy()
     _setup_muzzle_light()
@@ -145,7 +154,8 @@ func _get_production_visual_paths() -> Array[String]:
     # files are collected before raw models so sockets and authored structure win.
     var discovered_scenes: Array[String] = []
     var discovered_models: Array[String] = []
-    _collect_k17_visual_paths(K17_VISUAL_ROOT, discovered_scenes, discovered_models)
+    for root_path: String in K17_VISUAL_ROOTS:
+        _collect_k17_visual_paths(root_path, discovered_scenes, discovered_models)
     discovered_scenes.sort()
     discovered_models.sort()
     for path: String in discovered_scenes:
