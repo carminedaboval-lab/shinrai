@@ -2785,7 +2785,7 @@ func _build_apartment(
 	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
-	root.set_meta("reference_stage", "concrete_surface_and_corner_pass")
+	root.set_meta("reference_stage", "continuous_ground_corner_detail_pass")
 	root.set_meta("balcony_clear_side", balcony_side_sign)
 	root.set_meta("balcony_clearance_reserved", true)
 	root.set_meta("balcony_module_width_m", 3.0)
@@ -2806,11 +2806,23 @@ func _build_apartment(
 	# the authored 1.20 m module depth.
 	var front_balcony_anchor_z: float = recess_z + 0.10
 	var door_width: float = clampf(width_m * 0.19, 1.28, 1.64)
+	# Use the same pier width at ground level and above so the façade corner is
+	# one continuous structural line rather than two offset boxes.
+	var edge_pier_w: float = clampf(width_m * 0.095, 0.54, 0.78)
 
-	# Preserve a genuinely usable ground-floor entrance. This pass deliberately
-	# omits the previous generated interior furniture and lighting props.
+	# Preserve a genuinely usable ground-floor entrance. Apartment mode aligns
+	# every shell face inside the footprint and extends the ground-level front
+	# frame to the same depth as the upper concrete piers.
 	_add_enterable_ground_shell(
-		root, width_m, depth_m, floor_height, mat_apartment_concrete, door_width
+		root,
+		width_m,
+		depth_m,
+		floor_height,
+		mat_apartment_concrete,
+		door_width,
+		frame_depth,
+		edge_pier_w,
+		true
 	)
 	_add_open_door(root, depth_m, door_width, mat_black_metal)
 	_add_building_collision(
@@ -2849,7 +2861,6 @@ func _build_apartment(
 		)
 
 	# The reference is carried by substantial full-height outer concrete piers.
-	var edge_pier_w: float = clampf(width_m * 0.095, 0.54, 0.78)
 	for side: float in [-1.0, 1.0]:
 		_add_local_box(
 			root,
@@ -3968,13 +3979,44 @@ func _add_enterable_ground_shell(
 	depth_m: float,
 	wall_h: float,
 	material: Material,
-	door_width: float
+	door_width: float,
+	front_frame_depth: float = -1.0,
+	front_edge_post_width: float = 0.18,
+	align_inside_footprint: bool = false
 ) -> void:
 	var wall_t: float = 0.16
 	var door_h: float = 2.18
-	var segment_w: float = maxf(0.45, (width_m - door_width) * 0.5)
-	var left_x: float = -(door_width * 0.5 + segment_w * 0.5)
+	var side_span_w: float = maxf(0.45, (width_m - door_width) * 0.5)
+	var effective_front_depth: float = (
+		maxf(wall_t, front_frame_depth)
+		if front_frame_depth > 0.0
+		else wall_t
+	)
+	var effective_edge_post_w: float = maxf(0.18, front_edge_post_width)
+	var visual_segment_w: float = side_span_w
+	if align_inside_footprint:
+		visual_segment_w = maxf(0.28, side_span_w - effective_edge_post_w)
+	var left_x: float = -(door_width * 0.5 + visual_segment_w * 0.5)
 	var right_x: float = -left_x
+	var collision_left_x: float = -(door_width * 0.5 + side_span_w * 0.5)
+	var collision_right_x: float = -collision_left_x
+	var front_center_z: float = -depth_m * 0.5
+	var back_center_z: float = depth_m * 0.5
+	var side_wall_x: float = width_m * 0.5
+	var side_wall_depth: float = depth_m
+	var side_wall_center_z: float = 0.0
+	if align_inside_footprint:
+		front_center_z += effective_front_depth * 0.5
+		back_center_z -= wall_t * 0.5
+		side_wall_x -= wall_t * 0.5
+		# The deep front corner posts own the façade junction. Start the thin
+		# side walls behind them so no exterior faces overlap or flicker.
+		side_wall_depth = maxf(0.40, depth_m - effective_front_depth)
+		side_wall_center_z = (
+			-depth_m * 0.5
+			+ effective_front_depth
+			+ side_wall_depth * 0.5
+		)
 
 	var body: StaticBody3D = StaticBody3D.new()
 	body.name = "ShellCollision"
@@ -3982,41 +4024,106 @@ func _add_enterable_ground_shell(
 	body.collision_mask = 0
 	root.add_child(body)
 
-	_add_local_box(root, "BackWall", Vector3(0.0, wall_h * 0.5, depth_m * 0.5),
-		Vector3(width_m, wall_h, wall_t), material)
-	_add_collision_box(body, Vector3(0.0, wall_h * 0.5, depth_m * 0.5),
-		Vector3(width_m, wall_h, wall_t))
+	_add_local_box(
+		root,
+		"BackWall",
+		Vector3(0.0, wall_h * 0.5, back_center_z),
+		Vector3(width_m, wall_h, wall_t),
+		material
+	)
+	_add_collision_box(
+		body,
+		Vector3(0.0, wall_h * 0.5, back_center_z),
+		Vector3(width_m, wall_h, wall_t)
+	)
 	for side: float in [-1.0, 1.0]:
-		_add_local_box(root, "SideWall", Vector3(width_m * 0.5 * side, wall_h * 0.5, 0.0),
-			Vector3(wall_t, wall_h, depth_m), material)
-		_add_collision_box(body, Vector3(width_m * 0.5 * side, wall_h * 0.5, 0.0),
-			Vector3(wall_t, wall_h, depth_m))
+		_add_local_box(
+			root,
+			"SideWall",
+			Vector3(side_wall_x * side, wall_h * 0.5, side_wall_center_z),
+			Vector3(wall_t, wall_h, side_wall_depth),
+			material
+		)
+		_add_collision_box(
+			body,
+			Vector3(side_wall_x * side, wall_h * 0.5, side_wall_center_z),
+			Vector3(wall_t, wall_h, side_wall_depth)
+		)
 
 	# Front facade is not a solid box. It has real glazed bays around the door,
 	# so the player can see furniture and warm lighting before walking inside.
 	var sill_h: float = 0.46
-	for x_value: float in [left_x, right_x]:
-		_add_local_box(root, "FrontSill", Vector3(x_value, sill_h * 0.5, -depth_m * 0.5),
-			Vector3(segment_w, sill_h, wall_t), material)
+	for segment_index: int in range(2):
+		var x_value: float = left_x if segment_index == 0 else right_x
+		var collision_x: float = (
+			collision_left_x if segment_index == 0 else collision_right_x
+		)
+		_add_local_box(
+			root,
+			"FrontSill",
+			Vector3(x_value, sill_h * 0.5, front_center_z),
+			Vector3(visual_segment_w, sill_h, effective_front_depth),
+			material
+		)
 		# Invisible collision keeps the glass bay physically solid without
 		# putting an opaque wall behind the transparent window material.
-		_add_collision_box(body, Vector3(x_value, 1.15, -depth_m * 0.5),
-			Vector3(segment_w, 2.30, wall_t))
+		_add_collision_box(
+			body,
+			Vector3(collision_x, 1.15, front_center_z),
+			Vector3(side_span_w, 2.30, effective_front_depth)
+		)
 
 	for side: float in [-1.0, 1.0]:
-		_add_local_box(root, "FrontEdgePost", Vector3((width_m * 0.5 - 0.09) * side, wall_h * 0.5,
-			-depth_m * 0.5), Vector3(0.18, wall_h, wall_t), material)
+		var edge_post_x: float = (
+			(width_m * 0.5 - effective_edge_post_w * 0.5) * side
+			if align_inside_footprint
+			else (width_m * 0.5 - 0.09) * side
+		)
+		_add_local_box(
+			root,
+			"FrontEdgePost",
+			Vector3(edge_post_x, wall_h * 0.5, front_center_z),
+			Vector3(
+				effective_edge_post_w if align_inside_footprint else 0.18,
+				wall_h,
+				effective_front_depth
+			),
+			material
+		)
 
 	var lintel_h: float = maxf(0.18, wall_h - door_h)
-	_add_local_box(root, "FrontHeader", Vector3(0.0, door_h + lintel_h * 0.5, -depth_m * 0.5),
-		Vector3(width_m, lintel_h, wall_t), material)
-	_add_collision_box(body, Vector3(0.0, door_h + lintel_h * 0.5, -depth_m * 0.5),
-		Vector3(width_m, lintel_h, wall_t))
+	var header_w: float = (
+		maxf(door_width + 0.24, width_m - effective_edge_post_w * 2.0)
+		if align_inside_footprint
+		else width_m
+	)
+	_add_local_box(
+		root,
+		"FrontHeader",
+		Vector3(0.0, door_h + lintel_h * 0.5, front_center_z),
+		Vector3(header_w, lintel_h, effective_front_depth),
+		material
+	)
+	_add_collision_box(
+		body,
+		Vector3(0.0, door_h + lintel_h * 0.5, front_center_z),
+		Vector3(width_m, lintel_h, effective_front_depth)
+	)
 
-	_add_local_box(root, "InteriorFloor", Vector3(0.0, 0.055, 0.0),
-		Vector3(width_m - 0.22, 0.10, depth_m - 0.22), mat_interior_wood)
-	_add_local_box(root, "GroundCeiling", Vector3(0.0, wall_h - 0.055, 0.0),
-		Vector3(width_m - 0.18, 0.10, depth_m - 0.18), mat_soft_white)
+	_add_local_box(
+		root,
+		"InteriorFloor",
+		Vector3(0.0, 0.055, 0.0),
+		Vector3(width_m - 0.22, 0.10, depth_m - 0.22),
+		mat_interior_wood
+	)
+	_add_local_box(
+		root,
+		"GroundCeiling",
+		Vector3(0.0, wall_h - 0.055, 0.0),
+		Vector3(width_m - 0.18, 0.10, depth_m - 0.18),
+		mat_soft_white
+	)
 
 func _add_shop_open_door_leaf(root: Node3D, depth_m: float, door_width: float, material: Material) -> void:
 	# Shopfront already supplies its own jambs/lintel. Only add the leaf here so
