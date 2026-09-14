@@ -39,6 +39,9 @@ func _ready() -> void:
 	)
 	if stone_material != null:
 		corrected_count += 1
+		# Strong aggregate relief is a defining part of the reference threshold.
+		stone_material.normal_scale = 0.68
+		stone_material.roughness = 0.80
 
 	var exterior_wood_material: BaseMaterial3D = _calibrate_mesh(
 		"SM_YakitoriShop_ExteriorWoodMain",
@@ -126,6 +129,7 @@ func _ready() -> void:
 		frame_wood_material,
 		edge_material
 	)
+	_finish_stone_entry(stone_material)
 
 	set_meta("reference_finish_version", 6)
 	set_meta("reference_materials_calibrated", corrected_count == 10)
@@ -204,6 +208,78 @@ func _hide_authored_mesh(mesh_name: String) -> void:
 	) as MeshInstance3D
 	if target_mesh != null:
 		target_mesh.visible = false
+
+
+func _finish_stone_entry(stone_material: BaseMaterial3D) -> void:
+	if stone_material == null:
+		return
+	var model: Node3D = _model_root()
+	if model == null or model.get_node_or_null("ReferenceStoneEntry") != null:
+		return
+
+	var stone_root: Node3D = Node3D.new()
+	stone_root.name = "ReferenceStoneEntry"
+	model.add_child(stone_root)
+
+	# Reuse the authored stone base-color, normal and ORM maps. Triplanar mapping
+	# keeps the aggregate at one scale across the top, bevel and vertical riser.
+	var top_material: BaseMaterial3D = stone_material.duplicate(
+		true
+	) as BaseMaterial3D
+	top_material.resource_local_to_scene = true
+	top_material.uv1_triplanar = true
+	top_material.uv1_scale = Vector3(0.72, 0.72, 0.72)
+	top_material.normal_scale = 0.72
+	top_material.roughness = 0.80
+	top_material.metallic = 0.0
+	top_material.metallic_specular = 0.12
+
+	var riser_material: BaseMaterial3D = top_material.duplicate(
+		true
+	) as BaseMaterial3D
+	riser_material.resource_local_to_scene = true
+	var riser_color: Color = riser_material.albedo_color
+	riser_material.albedo_color = Color(
+		riser_color.r * 0.68,
+		riser_color.g * 0.67,
+		riser_color.b * 0.65,
+		1.0
+	)
+	riser_material.normal_scale = 0.78
+	riser_material.roughness = 0.86
+
+	# Broad rough top, dark exposed face and a narrow 45-degree worn edge reproduce
+	# the supplied close-up. The finish sits just above the authored threshold, so
+	# its existing collision and building placement remain unchanged.
+	_add_box(
+		stone_root,
+		"StoneThresholdRoughTop",
+		Vector3(0.0, 0.194, -0.910),
+		Vector3(4.52, 0.018, 0.440),
+		top_material
+	)
+	_add_box(
+		stone_root,
+		"StoneThresholdDarkRiser",
+		Vector3(0.0, 0.137, -1.165),
+		Vector3(4.52, 0.105, 0.035),
+		riser_material
+	)
+	_add_box(
+		stone_root,
+		"StoneThresholdWornBevel",
+		Vector3(0.0, 0.190, -1.139),
+		Vector3(4.50, 0.028, 0.028),
+		top_material,
+		Vector3(PI * 0.25, 0.0, 0.0)
+	)
+	_add_box(
+		stone_root,
+		"StoneThresholdGroundContact",
+		Vector3(0.0, 0.091, -1.185),
+		Vector3(4.54, 0.014, 0.012),
+		riser_material
+	)
 
 
 func _separate_wood_from_concrete(

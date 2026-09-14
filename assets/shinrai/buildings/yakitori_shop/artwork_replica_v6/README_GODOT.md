@@ -8,6 +8,7 @@ then performs the final Godot-side architectural finish.
 
 - Reference-matched exposure and roughness for all exterior material families
 - Dark aged plaster and restrained stone/entrance floor
+- Rough aggregate entrance threshold with dark riser, worn bevel and ground-contact edge
 - Warm-neutral transparent glazing
 - Finished prop-free architectural interior shell and dark timber floors
 - Subtle warm ground- and upper-floor architectural light
