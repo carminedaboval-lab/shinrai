@@ -163,6 +163,13 @@ func _get_production_visual_paths() -> Array[String]:
         _collect_k17_visual_paths(root_path, discovered_scenes, discovered_models)
     discovered_scenes.sort()
     discovered_models.sort()
+
+    # The supplied wrapper currently has stale external paths. Prefer its real
+    # full-detail hero GLB wherever the package was copied, before trying scenes
+    # or lower-detail/collision models.
+    for path: String in discovered_models:
+        if path.get_file().to_lower() == "k17_stage34_lod0.glb":
+            _append_unique_visual_path(candidate_paths, path)
     for path: String in discovered_scenes:
         _append_unique_visual_path(candidate_paths, path)
     for path: String in discovered_models:
