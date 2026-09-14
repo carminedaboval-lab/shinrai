@@ -2919,7 +2919,7 @@ func _build_apartment(
 				true
 			)
 
-	# The roof extension supplies the timber ceiling and recessed fixtures above
+	# The roof extension completes the timber ceiling above
 	# the fourth-floor balcony without adding a fifth railing.
 	for roof_bay_index: int in range(bay_count):
 		var roof_bay_x: float = 0.0
@@ -3305,18 +3305,6 @@ func _add_apartment_balcony_module(
 			mat_wood
 		)
 
-	# These are emissive fixture faces only, not extra real-time lights or props.
-	for light_side: float in [-1.0, 1.0]:
-		_add_local_cylinder(
-			root,
-			prefix + "SoffitLight",
-			Vector3(wall_anchor.x, slab_y - 0.158, wall_anchor.z)
-				+ outward * (BALCONY_DEPTH_M * 0.53)
-				+ tangent * (width_value * 0.27 * light_side),
-			0.070,
-			0.018,
-			mat_interior_task_warm
-		)
 
 	if include_railing:
 		_add_apartment_balcony_railing(
