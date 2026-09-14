@@ -475,11 +475,11 @@ func _build_materials() -> void:
 	# The apartment reference is neutral warm-grey exposed concrete rather
 	# than the cooler blue-grey concrete used elsewhere in the town. These
 	# remain deliberately rough so the façade does not bloom under streetlight.
-	mat_apartment_concrete = _material(Color(0.315, 0.302, 0.282), 0.0, 0.97,
-		Color(0.075, 0.068, 0.058), 0.020)
+	mat_apartment_concrete = _material(Color(0.238, 0.224, 0.205), 0.0, 0.97,
+		Color(0.060, 0.052, 0.042), 0.012)
 	mat_apartment_concrete.metallic_specular = 0.20
-	mat_apartment_concrete_recess = _material(Color(0.205, 0.198, 0.188), 0.0, 0.99,
-		Color(0.045, 0.040, 0.034), 0.012)
+	mat_apartment_concrete_recess = _material(Color(0.152, 0.143, 0.130), 0.0, 0.99,
+		Color(0.036, 0.031, 0.025), 0.008)
 	mat_apartment_concrete_recess.metallic_specular = 0.16
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
@@ -735,9 +735,9 @@ func _build_materials() -> void:
 	_apply_detail_texture(mat_concrete, "res://assets/procedural_textures/concrete_detail.png", 2.5)
 	_apply_detail_texture(mat_dark_concrete, "res://assets/procedural_textures/concrete_detail.png", 2.8)
 	_apply_detail_texture(mat_apartment_concrete,
-		"res://assets/procedural_textures/concrete_stained_v22.png", 1.72)
+		"res://assets/procedural_textures/concrete_detail.png", 2.75)
 	_apply_detail_texture(mat_apartment_concrete_recess,
-		"res://assets/procedural_textures/concrete_stained_v22.png", 2.05)
+		"res://assets/procedural_textures/concrete_detail.png", 3.10)
 	_apply_detail_texture(mat_plaster, "res://assets/procedural_textures/plaster_detail.png", 2.0)
 	_apply_detail_texture(mat_dirty_plaster, "res://assets/procedural_textures/plaster_detail.png", 2.2)
 	_apply_detail_texture(mat_wood, "res://assets/procedural_textures/wood_detail.png", 2.0)
@@ -1497,43 +1497,94 @@ func _build_city_blocks() -> void:
 		_build_perimeter_block(block, district, block_index)
 
 func _build_perimeter_block(block: Rect2i, district: int, block_index: int) -> void:
-	# Buildings now line the four street edges instead of filling a block as a
-	# 3x3 field of detached boxes. This creates the continuous narrow Japanese
-	# street walls visible in the reference art while leaving a hidden rear
-	# service court inside each block.
+	# Buildings line the four street edges around a rear service court. Each
+	# edge is built independently so a reference apartment can reserve the next
+	# frontage lot for its future side balconies.
 	var strip_depth: int = 2 if mini(block.size.x, block.size.y) >= 7 else 1
 	var serial: int = 0
 	var x_segments: Array[Vector2i] = _subdivide_frontage(block.position.x, block.size.x)
-
+	var north_lots: Array[Rect2i] = []
+	var south_lots: Array[Rect2i] = []
 	for segment: Vector2i in x_segments:
-		_build_lot(
-			Rect2i(segment.x, block.position.y, segment.y, strip_depth),
-			district, block_index, serial
+		north_lots.append(
+			Rect2i(segment.x, block.position.y, segment.y, strip_depth)
 		)
-		serial += 1
 		if block.size.y > strip_depth:
-			_build_lot(
-				Rect2i(segment.x, block.position.y + block.size.y - strip_depth, segment.y, strip_depth),
-				district, block_index, serial
+			south_lots.append(
+				Rect2i(
+					segment.x,
+					block.position.y + block.size.y - strip_depth,
+					segment.y,
+					strip_depth
+				)
 			)
-			serial += 1
+
+	serial = _build_perimeter_lot_run(
+		north_lots, district, block_index, serial, Vector3.RIGHT
+	)
+	serial = _build_perimeter_lot_run(
+		south_lots, district, block_index, serial, Vector3.RIGHT
+	)
 
 	var inner_start_y: int = block.position.y + strip_depth
 	var inner_length_y: int = block.size.y - strip_depth * 2
 	if inner_length_y >= 2:
 		var y_segments: Array[Vector2i] = _subdivide_frontage(inner_start_y, inner_length_y)
+		var west_lots: Array[Rect2i] = []
+		var east_lots: Array[Rect2i] = []
 		for segment: Vector2i in y_segments:
-			_build_lot(
-				Rect2i(block.position.x, segment.x, strip_depth, segment.y),
-				district, block_index, serial
+			west_lots.append(
+				Rect2i(block.position.x, segment.x, strip_depth, segment.y)
 			)
-			serial += 1
 			if block.size.x > strip_depth:
-				_build_lot(
-					Rect2i(block.position.x + block.size.x - strip_depth, segment.x, strip_depth, segment.y),
-					district, block_index, serial
+				east_lots.append(
+					Rect2i(
+						block.position.x + block.size.x - strip_depth,
+						segment.x,
+						strip_depth,
+						segment.y
+					)
 				)
-				serial += 1
+
+		serial = _build_perimeter_lot_run(
+			west_lots, district, block_index, serial, Vector3.BACK
+		)
+		_build_perimeter_lot_run(
+			east_lots, district, block_index, serial, Vector3.BACK
+		)
+
+
+func _build_perimeter_lot_run(
+	lots: Array[Rect2i],
+	district: int,
+	block_index: int,
+	serial_start: int,
+	clearance_world_direction: Vector3
+) -> int:
+	var lot_index: int = 0
+	var serial: int = serial_start
+	while lot_index < lots.size():
+		# An apartment is allowed only when a complete neighboring frontage lot
+		# exists to reserve. This prevents a building or random prop from ever
+		# occupying the side selected for the wraparound balcony modules.
+		var can_reserve_next: bool = lot_index + 1 < lots.size()
+		var building_type: int = _build_lot(
+			lots[lot_index],
+			district,
+			block_index,
+			serial,
+			can_reserve_next,
+			clearance_world_direction
+		)
+		serial += 1
+		lot_index += 1
+		if building_type == BUILDING_APARTMENT:
+			# Consume the serial as well as the physical lot so later names remain
+			# unique and the empty clearance is explicit in the generated layout.
+			serial += 1
+			lot_index += 1
+	return serial
+
 
 func _subdivide_frontage(start_cell: int, length_cells: int) -> Array[Vector2i]:
 	var segments: Array[Vector2i] = []
@@ -1573,8 +1624,10 @@ func _build_lot(
 	lot: Rect2i,
 	district: int,
 	block_index: int,
-	lot_serial: int
-) -> void:
+	lot_serial: int,
+	allow_apartment: bool = true,
+	apartment_clearance_world_direction: Vector3 = Vector3.RIGHT
+) -> int:
 	var cell_center: Vector2 = Vector2(
 		float(lot.position.x) + float(lot.size.x - 1) * 0.5,
 		float(lot.position.y) + float(lot.size.y - 1) * 0.5
@@ -1602,6 +1655,8 @@ func _build_lot(
 	world_center += front_direction * front_shift
 
 	var building_type: int = _choose_building_type(district, lot)
+	if building_type == BUILDING_APARTMENT and not allow_apartment:
+		building_type = BUILDING_MODERN
 	var building_name: String = "Block%dLot%d" % [block_index, lot_serial]
 	var enterable: bool = false
 	if building_type == BUILDING_SHOP:
@@ -1617,11 +1672,22 @@ func _build_lot(
 		BUILDING_SHOP:
 			_build_shop(building_name, world_center, width_m, depth_m, district, front_yaw, enterable)
 		BUILDING_APARTMENT:
-			_build_apartment(building_name, world_center, width_m, depth_m, district, front_yaw)
+			var local_right_world: Vector3 = Vector3(cos(front_yaw), 0.0, -sin(front_yaw))
+			var balcony_side_sign: float = 1.0
+			if local_right_world.dot(apartment_clearance_world_direction) < 0.0:
+				balcony_side_sign = -1.0
+			_build_apartment(
+				building_name, world_center, width_m, depth_m, district,
+				front_yaw, balcony_side_sign
+			)
 		BUILDING_TOWER:
 			_build_tower(building_name, world_center, width_m, depth_m, front_yaw)
 
-	if district == DISTRICT_OVERGROWN and town_rng.randf() < 0.45:
+	if (
+		district == DISTRICT_OVERGROWN
+		and building_type != BUILDING_APARTMENT
+		and town_rng.randf() < 0.45
+	):
 		var plant_count: int = town_rng.randi_range(1, 3)
 		for plant_index: int in range(plant_count):
 			var plant_pos: Vector3 = world_center + Vector3(
@@ -1630,6 +1696,7 @@ func _build_lot(
 				town_rng.randf_range(-depth_m * 0.46, depth_m * 0.46)
 			)
 			_add_shrub(plant_pos, town_rng.randf_range(0.45, 0.88))
+	return building_type
 
 func _choose_building_type(district: int, lot: Rect2i) -> int:
 	var roll: float = town_rng.randf()
@@ -2684,7 +2751,8 @@ func _build_apartment(
 	width_m: float,
 	depth_m: float,
 	_district: int,
-	front_yaw: float
+	front_yaw: float,
+	balcony_side_sign: float = 1.0
 ) -> void:
 	# Reference pass 1: the apartment is intentionally architecture-only.
 	# Balconies, railings, soffit lights, signs, AC units, pipes, plants and
@@ -2692,6 +2760,8 @@ func _build_apartment(
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
 	root.set_meta("reference_stage", "building_without_balconies_or_props")
+	root.set_meta("balcony_clear_side", balcony_side_sign)
+	root.set_meta("balcony_clearance_reserved", true)
 	var floor_height: float = 3.0
 	var floors: int = 5
 	var height: float = floor_height * float(floors)
@@ -2852,11 +2922,12 @@ func _build_apartment(
 		_add_apartment_side_window(
 			root,
 			"ApartmentStairWindow_%02d" % stair_level,
-			width_m * 0.5 + 0.018,
+			(width_m * 0.5 + 0.018) * balcony_side_sign,
 			stair_y,
 			depth_m * 0.18,
 			clampf(depth_m * 0.16, 0.62, 0.92),
-			1.18
+			1.18,
+			balcony_side_sign
 		)
 
 	_add_apartment_reference_roof(root, width_m, depth_m, height)
@@ -2929,7 +3000,8 @@ func _add_apartment_side_window(
 	y_value: float,
 	z_value: float,
 	width_value: float,
-	height_value: float
+	height_value: float,
+	outward_sign: float
 ) -> void:
 	_add_local_box(
 		root,
@@ -2938,7 +3010,7 @@ func _add_apartment_side_window(
 		Vector3(0.042, height_value, width_value),
 		mat_window_warm_dim
 	)
-	var frame_x: float = x_value + 0.035
+	var frame_x: float = x_value + 0.035 * outward_sign
 	var frame_t: float = 0.075
 	_add_local_box(
 		root,
