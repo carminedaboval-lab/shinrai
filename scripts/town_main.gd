@@ -2781,7 +2781,7 @@ func _build_apartment(
 	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
-	root.set_meta("reference_stage", "reference_balconies_without_loose_props")
+	root.set_meta("reference_stage", "front_balcony_structural_frame_pass")
 	root.set_meta("balcony_clear_side", balcony_side_sign)
 	root.set_meta("balcony_clearance_reserved", true)
 	root.set_meta("balcony_module_width_m", 3.0)
@@ -2794,8 +2794,13 @@ func _build_apartment(
 	var wall_t: float = 0.22
 	var front_z: float = -depth_m * 0.5
 	var rear_z: float = depth_m * 0.5
-	var frame_depth: float = minf(0.56, depth_m * 0.12)
-	var recess_z: float = front_z + frame_depth - 0.07
+	# Deepen the façade reveal so the balcony/window bays read as part of the
+	# concrete structure instead of modules pasted onto a flat wall.
+	var frame_depth: float = clampf(depth_m * 0.15, 0.58, 0.72)
+	var recess_z: float = front_z + frame_depth - 0.05
+	# Seat the balcony slab slightly farther into that reveal while retaining
+	# the authored 1.20 m module depth.
+	var front_balcony_anchor_z: float = recess_z + 0.10
 	var door_width: float = clampf(width_m * 0.19, 1.28, 1.64)
 
 	# Preserve a genuinely usable ground-floor entrance. This pass deliberately
@@ -2833,7 +2838,8 @@ func _build_apartment(
 			mat_apartment_concrete
 		)
 
-	var edge_pier_w: float = clampf(width_m * 0.085, 0.42, 0.70)
+	# The reference is carried by substantial full-height outer concrete piers.
+	var edge_pier_w: float = clampf(width_m * 0.095, 0.54, 0.78)
 	for side: float in [-1.0, 1.0]:
 		_add_local_box(
 			root,
@@ -2851,12 +2857,12 @@ func _build_apartment(
 			root,
 			"ApartmentFrontFloorBeam_%02d" % level,
 			Vector3(0.0, float(level) * floor_height, front_z + frame_depth * 0.5),
-			Vector3(width_m, 0.24, frame_depth),
+			Vector3(width_m, 0.28, frame_depth),
 			mat_apartment_concrete
 		)
 
 	var paired_bays: bool = width_m >= 5.80
-	var center_spine_w: float = clampf(width_m * 0.065, 0.36, 0.54) if paired_bays else 0.0
+	var center_spine_w: float = clampf(width_m * 0.080, 0.46, 0.68) if paired_bays else 0.0
 	if paired_bays:
 		_add_local_box(
 			root,
@@ -2911,7 +2917,7 @@ func _build_apartment(
 			_add_apartment_balcony_module(
 				balcony_root,
 				module_prefix,
-				Vector3(bay_x, 0.0, recess_z),
+				Vector3(bay_x, 0.0, front_balcony_anchor_z),
 				Vector3.RIGHT,
 				Vector3.FORWARD,
 				balcony_width,
@@ -2930,7 +2936,7 @@ func _build_apartment(
 		_add_apartment_balcony_module(
 			balcony_root,
 			"ApartmentFrontBalconyRoof_%02d" % roof_bay_index,
-			Vector3(roof_bay_x, 0.0, recess_z),
+			Vector3(roof_bay_x, 0.0, front_balcony_anchor_z),
 			Vector3.RIGHT,
 			Vector3.FORWARD,
 			roof_balcony_width,
