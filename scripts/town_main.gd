@@ -21,7 +21,7 @@ const ManholeCutMaterial: Material = preload("res://assets/environment/roads/shi
 const CurbEdgeRepairMaterial: Material = preload("res://assets/environment/roads/shinrai_road/repairs/M_SHINRAI_CurbEdgeRepair.tres")
 const CurbDrainScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady.tscn")
 const CurbDrainEndCapScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady.tscn")
-const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/ProjectShinrai_YakitoriShop_BuildingShell_v2.tscn")
+const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v3/ProjectShinrai_YakitoriShop_ArtworkReplica_v3.tscn")
 
 const GRID_WIDTH: int = 53
 const GRID_HEIGHT: int = 53
@@ -178,13 +178,13 @@ const YAKITORI_LANTERN_VISIBILITY_MARGIN: float = 5.0
 const YAKITORI_LANTERN_FALLBACK_LIGHT_ENERGY: float = 0.72
 const YAKITORI_LANTERN_FALLBACK_LIGHT_RANGE: float = 2.5
 
-# v10.27a: replace the complete procedural storefront root at the locked review
-# position with the authored 4.20 m x 1.20 m Yakitori building. The model's
-# entrance socket is aligned to the removed shop's threshold, so no old walls,
-# roof, collision, interior, utilities or façade pieces remain behind it.
+# v10.30a: replace the complete procedural storefront root at the locked review
+# position with the artwork-matched 4.20 m x 4.58 m two-storey Yakitori building.
+# The GLB owns the shell, upper facade, roofline, rear elevation, materials and
+# collision, so the former runtime architecture extension is no longer applied.
 const YAKITORI_SHOP_ENTRANCE_LOCAL_Z: float = -0.72
-# v10.29a: reserve three of the existing street-light slots for the hero
-# storefront's recessed canopy downlights. The town-wide light ceiling remains
+# v10.30a: reserve three existing street-light slots for the artwork replica's
+# authored recessed-canopy sockets. The town-wide light ceiling remains
 # unchanged; these fixtures simply replace three generic road lights.
 const YAKITORI_CANOPY_LIGHT_COUNT: int = 3
 const YAKITORI_CANOPY_LIGHT_ENERGY: float = 0.46
@@ -5025,19 +5025,22 @@ func _replace_visual_test_storefront_with_yakitori_shop() -> void:
 	replacement.add_child(lintel_anchor)
 
 	geometry_root.add_child(replacement)
-	var architecture: Node3D = _upgrade_yakitori_shop_architecture(authored_model)
+	var architecture: Node3D = authored_model.find_child(
+		"ProjectShinrai_YakitoriShop_ArtworkReplica_v3_ROOT", true, false
+	) as Node3D
+	if architecture == null:
+		architecture = authored_model
+	architecture.add_to_group("shinrai_yakitori_architecture")
+	architecture.add_to_group("shinrai_yakitori_artwork_replica")
 
 	if removed_interior_lights > 0:
 		interior_light_count = maxi(0, interior_light_count - removed_interior_lights)
 		shop_interior_light_count = maxi(0, shop_interior_light_count - removed_interior_lights)
 
 	print(
-		"v10.29a Yakitori building: installed %s + %s | compact dark-metal door pulls | compact offset rear window | unified dark-stone threshold | removed legacy triangles cedar=%d roof=%d handles=%d | released interior lights %d" % [
+		"v10.30a Yakitori artwork replica: installed %s + %s | 4.20 x 4.58 m full-depth shell | two-storey facade + low-slope roof + rear window + stone plinth | later-detail sockets ready | released interior lights %d" % [
 			replacement.name,
 			architecture.name,
-			int(architecture.get_meta("removed_legacy_cedar_triangles", 0)),
-			int(architecture.get_meta("removed_legacy_roof_triangles", 0)),
-			int(architecture.get_meta("removed_legacy_handle_triangles", 0)),
 			removed_interior_lights,
 		]
 	)
@@ -5128,8 +5131,12 @@ func _visual_test_storefront_fixture_anchor(
 
 func _build_yakitori_canopy_lights(building_root: Node3D) -> int:
 	var architecture: Node3D = building_root.find_child(
-		"YakitoriArchitecture_v10_29a", true, false
+		"ProjectShinrai_YakitoriShop_ArtworkReplica_v3_ROOT", true, false
 	) as Node3D
+	if architecture == null:
+		architecture = building_root.find_child(
+			"YakitoriArchitecture_v10_29a", true, false
+		) as Node3D
 	if architecture == null:
 		return 0
 
@@ -5137,25 +5144,25 @@ func _build_yakitori_canopy_lights(building_root: Node3D) -> int:
 	var light_total: int = mini(YAKITORI_CANOPY_LIGHT_COUNT, available_slots)
 	var light_x_positions: Array[float] = [-1.34, 0.0, 1.34]
 	for light_index: int in range(light_total):
-		var light_x: float = light_x_positions[light_index]
-		var lens: MeshInstance3D = _add_local_box(
-			architecture,
-			"CanopyDownlightLens_%02d" % light_index,
-			Vector3(light_x, 2.605, -1.16),
-			Vector3(0.22, 0.025, 0.22),
-			mat_interior_task_warm
-		)
-		lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var light_parent: Node3D = building_root.find_child(
+			"SOCKET_CanopyLight_%02d" % light_index, true, false
+		) as Node3D
+		if light_parent == null:
+			light_parent = architecture
 
 		var light: OmniLight3D = OmniLight3D.new()
 		light.name = "YakitoriCanopyDownlight_%02d" % light_index
-		light.position = Vector3(light_x, 2.53, -1.16)
+		if light_parent == architecture:
+			var light_x: float = light_x_positions[light_index]
+			light.position = Vector3(light_x, 2.49, -1.16)
+		else:
+			light.position = Vector3.ZERO
 		light.light_color = Color(1.0, 0.72, 0.47)
 		light.light_energy = YAKITORI_CANOPY_LIGHT_ENERGY
 		light.omni_range = YAKITORI_CANOPY_LIGHT_RANGE
 		light.omni_attenuation = 1.72
 		light.shadow_enabled = false
-		architecture.add_child(light)
+		light_parent.add_child(light)
 		light.add_to_group("shinrai_street_light")
 		light.add_to_group("shinrai_visual_test_storefront_light")
 		light.add_to_group("shinrai_yakitori_canopy_light")
@@ -5182,9 +5189,9 @@ func _build_visual_test_storefront_lamp_coverage() -> void:
 		var canopy_light_count: int = _build_yakitori_canopy_lights(building_root)
 		street_light_count += canopy_light_count
 		visual_test_storefront_light_target = building_root.name
-		visual_test_storefront_fixture_target = "Three recessed canopy downlights"
+		visual_test_storefront_fixture_target = "Three artwork-matched recessed canopy downlights"
 		print(
-			"v10.29a Yakitori canopy lights: %d recessed fixtures | street pool %d/%d" % [
+			"v10.30a Yakitori canopy lights: %d authored sockets | street pool %d/%d" % [
 				canopy_light_count,
 				street_light_count,
 				MAX_STREET_LIGHTS,

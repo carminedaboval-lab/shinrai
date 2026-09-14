@@ -1,0 +1,59 @@
+{
+  "asset": "ProjectShinrai_YakitoriShop_ArtworkReplica_v3.glb",
+  "version": "3.0",
+  "dimensions_m": [
+    4.2,
+    6.4,
+    4.58
+  ],
+  "front_axis": "-Z",
+  "scope": "building only",
+  "excluded": [
+    "signage",
+    "lanterns",
+    "plants",
+    "props",
+    "AC units",
+    "finished interior"
+  ],
+  "placeholder_glass": true,
+  "triangle_counts": {
+    "plaster": 396,
+    "stone": 352,
+    "exterior_wood": 772,
+    "canopy_wood": 1912,
+    "upper_wood": 176,
+    "frame_wood": 1644,
+    "glass": 248,
+    "interior": 176,
+    "roof": 108,
+    "metal": 2324,
+    "lens": 216,
+    "collision": 308
+  },
+  "total_triangles_including_collision": 8632,
+  "material_slots": [
+    "MAT_Yakitori_04_PlasterConcrete",
+    "MAT_Yakitori_05_StoneThreshold",
+    "MAT_Yakitori_01_ExteriorWoodMain",
+    "MAT_Yakitori_02_CanopyEaveWood",
+    "MAT_Yakitori_03_UpperWoodCladding",
+    "MAT_Yakitori_07_WoodFrames",
+    "MAT_Yakitori_06_Glass_PLACEHOLDER",
+    "MAT_Yakitori_Interior_PLACEHOLDER",
+    "MAT_Yakitori_09_RoofEdgeFlashing",
+    "MAT_Yakitori_08_MetalTrimHandles",
+    "MAT_Yakitori_CanopyLightLens"
+  ],
+  "sockets": [
+    "SOCKET_Entrance",
+    "SOCKET_CanopyLight_00",
+    "SOCKET_CanopyLight_01",
+    "SOCKET_CanopyLight_02",
+    "SOCKET_Lantern_Right_LATER",
+    "SOCKET_VerticalSign_Right_LATER",
+    "SOCKET_Noren_LATER",
+    "SOCKET_InteriorOrigin_LATER",
+    "SOCKET_Roof"
+  ]
+}
