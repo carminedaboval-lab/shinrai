@@ -482,32 +482,36 @@ func _build_materials() -> void:
 	mat_apartment_concrete = ShaderMaterial.new()
 	mat_apartment_concrete.shader = ApartmentConcreteShader
 	mat_apartment_concrete.set_shader_parameter("concrete_texture", apartment_concrete_texture)
-	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.285, 0.268, 0.242, 1.0))
-	mat_apartment_concrete.set_shader_parameter("grime_tint", Color(0.064, 0.059, 0.051, 1.0))
-	mat_apartment_concrete.set_shader_parameter("texture_scale", 0.72)
-	mat_apartment_concrete.set_shader_parameter("panel_width_m", 2.05)
-	mat_apartment_concrete.set_shader_parameter("panel_height_m", 1.36)
-	mat_apartment_concrete.set_shader_parameter("panel_strength", 0.085)
-	mat_apartment_concrete.set_shader_parameter("tie_strength", 0.50)
-	mat_apartment_concrete.set_shader_parameter("rain_strength", 0.035)
-	mat_apartment_concrete.set_shader_parameter("grime_strength", 0.48)
-	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.08)
-	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.008)
+	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.275, 0.245, 0.205, 1.0))
+	mat_apartment_concrete.set_shader_parameter("grime_tint", Color(0.055, 0.047, 0.035, 1.0))
+	mat_apartment_concrete.set_shader_parameter("texture_scale", 0.58)
+	mat_apartment_concrete.set_shader_parameter("panel_width_m", 2.10)
+	mat_apartment_concrete.set_shader_parameter("panel_height_m", 1.42)
+	mat_apartment_concrete.set_shader_parameter("panel_strength", 0.12)
+	mat_apartment_concrete.set_shader_parameter("tie_strength", 0.34)
+	mat_apartment_concrete.set_shader_parameter("pore_strength", 0.32)
+	mat_apartment_concrete.set_shader_parameter("rain_strength", 0.050)
+	mat_apartment_concrete.set_shader_parameter("grime_strength", 0.42)
+	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.18)
+	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.52)
+	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.002)
 
 	mat_apartment_concrete_recess = ShaderMaterial.new()
 	mat_apartment_concrete_recess.shader = ApartmentConcreteShader
 	mat_apartment_concrete_recess.set_shader_parameter("concrete_texture", apartment_concrete_texture)
-	mat_apartment_concrete_recess.set_shader_parameter("concrete_tint", Color(0.168, 0.153, 0.134, 1.0))
-	mat_apartment_concrete_recess.set_shader_parameter("grime_tint", Color(0.044, 0.040, 0.034, 1.0))
-	mat_apartment_concrete_recess.set_shader_parameter("texture_scale", 0.78)
-	mat_apartment_concrete_recess.set_shader_parameter("panel_width_m", 2.05)
-	mat_apartment_concrete_recess.set_shader_parameter("panel_height_m", 1.36)
-	mat_apartment_concrete_recess.set_shader_parameter("panel_strength", 0.045)
-	mat_apartment_concrete_recess.set_shader_parameter("tie_strength", 0.14)
-	mat_apartment_concrete_recess.set_shader_parameter("rain_strength", 0.018)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_tint", Color(0.150, 0.130, 0.105, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("grime_tint", Color(0.040, 0.034, 0.026, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("texture_scale", 0.62)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_width_m", 2.10)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_height_m", 1.42)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_strength", 0.070)
+	mat_apartment_concrete_recess.set_shader_parameter("tie_strength", 0.20)
+	mat_apartment_concrete_recess.set_shader_parameter("pore_strength", 0.24)
+	mat_apartment_concrete_recess.set_shader_parameter("rain_strength", 0.025)
 	mat_apartment_concrete_recess.set_shader_parameter("grime_strength", 0.34)
-	mat_apartment_concrete_recess.set_shader_parameter("grime_height_m", 1.10)
-	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.005)
+	mat_apartment_concrete_recess.set_shader_parameter("grime_height_m", 1.12)
+	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.42)
+	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.001)
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
 	mat_dirty_plaster = _material(Color(0.230, 0.225, 0.216), 0.0, 0.98,
@@ -2781,7 +2785,7 @@ func _build_apartment(
 	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
-	root.set_meta("reference_stage", "front_balcony_structural_frame_pass")
+	root.set_meta("reference_stage", "concrete_surface_and_corner_pass")
 	root.set_meta("balcony_clear_side", balcony_side_sign)
 	root.set_meta("balcony_clearance_reserved", true)
 	root.set_meta("balcony_module_width_m", 3.0)
@@ -2828,13 +2832,19 @@ func _build_apartment(
 		)
 
 	# Broad, almost blank shear walls define the narrow Japanese urban block.
+	# Start them behind the front frame instead of overlapping the edge piers.
+	# This removes the coplanar faces that produced the jagged left corner.
+	var side_wall_depth: float = maxf(0.40, depth_m - frame_depth)
+	var side_wall_center_z: float = (
+		front_z + frame_depth + side_wall_depth * 0.5
+	)
 	for side: float in [-1.0, 1.0]:
 		_add_local_box(
 			root,
 			"ApartmentSideShearWall",
 			Vector3((width_m * 0.5 - wall_t * 0.5) * side,
-				floor_height + upper_height * 0.5, 0.0),
-			Vector3(wall_t, upper_height, depth_m),
+				floor_height + upper_height * 0.5, side_wall_center_z),
+			Vector3(wall_t, upper_height, side_wall_depth),
 			mat_apartment_concrete
 		)
 
