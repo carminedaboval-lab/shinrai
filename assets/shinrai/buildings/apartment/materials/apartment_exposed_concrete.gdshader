@@ -5,6 +5,12 @@ shader_type spatial;
 // broad curing clouds, formwork-scale grain, and fine aggregate. All procedural
 // marks remain restrained so the façade reads as cast concrete, not scribbles.
 uniform sampler2D concrete_texture : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D concrete_albedo_texture : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D concrete_normal_texture : hint_normal, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D concrete_orm_texture : repeat_enable, filter_linear_mipmap_anisotropic;
+uniform float pbr_texture_scale : hint_range(0.10, 2.00, 0.01) = 0.62;
+uniform float pbr_detail_mix : hint_range(0.0, 1.0, 0.01) = 0.0;
+uniform float pbr_normal_strength : hint_range(0.0, 1.0, 0.01) = 0.0;
 uniform vec4 concrete_tint : source_color = vec4(0.305, 0.270, 0.225, 1.0);
 uniform vec4 grime_tint : source_color = vec4(0.055, 0.047, 0.035, 1.0);
 uniform vec4 efflorescence_tint : source_color = vec4(0.43, 0.40, 0.34, 1.0);
@@ -48,6 +54,73 @@ vec3 sample_concrete_triplanar(
 	vec3 y_sample = texture(concrete_texture, position_value.xz * scale_value).rgb;
 	vec3 z_sample = texture(concrete_texture, position_value.xy * scale_value).rgb;
 	return x_sample * weights.x + y_sample * weights.y + z_sample * weights.z;
+}
+
+vec3 sample_pbr_albedo_triplanar(vec3 position_value, vec3 normal_value) {
+	vec3 weights = pow(abs(normalize(normal_value)), vec3(8.0));
+	weights /= max(weights.x + weights.y + weights.z, 0.0001);
+	vec3 x_sample = texture(
+		concrete_albedo_texture, position_value.zy * pbr_texture_scale
+	).rgb;
+	vec3 y_sample = texture(
+		concrete_albedo_texture, position_value.xz * pbr_texture_scale
+	).rgb;
+	vec3 z_sample = texture(
+		concrete_albedo_texture, position_value.xy * pbr_texture_scale
+	).rgb;
+	return x_sample * weights.x + y_sample * weights.y + z_sample * weights.z;
+}
+
+vec3 sample_pbr_orm_triplanar(vec3 position_value, vec3 normal_value) {
+	vec3 weights = pow(abs(normalize(normal_value)), vec3(8.0));
+	weights /= max(weights.x + weights.y + weights.z, 0.0001);
+	vec3 x_sample = texture(
+		concrete_orm_texture, position_value.zy * pbr_texture_scale
+	).rgb;
+	vec3 y_sample = texture(
+		concrete_orm_texture, position_value.xz * pbr_texture_scale
+	).rgb;
+	vec3 z_sample = texture(
+		concrete_orm_texture, position_value.xy * pbr_texture_scale
+	).rgb;
+	return x_sample * weights.x + y_sample * weights.y + z_sample * weights.z;
+}
+
+vec3 sample_pbr_normal_triplanar(vec3 position_value, vec3 normal_value) {
+	vec3 weights = pow(abs(normalize(normal_value)), vec3(8.0));
+	weights /= max(weights.x + weights.y + weights.z, 0.0001);
+	vec3 axis_sign = vec3(
+		normal_value.x < 0.0 ? -1.0 : 1.0,
+		normal_value.y < 0.0 ? -1.0 : 1.0,
+		normal_value.z < 0.0 ? -1.0 : 1.0
+	);
+	vec3 normal_x = texture(
+		concrete_normal_texture, position_value.zy * pbr_texture_scale
+	).xyz * 2.0 - 1.0;
+	vec3 normal_y = texture(
+		concrete_normal_texture, position_value.xz * pbr_texture_scale
+	).xyz * 2.0 - 1.0;
+	vec3 normal_z = texture(
+		concrete_normal_texture, position_value.xy * pbr_texture_scale
+	).xyz * 2.0 - 1.0;
+	vec3 world_x = vec3(
+		axis_sign.x * normal_x.z,
+		-axis_sign.x * normal_x.y,
+		normal_x.x
+	);
+	vec3 world_y = vec3(
+		normal_y.x,
+		axis_sign.y * normal_y.z,
+		-axis_sign.y * normal_y.y
+	);
+	vec3 world_z = vec3(
+		normal_z.x,
+		axis_sign.z * normal_z.y,
+		axis_sign.z * normal_z.z
+	);
+	return normalize(
+		world_x * weights.x + world_y * weights.y + world_z * weights.z
+	);
 }
 
 float seam_line(float panel_coordinate) {
@@ -149,6 +222,20 @@ void fragment() {
 	float macro_luma = luminance(macro_texture);
 	float base_luma = luminance(base_texture);
 	float fine_luma = luminance(fine_texture);
+	vec3 pbr_albedo = sample_pbr_albedo_triplanar(world_position, normal_world);
+	vec3 pbr_orm = sample_pbr_orm_triplanar(world_position, normal_world);
+	float pbr_luma = luminance(pbr_albedo);
+	float pbr_value = mix(
+		1.0,
+		mix(0.82, 1.18, pbr_luma),
+		pbr_detail_mix
+	);
+	vec3 pbr_chroma = pbr_albedo / max(pbr_luma, 0.04);
+	vec3 pbr_tone = mix(
+		vec3(1.0),
+		clamp(pbr_chroma, vec3(0.86), vec3(1.14)),
+		pbr_detail_mix * 0.16
+	);
 	float grain = clamp(
 		1.0
 			+ (macro_luma - 0.94) * 0.78
@@ -162,7 +249,13 @@ void fragment() {
 		1.035,
 		hash21(panel_cell + vec2(7.3, 2.1))
 	);
-	vec3 surface_color = concrete_tint.rgb * grain * panel_variation;
+	vec3 surface_color = (
+		concrete_tint.rgb
+		* grain
+		* panel_variation
+		* pbr_value
+		* pbr_tone
+	);
 
 	// Thin, slightly recessed formwork joints reproduce the large poured panels.
 	float seam = max(seam_line(panel_uv.x), seam_line(panel_uv.y)) * vertical_surface;
@@ -308,25 +401,39 @@ void fragment() {
 		- pore_mask * 0.020
 		- hairline_crack * 0.012
 	);
+	vec3 pbr_world_normal = sample_pbr_normal_triplanar(
+		world_position, normal_world
+	);
+	vec3 material_world_normal = normalize(
+		mix(normal_world, pbr_world_normal, pbr_normal_strength)
+	);
 	vec3 bumped_world_normal = perturb_world_normal(
 		world_position,
-		normal_world,
+		material_world_normal,
 		relief_height,
 		mix(0.12, detail_normal_strength, vertical_surface)
 	);
 	NORMAL = normalize((VIEW_MATRIX * vec4(bumped_world_normal, 0.0)).xyz);
 
 	float roughness_variation = clamp((0.94 - fine_luma) * 0.22, -0.025, 0.040);
+	float authored_roughness = mix(
+		0.925,
+		clamp(pbr_orm.g, 0.82, 1.0),
+		pbr_detail_mix * 0.56
+	);
 	ALBEDO = surface_color;
 	METALLIC = 0.0;
 	ROUGHNESS = clamp(
-		0.925 + roughness_variation + seam * 0.025 + ground_grime * 0.030,
-		0.89,
+		authored_roughness
+			+ roughness_variation
+			+ seam * 0.025
+			+ ground_grime * 0.030,
+		0.87,
 		0.995
 	);
 	SPECULAR = 0.16;
 	AO = clamp(
-		1.0
+		mix(1.0, pbr_orm.r, pbr_detail_mix * 0.70)
 			- seam * 0.075
 			- tie_halo * 0.16
 			- pore_mask * 0.10
