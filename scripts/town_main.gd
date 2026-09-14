@@ -23,6 +23,9 @@ const CurbDrainScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/P
 const CurbDrainEndCapScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady.tscn")
 const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v6/ProjectShinrai_YakitoriShop_ArtworkReplica_v6.tscn")
 const ApartmentConcreteShader: Shader = preload("res://assets/shinrai/buildings/apartment/materials/apartment_exposed_concrete.gdshader")
+const ApartmentConcreteAlbedoTexture: Texture2D = preload("res://assets/environment/roads/shinrai_road/curb_drain/SHINRAI_CurbConcrete_Albedo_1K.png")
+const ApartmentConcreteNormalTexture: Texture2D = preload("res://assets/environment/roads/shinrai_road/curb_drain/SHINRAI_CurbConcrete_NormalGL_1K.png")
+const ApartmentConcreteOrmTexture: Texture2D = preload("res://assets/environment/roads/shinrai_road/curb_drain/SHINRAI_CurbConcrete_ORM_1K.png")
 
 const GRID_WIDTH: int = 53
 const GRID_HEIGHT: int = 53
@@ -487,6 +490,12 @@ func _build_materials() -> void:
 	mat_apartment_concrete = ShaderMaterial.new()
 	mat_apartment_concrete.shader = ApartmentConcreteShader
 	mat_apartment_concrete.set_shader_parameter("concrete_texture", apartment_concrete_texture)
+	mat_apartment_concrete.set_shader_parameter("concrete_albedo_texture", ApartmentConcreteAlbedoTexture)
+	mat_apartment_concrete.set_shader_parameter("concrete_normal_texture", ApartmentConcreteNormalTexture)
+	mat_apartment_concrete.set_shader_parameter("concrete_orm_texture", ApartmentConcreteOrmTexture)
+	mat_apartment_concrete.set_shader_parameter("pbr_texture_scale", 0.92)
+	mat_apartment_concrete.set_shader_parameter("pbr_detail_mix", 0.62)
+	mat_apartment_concrete.set_shader_parameter("pbr_normal_strength", 0.22)
 	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.305, 0.270, 0.225, 1.0))
 	mat_apartment_concrete.set_shader_parameter("grime_tint", Color(0.055, 0.047, 0.035, 1.0))
 	mat_apartment_concrete.set_shader_parameter("efflorescence_tint", Color(0.43, 0.40, 0.34, 1.0))
@@ -496,7 +505,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("panel_height_m", 1.42)
 	mat_apartment_concrete.set_shader_parameter("panel_strength", 0.12)
 	mat_apartment_concrete.set_shader_parameter("tie_strength", 0.24)
-	mat_apartment_concrete.set_shader_parameter("pore_strength", 0.32)
+	mat_apartment_concrete.set_shader_parameter("pore_strength", 0.17)
 	mat_apartment_concrete.set_shader_parameter("crack_strength", 0.050)
 	mat_apartment_concrete.set_shader_parameter("rain_strength", 0.050)
 	mat_apartment_concrete.set_shader_parameter("efflorescence_strength", 0.075)
@@ -509,6 +518,12 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess = ShaderMaterial.new()
 	mat_apartment_concrete_recess.shader = ApartmentConcreteShader
 	mat_apartment_concrete_recess.set_shader_parameter("concrete_texture", apartment_concrete_texture)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_albedo_texture", ApartmentConcreteAlbedoTexture)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_normal_texture", ApartmentConcreteNormalTexture)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_orm_texture", ApartmentConcreteOrmTexture)
+	mat_apartment_concrete_recess.set_shader_parameter("pbr_texture_scale", 0.92)
+	mat_apartment_concrete_recess.set_shader_parameter("pbr_detail_mix", 0.52)
+	mat_apartment_concrete_recess.set_shader_parameter("pbr_normal_strength", 0.18)
 	mat_apartment_concrete_recess.set_shader_parameter("concrete_tint", Color(0.175, 0.150, 0.120, 1.0))
 	mat_apartment_concrete_recess.set_shader_parameter("grime_tint", Color(0.040, 0.034, 0.026, 1.0))
 	mat_apartment_concrete_recess.set_shader_parameter("efflorescence_tint", Color(0.32, 0.29, 0.24, 1.0))
@@ -518,7 +533,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess.set_shader_parameter("panel_height_m", 1.42)
 	mat_apartment_concrete_recess.set_shader_parameter("panel_strength", 0.070)
 	mat_apartment_concrete_recess.set_shader_parameter("tie_strength", 0.16)
-	mat_apartment_concrete_recess.set_shader_parameter("pore_strength", 0.24)
+	mat_apartment_concrete_recess.set_shader_parameter("pore_strength", 0.13)
 	mat_apartment_concrete_recess.set_shader_parameter("crack_strength", 0.025)
 	mat_apartment_concrete_recess.set_shader_parameter("rain_strength", 0.025)
 	mat_apartment_concrete_recess.set_shader_parameter("efflorescence_strength", 0.045)
