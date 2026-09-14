@@ -283,6 +283,11 @@ var shinrai_road_material: Material
 var mat_sidewalk: StandardMaterial3D
 var mat_concrete: StandardMaterial3D
 var mat_dark_concrete: StandardMaterial3D
+# Apartment-only concrete calibration. It reuses the existing town concrete
+# detail maps with a warmer exposed-formwork tint, keeping it distinct from
+# the Yakitori plaster while matching the apartment reference sheet.
+var mat_apartment_concrete: StandardMaterial3D
+var mat_apartment_concrete_recess: StandardMaterial3D
 var mat_wood: StandardMaterial3D
 var mat_dark_wood: StandardMaterial3D
 var mat_roof: StandardMaterial3D
@@ -467,6 +472,15 @@ func _build_materials() -> void:
 		Color(0.070, 0.080, 0.096), 0.035)
 	mat_dark_concrete = _material(Color(0.160, 0.175, 0.198), 0.01, 0.88,
 		Color(0.070, 0.084, 0.108), 0.070)
+	# The apartment reference is neutral warm-grey exposed concrete rather
+	# than the cooler blue-grey concrete used elsewhere in the town. These
+	# remain deliberately rough so the façade does not bloom under streetlight.
+	mat_apartment_concrete = _material(Color(0.315, 0.302, 0.282), 0.0, 0.97,
+		Color(0.075, 0.068, 0.058), 0.020)
+	mat_apartment_concrete.metallic_specular = 0.20
+	mat_apartment_concrete_recess = _material(Color(0.205, 0.198, 0.188), 0.0, 0.99,
+		Color(0.045, 0.040, 0.034), 0.012)
+	mat_apartment_concrete_recess.metallic_specular = 0.16
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
 	mat_dirty_plaster = _material(Color(0.230, 0.225, 0.216), 0.0, 0.98,
@@ -720,6 +734,10 @@ func _build_materials() -> void:
 	_apply_detail_texture(mat_curb, "res://assets/procedural_textures/concrete_detail.png", 2.0)
 	_apply_detail_texture(mat_concrete, "res://assets/procedural_textures/concrete_detail.png", 2.5)
 	_apply_detail_texture(mat_dark_concrete, "res://assets/procedural_textures/concrete_detail.png", 2.8)
+	_apply_detail_texture(mat_apartment_concrete,
+		"res://assets/procedural_textures/concrete_stained_v22.png", 1.72)
+	_apply_detail_texture(mat_apartment_concrete_recess,
+		"res://assets/procedural_textures/concrete_stained_v22.png", 2.05)
 	_apply_detail_texture(mat_plaster, "res://assets/procedural_textures/plaster_detail.png", 2.0)
 	_apply_detail_texture(mat_dirty_plaster, "res://assets/procedural_textures/plaster_detail.png", 2.2)
 	_apply_detail_texture(mat_wood, "res://assets/procedural_textures/wood_detail.png", 2.0)
@@ -2665,77 +2683,349 @@ func _build_apartment(
 	position_value: Vector3,
 	width_m: float,
 	depth_m: float,
-	district: int,
+	_district: int,
 	front_yaw: float
 ) -> void:
+	# Reference pass 1: the apartment is intentionally architecture-only.
+	# Balconies, railings, soffit lights, signs, AC units, pipes, plants and
+	# furniture are excluded until the concrete building is approved.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
-	var floors: int = town_rng.randi_range(3, 5)
-	if district == DISTRICT_COMMERCIAL:
-		floors += town_rng.randi_range(0, 1)
-	var floor_height: float = 2.78
+	root.add_to_group("shinrai_reference_apartment")
+	root.set_meta("reference_stage", "building_without_balconies_or_props")
+	var floor_height: float = 3.0
+	var floors: int = 5
 	var height: float = floor_height * float(floors)
-	var body_mat: Material = _choose_apartment_body_material(district)
+	var upper_height: float = height - floor_height
+	var wall_t: float = 0.22
+	var front_z: float = -depth_m * 0.5
+	var rear_z: float = depth_m * 0.5
+	var frame_depth: float = minf(0.56, depth_m * 0.12)
+	var recess_z: float = front_z + frame_depth - 0.07
+	var door_width: float = clampf(width_m * 0.19, 1.28, 1.64)
 
-	# Apartment blocks now have a real accessible lobby. Upper residential
-	# floors stay closed for this pass so we do not pretend there are stairs
-	# and rooms that do not exist yet.
-	_add_enterable_ground_shell(root, width_m, depth_m, floor_height, body_mat, 1.48)
-	_add_interior_details(root, width_m, depth_m, BUILDING_APARTMENT, floor_height)
-	_add_open_door(root, depth_m, 1.30, mat_black_metal)
-	var upper_h: float = height - floor_height
-	_add_local_box(root, "ApartmentUpperBody", Vector3(0.0, floor_height + upper_h * 0.5, 0.0),
-		Vector3(width_m, upper_h, depth_m), body_mat)
-	_add_building_collision(root, Vector3(width_m, upper_h, depth_m),
-		Vector3(0.0, floor_height + upper_h * 0.5, 0.0))
+	# Preserve a genuinely usable ground-floor entrance. This pass deliberately
+	# omits the previous generated interior furniture and lighting props.
+	_add_enterable_ground_shell(
+		root, width_m, depth_m, floor_height, mat_apartment_concrete, door_width
+	)
+	_add_open_door(root, depth_m, door_width, mat_black_metal)
+	_add_building_collision(
+		root,
+		Vector3(width_m, upper_height, depth_m),
+		Vector3(0.0, floor_height + upper_height * 0.5, 0.0)
+	)
 
-	_add_front_window(root, "LobbyGlassL", -width_m * 0.27, 1.35, -depth_m * 0.525,
-		width_m * 0.24, 1.65, mat_glass, mat_black_metal)
-	_add_front_window(root, "LobbyGlassR", width_m * 0.27, 1.35, -depth_m * 0.525,
-		width_m * 0.24, 1.65, mat_glass, mat_black_metal)
-	_add_local_box(root, "EntranceCanopy", Vector3(0.0, 2.55, -depth_m * 0.5 - 0.68),
-		Vector3(2.95, 0.15, 1.28), mat_black_metal)
-	for lobby_side: float in [-1.0, 1.0]:
-		_add_facade_detail_box(root, "LobbyPier",
-			Vector3(width_m * 0.43 * lobby_side, 1.45, -depth_m * 0.545),
-			Vector3(0.16, 2.55, 0.16), mat_dark_concrete)
+	# Five continuous slabs lock the 3.0 m floor rhythm and supply the strong
+	# horizontal concrete edges visible in every reference elevation.
+	for slab_level: int in range(1, floors + 1):
+		var slab_y: float = float(slab_level) * floor_height
+		_add_local_box(
+			root,
+			"ApartmentFloorSlab_%02d" % slab_level,
+			Vector3(0.0, slab_y, 0.0),
+			Vector3(width_m, 0.22, depth_m),
+			mat_apartment_concrete
+		)
 
-	var columns: int = clampi(int(width_m / 2.7), 2, 4)
-	for floor_index: int in range(1, floors):
-		var y_value: float = 1.45 + float(floor_index) * floor_height
-		for column: int in range(columns):
-			var t: float = (float(column) + 0.5) / float(columns) - 0.5
-			var row_shift: float = width_m * (0.022 if floor_index % 2 == 0 else -0.022)
-			var x_value: float = t * width_m * 0.82 + row_shift
-			var glass_mat: Material = _choose_window_material(0.12 if (floor_index + column) % 3 == 0 else 0.05)
-			_add_front_window(root, "ApartmentWindow", x_value, y_value, -depth_m * 0.515,
-				minf(1.35, width_m * 0.16), 1.05, glass_mat, mat_black_metal)
+	# Broad, almost blank shear walls define the narrow Japanese urban block.
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			"ApartmentSideShearWall",
+			Vector3((width_m * 0.5 - wall_t * 0.5) * side,
+				floor_height + upper_height * 0.5, 0.0),
+			Vector3(wall_t, upper_height, depth_m),
+			mat_apartment_concrete
+		)
 
-		if floor_index % 2 == 1:
-			_add_facade_detail_box(root, "ApartmentFloorBand",
-				Vector3(0.0, float(floor_index) * floor_height + 0.04, -depth_m * 0.537),
-				Vector3(width_m * 0.90, 0.09, 0.12), mat_dark_concrete)
+	var edge_pier_w: float = clampf(width_m * 0.085, 0.42, 0.70)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			"ApartmentFrontEdgePier",
+			Vector3((width_m * 0.5 - edge_pier_w * 0.5) * side,
+				floor_height + upper_height * 0.5, front_z + frame_depth * 0.5),
+			Vector3(edge_pier_w, upper_height, frame_depth),
+			mat_apartment_concrete
+		)
 
-		if floor_index > 1 and floor_index % 2 == 0:
-			var balcony_y: float = float(floor_index) * floor_height + 0.12
-			_add_local_box(root, "ApartmentBalcony", Vector3(0.0, balcony_y, -depth_m * 0.5 - 0.50),
-				Vector3(width_m * 0.82, 0.13, 0.95), mat_dark_concrete)
-			_add_balcony_rail(root, width_m * 0.80, balcony_y + 0.66, -depth_m * 0.5 - 0.94)
+	# Full-width floor beams, edge piers and the central spine create the same
+	# concrete grid as the reference, without adding any balcony geometry.
+	for level: int in range(1, floors + 1):
+		_add_local_box(
+			root,
+			"ApartmentFrontFloorBeam_%02d" % level,
+			Vector3(0.0, float(level) * floor_height, front_z + frame_depth * 0.5),
+			Vector3(width_m, 0.24, frame_depth),
+			mat_apartment_concrete
+		)
 
-	_add_facade_detail_box(root, "FrontServiceSpine",
-		Vector3(-width_m * 0.425, floor_height + upper_h * 0.50, -depth_m * 0.535),
-		Vector3(width_m * 0.11, maxf(0.8, upper_h * 0.88), 0.11), mat_weathered_metal)
-	_add_local_box(root, "StairTower", Vector3(width_m * 0.38, height * 0.52, depth_m * 0.43),
-		Vector3(width_m * 0.20, height * 0.90, depth_m * 0.16), mat_dark_concrete)
-	_add_local_box(root, "RoofPlantA", Vector3(-width_m * 0.20, height + 0.48, 0.0),
-		Vector3(width_m * 0.24, 0.78, depth_m * 0.22), mat_black_metal)
-	_add_local_box(root, "RoofPlantB", Vector3(width_m * 0.18, height + 0.34, depth_m * 0.12),
-		Vector3(width_m * 0.18, 0.50, depth_m * 0.18), mat_soft_white)
-	_add_wall_ac_unit(root, width_m * 0.40, 2.0, -depth_m * 0.515)
-	_add_exposed_service_pipe(root, -width_m * 0.44, height * 0.48, -depth_m * 0.54, height * 0.84)
-	_add_rooftop_parapet(root, width_m, depth_m, height)
-	if district == DISTRICT_LUXURY:
-		_add_local_box(root, "LuxuryCrown", Vector3(0.0, height + 1.02, 0.0),
-			Vector3(width_m * 0.70, 0.12, depth_m * 0.70), mat_neon_pink)
+	var paired_bays: bool = width_m >= 5.80
+	var center_spine_w: float = clampf(width_m * 0.065, 0.36, 0.54) if paired_bays else 0.0
+	if paired_bays:
+		_add_local_box(
+			root,
+			"ApartmentFrontCentralSpine",
+			Vector3(0.0, floor_height + upper_height * 0.5, front_z + frame_depth * 0.5),
+			Vector3(center_spine_w, upper_height, frame_depth),
+			mat_apartment_concrete
+		)
+
+	var bay_count: int = 2 if paired_bays else 1
+	var bay_width: float = (
+		(width_m - edge_pier_w * 2.0 - center_spine_w) / float(bay_count)
+	)
+	for residential_level: int in range(1, floors):
+		var opening_y: float = float(residential_level) * floor_height + 1.50
+		for bay_index: int in range(bay_count):
+			var bay_x: float = 0.0
+			if paired_bays:
+				var bay_side: float = -1.0 if bay_index == 0 else 1.0
+				bay_x = bay_side * (center_spine_w * 0.5 + bay_width * 0.5)
+			var opening_w: float = clampf(bay_width * 0.76, 1.02, 2.20)
+			_add_apartment_recessed_window(
+				root,
+				"ApartmentFrontBay_%02d_%02d" % [residential_level, bay_index],
+				bay_x,
+				opening_y,
+				recess_z,
+				opening_w,
+				2.18,
+				-1.0
+			)
+
+	# Reuse the established town façade glazing at ground level because its
+	# frame/reveal proportions already match the reference entrance.
+	var entrance_side_w: float = maxf(0.52, (width_m - door_width) * 0.5)
+	var lobby_window_w: float = maxf(0.58, entrance_side_w * 0.70)
+	var lobby_window_x: float = door_width * 0.5 + entrance_side_w * 0.5
+	for side: float in [-1.0, 1.0]:
+		_add_front_window(
+			root,
+			"ApartmentLobbyGlass",
+			lobby_window_x * side,
+			1.44,
+			front_z - 0.018,
+			lobby_window_w,
+			1.78,
+			mat_window_warm_dim,
+			mat_black_metal
+		)
+
+	# The rear keeps broad blank concrete fields around one narrow vertical
+	# window stack, matching the rear elevation while leaving balcony work out.
+	var rear_bay_w: float = clampf(width_m * 0.38, 1.62, 2.90)
+	var rear_field_w: float = maxf(0.42, (width_m - rear_bay_w) * 0.5)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			"ApartmentRearConcreteField",
+			Vector3((rear_bay_w * 0.5 + rear_field_w * 0.5) * side,
+				floor_height + upper_height * 0.5, rear_z - wall_t * 0.5),
+			Vector3(rear_field_w, upper_height, wall_t),
+			mat_apartment_concrete
+		)
+	for rear_level: int in range(1, floors):
+		var rear_y: float = float(rear_level) * floor_height + 1.50
+		_add_apartment_recessed_window(
+			root,
+			"ApartmentRearBay_%02d" % rear_level,
+			0.0,
+			rear_y,
+			rear_z - 0.34,
+			rear_bay_w * 0.72,
+			1.86,
+			1.0
+		)
+		_add_local_box(
+			root,
+			"ApartmentRearFloorBeam_%02d" % rear_level,
+			Vector3(0.0, float(rear_level) * floor_height, rear_z - frame_depth * 0.5),
+			Vector3(rear_bay_w, 0.24, frame_depth),
+			mat_apartment_concrete
+		)
+
+	# Small flush stair windows are part of the shell, not balcony or prop work.
+	# Their staggered rhythm keeps the stair-side elevation recognizable.
+	for stair_level: int in range(1, floors):
+		var stair_y: float = float(stair_level) * floor_height + 1.05
+		_add_apartment_side_window(
+			root,
+			"ApartmentStairWindow_%02d" % stair_level,
+			width_m * 0.5 + 0.018,
+			stair_y,
+			depth_m * 0.18,
+			clampf(depth_m * 0.16, 0.62, 0.92),
+			1.18
+		)
+
+	_add_apartment_reference_roof(root, width_m, depth_m, height)
+
+
+func _add_apartment_recessed_window(
+	root: Node3D,
+	prefix: String,
+	x_value: float,
+	y_value: float,
+	z_value: float,
+	width_value: float,
+	height_value: float,
+	outward_sign: float
+) -> void:
+	# A dark concrete backing gives the bay real depth even before interiors and
+	# balcony soffits are introduced. The glazing is reused from the town kit.
+	var backing_z: float = z_value - outward_sign * 0.105
+	var frame_z: float = z_value + outward_sign * 0.035
+	_add_local_box(
+		root,
+		prefix + "Backing",
+		Vector3(x_value, y_value, backing_z),
+		Vector3(width_value + 0.28, height_value + 0.24, 0.08),
+		mat_apartment_concrete_recess
+	)
+	_add_local_box(
+		root,
+		prefix + "Glass",
+		Vector3(x_value, y_value, z_value),
+		Vector3(width_value, height_value, 0.042),
+		mat_window_warm_dim
+	)
+	var frame_t: float = 0.075
+	_add_local_box(
+		root,
+		prefix + "FrameTop",
+		Vector3(x_value, y_value + height_value * 0.5, frame_z),
+		Vector3(width_value + 0.10, frame_t, 0.10),
+		mat_black_metal
+	)
+	_add_local_box(
+		root,
+		prefix + "FrameBottom",
+		Vector3(x_value, y_value - height_value * 0.5, frame_z),
+		Vector3(width_value + 0.10, frame_t, 0.10),
+		mat_black_metal
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			prefix + "FrameSide",
+			Vector3(x_value + width_value * 0.5 * side, y_value, frame_z),
+			Vector3(frame_t, height_value, 0.10),
+			mat_black_metal
+		)
+	_add_local_box(
+		root,
+		prefix + "CenterMullion",
+		Vector3(x_value, y_value, frame_z),
+		Vector3(0.065, height_value, 0.105),
+		mat_black_metal
+	)
+
+
+func _add_apartment_side_window(
+	root: Node3D,
+	prefix: String,
+	x_value: float,
+	y_value: float,
+	z_value: float,
+	width_value: float,
+	height_value: float
+) -> void:
+	_add_local_box(
+		root,
+		prefix + "Glass",
+		Vector3(x_value, y_value, z_value),
+		Vector3(0.042, height_value, width_value),
+		mat_window_warm_dim
+	)
+	var frame_x: float = x_value + 0.035
+	var frame_t: float = 0.075
+	_add_local_box(
+		root,
+		prefix + "FrameTop",
+		Vector3(frame_x, y_value + height_value * 0.5, z_value),
+		Vector3(0.10, frame_t, width_value + 0.10),
+		mat_black_metal
+	)
+	_add_local_box(
+		root,
+		prefix + "FrameBottom",
+		Vector3(frame_x, y_value - height_value * 0.5, z_value),
+		Vector3(0.10, frame_t, width_value + 0.10),
+		mat_black_metal
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			prefix + "FrameSide",
+			Vector3(frame_x, y_value, z_value + width_value * 0.5 * side),
+			Vector3(0.10, height_value, frame_t),
+			mat_black_metal
+		)
+
+
+func _add_apartment_reference_roof(
+	root: Node3D,
+	width_m: float,
+	depth_m: float,
+	top_y: float
+) -> void:
+	var parapet_h: float = 0.62
+	var parapet_t: float = 0.20
+	var parapet_y: float = top_y + parapet_h * 0.5
+	_add_local_box(
+		root, "ApartmentRoofParapetFront",
+		Vector3(0.0, parapet_y, -depth_m * 0.5 + parapet_t * 0.5),
+		Vector3(width_m, parapet_h, parapet_t), mat_apartment_concrete
+	)
+	_add_local_box(
+		root, "ApartmentRoofParapetRear",
+		Vector3(0.0, parapet_y, depth_m * 0.5 - parapet_t * 0.5),
+		Vector3(width_m, parapet_h, parapet_t), mat_apartment_concrete
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root, "ApartmentRoofParapetSide",
+			Vector3((width_m * 0.5 - parapet_t * 0.5) * side, parapet_y, 0.0),
+			Vector3(parapet_t, parapet_h, depth_m), mat_apartment_concrete
+		)
+
+	# Thin dark coping is fixed building fabric. Roof rails and equipment remain
+	# intentionally absent during this architecture-only pass.
+	var cap_y: float = top_y + parapet_h + 0.035
+	_add_local_box(
+		root, "ApartmentRoofCopingFront",
+		Vector3(0.0, cap_y, -depth_m * 0.5),
+		Vector3(width_m + 0.04, 0.07, 0.24), mat_black_metal
+	)
+	_add_local_box(
+		root, "ApartmentRoofCopingRear",
+		Vector3(0.0, cap_y, depth_m * 0.5),
+		Vector3(width_m + 0.04, 0.07, 0.24), mat_black_metal
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root, "ApartmentRoofCopingSide",
+			Vector3(width_m * 0.5 * side, cap_y, 0.0),
+			Vector3(0.24, 0.07, depth_m), mat_black_metal
+		)
+
+	# The two unequal concrete service cores are the distinctive roof silhouette
+	# in the supplied front, side and three-quarter references.
+	var core_w: float = clampf(width_m * 0.18, 0.72, 1.28)
+	var core_d: float = clampf(depth_m * 0.24, 1.00, 1.65)
+	var core_x: float = width_m * 0.28
+	_add_local_box(
+		root, "ApartmentRoofCoreLeft",
+		Vector3(-core_x, top_y + 1.22, depth_m * 0.12),
+		Vector3(core_w, 2.44, core_d), mat_apartment_concrete
+	)
+	_add_local_box(
+		root, "ApartmentRoofCoreRight",
+		Vector3(core_x, top_y + 1.45, depth_m * 0.16),
+		Vector3(core_w * 0.88, 2.90, core_d * 0.90), mat_apartment_concrete
+	)
+
 
 func _build_tower(
 	building_name: String,
