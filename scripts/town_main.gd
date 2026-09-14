@@ -21,7 +21,7 @@ const ManholeCutMaterial: Material = preload("res://assets/environment/roads/shi
 const CurbEdgeRepairMaterial: Material = preload("res://assets/environment/roads/shinrai_road/repairs/M_SHINRAI_CurbEdgeRepair.tres")
 const CurbDrainScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady.tscn")
 const CurbDrainEndCapScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady.tscn")
-const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v3/ProjectShinrai_YakitoriShop_ArtworkReplica_v3.tscn")
+const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/ProjectShinrai_YakitoriShop_ArtworkReplica_v5.tscn")
 
 const GRID_WIDTH: int = 53
 const GRID_HEIGHT: int = 53
@@ -178,12 +178,12 @@ const YAKITORI_LANTERN_VISIBILITY_MARGIN: float = 5.0
 const YAKITORI_LANTERN_FALLBACK_LIGHT_ENERGY: float = 0.72
 const YAKITORI_LANTERN_FALLBACK_LIGHT_RANGE: float = 2.5
 
-# v10.30a: replace the complete procedural storefront root at the locked review
+# v10.32a: replace the complete procedural storefront root at the locked review
 # position with the artwork-matched 4.20 m x 4.58 m two-storey Yakitori building.
 # The GLB owns the shell, upper facade, roofline, rear elevation, materials and
 # collision, so the former runtime architecture extension is no longer applied.
 const YAKITORI_SHOP_ENTRANCE_LOCAL_Z: float = -0.72
-# v10.30a: reserve three existing street-light slots for the artwork replica's
+# v10.32a: reserve three existing street-light slots for the artwork replica's
 # authored recessed-canopy sockets. The town-wide light ceiling remains
 # unchanged; these fixtures simply replace three generic road lights.
 const YAKITORI_CANOPY_LIGHT_COUNT: int = 3
@@ -5026,7 +5026,7 @@ func _replace_visual_test_storefront_with_yakitori_shop() -> void:
 
 	geometry_root.add_child(replacement)
 	var architecture: Node3D = authored_model.find_child(
-		"ProjectShinrai_YakitoriShop_ArtworkReplica_v3_ROOT", true, false
+		"ProjectShinrai_YakitoriShop_ArtworkReplica_v5_ROOT", true, false
 	) as Node3D
 	if architecture == null:
 		architecture = authored_model
@@ -5038,7 +5038,7 @@ func _replace_visual_test_storefront_with_yakitori_shop() -> void:
 		shop_interior_light_count = maxi(0, shop_interior_light_count - removed_interior_lights)
 
 	print(
-		"v10.30a Yakitori artwork replica: installed %s + %s | 4.20 x 4.58 m full-depth shell | two-storey facade + low-slope roof + rear window + stone plinth | later-detail sockets ready | released interior lights %d" % [
+		"v10.32a Yakitori artwork replica: installed %s + %s | V5 continuous plaster + closed upper roof junction + rebuilt thin storefront canopy | later-detail sockets ready | released interior lights %d" % [
 			replacement.name,
 			architecture.name,
 			removed_interior_lights,
@@ -5131,8 +5131,16 @@ func _visual_test_storefront_fixture_anchor(
 
 func _build_yakitori_canopy_lights(building_root: Node3D) -> int:
 	var architecture: Node3D = building_root.find_child(
-		"ProjectShinrai_YakitoriShop_ArtworkReplica_v3_ROOT", true, false
+		"ProjectShinrai_YakitoriShop_ArtworkReplica_v5_ROOT", true, false
 	) as Node3D
+	if architecture == null:
+		architecture = building_root.find_child(
+			"ProjectShinrai_YakitoriShop_ArtworkReplica_v4_ROOT", true, false
+		) as Node3D
+	if architecture == null:
+		architecture = building_root.find_child(
+			"ProjectShinrai_YakitoriShop_ArtworkReplica_v3_ROOT", true, false
+		) as Node3D
 	if architecture == null:
 		architecture = building_root.find_child(
 			"YakitoriArchitecture_v10_29a", true, false
@@ -5191,7 +5199,7 @@ func _build_visual_test_storefront_lamp_coverage() -> void:
 		visual_test_storefront_light_target = building_root.name
 		visual_test_storefront_fixture_target = "Three artwork-matched recessed canopy downlights"
 		print(
-			"v10.30a Yakitori canopy lights: %d authored sockets | street pool %d/%d" % [
+			"v10.32a Yakitori canopy lights: %d authored sockets | street pool %d/%d" % [
 				canopy_light_count,
 				street_light_count,
 				MAX_STREET_LIGHTS,
