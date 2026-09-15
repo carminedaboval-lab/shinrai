@@ -211,6 +211,15 @@ const BUILDING_SHOP: int = 2
 const BUILDING_APARTMENT: int = 3
 const BUILDING_TOWER: int = 4
 
+# The supplied apartment and balcony sheets define one fixed real-world module.
+# Two 3.00 m balcony bays plus their concrete piers require an 8.64 m frontage.
+# The body is five 3.00 m storeys; rooftop service cores extend above that body.
+const APARTMENT_REFERENCE_WIDTH_M: float = 8.64
+const APARTMENT_REFERENCE_DEPTH_M: float = 6.60
+const APARTMENT_REFERENCE_FLOOR_HEIGHT_M: float = 3.00
+const APARTMENT_REFERENCE_FLOOR_COUNT: int = 5
+const APARTMENT_REFERENCE_BODY_HEIGHT_M: float = 15.00
+
 # Street-facing commercial archetypes. These share one procedural building
 # system but get recognisable storefront/interior layouts instead of a generic
 # shop room. Keep the kit lightweight so the v10.17 performance gains survive.
@@ -495,7 +504,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("concrete_orm_texture", ApartmentConcreteOrmTexture)
 	mat_apartment_concrete.set_shader_parameter("pbr_texture_scale", 0.92)
 	mat_apartment_concrete.set_shader_parameter("pbr_detail_mix", 0.70)
-	mat_apartment_concrete.set_shader_parameter("pbr_normal_strength", 0.30)
+	mat_apartment_concrete.set_shader_parameter("pbr_normal_strength", 0.24)
 	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.305, 0.270, 0.225, 1.0))
 	mat_apartment_concrete.set_shader_parameter("grime_tint", Color(0.055, 0.047, 0.035, 1.0))
 	mat_apartment_concrete.set_shader_parameter("efflorescence_tint", Color(0.43, 0.40, 0.34, 1.0))
@@ -512,9 +521,9 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("grime_strength", 0.42)
 	mat_apartment_concrete.set_shader_parameter("algae_strength", 0.10)
 	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.18)
-	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.50)
-	mat_apartment_concrete.set_shader_parameter("joint_relief_strength", 0.72)
-	mat_apartment_concrete.set_shader_parameter("panel_depth_variation", 0.010)
+	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.40)
+	mat_apartment_concrete.set_shader_parameter("joint_relief_strength", 0.64)
+	mat_apartment_concrete.set_shader_parameter("panel_depth_variation", 0.008)
 	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.012)
 
 	mat_apartment_concrete_recess = ShaderMaterial.new()
@@ -525,7 +534,7 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess.set_shader_parameter("concrete_orm_texture", ApartmentConcreteOrmTexture)
 	mat_apartment_concrete_recess.set_shader_parameter("pbr_texture_scale", 0.92)
 	mat_apartment_concrete_recess.set_shader_parameter("pbr_detail_mix", 0.60)
-	mat_apartment_concrete_recess.set_shader_parameter("pbr_normal_strength", 0.24)
+	mat_apartment_concrete_recess.set_shader_parameter("pbr_normal_strength", 0.20)
 	mat_apartment_concrete_recess.set_shader_parameter("concrete_tint", Color(0.175, 0.150, 0.120, 1.0))
 	mat_apartment_concrete_recess.set_shader_parameter("grime_tint", Color(0.040, 0.034, 0.026, 1.0))
 	mat_apartment_concrete_recess.set_shader_parameter("efflorescence_tint", Color(0.32, 0.29, 0.24, 1.0))
@@ -542,9 +551,9 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess.set_shader_parameter("grime_strength", 0.34)
 	mat_apartment_concrete_recess.set_shader_parameter("algae_strength", 0.060)
 	mat_apartment_concrete_recess.set_shader_parameter("grime_height_m", 1.12)
-	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.44)
-	mat_apartment_concrete_recess.set_shader_parameter("joint_relief_strength", 0.54)
-	mat_apartment_concrete_recess.set_shader_parameter("panel_depth_variation", 0.007)
+	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.34)
+	mat_apartment_concrete_recess.set_shader_parameter("joint_relief_strength", 0.48)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_depth_variation", 0.006)
 	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.006)
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
@@ -1716,7 +1725,15 @@ func _build_lot(
 	world_center += front_direction * front_shift
 
 	var building_type: int = _choose_building_type(district, lot)
-	if building_type == BUILDING_APARTMENT and not allow_apartment:
+	if (
+		building_type == BUILDING_APARTMENT
+		and (
+			not allow_apartment
+			or lot_depth_m < APARTMENT_REFERENCE_DEPTH_M
+		)
+	):
+		# Do not squeeze the reference apartment into a one-cell-deep strip.
+		# It would distort the 6.60 m footprint or collide with the rear lot run.
 		building_type = BUILDING_MODERN
 	var building_name: String = "Block%dLot%d" % [block_index, lot_serial]
 	var enterable: bool = false
@@ -1737,9 +1754,26 @@ func _build_lot(
 			var balcony_side_sign: float = 1.0
 			if local_right_world.dot(apartment_clearance_world_direction) < 0.0:
 				balcony_side_sign = -1.0
+
+			# Grow toward the frontage lot already reserved for the side balconies,
+			# keeping the opposite party-wall edge fixed. Grow depth only toward
+			# the rear, keeping the street-facing façade on its original line.
+			var apartment_width_delta: float = APARTMENT_REFERENCE_WIDTH_M - width_m
+			var apartment_depth_delta: float = APARTMENT_REFERENCE_DEPTH_M - depth_m
+			var apartment_center: Vector3 = (
+				world_center
+				+ local_right_world
+					* (apartment_width_delta * 0.5 * balcony_side_sign)
+				- front_direction * (apartment_depth_delta * 0.5)
+			)
 			_build_apartment(
-				building_name, world_center, width_m, depth_m, district,
-				front_yaw, balcony_side_sign
+				building_name,
+				apartment_center,
+				APARTMENT_REFERENCE_WIDTH_M,
+				APARTMENT_REFERENCE_DEPTH_M,
+				district,
+				front_yaw,
+				balcony_side_sign
 			)
 		BUILDING_TOWER:
 			_build_tower(building_name, world_center, width_m, depth_m, front_yaw)
@@ -2819,15 +2853,19 @@ func _build_apartment(
 	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
-	root.set_meta("reference_stage", "japanese_formwork_relief_pass")
+	root.set_meta("reference_stage", "reference_dimensions_and_relief_pass")
+	root.set_meta("reference_width_m", width_m)
+	root.set_meta("reference_depth_m", depth_m)
+	root.set_meta("reference_body_height_m", APARTMENT_REFERENCE_BODY_HEIGHT_M)
+	root.set_meta("reference_total_height_m", APARTMENT_REFERENCE_BODY_HEIGHT_M + 2.90)
 	root.set_meta("balcony_clear_side", balcony_side_sign)
 	root.set_meta("balcony_clearance_reserved", true)
 	root.set_meta("balcony_module_width_m", 3.0)
 	root.set_meta("balcony_module_depth_m", 1.2)
 	root.set_meta("balcony_railing_height_m", 1.0)
-	var floor_height: float = 3.0
-	var floors: int = 5
-	var height: float = floor_height * float(floors)
+	var floor_height: float = APARTMENT_REFERENCE_FLOOR_HEIGHT_M
+	var floors: int = APARTMENT_REFERENCE_FLOOR_COUNT
+	var height: float = APARTMENT_REFERENCE_BODY_HEIGHT_M
 	var upper_height: float = height - floor_height
 	var wall_t: float = 0.22
 	var front_z: float = -depth_m * 0.5
