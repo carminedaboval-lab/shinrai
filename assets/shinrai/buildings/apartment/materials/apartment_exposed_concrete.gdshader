@@ -19,7 +19,7 @@ uniform float texture_scale : hint_range(0.10, 1.50, 0.01) = 0.58;
 uniform float panel_width_m : hint_range(1.00, 3.50, 0.01) = 2.10;
 uniform float panel_height_m : hint_range(0.80, 2.50, 0.01) = 1.42;
 uniform float panel_strength : hint_range(0.0, 0.50, 0.01) = 0.12;
-uniform float tie_strength : hint_range(0.0, 1.0, 0.01) = 0.24;
+uniform float tie_strength : hint_range(0.0, 1.0, 0.01) = 0.0;
 uniform float pore_strength : hint_range(0.0, 1.0, 0.01) = 0.32;
 uniform float crack_strength : hint_range(0.0, 0.20, 0.005) = 0.050;
 uniform float rain_strength : hint_range(0.0, 0.20, 0.005) = 0.050;
@@ -321,16 +321,21 @@ void fragment() {
 		circle_mask(panel_position_m, tie_b, 0.029)
 	) * vertical_surface;
 	float tie_rim = max(tie_outer - tie_halo, 0.0);
+	// Gate every form-tie contribution together so zero removes the hole from
+	// albedo, relief/normal, and ambient occlusion—not only its dark color.
+	float tie_core_effect = tie_core * tie_strength;
+	float tie_halo_effect = tie_halo * tie_strength;
+	float tie_rim_effect = tie_rim * tie_strength;
 	surface_color = mix(
 		surface_color,
 		efflorescence_tint.rgb,
-		tie_rim * tie_strength * 0.10
+		tie_rim_effect * 0.10
 	);
-	surface_color *= 1.0 - tie_halo * tie_strength * 0.11;
+	surface_color *= 1.0 - tie_halo_effect * 0.11;
 	surface_color = mix(
 		surface_color,
 		grime_tint.rgb * 0.92,
-		tie_core * tie_strength * 0.62
+		tie_core_effect * 0.62
 	);
 
 	// Millimetre-scale aggregate pores remain irregular and distance-safe.
@@ -443,8 +448,8 @@ void fragment() {
 		+ panel_face_relief
 		- seam * mix(0.034, 0.058, joint_relief_strength)
 		- seam_bevel * mix(0.007, 0.016, joint_relief_strength)
-		- tie_halo * 0.026
-		- tie_core * 0.042
+		- tie_halo_effect * 0.026
+		- tie_core_effect * 0.042
 		- pore_mask * 0.022
 		- hairline_crack * 0.012
 	);
@@ -484,7 +489,7 @@ void fragment() {
 		mix(1.0, pbr_orm.r, pbr_detail_mix * 0.70)
 			- seam * 0.105
 			- seam_bevel * 0.035
-			- tie_halo * 0.16
+			- tie_halo_effect * 0.16
 			- pore_mask * 0.10
 			- hairline_crack * 0.06
 			- ground_grime * 0.12
