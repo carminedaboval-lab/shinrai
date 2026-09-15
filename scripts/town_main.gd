@@ -3394,6 +3394,9 @@ func _add_apartment_balcony_module(
 ) -> void:
 	const BALCONY_DEPTH_M: float = 1.20
 	const SLAB_THICKNESS_M: float = 0.22
+	const FASCIA_EDGE_WIDTH_M: float = 0.085
+	const DRIP_EDGE_WIDTH_M: float = 0.040
+	const COPING_EDGE_WIDTH_M: float = 0.065
 	var tangent_is_x: bool = absf(tangent.x) > 0.5
 	var outward_is_x: bool = absf(outward.x) > 0.5
 	var slab_center: Vector3 = (
@@ -3411,6 +3414,8 @@ func _add_apartment_balcony_module(
 
 	# A thin inset weathering surface represents the waterproof walking finish
 	# over the RC slab. Its exposed concrete PBR remains subtle and non-glossy.
+	var deck_center_y: float = slab_y + SLAB_THICKNESS_M * 0.5 + 0.009
+	var deck_top_y: float = deck_center_y + 0.009
 	var deck_size: Vector3 = (
 		Vector3(width_value - 0.16, 0.018, BALCONY_DEPTH_M - 0.12)
 		if tangent_is_x
@@ -3419,67 +3424,119 @@ func _add_apartment_balcony_module(
 	_add_facade_detail_box(
 		root,
 		prefix + "WaterproofDeck",
-		slab_center + Vector3.UP * (SLAB_THICKNESS_M * 0.5 + 0.009),
+		Vector3(slab_center.x, deck_center_y, slab_center.z),
 		deck_size,
 		mat_apartment_balcony_deck
 	)
 
-	# A 220 mm dark painted-steel fascia wraps the exposed slab edges.
-	var front_fascia_size: Vector3 = (
-		Vector3(width_value, SLAB_THICKNESS_M, 0.085)
+	# The waterproof layer turns up at the wall and drains into a narrow channel
+	# before the outer rail. Both are fixed construction details, not loose props.
+	var upstand_size: Vector3 = (
+		Vector3(width_value - 0.20, 0.070, 0.026)
 		if tangent_is_x
-		else Vector3(0.085, SLAB_THICKNESS_M, width_value)
+		else Vector3(0.026, 0.070, width_value - 0.20)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "WaterproofUpstand",
+		Vector3(wall_anchor.x, deck_top_y + 0.035, wall_anchor.z)
+			+ outward * 0.013,
+		upstand_size,
+		mat_apartment_balcony_deck
+	)
+	var drain_size: Vector3 = (
+		Vector3(width_value - 0.22, 0.012, 0.045)
+		if tangent_is_x
+		else Vector3(0.045, 0.012, width_value - 0.22)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "DeckDrainChannel",
+		Vector3(wall_anchor.x, deck_top_y + 0.006, wall_anchor.z)
+			+ outward * (BALCONY_DEPTH_M - 0.115),
+		drain_size,
+		mat_weathered_metal
+	)
+
+	# The steel fascia owns the exposed slab edges. Front pieces terminate inside
+	# the side returns, eliminating coplanar corner faces while keeping the exact
+	# 220 mm structural slab specified by the balcony sheet.
+	var fascia_height: float = SLAB_THICKNESS_M + 0.006
+	var front_fascia_size: Vector3 = (
+		Vector3(
+			width_value - FASCIA_EDGE_WIDTH_M * 2.0,
+			fascia_height,
+			FASCIA_EDGE_WIDTH_M
+		)
+		if tangent_is_x
+		else Vector3(
+			FASCIA_EDGE_WIDTH_M,
+			fascia_height,
+			width_value - FASCIA_EDGE_WIDTH_M * 2.0
+		)
 	)
 	_add_local_box(
 		root,
 		prefix + "FrontFascia",
 		Vector3(wall_anchor.x, slab_y, wall_anchor.z)
-			+ outward * (BALCONY_DEPTH_M - 0.042),
+			+ outward * (BALCONY_DEPTH_M - FASCIA_EDGE_WIDTH_M * 0.5),
 		front_fascia_size,
 		mat_weathered_metal
 	)
 	var side_fascia_size: Vector3 = (
-		Vector3(0.085, SLAB_THICKNESS_M, BALCONY_DEPTH_M)
+		Vector3(FASCIA_EDGE_WIDTH_M, fascia_height, BALCONY_DEPTH_M)
 		if tangent_is_x
-		else Vector3(BALCONY_DEPTH_M, SLAB_THICKNESS_M, 0.085)
+		else Vector3(BALCONY_DEPTH_M, fascia_height, FASCIA_EDGE_WIDTH_M)
 	)
 	for side: float in [-1.0, 1.0]:
 		_add_local_box(
 			root,
 			prefix + "SideFascia",
-			slab_center + tangent * ((width_value * 0.5 - 0.042) * side),
+			slab_center
+				+ tangent * ((width_value * 0.5 - FASCIA_EDGE_WIDTH_M * 0.5) * side),
 			side_fascia_size,
 			mat_weathered_metal
 		)
 
 	# Folded lower lips and a wall-side shadow joint give the steel wrap a real
 	# manufactured section and keep the soffit from appearing fused to the wall.
-	var drip_y: float = slab_y - SLAB_THICKNESS_M * 0.5 - 0.017
+	var drip_height: float = 0.028
+	var drip_y: float = slab_y - fascia_height * 0.5 - drip_height * 0.5 + 0.003
 	var front_drip_size: Vector3 = (
-		Vector3(width_value + 0.02, 0.034, 0.045)
+		Vector3(
+			width_value - DRIP_EDGE_WIDTH_M * 2.0,
+			drip_height,
+			DRIP_EDGE_WIDTH_M
+		)
 		if tangent_is_x
-		else Vector3(0.045, 0.034, width_value + 0.02)
+		else Vector3(
+			DRIP_EDGE_WIDTH_M,
+			drip_height,
+			width_value - DRIP_EDGE_WIDTH_M * 2.0
+		)
 	)
 	_add_facade_detail_box(
 		root,
 		prefix + "FrontFasciaDrip",
 		Vector3(wall_anchor.x, drip_y, wall_anchor.z)
-			+ outward * (BALCONY_DEPTH_M - 0.022),
+			+ outward * (BALCONY_DEPTH_M - DRIP_EDGE_WIDTH_M * 0.5),
 		front_drip_size,
 		mat_weathered_metal
 	)
 	var side_drip_size: Vector3 = (
-		Vector3(0.045, 0.034, BALCONY_DEPTH_M)
+		Vector3(DRIP_EDGE_WIDTH_M, drip_height, BALCONY_DEPTH_M)
 		if tangent_is_x
-		else Vector3(BALCONY_DEPTH_M, 0.034, 0.045)
+		else Vector3(BALCONY_DEPTH_M, drip_height, DRIP_EDGE_WIDTH_M)
 	)
 	for side: float in [-1.0, 1.0]:
 		_add_facade_detail_box(
 			root,
 			prefix + "SideFasciaDrip",
-			slab_center
-				+ tangent * ((width_value * 0.5 - 0.022) * side)
-				+ Vector3.DOWN * (SLAB_THICKNESS_M * 0.5 + 0.017),
+			Vector3(wall_anchor.x, drip_y, wall_anchor.z)
+				+ outward * (BALCONY_DEPTH_M * 0.5)
+				+ tangent * (
+					(width_value * 0.5 - DRIP_EDGE_WIDTH_M * 0.5) * side
+				),
 			side_drip_size,
 			mat_weathered_metal
 		)
@@ -3497,60 +3554,107 @@ func _add_apartment_balcony_module(
 		mat_black_metal
 	)
 
-	# Thin coping completes the dark frame visible around the balcony slab.
+	# Three non-overlapping coping pieces complete the manufactured slab frame.
+	var coping_height: float = 0.050
+	var coping_y: float = slab_y + fascia_height * 0.5 + coping_height * 0.5
 	var tangent_coping_size: Vector3 = (
-		Vector3(width_value + 0.04, 0.060, 0.075)
+		Vector3(
+			width_value - COPING_EDGE_WIDTH_M * 2.0,
+			coping_height,
+			COPING_EDGE_WIDTH_M
+		)
 		if tangent_is_x
-		else Vector3(0.075, 0.060, width_value + 0.04)
+		else Vector3(
+			COPING_EDGE_WIDTH_M,
+			coping_height,
+			width_value - COPING_EDGE_WIDTH_M * 2.0
+		)
 	)
 	_add_facade_detail_box(
 		root,
 		prefix + "FrontCoping",
-		Vector3(wall_anchor.x, slab_y + 0.135, wall_anchor.z)
-			+ outward * (BALCONY_DEPTH_M - 0.035),
+		Vector3(wall_anchor.x, coping_y, wall_anchor.z)
+			+ outward * (BALCONY_DEPTH_M - COPING_EDGE_WIDTH_M * 0.5),
 		tangent_coping_size,
 		mat_black_metal
 	)
 	var outward_coping_size: Vector3 = (
-		Vector3(BALCONY_DEPTH_M, 0.060, 0.075)
+		Vector3(BALCONY_DEPTH_M, coping_height, COPING_EDGE_WIDTH_M)
 		if outward_is_x
-		else Vector3(0.075, 0.060, BALCONY_DEPTH_M)
+		else Vector3(COPING_EDGE_WIDTH_M, coping_height, BALCONY_DEPTH_M)
 	)
 	for side: float in [-1.0, 1.0]:
 		_add_facade_detail_box(
 			root,
 			prefix + "SideCoping",
-			slab_center + tangent * ((width_value * 0.5 - 0.035) * side)
-				+ Vector3.UP * 0.135,
+			Vector3(wall_anchor.x, coping_y, wall_anchor.z)
+				+ outward * (BALCONY_DEPTH_M * 0.5)
+				+ tangent * (
+					(width_value * 0.5 - COPING_EDGE_WIDTH_M * 0.5) * side
+				),
 			outward_coping_size,
 			mat_black_metal
 		)
 
-	# Six real timber boards form the soffit; narrow gaps preserve the plank read.
-	var soffit_board_count: int = 6
+	# Reference soffit planks run from the wall to the outer fascia and repeat
+	# across the three-metre bay. Batch them so the corrected direction does not
+	# increase balcony draw calls.
+	var usable_width: float = maxf(0.40, width_value - 0.12)
 	var usable_depth: float = BALCONY_DEPTH_M - 0.10
-	var board_depth: float = usable_depth / float(soffit_board_count)
+	var soffit_board_count: int = clampi(roundi(usable_width / 0.16), 8, 20)
+	var board_width: float = usable_width / float(soffit_board_count)
 	var board_size: Vector3 = (
-		Vector3(width_value - 0.12, 0.035, board_depth - 0.012)
+		Vector3(board_width - 0.008, 0.035, usable_depth)
 		if tangent_is_x
-		else Vector3(board_depth - 0.012, 0.035, width_value - 0.12)
+		else Vector3(usable_depth, 0.035, board_width - 0.008)
 	)
+	var soffit_positions: PackedVector3Array = PackedVector3Array()
 	for board_index: int in range(soffit_board_count):
-		var board_distance: float = 0.05 + board_depth * (float(board_index) + 0.5)
-		_add_facade_detail_box(
-			root,
-			prefix + "SoffitBoard",
-			Vector3(wall_anchor.x, slab_y - 0.132, wall_anchor.z)
-				+ outward * board_distance,
-			board_size,
-			mat_wood
+		var tangent_offset: float = (
+			-usable_width * 0.5
+			+ board_width * (float(board_index) + 0.5)
 		)
-
+		soffit_positions.append(
+			Vector3(wall_anchor.x, slab_y - 0.132, wall_anchor.z)
+				+ outward * (0.05 + usable_depth * 0.5)
+				+ tangent * tangent_offset
+		)
+	_add_apartment_soffit_multimesh(
+		root, prefix + "SoffitBoards", soffit_positions, board_size
+	)
 
 	if include_railing:
 		_add_apartment_balcony_railing(
 			root, prefix, wall_anchor, tangent, outward, width_value, slab_y
 		)
+
+
+func _add_apartment_soffit_multimesh(
+	root: Node3D,
+	part_name: String,
+	positions: PackedVector3Array,
+	board_size: Vector3
+) -> void:
+	if positions.is_empty():
+		return
+	var board_mesh: BoxMesh = BoxMesh.new()
+	board_mesh.size = board_size
+	var boards: MultiMesh = MultiMesh.new()
+	boards.transform_format = MultiMesh.TRANSFORM_3D
+	boards.mesh = board_mesh
+	boards.instance_count = positions.size()
+	for index: int in range(positions.size()):
+		boards.set_instance_transform(
+			index, Transform3D(Basis.IDENTITY, positions[index])
+		)
+	var instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	instance.name = part_name
+	instance.multimesh = boards
+	instance.material_override = mat_wood
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.visibility_range_end = FACADE_DETAIL_VISIBILITY_RANGE
+	instance.visibility_range_end_margin = 6.0
+	root.add_child(instance)
 
 
 func _add_apartment_balcony_railing(
@@ -3563,34 +3667,54 @@ func _add_apartment_balcony_railing(
 	slab_y: float
 ) -> void:
 	const BALCONY_DEPTH_M: float = 1.20
+	const RAILING_HEIGHT_M: float = 1.00
+	const TOP_RAIL_HEIGHT_M: float = 0.052
+	const TOP_RAIL_WIDTH_M: float = 0.055
+	const LOW_RAIL_HEIGHT_M: float = 0.042
+	const LOW_RAIL_WIDTH_M: float = 0.045
+	const BALUSTER_WIDTH_M: float = 0.030
+	const TARGET_BAR_CENTRE_M: float = 0.135
 	var tangent_is_x: bool = absf(tangent.x) > 0.5
 	var outward_is_x: bool = absf(outward.x) > 0.5
-	var deck_top_y: float = slab_y + 0.11
-	var rail_top_y: float = deck_top_y + 0.98
-	var rail_low_y: float = deck_top_y + 0.16
+	# Include the 18 mm waterproof finish when measuring the one-metre guard.
+	var deck_top_y: float = slab_y + 0.128
+	var rail_top_y: float = (
+		deck_top_y + RAILING_HEIGHT_M - TOP_RAIL_HEIGHT_M * 0.5
+	)
+	var rail_low_y: float = deck_top_y + 0.150
 	var front_line: Vector3 = (
 		Vector3(wall_anchor.x, 0.0, wall_anchor.z)
 		+ outward * (BALCONY_DEPTH_M - 0.060)
 	)
-	var tangent_rail_size: Vector3 = (
-		Vector3(width_value + 0.06, 0.065, 0.065)
+	var tangent_top_size: Vector3 = (
+		Vector3(width_value + 0.02, TOP_RAIL_HEIGHT_M, TOP_RAIL_WIDTH_M)
 		if tangent_is_x
-		else Vector3(0.065, 0.065, width_value + 0.06)
+		else Vector3(TOP_RAIL_WIDTH_M, TOP_RAIL_HEIGHT_M, width_value + 0.02)
 	)
-	var outward_rail_size: Vector3 = (
-		Vector3(BALCONY_DEPTH_M, 0.065, 0.065)
+	var tangent_low_size: Vector3 = (
+		Vector3(width_value + 0.02, LOW_RAIL_HEIGHT_M, LOW_RAIL_WIDTH_M)
+		if tangent_is_x
+		else Vector3(LOW_RAIL_WIDTH_M, LOW_RAIL_HEIGHT_M, width_value + 0.02)
+	)
+	var outward_top_size: Vector3 = (
+		Vector3(BALCONY_DEPTH_M, TOP_RAIL_HEIGHT_M, TOP_RAIL_WIDTH_M)
 		if outward_is_x
-		else Vector3(0.065, 0.065, BALCONY_DEPTH_M)
+		else Vector3(TOP_RAIL_WIDTH_M, TOP_RAIL_HEIGHT_M, BALCONY_DEPTH_M)
+	)
+	var outward_low_size: Vector3 = (
+		Vector3(BALCONY_DEPTH_M, LOW_RAIL_HEIGHT_M, LOW_RAIL_WIDTH_M)
+		if outward_is_x
+		else Vector3(LOW_RAIL_WIDTH_M, LOW_RAIL_HEIGHT_M, BALCONY_DEPTH_M)
 	)
 	_add_facade_detail_box(
 		root, prefix + "RailTopFront",
 		Vector3(front_line.x, rail_top_y, front_line.z),
-		tangent_rail_size, mat_weathered_metal
+		tangent_top_size, mat_weathered_metal
 	)
 	_add_facade_detail_box(
 		root, prefix + "RailLowFront",
 		Vector3(front_line.x, rail_low_y, front_line.z),
-		tangent_rail_size, mat_weathered_metal
+		tangent_low_size, mat_weathered_metal
 	)
 	for side: float in [-1.0, 1.0]:
 		var side_center: Vector3 = (
@@ -3601,24 +3725,27 @@ func _add_apartment_balcony_railing(
 		_add_facade_detail_box(
 			root, prefix + "RailTopSide",
 			Vector3(side_center.x, rail_top_y, side_center.z),
-			outward_rail_size, mat_weathered_metal
+			outward_top_size, mat_weathered_metal
 		)
 		_add_facade_detail_box(
 			root, prefix + "RailLowSide",
 			Vector3(side_center.x, rail_low_y, side_center.z),
-			outward_rail_size, mat_weathered_metal
+			outward_low_size, mat_weathered_metal
 		)
 
 	# Four 80 mm structural posts match the supplied railing connection detail.
-	# Their separate floor plates make the load path readable at close range.
-	var post_height: float = rail_top_y - deck_top_y
+	# Their plates sit directly on the waterproof finish rather than floating.
+	var post_height: float = RAILING_HEIGHT_M - TOP_RAIL_HEIGHT_M * 0.5
 	var post_center_y: float = deck_top_y + post_height * 0.5
+	var front_post_distance: float = BALCONY_DEPTH_M - 0.060
+	var wall_post_distance: float = 0.075
+	var post_half_span: float = width_value * 0.5 - 0.040
 	var baseplate_positions: PackedVector3Array = PackedVector3Array()
 	for side: float in [-1.0, 1.0]:
-		for distance_value: float in [0.075, BALCONY_DEPTH_M - 0.060]:
+		for distance_value: float in [wall_post_distance, front_post_distance]:
 			var post_position: Vector3 = (
 				Vector3(wall_anchor.x, post_center_y, wall_anchor.z)
-				+ tangent * ((width_value * 0.5 - 0.040) * side)
+				+ tangent * (post_half_span * side)
 				+ outward * distance_value
 			)
 			_add_facade_detail_box(
@@ -3626,38 +3753,53 @@ func _add_apartment_balcony_railing(
 				Vector3(0.080, post_height, 0.080), mat_weathered_metal
 			)
 			baseplate_positions.append(
-				Vector3(post_position.x, deck_top_y + 0.020, post_position.z)
+				Vector3(post_position.x, deck_top_y + 0.009, post_position.z)
 			)
 	_add_apartment_baseplate_multimesh(
 		root, prefix + "RailingBaseplates", baseplate_positions
 	)
 
-	# Dense 35 mm balusters are batched into one MultiMesh per module.
+	# Thirty-millimetre balusters keep a roughly 100 mm clear opening. Positions
+	# are measured between the structural posts so no bar intersects a post.
 	var baluster_positions: PackedVector3Array = PackedVector3Array()
-	var baluster_bottom_y: float = deck_top_y + 0.10
-	var baluster_top_y: float = rail_top_y - 0.050
+	var baluster_bottom_y: float = deck_top_y + 0.105
+	var baluster_top_y: float = rail_top_y - TOP_RAIL_HEIGHT_M * 0.45
 	var baluster_height: float = baluster_top_y - baluster_bottom_y
 	var baluster_y: float = (baluster_bottom_y + baluster_top_y) * 0.5
-	var front_intervals: int = clampi(roundi(width_value / 0.18), 10, 18)
+	var front_span: float = post_half_span * 2.0
+	var front_intervals: int = clampi(
+		ceili(front_span / TARGET_BAR_CENTRE_M), 12, 24
+	)
 	for bar_index: int in range(1, front_intervals):
-		var front_t: float = float(bar_index) / float(front_intervals) - 0.5
+		var front_offset: float = (
+			-post_half_span
+			+ front_span * float(bar_index) / float(front_intervals)
+		)
 		baluster_positions.append(
 			Vector3(front_line.x, baluster_y, front_line.z)
-				+ tangent * (front_t * width_value)
+				+ tangent * front_offset
 		)
-	var side_intervals: int = clampi(roundi(BALCONY_DEPTH_M / 0.18), 6, 8)
+	var side_span: float = front_post_distance - wall_post_distance
+	var side_intervals: int = clampi(
+		ceili(side_span / TARGET_BAR_CENTRE_M), 7, 10
+	)
 	for side: float in [-1.0, 1.0]:
 		for bar_index: int in range(1, side_intervals):
 			var side_distance: float = (
-				BALCONY_DEPTH_M * float(bar_index) / float(side_intervals)
+				wall_post_distance
+				+ side_span * float(bar_index) / float(side_intervals)
 			)
 			baluster_positions.append(
 				Vector3(wall_anchor.x, baluster_y, wall_anchor.z)
-					+ tangent * ((width_value * 0.5 - 0.040) * side)
+					+ tangent * (post_half_span * side)
 					+ outward * side_distance
 			)
 	_add_apartment_baluster_multimesh(
-		root, prefix + "Balusters", baluster_positions, baluster_height
+		root,
+		prefix + "Balusters",
+		baluster_positions,
+		baluster_height,
+		BALUSTER_WIDTH_M
 	)
 
 
@@ -3690,12 +3832,13 @@ func _add_apartment_baluster_multimesh(
 	root: Node3D,
 	part_name: String,
 	positions: PackedVector3Array,
-	bar_height: float
+	bar_height: float,
+	bar_width: float
 ) -> void:
 	if positions.is_empty():
 		return
 	var bar_mesh: BoxMesh = BoxMesh.new()
-	bar_mesh.size = Vector3(0.035, bar_height, 0.035)
+	bar_mesh.size = Vector3(bar_width, bar_height, bar_width)
 	var bars: MultiMesh = MultiMesh.new()
 	bars.transform_format = MultiMesh.TRANSFORM_3D
 	bars.mesh = bar_mesh
