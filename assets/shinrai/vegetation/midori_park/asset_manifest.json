@@ -1,0 +1,54 @@
+{
+  "collection": "SHINRAI Midori Park Vegetation",
+  "status": "in_progress",
+  "engine": {
+    "name": "Godot",
+    "version": "4.7",
+    "renderer": "gl_compatibility"
+  },
+  "workflow": {
+    "generator": "Meshy",
+    "principle": "Generate plant components separately, then assemble approved components in Godot.",
+    "source_format": "glb",
+    "units": "metres",
+    "up_axis": "Y",
+    "origin_rule": "planting/root point at local origin"
+  },
+  "families": [
+    {
+      "name": "sakura",
+      "status": "external_generated_pending_import",
+      "known_components": [
+        "full_tree",
+        "flowering_branch"
+      ]
+    },
+    {
+      "name": "bush",
+      "status": "external_generated_pending_import",
+      "known_components": [
+        "full_bush",
+        "branch_or_leafy_sprig"
+      ]
+    },
+    {
+      "id": "VEG-06",
+      "name": "waterside_reeds_ornamental_sedge",
+      "status": "reference_image_pending_approval",
+      "reference_doc": "VEG-06_WATERSIDE_REEDS.md",
+      "meshy_image_to_3d": {
+        "detail": "high",
+        "textures": "ultra_2k",
+        "image_enhancement": false,
+        "split": false,
+        "triangle_target_if_requested": 4000
+      },
+      "godot": {
+        "collision_default": false,
+        "preferred_surface_count": 1,
+        "proposed_glb": "SHINRAI_VEG06_WatersideReeds_A_GodotYUp.glb",
+        "proposed_scene": "VEG06_WatersideReeds_A.tscn"
+      }
+    }
+  ]
+}
