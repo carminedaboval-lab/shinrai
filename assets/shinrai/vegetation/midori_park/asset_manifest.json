@@ -15,7 +15,7 @@
     "origin_rule": "planting/root point at local origin"
   },
   "binary_commit_status": "pending_binary_upload",
-  "binary_storage_note": "The four Meshy source GLBs below have been collected and backed up outside GitHub. Their exact hashes, geometry counts, and intended repository paths are recorded here so the sources cannot be confused or replaced silently before binary upload.",
+  "binary_storage_note": "Collected Meshy source GLBs are tracked here with exact hashes, geometry counts, and intended repository paths until each binary is committed.",
   "families": [
     {
       "name": "sakura",
@@ -99,6 +99,25 @@
           "triangles": 5262,
           "vertices": 5178,
           "sha256": "9319847bb24f51d26ef614386c4b091742836e18c0f942011f65f68b221d0346"
+        }
+      ]
+    },
+    {
+      "id": "TREE-02",
+      "name": "evergreen_park_tree",
+      "status": "cleaned_trunk_ready_pending_binary_commit",
+      "assembly_note": "Use this cleaned trunk/main-branch mesh as the structural base. Add separate evergreen foliage/needle cluster modules later in Godot.",
+      "components": [
+        {
+          "id": "TREE-02_TRUNK_CLEAN",
+          "role": "evergreen_trunk_and_main_branches",
+          "source_filename": "Meshy_AI_The_Hollow_Sentinel_0915212913_texture_CLEAN.glb",
+          "proposed_repo_path": "assets/shinrai/vegetation/midori_park/tree_02_evergreen/SHINRAI_TREE02_EvergreenTrunk_CLEAN.glb",
+          "bytes": 8888692,
+          "triangles": 6560,
+          "vertices": 5164,
+          "sha256": "cbc2b0a0cdf711ff01cd6c3fb4b59007208f1bbf57e92a1d2fab9ddeef8c9dd8",
+          "cleanup": "accidental right-side wall geometry removed; tree geometry/materials/textures preserved"
         }
       ]
     }
