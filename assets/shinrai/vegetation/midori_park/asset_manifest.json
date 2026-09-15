@@ -14,6 +14,8 @@
     "up_axis": "Y",
     "origin_rule": "planting/root point at local origin"
   },
+  "binary_commit_status": "pending_binary_upload",
+  "binary_storage_note": "The four Meshy source GLBs below have been collected and backed up outside GitHub. Their exact hashes, geometry counts, and intended repository paths are recorded here so the sources cannot be confused or replaced silently before binary upload.",
   "families": [
     {
       "name": "sakura",
@@ -34,7 +36,7 @@
     {
       "id": "VEG-06",
       "name": "waterside_reeds_ornamental_sedge",
-      "status": "reference_image_pending_approval",
+      "status": "two_variants_collected_pending_binary_commit",
       "reference_doc": "VEG-06_WATERSIDE_REEDS.md",
       "meshy_image_to_3d": {
         "detail": "high",
@@ -45,10 +47,60 @@
       },
       "godot": {
         "collision_default": false,
-        "preferred_surface_count": 1,
-        "proposed_glb": "SHINRAI_VEG06_WatersideReeds_A_GodotYUp.glb",
-        "proposed_scene": "VEG06_WatersideReeds_A.tscn"
-      }
+        "preferred_surface_count": 1
+      },
+      "variants": [
+        {
+          "id": "VEG-06A",
+          "role": "waterside_reed_fountain_grass",
+          "source_filename": "Meshy_AI_Green_Fountain_Grass_0915205703_texture.glb",
+          "proposed_repo_path": "assets/shinrai/vegetation/midori_park/veg_06_waterside_reeds/SHINRAI_VEG06A_GreenFountainGrass.glb",
+          "bytes": 7113800,
+          "triangles": 3877,
+          "vertices": 5399,
+          "sha256": "989e1f7f366534fd04d5f8a6105e2055b9677ea8bd80686f5b0bc0369d1a5c77",
+          "approved_for_variation": true
+        },
+        {
+          "id": "VEG-06B",
+          "role": "waterside_reed_meadow_grass",
+          "source_filename": "Meshy_AI_Swaying_Meadow_Grass_0915205959_texture.glb",
+          "proposed_repo_path": "assets/shinrai/vegetation/midori_park/veg_06_waterside_reeds/SHINRAI_VEG06B_SwayingMeadowGrass.glb",
+          "bytes": 6989464,
+          "triangles": 4262,
+          "vertices": 6068,
+          "sha256": "5ca8344bf26a8bf19f5ac7a54d56ffcc07f96284f8520b9a7ee7ff3100585c4c",
+          "approved_for_variation": true
+        }
+      ]
+    },
+    {
+      "id": "TREE-01",
+      "name": "normal_green_park_tree",
+      "status": "components_collected_pending_binary_commit",
+      "assembly_note": "Use the structural trunk as the base. Prune awkward branches if necessary, then duplicate, rotate, and scale the leafy branch module to build a natural canopy in Godot.",
+      "components": [
+        {
+          "id": "TREE-01_TRUNK",
+          "role": "trunk_and_main_branches",
+          "source_filename": "Meshy_AI_Winter_Sentinel_0915211325_texture.glb",
+          "proposed_repo_path": "assets/shinrai/vegetation/midori_park/tree_01_normal_park_tree/SHINRAI_TREE01_Trunk_MainBranches.glb",
+          "bytes": 7647100,
+          "triangles": 4755,
+          "vertices": 8529,
+          "sha256": "fc274fcdd6dcecce9ac85a60d4c3fc75613b76445f9a0e96957290c4a9fd3e66"
+        },
+        {
+          "id": "TREE-01_LEAFY_BRANCH_A",
+          "role": "reusable_leafy_branch_module",
+          "source_filename": "Meshy_AI__0915211721_texture.glb",
+          "proposed_repo_path": "assets/shinrai/vegetation/midori_park/tree_01_normal_park_tree/SHINRAI_TREE01_LeafyBranch_A.glb",
+          "bytes": 8514660,
+          "triangles": 5262,
+          "vertices": 5178,
+          "sha256": "9319847bb24f51d26ef614386c4b091742836e18c0f942011f65f68b221d0346"
+        }
+      ]
     }
   ]
 }
