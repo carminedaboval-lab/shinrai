@@ -512,7 +512,9 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("grime_strength", 0.42)
 	mat_apartment_concrete.set_shader_parameter("algae_strength", 0.10)
 	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.18)
-	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.42)
+	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.50)
+	mat_apartment_concrete.set_shader_parameter("joint_relief_strength", 0.72)
+	mat_apartment_concrete.set_shader_parameter("panel_depth_variation", 0.010)
 	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.012)
 
 	mat_apartment_concrete_recess = ShaderMaterial.new()
@@ -540,7 +542,9 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess.set_shader_parameter("grime_strength", 0.34)
 	mat_apartment_concrete_recess.set_shader_parameter("algae_strength", 0.060)
 	mat_apartment_concrete_recess.set_shader_parameter("grime_height_m", 1.12)
-	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.38)
+	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.44)
+	mat_apartment_concrete_recess.set_shader_parameter("joint_relief_strength", 0.54)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_depth_variation", 0.007)
 	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.006)
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
@@ -2815,7 +2819,7 @@ func _build_apartment(
 	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
-	root.set_meta("reference_stage", "japanese_formwork_surface_pass")
+	root.set_meta("reference_stage", "japanese_formwork_relief_pass")
 	root.set_meta("balcony_clear_side", balcony_side_sign)
 	root.set_meta("balcony_clearance_reserved", true)
 	root.set_meta("balcony_module_width_m", 3.0)
