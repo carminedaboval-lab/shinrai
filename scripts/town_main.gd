@@ -301,6 +301,7 @@ var mat_dark_concrete: StandardMaterial3D
 # the Yakitori plaster while matching the apartment reference sheet.
 var mat_apartment_concrete: ShaderMaterial
 var mat_apartment_concrete_recess: ShaderMaterial
+var mat_apartment_balcony_deck: ShaderMaterial
 var mat_wood: StandardMaterial3D
 var mat_dark_wood: StandardMaterial3D
 var mat_roof: StandardMaterial3D
@@ -555,6 +556,29 @@ func _build_materials() -> void:
 	mat_apartment_concrete_recess.set_shader_parameter("joint_relief_strength", 0.48)
 	mat_apartment_concrete_recess.set_shader_parameter("panel_depth_variation", 0.006)
 	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.006)
+
+	# Japanese RC balconies normally separate the weather-exposed walking finish
+	# from the structural slab. Reuse the real concrete PBR maps with a calmer,
+	# darker waterproof-deck calibration rather than adding a flat color plate.
+	mat_apartment_balcony_deck = mat_apartment_concrete.duplicate() as ShaderMaterial
+	mat_apartment_balcony_deck.set_shader_parameter(
+		"concrete_tint", Color(0.225, 0.212, 0.192, 1.0)
+	)
+	mat_apartment_balcony_deck.set_shader_parameter("pbr_detail_mix", 0.62)
+	mat_apartment_balcony_deck.set_shader_parameter("pbr_normal_strength", 0.14)
+	mat_apartment_balcony_deck.set_shader_parameter("texture_scale", 0.70)
+	mat_apartment_balcony_deck.set_shader_parameter("panel_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("tie_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("pore_strength", 0.08)
+	mat_apartment_balcony_deck.set_shader_parameter("crack_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("rain_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("efflorescence_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("grime_strength", 0.18)
+	mat_apartment_balcony_deck.set_shader_parameter("algae_strength", 0.02)
+	mat_apartment_balcony_deck.set_shader_parameter("detail_normal_strength", 0.18)
+	mat_apartment_balcony_deck.set_shader_parameter("joint_relief_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("panel_depth_variation", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("ambient_lift", 0.006)
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
 	mat_dirty_plaster = _material(Color(0.230, 0.225, 0.216), 0.0, 0.98,
@@ -2853,7 +2877,7 @@ func _build_apartment(
 	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
 	root.add_to_group("shinrai_reference_apartment")
-	root.set_meta("reference_stage", "reference_dimensions_and_relief_pass")
+	root.set_meta("reference_stage", "reference_balcony_construction_pass")
 	root.set_meta("reference_width_m", width_m)
 	root.set_meta("reference_depth_m", depth_m)
 	root.set_meta("reference_body_height_m", APARTMENT_REFERENCE_BODY_HEIGHT_M)
@@ -2975,7 +2999,7 @@ func _build_apartment(
 	root.add_child(balcony_root)
 	for residential_level: int in range(1, floors):
 		var slab_y: float = float(residential_level) * floor_height
-		var opening_y: float = slab_y + 1.50
+		var opening_y: float = slab_y + 1.42
 		for bay_index: int in range(bay_count):
 			var bay_x: float = 0.0
 			if paired_bays:
@@ -2995,7 +3019,7 @@ func _build_apartment(
 				opening_y,
 				recess_z,
 				opening_w,
-				2.18,
+				2.42,
 				-1.0
 			)
 			_add_apartment_balcony_timber(
@@ -3100,7 +3124,7 @@ func _build_apartment(
 	)
 	for side_level: int in range(1, floors):
 		var side_slab_y: float = float(side_level) * floor_height
-		var side_opening_y: float = side_slab_y + 1.50
+		var side_opening_y: float = side_slab_y + 1.42
 		var side_prefix: String = "ApartmentSideBalcony_%02d" % side_level
 		_add_apartment_oriented_window(
 			balcony_root,
@@ -3109,7 +3133,7 @@ func _build_apartment(
 			side_tangent,
 			side_outward,
 			side_opening_w,
-			2.18
+			2.42
 		)
 		_add_apartment_balcony_timber(
 			balcony_root,
@@ -3273,6 +3297,22 @@ func _add_apartment_balcony_timber(
 		if tangent_is_x
 		else Vector3(0.075, 2.42, 0.045)
 	)
+	# A recessed timber backing stops the battens reading as loose bars against
+	# the concrete. The slats remain proud, preserving the reference shadow gaps.
+	var backer_size: Vector3 = (
+		Vector3(maxf(0.08, side_zone - 0.07), 2.42, 0.028)
+		if tangent_is_x
+		else Vector3(0.028, 2.42, maxf(0.08, side_zone - 0.07))
+	)
+	for side: float in [-1.0, 1.0]:
+		var backer_offset: float = opening_width * 0.5 + side_zone * 0.5
+		_add_facade_detail_box(
+			root,
+			prefix + "TimberCladdingBacker",
+			window_center + tangent * (backer_offset * side) + outward * 0.018,
+			backer_size,
+			mat_dark_wood
+		)
 	for side: float in [-1.0, 1.0]:
 		for slat_index: int in range(slats_per_side):
 			var slat_offset: float = (
@@ -3295,6 +3335,13 @@ func _add_apartment_balcony_timber(
 		root,
 		prefix + "TimberLintel",
 		window_center + Vector3.UP * 1.18 + outward * 0.050,
+		lintel_size,
+		mat_dark_wood
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "TimberThreshold",
+		window_center - Vector3.UP * 1.18 + outward * 0.050,
 		lintel_size,
 		mat_dark_wood
 	)
@@ -3327,6 +3374,21 @@ func _add_apartment_balcony_module(
 		root, prefix + "ConcreteSlab", slab_center, slab_size, mat_apartment_concrete
 	)
 
+	# A thin inset weathering surface represents the waterproof walking finish
+	# over the RC slab. Its exposed concrete PBR remains subtle and non-glossy.
+	var deck_size: Vector3 = (
+		Vector3(width_value - 0.16, 0.018, BALCONY_DEPTH_M - 0.12)
+		if tangent_is_x
+		else Vector3(BALCONY_DEPTH_M - 0.12, 0.018, width_value - 0.16)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "WaterproofDeck",
+		slab_center + Vector3.UP * (SLAB_THICKNESS_M * 0.5 + 0.009),
+		deck_size,
+		mat_apartment_balcony_deck
+	)
+
 	# A 220 mm dark painted-steel fascia wraps the exposed slab edges.
 	var front_fascia_size: Vector3 = (
 		Vector3(width_value, SLAB_THICKNESS_M, 0.085)
@@ -3354,6 +3416,51 @@ func _add_apartment_balcony_module(
 			side_fascia_size,
 			mat_weathered_metal
 		)
+
+	# Folded lower lips and a wall-side shadow joint give the steel wrap a real
+	# manufactured section and keep the soffit from appearing fused to the wall.
+	var drip_y: float = slab_y - SLAB_THICKNESS_M * 0.5 - 0.017
+	var front_drip_size: Vector3 = (
+		Vector3(width_value + 0.02, 0.034, 0.045)
+		if tangent_is_x
+		else Vector3(0.045, 0.034, width_value + 0.02)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "FrontFasciaDrip",
+		Vector3(wall_anchor.x, drip_y, wall_anchor.z)
+			+ outward * (BALCONY_DEPTH_M - 0.022),
+		front_drip_size,
+		mat_weathered_metal
+	)
+	var side_drip_size: Vector3 = (
+		Vector3(0.045, 0.034, BALCONY_DEPTH_M)
+		if tangent_is_x
+		else Vector3(BALCONY_DEPTH_M, 0.034, 0.045)
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_facade_detail_box(
+			root,
+			prefix + "SideFasciaDrip",
+			slab_center
+				+ tangent * ((width_value * 0.5 - 0.022) * side)
+				+ Vector3.DOWN * (SLAB_THICKNESS_M * 0.5 + 0.017),
+			side_drip_size,
+			mat_weathered_metal
+		)
+	var wall_joint_size: Vector3 = (
+		Vector3(width_value - 0.12, 0.026, 0.032)
+		if tangent_is_x
+		else Vector3(0.032, 0.026, width_value - 0.12)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "SoffitWallShadowJoint",
+		Vector3(wall_anchor.x, slab_y - 0.132, wall_anchor.z)
+			+ outward * 0.020,
+		wall_joint_size,
+		mat_black_metal
+	)
 
 	# Thin coping completes the dark frame visible around the balcony slab.
 	var tangent_coping_size: Vector3 = (
@@ -3443,12 +3550,12 @@ func _add_apartment_balcony_railing(
 	_add_facade_detail_box(
 		root, prefix + "RailTopFront",
 		Vector3(front_line.x, rail_top_y, front_line.z),
-		tangent_rail_size, mat_black_metal
+		tangent_rail_size, mat_weathered_metal
 	)
 	_add_facade_detail_box(
 		root, prefix + "RailLowFront",
 		Vector3(front_line.x, rail_low_y, front_line.z),
-		tangent_rail_size, mat_black_metal
+		tangent_rail_size, mat_weathered_metal
 	)
 	for side: float in [-1.0, 1.0]:
 		var side_center: Vector3 = (
@@ -3459,17 +3566,19 @@ func _add_apartment_balcony_railing(
 		_add_facade_detail_box(
 			root, prefix + "RailTopSide",
 			Vector3(side_center.x, rail_top_y, side_center.z),
-			outward_rail_size, mat_black_metal
+			outward_rail_size, mat_weathered_metal
 		)
 		_add_facade_detail_box(
 			root, prefix + "RailLowSide",
 			Vector3(side_center.x, rail_low_y, side_center.z),
-			outward_rail_size, mat_black_metal
+			outward_rail_size, mat_weathered_metal
 		)
 
 	# Four 80 mm structural posts match the supplied railing connection detail.
+	# Their separate floor plates make the load path readable at close range.
 	var post_height: float = rail_top_y - deck_top_y
 	var post_center_y: float = deck_top_y + post_height * 0.5
+	var baseplate_positions: PackedVector3Array = PackedVector3Array()
 	for side: float in [-1.0, 1.0]:
 		for distance_value: float in [0.075, BALCONY_DEPTH_M - 0.060]:
 			var post_position: Vector3 = (
@@ -3479,8 +3588,14 @@ func _add_apartment_balcony_railing(
 			)
 			_add_facade_detail_box(
 				root, prefix + "RailingPost", post_position,
-				Vector3(0.080, post_height, 0.080), mat_black_metal
+				Vector3(0.080, post_height, 0.080), mat_weathered_metal
 			)
+			baseplate_positions.append(
+				Vector3(post_position.x, deck_top_y + 0.020, post_position.z)
+			)
+	_add_apartment_baseplate_multimesh(
+		root, prefix + "RailingBaseplates", baseplate_positions
+	)
 
 	# Dense 35 mm balusters are batched into one MultiMesh per module.
 	var baluster_positions: PackedVector3Array = PackedVector3Array()
@@ -3511,6 +3626,31 @@ func _add_apartment_balcony_railing(
 	)
 
 
+func _add_apartment_baseplate_multimesh(
+	root: Node3D,
+	part_name: String,
+	positions: PackedVector3Array
+) -> void:
+	if positions.is_empty():
+		return
+	var plate_mesh: BoxMesh = BoxMesh.new()
+	plate_mesh.size = Vector3(0.140, 0.018, 0.140)
+	var plates: MultiMesh = MultiMesh.new()
+	plates.transform_format = MultiMesh.TRANSFORM_3D
+	plates.mesh = plate_mesh
+	plates.instance_count = positions.size()
+	for index: int in range(positions.size()):
+		plates.set_instance_transform(index, Transform3D(Basis.IDENTITY, positions[index]))
+	var instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	instance.name = part_name
+	instance.multimesh = plates
+	instance.material_override = mat_weathered_metal
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.visibility_range_end = FACADE_DETAIL_VISIBILITY_RANGE
+	instance.visibility_range_end_margin = 6.0
+	root.add_child(instance)
+
+
 func _add_apartment_baluster_multimesh(
 	root: Node3D,
 	part_name: String,
@@ -3530,7 +3670,7 @@ func _add_apartment_baluster_multimesh(
 	var instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	instance.name = part_name
 	instance.multimesh = bars
-	instance.material_override = mat_black_metal
+	instance.material_override = mat_weathered_metal
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	instance.visibility_range_end = FACADE_DETAIL_VISIBILITY_RANGE
 	instance.visibility_range_end_margin = 6.0
