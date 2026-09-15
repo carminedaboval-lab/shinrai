@@ -28,6 +28,10 @@ uniform float grime_strength : hint_range(0.0, 0.80, 0.01) = 0.42;
 uniform float algae_strength : hint_range(0.0, 0.30, 0.005) = 0.10;
 uniform float grime_height_m : hint_range(0.20, 2.50, 0.01) = 1.18;
 uniform float detail_normal_strength : hint_range(0.0, 1.0, 0.01) = 0.36;
+// Shallow casting depth: the panels remain poured concrete, but the shutter
+// joints and small panel-to-panel offsets catch light instead of reading as ink.
+uniform float joint_relief_strength : hint_range(0.0, 1.0, 0.01) = 0.55;
+uniform float panel_depth_variation : hint_range(0.0, 0.018, 0.001) = 0.008;
 uniform float ambient_lift : hint_range(0.0, 0.08, 0.002) = 0.006;
 
 varying vec3 world_position;
@@ -123,15 +127,18 @@ vec3 sample_pbr_normal_triplanar(vec3 position_value, vec3 normal_value) {
 	);
 }
 
-float seam_line(float panel_coordinate) {
+float seam_line_width(float panel_coordinate, float seam_half_width) {
 	float edge_distance = min(fract(panel_coordinate), 1.0 - fract(panel_coordinate));
 	float antialias_width = max(fwidth(panel_coordinate) * 0.72, 0.0007);
-	float seam_half_width = 0.0034;
 	return 1.0 - smoothstep(
 		seam_half_width,
 		seam_half_width + antialias_width,
 		edge_distance
 	);
+}
+
+float seam_line(float panel_coordinate) {
+	return seam_line_width(panel_coordinate, 0.0030);
 }
 
 float circle_mask(vec2 position_value, vec2 center_value, float radius_value) {
@@ -257,9 +264,33 @@ void fragment() {
 		* pbr_tone
 	);
 
-	// Thin, slightly recessed formwork joints reproduce the large poured panels.
+	// A narrow dark core plus a wider bevel gives each formwork joint a real
+	// shallow recess. Adjacent shutter panels also sit a few millimetres proud
+	// or shy of one another, breaking the perfectly flat generated wall.
 	float seam = max(seam_line(panel_uv.x), seam_line(panel_uv.y)) * vertical_surface;
-	surface_color *= 1.0 - seam * panel_strength;
+	float seam_outer = max(
+		seam_line_width(panel_uv.x, 0.017),
+		seam_line_width(panel_uv.y, 0.025)
+	) * vertical_surface;
+	float seam_bevel = max(seam_outer - seam, 0.0);
+	float panel_edge_distance_m = min(
+		min(panel_position_m.x, panel_width_m - panel_position_m.x),
+		min(panel_position_m.y, panel_height_m - panel_position_m.y)
+	);
+	float panel_face_mask = smoothstep(0.010, 0.045, panel_edge_distance_m);
+	float panel_depth_seed = hash21(panel_cell + vec2(47.2, 11.8));
+	float panel_face_relief = (
+		(panel_depth_seed - 0.5)
+		* 2.0
+		* panel_depth_variation
+		* panel_face_mask
+		* vertical_surface
+	);
+	surface_color *= (
+		1.0
+		- seam * panel_strength
+		- seam_bevel * panel_strength * 0.14
+	);
 
 	// Two aligned form-tie holes per panel follow the reference's calm grid.
 	// Their halos are shallow and warm-grey rather than pitch-black dots.
@@ -391,14 +422,17 @@ void fragment() {
 	);
 
 	// Derivative-based relief works on every box face without UV stretching.
-	// Seams, tie recesses, aggregate and the real texture all contribute.
+	// The broad panel offset supplies shallow shutter steps; the bevel slopes
+	// into a narrow recessed core, while aggregate remains millimetre-scale.
 	float relief_height = (
-		(base_luma - 0.94) * 0.030
-		+ (fine_luma - 0.94) * 0.012
-		- seam * 0.032
-		- tie_halo * 0.024
-		- tie_core * 0.038
-		- pore_mask * 0.020
+		(base_luma - 0.94) * 0.038
+		+ (fine_luma - 0.94) * 0.017
+		+ panel_face_relief
+		- seam * mix(0.034, 0.058, joint_relief_strength)
+		- seam_bevel * mix(0.007, 0.016, joint_relief_strength)
+		- tie_halo * 0.026
+		- tie_core * 0.042
+		- pore_mask * 0.022
 		- hairline_crack * 0.012
 	);
 	vec3 pbr_world_normal = sample_pbr_normal_triplanar(
@@ -426,7 +460,8 @@ void fragment() {
 	ROUGHNESS = clamp(
 		authored_roughness
 			+ roughness_variation
-			+ seam * 0.025
+			+ seam * 0.032
+			+ seam_bevel * 0.010
 			+ ground_grime * 0.030,
 		0.72,
 		0.97
@@ -434,7 +469,8 @@ void fragment() {
 	SPECULAR = 0.28;
 	AO = clamp(
 		mix(1.0, pbr_orm.r, pbr_detail_mix * 0.70)
-			- seam * 0.075
+			- seam * 0.105
+			- seam_bevel * 0.035
 			- tie_halo * 0.16
 			- pore_mask * 0.10
 			- hairline_crack * 0.06
