@@ -1,0 +1,9 @@
+[gd_resource type="StandardMaterial3D" load_steps=2 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/environment/roads/long_paved_walkway/clean_spawn_surface/SpawnRoad_Pavers_Albedo_1K.jpg" id="1_albedo"]
+
+[resource]
+albedo_texture = ExtResource("1_albedo")
+metallic = 0.0
+metallic_specular = 0.28
+roughness = 0.88

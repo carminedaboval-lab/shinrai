@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Material" path="res://assets/environment/roads/long_paved_walkway/clean_spawn_surface/M_SpawnRoad_Pavers.tres" id="1_material"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_pavers"]
+size = Vector2(10.0, 3.1)
+material = ExtResource("1_material")
+
+[node name="SpawnRoadPaverOverlay" type="Node3D"]
+
+[node name="Pavers" type="MeshInstance3D" parent="."]
+mesh = SubResource("PlaneMesh_pavers")
+cast_shadow = 0
+visibility_range_end = 48.0
+visibility_range_end_margin = 6.0

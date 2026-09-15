@@ -2,7 +2,7 @@
 
 [ext_resource path="res://scripts/town_main.gd" type="Script" id="1"]
 [ext_resource type="PackedScene" path="res://assets/shinrai/signage/cat_cafe/CatCafeSignPlacement.tscn" id="2_cat_cafe"]
-[ext_resource type="PackedScene" path="res://assets/environment/roads/long_paved_walkway/LongPavedWalkway_GameReady.tscn" id="3_walkway"]
+[ext_resource type="PackedScene" path="res://assets/environment/roads/long_paved_walkway/clean_spawn_surface/SpawnRoad_PaverOverlay.tscn" id="3_pavers"]
 
 [node name="Blacksite" type="Node3D"]
 script = ExtResource("1")
@@ -12,6 +12,5 @@ dry_ground_comparison = false
 
 [node name="CatCafeSignPlacement" parent="." instance=ExtResource("2_cat_cafe")]
 
-[node name="LongPavedWalkway_TestCorridor" parent="." instance=ExtResource("3_walkway")]
-position = Vector3(18, 0.055, 38.85)
-rotation = Vector3(0, 1.5707963, 0)
+[node name="SpawnRoadPavers" parent="." instance=ExtResource("3_pavers")]
+position = Vector3(21.6, 0.0618, 36.0)
