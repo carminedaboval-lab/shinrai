@@ -1,9 +1,11 @@
-[gd_resource type="StandardMaterial3D" load_steps=2 format=3]
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
 
-[ext_resource type="Texture2D" path="res://assets/environment/roads/long_paved_walkway/clean_spawn_surface/SpawnRoad_Pavers_Albedo_1K.jpg" id="1_albedo"]
+[ext_resource type="Shader" path="res://assets/environment/roads/long_paved_walkway/clean_spawn_surface/spawn_road_pavers.gdshader" id="1_shader"]
 
 [resource]
-albedo_texture = ExtResource("1_albedo")
-metallic = 0.0
-metallic_specular = 0.28
-roughness = 0.88
+shader = ExtResource("1_shader")
+shader_parameter/crop_origin = Vector2(0.400390625, 0.576171875)
+shader_parameter/crop_size = Vector2(0.17578125, 0.17578125)
+shader_parameter/tile_count = Vector2(6, 2)
+shader_parameter/roughness_value = 0.88
+shader_parameter/normal_strength = 0.55
