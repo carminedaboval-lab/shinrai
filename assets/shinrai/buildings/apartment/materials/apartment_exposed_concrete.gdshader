@@ -208,6 +208,17 @@ void fragment() {
 	float vertical_surface = 1.0 - smoothstep(0.48, 0.82, normal_abs.y);
 	float front_or_back = step(normal_abs.x, normal_abs.z);
 	vec2 facade_position = mix(world_position.zy, world_position.xy, front_or_back);
+	// Fine relief fades as its world-space footprint approaches a pixel. This
+	// keeps the close concrete pores while preventing temporal crawl in motion.
+	float relief_pixel_footprint = max(
+		length(dFdx(facade_position)),
+		length(dFdy(facade_position))
+	);
+	float micro_relief_fade = 1.0 - smoothstep(
+		0.012,
+		0.060,
+		relief_pixel_footprint
+	);
 	vec2 panel_uv = vec2(
 		facade_position.x / panel_width_m,
 		world_position.y / panel_height_m
@@ -425,8 +436,10 @@ void fragment() {
 	// The broad panel offset supplies shallow shutter steps; the bevel slopes
 	// into a narrow recessed core, while aggregate remains millimetre-scale.
 	float relief_height = (
-		(base_luma - 0.94) * 0.038
-		+ (fine_luma - 0.94) * 0.017
+		(
+			(base_luma - 0.94) * 0.032
+			+ (fine_luma - 0.94) * 0.012
+		) * micro_relief_fade
 		+ panel_face_relief
 		- seam * mix(0.034, 0.058, joint_relief_strength)
 		- seam_bevel * mix(0.007, 0.016, joint_relief_strength)
