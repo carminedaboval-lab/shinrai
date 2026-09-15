@@ -219,6 +219,13 @@ const APARTMENT_REFERENCE_DEPTH_M: float = 6.60
 const APARTMENT_REFERENCE_FLOOR_HEIGHT_M: float = 3.00
 const APARTMENT_REFERENCE_FLOOR_COUNT: int = 5
 const APARTMENT_REFERENCE_BODY_HEIGHT_M: float = 15.00
+# Keep adjoining procedural boxes from sharing the same exterior depth plane.
+# The tiny return is construction-scale, while the hidden overlap prevents
+# camera-dependent seams and washed/flickering bands at the concrete junctions.
+const APARTMENT_WALL_JOIN_OVERLAP_M: float = 0.10
+const APARTMENT_SIDE_RETURN_INSET_M: float = 0.012
+const APARTMENT_STRUCTURE_FACE_INSET_M: float = 0.026
+const APARTMENT_FRONT_GRID_FACE_INSET_M: float = 0.014
 
 # Street-facing commercial archetypes. These share one procedural building
 # system but get recognisable storefront/interior layouts instead of a generic
@@ -504,8 +511,11 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("concrete_normal_texture", ApartmentConcreteNormalTexture)
 	mat_apartment_concrete.set_shader_parameter("concrete_orm_texture", ApartmentConcreteOrmTexture)
 	mat_apartment_concrete.set_shader_parameter("pbr_texture_scale", 0.92)
-	mat_apartment_concrete.set_shader_parameter("pbr_detail_mix", 0.70)
-	mat_apartment_concrete.set_shader_parameter("pbr_normal_strength", 0.24)
+	# Keep the real PBR maps subordinate to the authored formwork response.
+	# This prevents broad curb-albedo values and grazing normals from washing out
+	# isolated wall boxes as the camera crosses a junction.
+	mat_apartment_concrete.set_shader_parameter("pbr_detail_mix", 0.62)
+	mat_apartment_concrete.set_shader_parameter("pbr_normal_strength", 0.18)
 	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.305, 0.270, 0.225, 1.0))
 	mat_apartment_concrete.set_shader_parameter("grime_tint", Color(0.055, 0.047, 0.035, 1.0))
 	mat_apartment_concrete.set_shader_parameter("efflorescence_tint", Color(0.43, 0.40, 0.34, 1.0))
@@ -522,10 +532,10 @@ func _build_materials() -> void:
 	mat_apartment_concrete.set_shader_parameter("grime_strength", 0.42)
 	mat_apartment_concrete.set_shader_parameter("algae_strength", 0.10)
 	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.18)
-	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.40)
+	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.34)
 	mat_apartment_concrete.set_shader_parameter("joint_relief_strength", 0.64)
 	mat_apartment_concrete.set_shader_parameter("panel_depth_variation", 0.008)
-	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.012)
+	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.010)
 
 	mat_apartment_concrete_recess = ShaderMaterial.new()
 	mat_apartment_concrete_recess.shader = ApartmentConcreteShader
@@ -2927,30 +2937,45 @@ func _build_apartment(
 		Vector3(0.0, floor_height + upper_height * 0.5, 0.0)
 	)
 
-	# Five continuous slabs lock the 3.0 m floor rhythm and supply the strong
-	# horizontal concrete edges visible in every reference elevation.
+	# Five continuous slabs lock the 3.0 m floor rhythm. Their plan faces sit
+	# inside the enclosing walls so a slab side never competes with a wall face
+	# for the same depth pixel while the player moves.
 	for slab_level: int in range(1, floors + 1):
 		var slab_y: float = float(slab_level) * floor_height
 		_add_local_box(
 			root,
 			"ApartmentFloorSlab_%02d" % slab_level,
 			Vector3(0.0, slab_y, 0.0),
-			Vector3(width_m, 0.22, depth_m),
+			Vector3(
+				width_m - APARTMENT_STRUCTURE_FACE_INSET_M * 2.0,
+				0.22,
+				depth_m - APARTMENT_STRUCTURE_FACE_INSET_M * 2.0
+			),
 			mat_apartment_concrete
 		)
 
 	# Broad, almost blank shear walls define the narrow Japanese urban block.
-	# Start them behind the front frame instead of overlapping the edge piers.
-	# This removes the coplanar faces that produced the jagged left corner.
-	var side_wall_depth: float = maxf(0.40, depth_m - frame_depth)
+	# Recess their exterior face by 12 mm and bury the front end 100 mm inside
+	# the corner pier. The pier now owns the visible junction, so there is no
+	# edge-to-edge crack and no pair of coplanar faces fighting at that seam.
+	var side_wall_depth: float = maxf(
+		0.40,
+		depth_m - frame_depth + APARTMENT_WALL_JOIN_OVERLAP_M
+	)
 	var side_wall_center_z: float = (
-		front_z + frame_depth + side_wall_depth * 0.5
+		front_z
+		+ frame_depth
+		- APARTMENT_WALL_JOIN_OVERLAP_M
+		+ side_wall_depth * 0.5
+	)
+	var upper_side_wall_x: float = (
+		width_m * 0.5 - wall_t * 0.5 - APARTMENT_SIDE_RETURN_INSET_M
 	)
 	for side: float in [-1.0, 1.0]:
 		_add_local_box(
 			root,
 			"ApartmentSideShearWall",
-			Vector3((width_m * 0.5 - wall_t * 0.5) * side,
+			Vector3(upper_side_wall_x * side,
 				floor_height + upper_height * 0.5, side_wall_center_z),
 			Vector3(wall_t, upper_height, side_wall_depth),
 			mat_apartment_concrete
@@ -2967,14 +2992,19 @@ func _build_apartment(
 			mat_apartment_concrete
 		)
 
-	# Full-width floor beams, edge piers and the central spine create the same
-	# concrete grid as the reference behind the attached balcony modules.
+	# Floor beams remain continuous behind the piers, but their front and side
+	# faces are recessed 14 mm. The vertical piers therefore own the facade plane
+	# instead of overlapping another identically placed concrete surface.
 	for level: int in range(1, floors + 1):
 		_add_local_box(
 			root,
 			"ApartmentFrontFloorBeam_%02d" % level,
 			Vector3(0.0, float(level) * floor_height, front_z + frame_depth * 0.5),
-			Vector3(width_m, 0.28, frame_depth),
+			Vector3(
+				width_m - APARTMENT_FRONT_GRID_FACE_INSET_M * 2.0,
+				0.28,
+				frame_depth - APARTMENT_FRONT_GRID_FACE_INSET_M * 2.0
+			),
 			mat_apartment_concrete
 		)
 
@@ -3116,7 +3146,12 @@ func _build_apartment(
 	# the same 1.20 m projection and floor rhythm as the front modules.
 	var side_outward: Vector3 = Vector3(balcony_side_sign, 0.0, 0.0)
 	var side_tangent: Vector3 = Vector3.BACK
-	var side_wall_x: float = width_m * 0.5 * balcony_side_sign
+	var side_wall_x: float = (
+		(width_m * 0.5 - APARTMENT_SIDE_RETURN_INSET_M) * balcony_side_sign
+	)
+	var side_balcony_anchor_x: float = (
+		side_wall_x - side_outward.x * 0.035
+	)
 	var side_center_z: float = -depth_m * 0.10
 	var side_balcony_width: float = clampf(minf(3.0, depth_m * 0.58), 1.70, 3.0)
 	var side_opening_w: float = clampf(
@@ -3147,7 +3182,7 @@ func _build_apartment(
 		_add_apartment_balcony_module(
 			balcony_root,
 			side_prefix,
-			Vector3(side_wall_x, 0.0, side_center_z),
+			Vector3(side_balcony_anchor_x, 0.0, side_center_z),
 			side_tangent,
 			side_outward,
 			side_balcony_width,
@@ -4215,20 +4250,28 @@ func _add_enterable_ground_shell(
 	var front_center_z: float = -depth_m * 0.5
 	var back_center_z: float = depth_m * 0.5
 	var side_wall_x: float = width_m * 0.5
+	var collision_side_wall_x: float = side_wall_x
 	var side_wall_depth: float = depth_m
 	var side_wall_center_z: float = 0.0
 	if align_inside_footprint:
 		front_center_z += effective_front_depth * 0.5
 		back_center_z -= wall_t * 0.5
-		side_wall_x -= wall_t * 0.5
-		# The deep front corner posts own the façade junction. Start the thin
-		# side walls behind them so no exterior faces overlap or flicker.
-		side_wall_depth = maxf(0.40, depth_m - effective_front_depth)
+		collision_side_wall_x -= wall_t * 0.5
+		side_wall_x = collision_side_wall_x - APARTMENT_SIDE_RETURN_INSET_M
+		# Match the upper-wall return: the visual wall is slightly recessed and
+		# its front end is hidden inside the deep concrete corner post.
+		side_wall_depth = maxf(
+			0.40,
+			depth_m - effective_front_depth + APARTMENT_WALL_JOIN_OVERLAP_M
+		)
 		side_wall_center_z = (
 			-depth_m * 0.5
 			+ effective_front_depth
+			- APARTMENT_WALL_JOIN_OVERLAP_M
 			+ side_wall_depth * 0.5
 		)
+	else:
+		collision_side_wall_x = side_wall_x
 
 	var body: StaticBody3D = StaticBody3D.new()
 	body.name = "ShellCollision"
@@ -4258,7 +4301,7 @@ func _add_enterable_ground_shell(
 		)
 		_add_collision_box(
 			body,
-			Vector3(side_wall_x * side, wall_h * 0.5, side_wall_center_z),
+			Vector3(collision_side_wall_x * side, wall_h * 0.5, side_wall_center_z),
 			Vector3(wall_t, wall_h, side_wall_depth)
 		)
 
