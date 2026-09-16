@@ -278,6 +278,10 @@ var van_vertical: Array[bool] = []
 var path_grid: AStarGrid2D = AStarGrid2D.new()
 var player_spawn_cell: Vector2i = Vector2i(MAIN_ROAD_CENTER, 43)
 var featured_park_block_index: int = -1
+var featured_mall_block_index: int = -1
+var featured_pyramid_block_index: int = -1
+var featured_town_square_block_index: int = -1
+var landmark_layout_variant: int = 0
 
 var geometry_root: Node3D
 var static_root: Node3D
@@ -413,17 +417,25 @@ func _ready() -> void:
 	_choose_van_cells()
 	_configure_path_grid()
 	_build_town_geometry()
+	var atmosphere := Node.new()
+	atmosphere.name = "StreetAtmosphere"
+	atmosphere.set_script(preload("res://scripts/street_atmosphere.gd"))
+	add_child(atmosphere)
 	_apply_ground_comparison_mode(dry_ground_comparison)
 	_spawn_player()
 	_spawn_wave()
 	_print_light_budget_audit()
 
 	print(
-		"Blacksite procedural Japanese town seed: %d | blocks: %d | vans: %d | featured park block: %d" % [
+		"Blacksite procedural Japanese town seed: %d | blocks: %d | vans: %d | landmark layout: %d | park/mall/pyramid/square: %d/%d/%d/%d" % [
 			level_seed,
 			town_blocks.size(),
 			van_cells.size(),
+			landmark_layout_variant,
 			featured_park_block_index,
+			featured_mall_block_index,
+			featured_pyramid_block_index,
+			featured_town_square_block_index,
 		]
 	)
 	if commercial_test_corridor_mode:
@@ -1532,54 +1544,71 @@ func _build_road_markings() -> void:
 			mat_asphalt_marking
 		)
 
-func _choose_featured_park_block_index() -> int:
-	# v10.15 chose the *first* overgrown block in iteration order. That put the
-	# showcase park in a far map corner, which made it almost impossible to
-	# discover once the street walls became dense. Choose an authored central
-	# block instead: one intersection north of the spawn and immediately west
-	# of the main avenue. The player still has to explore, but the park can be
-	# found from a deliberate sightline rather than by wandering randomly.
-	var target_center: Vector2 = Vector2(
-		float(MAIN_ROAD_CENTER) - 5.0,
-		float(MAIN_ROAD_CENTER) + 5.5
-	)
+func _choose_landmark_block_index(
+	target_center: Vector2,
+	excluded_indices: Array[int],
+	minimum_size: Vector2i = Vector2i(7, 7)
+) -> int:
 	var best_index: int = -1
 	var best_score: float = 1.0e9
-	var main_left_edge: int = MAIN_ROAD_CENTER - MAIN_ROAD_HALF_WIDTH
-
 	for block_index: int in range(town_blocks.size()):
-		var block: Rect2i = town_blocks[block_index]
-		if block.size.x < 7 or block.size.y < 7:
+		if excluded_indices.has(block_index):
 			continue
-		var center: Vector2 = Vector2(
+		var block: Rect2i = town_blocks[block_index]
+		if block.size.x < minimum_size.x or block.size.y < minimum_size.y:
+			continue
+		var center := Vector2(
 			float(block.position.x) + float(block.size.x) * 0.5,
 			float(block.position.y) + float(block.size.y) * 0.5
 		)
-		var score: float = center.distance_to(target_center)
-
-		# Strongly prefer a block that directly touches the west side of the
-		# main road, so the torii / cherry canopy can be seen from the avenue.
-		if block.position.x + block.size.x == main_left_edge:
-			score -= 24.0
-		else:
-			score += 60.0
-
-		# Keep the landmark away from the outermost map edge.
-		if block.position.y <= 4 or block.position.y + block.size.y >= GRID_HEIGHT - 4:
-			score += 30.0
-
+		var score: float = center.distance_squared_to(target_center)
 		if score < best_score:
 			best_score = score
 			best_index = block_index
-
-	# Defensive fallback: there should always be a suitable block in this
-	# layout, but never silently lose the featured park if the road grid changes.
-	if best_index < 0 and not town_blocks.is_empty():
-		best_index = int(town_blocks.size() / 2)
 	return best_index
 
+func _assign_major_landmark_blocks() -> void:
+	# Four authored layouts rotate the recognizable destinations through known,
+	# readable blocks. The streets and district identities remain familiar while
+	# a new seed changes where the player must travel. The locked art-review scene
+	# always uses variant zero so screenshots remain directly comparable.
+	landmark_layout_variant = 0 if commercial_test_corridor_mode else ((level_seed % 4) + 4) % 4
+	var park_anchors: Array[Vector2] = [
+		Vector2(21.0, 31.5), Vector2(31.5, 31.5),
+		Vector2(31.5, 21.0), Vector2(21.0, 21.0),
+	]
+	var square_anchors: Array[Vector2] = [
+		Vector2(31.5, 21.0), Vector2(21.0, 21.0),
+		Vector2(21.0, 31.5), Vector2(31.5, 31.5),
+	]
+	var mall_anchors: Array[Vector2] = [
+		Vector2(42.5, 31.5), Vector2(42.5, 21.0),
+		Vector2(10.5, 21.0), Vector2(10.5, 31.5),
+	]
+	var pyramid_anchors: Array[Vector2] = [
+		Vector2(42.5, 10.5), Vector2(10.5, 10.5),
+		Vector2(10.5, 42.5), Vector2(42.5, 42.5),
+	]
+
+	var reserved: Array[int] = []
+	featured_park_block_index = _choose_landmark_block_index(
+		park_anchors[landmark_layout_variant], reserved
+	)
+	reserved.append(featured_park_block_index)
+	featured_town_square_block_index = _choose_landmark_block_index(
+		square_anchors[landmark_layout_variant], reserved
+	)
+	reserved.append(featured_town_square_block_index)
+	featured_mall_block_index = _choose_landmark_block_index(
+		mall_anchors[landmark_layout_variant], reserved, Vector2i(8, 7)
+	)
+	reserved.append(featured_mall_block_index)
+	featured_pyramid_block_index = _choose_landmark_block_index(
+		pyramid_anchors[landmark_layout_variant], reserved, Vector2i(8, 8)
+	)
+
 func _build_city_blocks() -> void:
-	featured_park_block_index = _choose_featured_park_block_index()
+	_assign_major_landmark_blocks()
 	for block_index: int in range(town_blocks.size()):
 		var block: Rect2i = town_blocks[block_index]
 		var district: int = _district_for_block(block)
@@ -1593,9 +1622,24 @@ func _build_city_blocks() -> void:
 			park_chance = 0.055
 		elif district == DISTRICT_LUXURY:
 			park_chance = 0.020
+		# Preserve the old one-roll-per-non-featured-block sequence. That keeps the
+		# surrounding authored comparison street stable when a landmark replaces a block.
+		var park_roll: float = -1.0 if featured_park else town_rng.randf()
 
-		if featured_park or town_rng.randf() < park_chance:
+		if featured_park:
 			_build_green_block(block, block_index, district, featured_park)
+			continue
+		if block_index == featured_town_square_block_index:
+			_build_town_square_landmark(block, block_index)
+			continue
+		if block_index == featured_mall_block_index:
+			_build_mall_landmark(block, block_index)
+			continue
+		if block_index == featured_pyramid_block_index:
+			_build_pyramid_landmark(block, block_index)
+			continue
+		if park_roll < park_chance:
+			_build_green_block(block, block_index, district, false)
 			continue
 
 		_build_perimeter_block(block, district, block_index)
@@ -3408,8 +3452,18 @@ func _add_apartment_balcony_module(
 		if tangent_is_x
 		else Vector3(BALCONY_DEPTH_M, SLAB_THICKNESS_M, width_value)
 	)
+	# The metal wrap owns the exterior faces. Recess the concrete core so
+	# two differently shaded surfaces never occupy the same depth plane.
+	if tangent_is_x:
+		slab_size.x -= FASCIA_EDGE_WIDTH_M * 2.0
+		slab_size.z -= FASCIA_EDGE_WIDTH_M
+	else:
+		slab_size.z -= FASCIA_EDGE_WIDTH_M * 2.0
+		slab_size.x -= FASCIA_EDGE_WIDTH_M
 	_add_local_box(
-		root, prefix + "ConcreteSlab", slab_center, slab_size, mat_apartment_concrete
+		root, prefix + "ConcreteSlab",
+		slab_center - outward * (FASCIA_EDGE_WIDTH_M * 0.5),
+		slab_size, mat_apartment_concrete
 	)
 
 	# A thin inset weathering surface represents the waterproof walking finish
@@ -3501,7 +3555,7 @@ func _add_apartment_balcony_module(
 	# Folded lower lips and a wall-side shadow joint give the steel wrap a real
 	# manufactured section and keep the soffit from appearing fused to the wall.
 	var drip_height: float = 0.028
-	var drip_y: float = slab_y - fascia_height * 0.5 - drip_height * 0.5 + 0.003
+	var drip_y: float = slab_y - fascia_height * 0.5 - drip_height * 0.5
 	var front_drip_size: Vector3 = (
 		Vector3(
 			width_value - DRIP_EDGE_WIDTH_M * 2.0,
@@ -3971,6 +4025,112 @@ func _build_tower(
 		Vector3(tower_width * 0.45, 1.20, tower_depth * 0.38), mat_black_metal)
 	_add_local_box(root, "TowerCrown", Vector3(0.0, podium_h + height + 1.42, 0.0),
 		Vector3(tower_width + 0.45, 0.12, tower_depth + 0.45), mat_neon_blue)
+
+func _landmark_block_metrics(block: Rect2i) -> Dictionary:
+	var center_cell := Vector2(
+		float(block.position.x) + float(block.size.x - 1) * 0.5,
+		float(block.position.y) + float(block.size.y - 1) * 0.5
+	)
+	return {
+		"center": _grid_float_to_world(center_cell, 0.0),
+		"width": float(block.size.x) * TILE_SIZE - 1.25,
+		"depth": float(block.size.y) * TILE_SIZE - 1.25,
+	}
+
+func _build_mall_landmark(block: Rect2i, block_index: int) -> void:
+	var metrics: Dictionary = _landmark_block_metrics(block)
+	var center: Vector3 = metrics["center"]
+	var block_width: float = metrics["width"]
+	var block_depth: float = metrics["depth"]
+	var width_m: float = minf(block_width * 0.88, 31.0)
+	var depth_m: float = minf(block_depth * 0.74, 23.0)
+	var body_height: float = 9.4
+	var body_center := center + Vector3(0.0, body_height * 0.5, -block_depth * 0.08)
+
+	_add_collidable_world_box(geometry_root, "MallBody%d" % block_index,
+		body_center, Vector3(width_m, body_height, depth_m), mat_dark_concrete)
+	_add_visual_box(decoration_root, "MallUpperGlass%d" % block_index,
+		center + Vector3(0.0, 6.9, depth_m * 0.50 - block_depth * 0.08 + 0.035),
+		Vector3(width_m * 0.82, 2.55, 0.08), mat_window_blue)
+	_add_visual_box(decoration_root, "MallEntranceGlass%d" % block_index,
+		center + Vector3(0.0, 2.05, depth_m * 0.50 - block_depth * 0.08 + 0.045),
+		Vector3(width_m * 0.36, 3.75, 0.09), mat_storefront_glass_cool)
+	_add_visual_box(decoration_root, "MallCanopy%d" % block_index,
+		center + Vector3(0.0, 4.15, depth_m * 0.50 - block_depth * 0.08 + 1.25),
+		Vector3(width_m * 0.54, 0.20, 2.65), mat_black_metal)
+	_add_visual_box(decoration_root, "MallRoofFrame%d" % block_index,
+		center + Vector3(0.0, body_height + 0.18, -block_depth * 0.08),
+		Vector3(width_m + 0.55, 0.30, depth_m + 0.55), mat_weathered_metal)
+	_add_visual_box(decoration_root, "MallNamePlate%d" % block_index,
+		center + Vector3(0.0, 7.85, depth_m * 0.50 - block_depth * 0.08 + 0.10),
+		Vector3(width_m * 0.32, 0.85, 0.14), mat_neon_yellow)
+	for stripe_index: int in range(5):
+		var stripe_x: float = (float(stripe_index) - 2.0) * width_m * 0.17
+		_add_visual_box(decoration_root, "MallMullion%d_%d" % [block_index, stripe_index],
+			center + Vector3(stripe_x, 2.05, depth_m * 0.50 - block_depth * 0.08 + 0.10),
+			Vector3(0.10, 3.75, 0.14), mat_black_metal)
+
+func _build_pyramid_landmark(block: Rect2i, block_index: int) -> void:
+	var metrics: Dictionary = _landmark_block_metrics(block)
+	var center: Vector3 = metrics["center"]
+	var block_width: float = metrics["width"]
+	var block_depth: float = metrics["depth"]
+	var base_width: float = minf(minf(block_width, block_depth) * 0.86, 29.0)
+	var tier_height: float = 3.0
+	var tier_count: int = 6
+
+	# A stepped silhouette gives the landmark a reliable collision shape now;
+	# the final sloped shell can replace these tiers without changing its footprint.
+	for tier_index: int in range(tier_count):
+		var scale_ratio: float = 1.0 - float(tier_index) * 0.135
+		var tier_size: float = base_width * scale_ratio
+		var tier_center_y: float = float(tier_index) * tier_height + tier_height * 0.5
+		var tier_material: Material = mat_dark_concrete if tier_index % 2 == 0 else mat_weathered_metal
+		_add_collidable_world_box(geometry_root, "PyramidTier%d_%d" % [block_index, tier_index],
+			center + Vector3(0.0, tier_center_y, 0.0),
+			Vector3(tier_size, tier_height, tier_size), tier_material)
+		_add_visual_box(decoration_root, "PyramidLightBand%d_%d" % [block_index, tier_index],
+			center + Vector3(0.0, float(tier_index + 1) * tier_height - 0.12, tier_size * 0.505),
+			Vector3(tier_size * 0.78, 0.14, 0.10),
+			mat_neon_blue if tier_index % 2 == 0 else mat_neon_pink)
+
+	var pyramid_height: float = float(tier_count) * tier_height
+	var pyramid_beacon := _add_local_cylinder(decoration_root, "PyramidBeacon%d" % block_index,
+		center + Vector3(0.0, pyramid_height + 3.1, 0.0), 0.12, 6.0, mat_neon_red)
+	pyramid_beacon.visibility_range_end = 0.0
+	_add_visual_box(decoration_root, "PyramidCrown%d" % block_index,
+		center + Vector3(0.0, pyramid_height + 0.18, 0.0),
+		Vector3(base_width * 0.24, 0.34, base_width * 0.24), mat_neon_red)
+
+func _build_town_square_landmark(block: Rect2i, block_index: int) -> void:
+	var metrics: Dictionary = _landmark_block_metrics(block)
+	var center: Vector3 = metrics["center"]
+	var width_m: float = metrics["width"]
+	var depth_m: float = metrics["depth"]
+
+	_add_visual_box(geometry_root, "TownSquarePaving%d" % block_index,
+		center + Vector3(0.0, 0.045, 0.0), Vector3(width_m, 0.09, depth_m), mat_stone)
+	_add_collidable_world_box(geometry_root, "TownSquarePlinth%d" % block_index,
+		center + Vector3(0.0, 0.34, 0.0), Vector3(5.4, 0.68, 5.4), mat_stone_dark)
+	_add_local_cylinder(decoration_root, "TownSquareMonument%d" % block_index,
+		center + Vector3(0.0, 3.15, 0.0), 0.62, 5.65, mat_weathered_metal)
+	_add_visual_box(decoration_root, "TownSquareBeacon%d" % block_index,
+		center + Vector3(0.0, 6.05, 0.0), Vector3(0.90, 0.18, 0.90), mat_neon_red)
+
+	# Four open corners create cover and market-like framing without filling the
+	# combat space. They also make the square readable from every approach road.
+	for corner_index: int in range(4):
+		var side_x: float = -1.0 if corner_index % 2 == 0 else 1.0
+		var side_z: float = -1.0 if corner_index < 2 else 1.0
+		var corner := center + Vector3(side_x * width_m * 0.34, 0.0, side_z * depth_m * 0.34)
+		_add_visual_box(decoration_root, "SquareCanopy%d_%d" % [block_index, corner_index],
+			corner + Vector3(0.0, 2.65, 0.0), Vector3(4.4, 0.18, 3.2),
+			mat_roof if corner_index % 2 == 0 else mat_weathered_metal)
+		for post_index: int in range(4):
+			var post_x: float = -1.85 if post_index % 2 == 0 else 1.85
+			var post_z: float = -1.25 if post_index < 2 else 1.25
+			_add_local_box(decoration_root, "SquarePost%d_%d_%d" % [block_index, corner_index, post_index],
+				corner + Vector3(post_x, 1.30, post_z), Vector3(0.12, 2.60, 0.12), mat_black_metal)
 
 func _build_green_block(
 	block: Rect2i,
@@ -7487,6 +7647,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_F6:
 			dry_ground_comparison = not dry_ground_comparison
 			_apply_ground_comparison_mode(dry_ground_comparison)
+		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_F7:
+			get_tree().change_scene_to_file("res://scenes/traversal_test.tscn")
+		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_F8:
+			get_tree().change_scene_to_file("res://scenes/city_layout_test.tscn")
 
 func _apply_ground_comparison_mode(dry_mode: bool) -> void:
 	# The production SHINRAI road is always dry and is not altered by this old
@@ -7942,6 +8106,7 @@ func _add_gable_end_infill(
 		_surface_add_double_sided_triangle(surface_tool, p0, p3, p4)
 
 	surface_tool.generate_normals()
+	surface_tool.generate_tangents()
 	var generated_mesh: ArrayMesh = surface_tool.commit()
 	var gable: MeshInstance3D = MeshInstance3D.new()
 	gable.name = "GableEndInfill"

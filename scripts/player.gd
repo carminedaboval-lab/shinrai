@@ -20,6 +20,18 @@ var friction: float = 22.0
 var jump_velocity: float = 6.2
 var gravity: float = 18.0
 
+const MANTLE_MIN_HEIGHT: float = 0.55
+const MANTLE_MAX_HEIGHT: float = 1.70
+const MANTLE_REACH: float = 0.95
+var mantle_active: bool = false
+var mantle_start: Vector3 = Vector3.ZERO
+var mantle_target: Vector3 = Vector3.ZERO
+var mantle_elapsed: float = 0.0
+var mantle_duration: float = 0.28
+var mantle_saved_layer: int = 1
+var mantle_saved_mask: int = 3
+var jump_was_down: bool = false
+
 var health: float = 100.0
 var ammo: int = 30
 var reserve: int = 150
@@ -864,6 +876,12 @@ func _physics_process(delta: float) -> void:
     if not alive:
         return
 
+    var jump_down: bool = Input.is_key_pressed(KEY_SPACE)
+    if mantle_active:
+        _process_mantle(delta)
+        jump_was_down = jump_down
+        return
+
     fire_cooldown = maxf(0.0, fire_cooldown - delta)
     if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
         shoot()
@@ -907,10 +925,14 @@ func _physics_process(delta: float) -> void:
     velocity.x = move_toward(velocity.x, wish.x * speed, acceleration * delta if input_vec != Vector2.ZERO else friction * delta)
     velocity.z = move_toward(velocity.z, wish.z * speed, acceleration * delta if input_vec != Vector2.ZERO else friction * delta)
 
+    if jump_down and not jump_was_down and _try_start_mantle(wish):
+        jump_was_down = jump_down
+        return
+
     if not is_on_floor():
         velocity.y -= gravity * delta
     else:
-        if Input.is_key_pressed(KEY_SPACE):
+        if jump_down:
             velocity.y = jump_velocity
         else:
             velocity.y = 0.0
@@ -931,6 +953,75 @@ func _physics_process(delta: float) -> void:
         uzi_viewmodel.call("set_ads_blend", ads_blend)
         uzi_viewmodel.call("set_move_speed", horizontal_speed)
     _update_hud()
+    jump_was_down = jump_down
+
+func _try_start_mantle(wish: Vector3) -> bool:
+    var forward: Vector3 = wish
+    if forward.length_squared() < 0.01:
+        forward = -global_transform.basis.z
+    forward.y = 0.0
+    forward = forward.normalized()
+
+    var space_state: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+    var wall_from: Vector3 = global_position + Vector3.UP * 0.65
+    var wall_query := PhysicsRayQueryParameters3D.create(
+        wall_from, wall_from + forward * MANTLE_REACH
+    )
+    wall_query.exclude = [get_rid()]
+    wall_query.collision_mask = collision_mask
+    var wall_hit: Dictionary = space_state.intersect_ray(wall_query)
+    if wall_hit.is_empty():
+        return false
+
+    var clear_from: Vector3 = global_position + Vector3.UP * 1.82
+    var clear_query := PhysicsRayQueryParameters3D.create(
+        clear_from, clear_from + forward * (MANTLE_REACH + 0.20)
+    )
+    clear_query.exclude = [get_rid()]
+    clear_query.collision_mask = collision_mask
+    if not space_state.intersect_ray(clear_query).is_empty():
+        return false
+
+    var beyond_wall: Vector3 = global_position + forward * (MANTLE_REACH + 0.22)
+    var down_query := PhysicsRayQueryParameters3D.create(
+        beyond_wall + Vector3.UP * (MANTLE_MAX_HEIGHT + 0.35),
+        beyond_wall + Vector3.UP * 0.20
+    )
+    down_query.exclude = [get_rid()]
+    down_query.collision_mask = collision_mask
+    var top_hit: Dictionary = space_state.intersect_ray(down_query)
+    if top_hit.is_empty():
+        return false
+
+    var ledge_position: Vector3 = top_hit.position
+    var ledge_height: float = ledge_position.y - global_position.y
+    if ledge_height < MANTLE_MIN_HEIGHT or ledge_height > MANTLE_MAX_HEIGHT:
+        return false
+
+    mantle_start = global_position
+    mantle_target = ledge_position + forward * 0.32 + Vector3.UP * 0.06
+    mantle_elapsed = 0.0
+    mantle_duration = lerpf(0.22, 0.34, inverse_lerp(MANTLE_MIN_HEIGHT, MANTLE_MAX_HEIGHT, ledge_height))
+    mantle_saved_layer = collision_layer
+    mantle_saved_mask = collision_mask
+    collision_layer = 0
+    collision_mask = 0
+    velocity = Vector3.ZERO
+    mantle_active = true
+    return true
+
+func _process_mantle(delta: float) -> void:
+    mantle_elapsed += delta
+    var amount: float = clampf(mantle_elapsed / mantle_duration, 0.0, 1.0)
+    var smooth_amount: float = amount * amount * (3.0 - 2.0 * amount)
+    global_position = mantle_start.lerp(mantle_target, smooth_amount)
+    global_position.y += sin(amount * PI) * 0.14
+    if amount >= 1.0:
+        global_position = mantle_target
+        collision_layer = mantle_saved_layer
+        collision_mask = mantle_saved_mask
+        mantle_active = false
+        velocity = -global_transform.basis.z * 1.2
 
 func _smooth01(value: float) -> float:
     var x: float = clampf(value, 0.0, 1.0)
