@@ -38,6 +38,7 @@ var mat_island: StandardMaterial3D
 var mat_plan_marker: StandardMaterial3D
 var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
+var pine_sapling_prototypes: Array[Node3D] = []
 var lilac_prototypes: Array[Node3D] = []
 var dense_grass_prototypes: Array[Node3D] = []
 var deadwood_trunk_prototype: Node3D
@@ -436,6 +437,10 @@ func _prepare_reference_vegetation() -> void:
 		["Pine_big_1_LOD1", 9.0], ["Pine_large_2_LOD1", 7.6],
 		["Pine_medium_3_LOD1", 6.2],
 	]
+	var pine_sapling_specs: Array = [
+		["Pine_sapling_1_LOD1", 3.0], ["Pine_sapling_2_LOD1", 2.7],
+		["Pine_sapling_3_LOD1", 3.2],
+	]
 	var lilac_specs: Array = [
 		["Lilac_bush_1_LOD1", 1.65], ["Lilac_bush_2_LOD1", 1.50],
 	]
@@ -450,6 +455,10 @@ func _prepare_reference_vegetation() -> void:
 		var prototype := _extract_vegetation_prototype(PineTreePack, spec[0], spec[1])
 		if prototype != null:
 			pine_prototypes.append(prototype)
+	for spec: Array in pine_sapling_specs:
+		var prototype := _extract_vegetation_prototype(PineTreePack, spec[0], spec[1])
+		if prototype != null:
+			pine_sapling_prototypes.append(prototype)
 	for spec: Array in lilac_specs:
 		var prototype := _extract_vegetation_prototype(LilacBushPack, spec[0], spec[1])
 		if prototype != null:
@@ -459,8 +468,8 @@ func _prepare_reference_vegetation() -> void:
 		if prototype != null:
 			_naturalize_dense_grass_prototype(prototype)
 			dense_grass_prototypes.append(prototype)
-	print("Midori reference vegetation: %d broadleaf | %d pine | %d lilac | %d dense grass" % [
-		broadleaf_prototypes.size(), pine_prototypes.size(), lilac_prototypes.size(), dense_grass_prototypes.size(),
+	print("Midori reference vegetation: %d broadleaf | %d pine | %d pine sapling | %d lilac | %d dense grass" % [
+		broadleaf_prototypes.size(), pine_prototypes.size(), pine_sapling_prototypes.size(), lilac_prototypes.size(), dense_grass_prototypes.size(),
 	])
 	deadwood_trunk_prototype = _extract_whole_scene_prototype(DeadwoodTrunkScene, "BeechDeadwood")
 	hollow_bark_prototype = _extract_whole_scene_prototype(HollowBarkScene, "HeavyHollowBark")
@@ -801,6 +810,7 @@ func _build_reference_canopy(parent: Node3D) -> void:
 			canopy_root, mainland_micro_groves[grove_index],
 			micro_grove_pine_indices[grove_index], 600 + grove_index
 		)
+	_build_mainland_pine_saplings(canopy_root)
 
 	# Each green island has a small vertical silhouette in the screenshot.
 	var island_trees: Array[Vector4] = [
@@ -850,6 +860,38 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		)
 	_build_mainland_groundcover_patches(parent)
 	_build_mainland_meadow_transitions(parent)
+
+func _build_mainland_pine_saplings(parent: Node3D) -> void:
+	if pine_sapling_prototypes.is_empty():
+		return
+	var candidates: Array[Vector2] = [
+		Vector2(-94,-31),Vector2(-91,-27),Vector2(-84,-29),Vector2(-76,-25),
+		Vector2(-71,-5),Vector2(-67,-2),Vector2(-58,-5),Vector2(-56,-9),
+		Vector2(-94,30),Vector2(-90,27),Vector2(-82,29),Vector2(-75,27),
+		Vector2(-56,30),Vector2(-51,32),Vector2(-47,28),Vector2(-44,33),
+		Vector2(-42,69),Vector2(-38,72),Vector2(-34,68),Vector2(-9,69),
+		Vector2(11,71),Vector2(15,74),Vector2(30,70),Vector2(34,68),
+		Vector2(-31,-73),Vector2(-27,-70),Vector2(-23,-74),Vector2(-10,-72),
+		Vector2(12,-72),Vector2(16,-75),Vector2(22,-71),Vector2(29,-73),
+	]
+	var placed := 0
+	for candidate_index: int in range(candidates.size()):
+		if placed >= 16:
+			break
+		var point := candidates[candidate_index]
+		var position_value := Vector3(point.x, 0.08, point.y)
+		if not _is_vegetation_clear(position_value, 1.2):
+			continue
+		if not _is_tree_spaced_for_type(position_value, true):
+			continue
+		_add_reference_plant(
+			parent, pine_sapling_prototypes, position_value,
+			0.86 + float((candidate_index * 3) % 5) * 0.045,
+			4200 + candidate_index, "MainlandPineSapling"
+		)
+		occupied_tree_positions.append(point)
+		occupied_tree_is_skinny.append(true)
+		placed += 1
 
 func _add_authored_mainland_micro_grove(
 	parent: Node3D,
