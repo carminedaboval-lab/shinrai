@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c5akt0wa133rw"
-path="res://.godot/imported/scene_29.png-d14f03b9d053cb7ada66fd6912b03ec6.ctex"
+path.s3tc="res://.godot/imported/scene_29.png-d14f03b9d053cb7ada66fd6912b03ec6.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "253485e7a9c3c979c799acb93d1a7587"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/scene_29.png"
-dest_files=["res://.godot/imported/scene_29.png-d14f03b9d053cb7ada66fd6912b03ec6.ctex"]
+dest_files=["res://.godot/imported/scene_29.png-d14f03b9d053cb7ada66fd6912b03ec6.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
