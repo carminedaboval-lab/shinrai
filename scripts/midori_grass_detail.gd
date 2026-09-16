@@ -12,7 +12,7 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 3
+const DETAIL_VERSION := 4
 
 # The original uploaded Meshy GLB measures 1.0 m tall with its pivot centered.
 # Keep it small and broad so it blends into the Forest Ground 01 material.
@@ -21,6 +21,7 @@ const SOURCE_BOTTOM_Y := -0.5
 const MIN_CLUMP_HEIGHT_M := 0.07
 const MAX_CLUMP_HEIGHT_M := 0.14
 const GROUND_SURFACE_Y := 0.010
+const HEIGHT_OFFSET_FACTOR := 0.08
 
 var _installed_scene_id: int = 0
 
@@ -109,8 +110,10 @@ func _install_ground_clumps() -> void:
 		))
 
 		# Meshy's source pivot is centered, so lift half the scaled source height
-		# to plant the base directly on the park surface.
+		# to plant the base directly on the park surface, then raise it by an
+		# additional 8% of the clump's own height as requested.
 		var grounded_y := GROUND_SURFACE_Y - SOURCE_BOTTOM_Y * uniform_scale
+		grounded_y += target_height * HEIGHT_OFFSET_FACTOR
 		grounded_y += rng.randf_range(-0.002, 0.002)
 		var local_position := Vector3(x - center_x, grounded_y, z - center_z)
 		buckets[chunk_index].append(Transform3D(basis, local_position))
@@ -142,7 +145,7 @@ func _install_ground_clumps() -> void:
 			multimesh.instance_count = transforms.size()
 			multimesh.custom_aabb = AABB(
 				Vector3(-chunk_width * 0.5 - 1.0, -0.02, -chunk_depth * 0.5 - 1.0),
-				Vector3(chunk_width + 2.0, MAX_CLUMP_HEIGHT_M + 0.10, chunk_depth + 2.0)
+				Vector3(chunk_width + 2.0, MAX_CLUMP_HEIGHT_M + 0.12, chunk_depth + 2.0)
 			)
 
 			for transform_index: int in range(transforms.size()):
