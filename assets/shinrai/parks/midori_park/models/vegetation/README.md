@@ -42,6 +42,7 @@
 - Twenty-four patches from the existing dense-grass pack sit around the eight mainland infill groves; the lake islands are unchanged. The heavy `Grass1` variant is corrected for dark transparent-blade self-shadowing and restricted to four reduced-scale deep-woodland accents; shoreline patches use only the two lighter variants.
 - The Meshy ground-clump scatter remains at 18,000 instances. Its imported bounds were measured at 0.796875 m high with a -0.378906 m base, so placement now uses the true base plus a fixed 3.5 cm reveal instead of an assumed centred one-metre pivot.
 - `vendor/midnight_fern/midnight_fern.glb` supplies up to 48 reduced-scale fern accents in twelve irregular mainland pockets. These decorative plants add recognizable floor foliage without changing the 18,000-clump scatter or touching the islands.
+- `vendor/emerald_fountain_grass/emerald_fountain_grass.glb` supplies the 5,628-triangle mid-height sedge layer. It is varied between approximately 0.62 and 0.88 m and placed in irregular three-to-six-plant mainland groups between groves, shrubs, and ferns; it has no collision and does not touch the islands.
 
 ## Japanese maple accents
 

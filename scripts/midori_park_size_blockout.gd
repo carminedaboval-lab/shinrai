@@ -15,6 +15,7 @@ const DenseGrassPack: PackedScene = preload("res://assets/shinrai/parks/midori_p
 const DeadwoodTrunkScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/mistrzjang1_tree_trunk/tree_trunk_002.fbx")
 const HollowBarkScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/michaeldebbarma_hollow_bark/hollow_bark.fbx")
 const MidnightFernScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/midnight_fern/midnight_fern.glb")
+const EmeraldFountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/emerald_fountain_grass/emerald_fountain_grass.glb")
 const JapaneseMapleMesh: Mesh = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/free3d_japanese_maple_n030123/Tree Japanese maple N030123.obj")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
@@ -47,6 +48,7 @@ var dense_grass_prototypes: Array[Node3D] = []
 var deadwood_trunk_prototype: Node3D
 var hollow_bark_prototype: Node3D
 var midnight_fern_prototype: Node3D
+var emerald_fountain_grass_prototype: Node3D
 var japanese_maple_prototype: Node3D
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
@@ -487,6 +489,7 @@ func _prepare_reference_vegetation() -> void:
 	deadwood_trunk_prototype = _extract_whole_scene_prototype(DeadwoodTrunkScene, "BeechDeadwood")
 	hollow_bark_prototype = _extract_whole_scene_prototype(HollowBarkScene, "HeavyHollowBark")
 	midnight_fern_prototype = _extract_whole_scene_prototype(MidnightFernScene, "MidnightFern")
+	emerald_fountain_grass_prototype = _extract_whole_scene_prototype(EmeraldFountainGrassScene, "EmeraldFountainGrass")
 	japanese_maple_prototype = _extract_mesh_prototype(JapaneseMapleMesh, "Free3DJapaneseMaple", 6.4)
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
@@ -903,6 +906,7 @@ func _build_reference_canopy(parent: Node3D) -> void:
 	_build_mainland_meadow_transitions(parent)
 	_build_forest_floor_bush_pockets(parent)
 	_build_midnight_fern_pockets(parent)
+	_build_emerald_grass_clusters(parent)
 
 func _build_midnight_fern_pockets(parent: Node3D) -> void:
 	if midnight_fern_prototype == null:
@@ -934,6 +938,44 @@ func _build_midnight_fern_pockets(parent: Node3D) -> void:
 			fern.rotation_degrees.y = fmod(float(serial * 137 + center_index * 29), 360.0)
 			fern.scale = Vector3.ONE * (0.42 + float((serial * 3 + center_index) % 6) * 0.055)
 			root.add_child(fern)
+			serial += 1
+
+func _build_emerald_grass_clusters(parent: Node3D) -> void:
+	if emerald_fountain_grass_prototype == null:
+		return
+	var root := Node3D.new()
+	root.name = "MainlandEmeraldGrassClusters"
+	parent.add_child(root)
+	# Mid-height grass bridges the tiny clumps and knee-height shrubs. Uneven
+	# 3–6 plant groups keep the supplied silhouette readable without carpeting
+	# the park or repeating a regular scatter pattern.
+	var clusters: Array[Vector4] = [
+		Vector4(-91,-29,5.2,5),Vector4(-71,-24,4.8,4),
+		Vector4(-91,31,5.6,6),Vector4(-65,34,4.4,3),
+		Vector4(-36,59,5.0,5),Vector4(13,65,5.4,6),
+		Vector4(-28,-66,4.7,4),Vector4(16,-70,5.2,5),
+		Vector4(-19,-39,4.5,4),Vector4(84,-27,4.8,5),
+	]
+	var serial := 0
+	for cluster_index: int in range(clusters.size()):
+		var cluster := clusters[cluster_index]
+		for plant_index: int in range(int(cluster.w)):
+			var angle := float(cluster_index) * 1.83 + float(plant_index) * 2.399963
+			var radius_value := 0.9 + sqrt(float(plant_index + 1) / cluster.w) * cluster.z
+			var position_value := Vector3(
+				cluster.x + cos(angle) * radius_value,
+				-0.018,
+				cluster.y + sin(angle) * radius_value * 0.68
+			)
+			if not _is_vegetation_clear(position_value, 0.62):
+				continue
+			var grass := emerald_fountain_grass_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+			grass.name = "EmeraldFountainGrass_%03d" % (serial + 1)
+			grass.position = position_value
+			grass.rotation_degrees.y = fmod(float(serial * 137 + cluster_index * 41), 360.0)
+			var scale_value := 0.62 + float((serial * 5 + cluster_index) % 7) * 0.043
+			grass.scale = Vector3.ONE * scale_value
+			root.add_child(grass)
 			serial += 1
 
 func _build_forest_floor_bush_pockets(parent: Node3D) -> void:
