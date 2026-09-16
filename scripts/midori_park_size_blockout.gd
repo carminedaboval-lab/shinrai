@@ -12,6 +12,8 @@ const BroadleafTreePack: PackedScene = preload("res://assets/shinrai/parks/midor
 const PineTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/scene.glb")
 const LilacBushPack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/lilac_bush_pack/scene.glb")
 const DenseGrassPack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/cosmic_dust_grass/grass_1k.glb")
+const DeadwoodTrunkScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/mistrzjang1_tree_trunk/tree_trunk_002.fbx")
+const HollowBarkScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/michaeldebbarma_hollow_bark/hollow_bark.fbx")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -38,6 +40,8 @@ var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
 var lilac_prototypes: Array[Node3D] = []
 var dense_grass_prototypes: Array[Node3D] = []
+var deadwood_trunk_prototype: Node3D
+var hollow_bark_prototype: Node3D
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
@@ -114,6 +118,7 @@ func _build_park_footprint() -> void:
 		_build_scale_ticks(root)
 	_build_sakura_trees(root)
 	_build_reference_canopy(root)
+	_build_deadwood_pass(root)
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
@@ -457,6 +462,8 @@ func _prepare_reference_vegetation() -> void:
 	print("Midori reference vegetation: %d broadleaf | %d pine | %d lilac | %d dense grass" % [
 		broadleaf_prototypes.size(), pine_prototypes.size(), lilac_prototypes.size(), dense_grass_prototypes.size(),
 	])
+	deadwood_trunk_prototype = _extract_whole_scene_prototype(DeadwoodTrunkScene, "BeechDeadwood")
+	hollow_bark_prototype = _extract_whole_scene_prototype(HollowBarkScene, "HeavyHollowBark")
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
 	var source_root := pack.instantiate() as Node3D
@@ -492,6 +499,31 @@ func _extract_vegetation_prototype(pack: PackedScene, source_name: String, targe
 		bounds.position.y,
 		bounds.position.z + bounds.size.z * 0.5
 	) * height_scale
+	_configure_vegetation_visibility(content)
+	return prototype
+
+func _extract_whole_scene_prototype(pack: PackedScene, prototype_name: String) -> Node3D:
+	var source_root := pack.instantiate() as Node3D
+	if source_root == null:
+		push_warning("Midori deadwood source failed to instantiate: %s" % prototype_name)
+		return null
+	var prototype := Node3D.new()
+	prototype.name = prototype_name
+	var content := Node3D.new()
+	content.name = "Content"
+	prototype.add_child(content)
+	_clear_vegetation_owner(source_root)
+	content.add_child(source_root)
+	var bounds_data := _vegetation_visual_bounds(content)
+	if not bounds_data["valid"]:
+		prototype.free()
+		return null
+	var bounds: AABB = bounds_data["bounds"]
+	content.position = -Vector3(
+		bounds.position.x + bounds.size.x * 0.5,
+		bounds.position.y,
+		bounds.position.z + bounds.size.z * 0.5
+	)
 	_configure_vegetation_visibility(content)
 	return prototype
 
@@ -881,6 +913,120 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 				"MainlandDenseGrass"
 			)
 			serial += 1
+
+func _build_deadwood_pass(parent: Node3D) -> void:
+	if deadwood_trunk_prototype == null or hollow_bark_prototype == null:
+		push_warning("Midori deadwood pass skipped because a staged source is unavailable")
+		return
+	var root := Node3D.new()
+	root.name = "MainlandDeadwood_7Logs_5Stumps_1Hollow"
+	parent.add_child(root)
+
+	# The retopologized beech trunk is reused with varied proportions and angles
+	# to form seven separate fallen pieces. Four of the longer pieces affect
+	# movement; the smaller three remain decorative ground detail.
+	var log_specs: Array[Vector4] = [
+		Vector4(-82,-6,18,1.18),Vector4(-72,10,127,1.34),
+		Vector4(-56,7,246,1.08),Vector4(-21,54,73,1.42),
+		Vector4(10,57,311,1.24),Vector4(-4,-52,154,1.12),
+		Vector4(87,-6,38,1.38),
+	]
+	for index: int in range(log_specs.size()):
+		var spec := log_specs[index]
+		var position_value := Vector3(spec.x, 0.48 + float(index % 3) * 0.025, spec.y)
+		if not _is_vegetation_clear(position_value, SHRUB_PATH_CLEARANCE_M):
+			push_warning("Midori fallen log entered a reserved route: %s" % position_value)
+			continue
+		var cross_scale := 0.38 + float(index % 4) * 0.025
+		var log_instance := deadwood_trunk_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		log_instance.name = "FallenBeechLog_%02d" % (index + 1)
+		log_instance.position = position_value
+		log_instance.rotation_degrees = Vector3(0.0, spec.z, 90.0 + float(index % 3 - 1) * 2.5)
+		log_instance.scale = Vector3(cross_scale, spec.w, cross_scale)
+		root.add_child(log_instance)
+		if index % 2 == 0:
+			_add_deadwood_box_collision(
+				root, "FallenLogCollision_%02d" % (index + 1), position_value,
+				log_instance.rotation_degrees,
+				Vector3(0.92, 2.72 * spec.w, 0.92)
+			)
+
+	# Upright copies retain the scanned root flare and read as broken stump bases.
+	var stump_specs: Array[Vector4] = [
+		Vector4(-88,64,42,0.52),Vector4(-60,0,173,0.62),
+		Vector4(-16,56,286,0.48),Vector4(88,16,104,0.58),
+		Vector4(-52,-8,229,0.54),
+	]
+	for index: int in range(stump_specs.size()):
+		var spec := stump_specs[index]
+		var position_value := Vector3(spec.x, -0.055, spec.y)
+		if not _is_vegetation_clear(position_value, SHRUB_PATH_CLEARANCE_M):
+			push_warning("Midori stump entered a reserved route: %s" % position_value)
+			continue
+		var stump_instance := deadwood_trunk_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		stump_instance.name = "BeechStump_%02d" % (index + 1)
+		stump_instance.position = position_value
+		stump_instance.rotation_degrees.y = spec.z
+		stump_instance.scale = Vector3(0.46 + float(index % 3) * 0.035, spec.w, 0.46 + float(index % 3) * 0.035)
+		root.add_child(stump_instance)
+		if index in [0,1,3]:
+			var stump_height := 2.78 * spec.w
+			_add_deadwood_stump_collision(
+				root, "StumpCollision_%02d" % (index + 1),
+				position_value + Vector3(0.0, stump_height * 0.5, 0.0),
+				0.58, stump_height
+			)
+
+	# The 220k-polygon hollow bark remains a single focal prop.
+	var hollow_position := Vector3(-75.0, -0.065, -7.0)
+	if _is_vegetation_clear(hollow_position, SHRUB_PATH_CLEARANCE_M):
+		var hollow := hollow_bark_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		hollow.name = "HeavyHollowBark_01"
+		hollow.position = hollow_position
+		hollow.rotation_degrees.y = 23.0
+		hollow.scale = Vector3.ONE * 0.48
+		root.add_child(hollow)
+		_add_deadwood_box_collision(
+			root, "HeavyHollowBarkCollision_01",
+			hollow_position + Vector3(0.0, 0.38, 0.0), Vector3(0.0,23.0,0.0),
+			Vector3(3.55,0.76,2.55)
+		)
+
+func _add_deadwood_box_collision(
+	parent: Node3D,
+	node_name: String,
+	position_value: Vector3,
+	rotation_degrees_value: Vector3,
+	size_value: Vector3
+) -> void:
+	var body := StaticBody3D.new()
+	body.name = node_name
+	body.position = position_value
+	body.rotation_degrees = rotation_degrees_value
+	parent.add_child(body)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size_value
+	collision.shape = shape
+	body.add_child(collision)
+
+func _add_deadwood_stump_collision(
+	parent: Node3D,
+	node_name: String,
+	position_value: Vector3,
+	radius_value: float,
+	height_value: float
+) -> void:
+	var body := StaticBody3D.new()
+	body.name = node_name
+	body.position = position_value
+	parent.add_child(body)
+	var collision := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = radius_value
+	shape.height = height_value
+	collision.shape = shape
+	body.add_child(collision)
 
 func _add_mixed_tree_pair_shrubs(parent: Node3D) -> void:
 	# Give each skinny pine's nearest mature neighbour a soft three-bush pocket.

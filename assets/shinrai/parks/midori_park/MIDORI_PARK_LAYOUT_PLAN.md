@@ -14,6 +14,7 @@ The active scene is a 220 m × 180 m landmark park based on the supplied SHINRAI
 - Twenty-four sakura accents, dense mainland tree groves, four irregular five-tree edge groves, and clustered lilac understory, with the main routes kept readable. Each new edge grove uses one skinny pine and preserves at least 3 m between trunks.
 - Twenty-four knee-height grass patches from the existing grass pack break up the mainland grove floors; the 18,000 near-ground clumps remain a separate low layer.
 - Lilac understory is grouped into irregular 3–7 plant pockets instead of isolated rows, with approximately 1.3 m of clean shoulder beside important paths.
+- Mainland deadwood uses seven varied fallen beech-trunk placements, five upright stump bases, and one heavy hollow-bark focal prop. Four large logs, three tall stumps, and the hollow piece have simple gameplay collision.
 - Sports district west, playground southwest, central plaza southeast, and pavilion overlook northeast.
 - Main arrival from the south with secondary entrances on the north, east, and west edges.
 

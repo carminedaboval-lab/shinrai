@@ -49,7 +49,8 @@
 
 ## Staged deadwood sources
 
-- `vendor/mistrzjang1_tree_trunk/` contains the downloaded retopologized beech trunk and PBR maps. It is staged for the fallen-log pass and is not spawned yet.
-- `vendor/michaeldebbarma_hollow_bark/` contains the 220,222-polygon hollow-bark source. It is intentionally staged only; when placed, it must be limited to one or two focal props or reduced first.
+- `vendor/mistrzjang1_tree_trunk/` supplies the downloaded retopologized beech trunk and PBR maps. Seven rotated and proportion-varied copies form fallen pieces, while five upright copies form stump bases.
+- `vendor/michaeldebbarma_hollow_bark/` supplies one 220,222-polygon focal prop. It remains limited to a single reduced-scale mainland placement.
+- Deadwood is settled slightly into the terrain and preserves approximately 1.3 m beside important paths. Collision is limited to four large logs, three tall stumps, and the heavy focal piece.
 
 The untouched Meshy downloads remain under `source_glb/`. These GLBs are derived game-ready assets and can be rebuilt from those sources.
