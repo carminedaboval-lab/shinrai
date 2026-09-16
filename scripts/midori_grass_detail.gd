@@ -1,54 +1,64 @@
 extends Node
 
-# Midori Park near-ground vegetation scatter.
-# The former procedural blade cards are replaced by the uploaded Meshy clump.
-# The source model is optimized for repeated use, then instanced through
-# spatially chunked MultiMeshes so only nearby areas need to render.
+# Midori Park near-ground vegetation scatter using the uploaded Meshy clump.
+# This version makes the clumps clearly readable at first-person height and
+# avoids distance-range culling issues by relying on per-chunk frustum culling.
 
 const GroundClumpScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_meshy_ground_clump_v1.glb")
 
 const PARK_HALF := Vector2(110.0, 90.0)
-const CLUMP_INSTANCE_COUNT := 9000
+const CLUMP_INSTANCE_COUNT := 12000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
-const VISIBILITY_RANGE_M := 52.0
-const VISIBILITY_MARGIN_M := 10.0
 const RNG_SEED := 20260916
+const DETAIL_VERSION := 2
 
-# Measured from the optimized uploaded GLB.
-const SOURCE_HEIGHT_M := 0.796875
-const SOURCE_BOTTOM_Y := -0.378906
-const MIN_CLUMP_HEIGHT_M := 0.055
-const MAX_CLUMP_HEIGHT_M := 0.120
-const GROUND_SURFACE_Y := 0.008
+# The original uploaded Meshy GLB measures 1.0 m tall with its pivot centered.
+# Scale it down to small but visible park-floor foliage.
+const SOURCE_HEIGHT_M := 1.0
+const SOURCE_BOTTOM_Y := -0.5
+const MIN_CLUMP_HEIGHT_M := 0.14
+const MAX_CLUMP_HEIGHT_M := 0.26
+const GROUND_SURFACE_Y := 0.010
 
-var _installed := false
+var _installed_scene_id: int = 0
 
 
 func _ready() -> void:
+	get_tree().node_added.connect(_on_node_added)
+	call_deferred("_install_ground_clumps")
+
+
+func _on_node_added(_node: Node) -> void:
 	call_deferred("_install_ground_clumps")
 
 
 func _install_ground_clumps() -> void:
-	if _installed:
-		return
-
 	var scene := get_tree().current_scene
 	if scene == null:
-		call_deferred("_install_ground_clumps")
 		return
 	if String(scene.name) != "MidoriParkSizeBlockout":
 		return
 
+	var scene_id := scene.get_instance_id()
+	if _installed_scene_id == scene_id:
+		return
+
 	var existing := scene.get_node_or_null("MidoriGrassDetail")
 	if existing != null:
-		_installed = true
-		return
+		if int(existing.get_meta("detail_version", 0)) == DETAIL_VERSION:
+			_installed_scene_id = scene_id
+			return
+		existing.free()
 
 	var clump_mesh := _extract_source_mesh()
 	if clump_mesh == null:
 		push_warning("Midori ground detail: Meshy clump mesh was not found")
 		return
+
+	var fallback_material: Material = null
+	if not _mesh_has_material(clump_mesh):
+		fallback_material = _build_fallback_material()
 
 	var chunk_width := PARK_HALF.x * 2.0 / float(CHUNKS_X)
 	var chunk_depth := PARK_HALF.y * 2.0 / float(CHUNKS_Z)
@@ -78,7 +88,7 @@ func _install_ground_clumps() -> void:
 
 		var target_height := rng.randf_range(MIN_CLUMP_HEIGHT_M, MAX_CLUMP_HEIGHT_M)
 		var uniform_scale := target_height / SOURCE_HEIGHT_M
-		var width_variation := rng.randf_range(0.86, 1.16)
+		var width_variation := rng.randf_range(0.88, 1.22)
 		var yaw := rng.randf_range(0.0, TAU)
 		var basis := Basis(Vector3.UP, yaw)
 		basis = basis.scaled(Vector3(
@@ -87,16 +97,17 @@ func _install_ground_clumps() -> void:
 			uniform_scale * width_variation
 		))
 
-		# The Meshy model pivot is near its center. Lift each instance by the
-		# measured source-bottom offset so the leaves sit on the forest ground.
+		# Meshy's source pivot is centered, so lift half the scaled source height
+		# to plant the base directly on the park surface.
 		var grounded_y := GROUND_SURFACE_Y - SOURCE_BOTTOM_Y * uniform_scale
-		grounded_y += rng.randf_range(-0.002, 0.002)
+		grounded_y += rng.randf_range(-0.002, 0.003)
 		var local_position := Vector3(x - center_x, grounded_y, z - center_z)
 		buckets[chunk_index].append(Transform3D(basis, local_position))
 		placed += 1
 
 	var root := Node3D.new()
 	root.name = "MidoriGrassDetail"
+	root.set_meta("detail_version", DETAIL_VERSION)
 	scene.add_child(root)
 
 	for chunk_z: int in range(CHUNKS_Z):
@@ -120,7 +131,7 @@ func _install_ground_clumps() -> void:
 			multimesh.instance_count = transforms.size()
 			multimesh.custom_aabb = AABB(
 				Vector3(-chunk_width * 0.5 - 1.0, -0.02, -chunk_depth * 0.5 - 1.0),
-				Vector3(chunk_width + 2.0, MAX_CLUMP_HEIGHT_M + 0.08, chunk_depth + 2.0)
+				Vector3(chunk_width + 2.0, MAX_CLUMP_HEIGHT_M + 0.12, chunk_depth + 2.0)
 			)
 
 			for transform_index: int in range(transforms.size()):
@@ -129,14 +140,16 @@ func _install_ground_clumps() -> void:
 			var clumps := MultiMeshInstance3D.new()
 			clumps.name = "MeshyGroundClumps"
 			clumps.multimesh = multimesh
-			clumps.visibility_range_end = VISIBILITY_RANGE_M
-			clumps.visibility_range_end_margin = VISIBILITY_MARGIN_M
 			clumps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			clumps.extra_cull_margin = 3.0
+			clumps.extra_cull_margin = 8.0
+			# Do not set visibility_range_end here. The previous short range could
+			# hide whole chunks depending on the player's position.
+			if fallback_material != null:
+				clumps.material_override = fallback_material
 			chunk_root.add_child(clumps)
 
-	_installed = true
-	print("Midori Meshy ground clumps installed: %d instances" % placed)
+	_installed_scene_id = scene_id
+	print("Midori Meshy ground clumps installed: %d visible instances" % placed)
 
 
 func _extract_source_mesh() -> Mesh:
@@ -159,6 +172,22 @@ func _find_first_mesh(node: Node) -> Mesh:
 		if found != null:
 			return found
 	return null
+
+
+func _mesh_has_material(mesh: Mesh) -> bool:
+	for surface_index: int in range(mesh.get_surface_count()):
+		if mesh.surface_get_material(surface_index) != null:
+			return true
+	return false
+
+
+func _build_fallback_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.resource_name = "SHINRAI_MeshyGroundClump_Fallback"
+	material.albedo_color = Color(0.28, 0.50, 0.16, 1.0)
+	material.roughness = 0.92
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return material
 
 
 func _is_lawn_position(x: float, z: float) -> bool:
