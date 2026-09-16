@@ -308,7 +308,9 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 		return
 	var lake_center := Vector3(28.0, 0.0, -14.0)
 	var dense_patch_indices: Array[int] = [0, 2, 4, 6, 8, 10, 12, 14, 16]
-	var dense_variant_sequence: Array[int] = [0, 0, 1, 0, 2, 0, 1, 0, 2]
+	# Keep the very dense Grass1 variant out of the open shoreline. Its layered
+	# blades are reserved for a few reduced-scale deep-woodland accents.
+	var dense_variant_sequence: Array[int] = [1, 1, 2, 1, 2, 1, 1, 2, 1]
 	for patch_index: int in range(dense_patch_indices.size()):
 		var edge_index: int = dense_patch_indices[patch_index]
 		var edge_position: Vector3 = edge_points[edge_index]
@@ -449,6 +451,7 @@ func _prepare_reference_vegetation() -> void:
 	for spec: Array in dense_grass_specs:
 		var prototype := _extract_vegetation_prototype(DenseGrassPack, spec[0], spec[1])
 		if prototype != null:
+			_naturalize_dense_grass_prototype(prototype)
 			dense_grass_prototypes.append(prototype)
 	print("Midori reference vegetation: %d broadleaf | %d pine | %d lilac | %d dense grass" % [
 		broadleaf_prototypes.size(), pine_prototypes.size(), lilac_prototypes.size(), dense_grass_prototypes.size(),
@@ -490,6 +493,27 @@ func _extract_vegetation_prototype(pack: PackedScene, source_name: String, targe
 	) * height_scale
 	_configure_vegetation_visibility(content)
 	return prototype
+
+func _naturalize_dense_grass_prototype(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		# Hundreds of overlapping transparent blades were receiving and casting
+		# near-black self-shadows. Keep their texture, but remove that artificial
+		# occlusion while preserving ordinary light response.
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		for surface_index: int in range(mesh_instance.mesh.get_surface_count()):
+			var source_material := mesh_instance.mesh.surface_get_material(surface_index)
+			if source_material is StandardMaterial3D:
+				var material := source_material.duplicate() as StandardMaterial3D
+				material.ao_texture = null
+				material.disable_receive_shadows = true
+				material.metallic = 0.0
+				material.metallic_specular = 0.15
+				material.roughness = 0.94
+				material.albedo_color = Color(0.82, 0.94, 0.78, 1.0)
+				mesh_instance.set_surface_override_material(surface_index, material)
+	for child: Node in node.get_children():
+		_naturalize_dense_grass_prototype(child)
 
 func _find_vegetation_source(root: Node, source_name: String) -> Node3D:
 	var wanted := _normalized_vegetation_name(source_name)
@@ -791,7 +815,7 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 		Vector2(-86,-16),Vector2(-63,-14),Vector2(-86,17),Vector2(-63,18),
 		Vector2(-28,61),Vector2(23,63),Vector2(-18,-66),Vector2(4,-69),
 	]
-	var variant_sequence: Array[int] = [0,0,1,0,0,2,0,0]
+	var heavy_patch_serials: Array[int] = [2,8,15,21]
 	var serial := 0
 	for center_index: int in range(centers.size()):
 		var center := centers[center_index]
@@ -800,16 +824,19 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 			var radius_value := 3.4 + float(patch_index) * 2.1
 			var position_value := Vector3(
 				center.x + cos(angle) * radius_value,
-				0.12,
+				0.025,
 				center.y + sin(angle) * radius_value * 0.72
 			)
 			if not _is_vegetation_clear(position_value, 0.35):
 				continue
-			var prototype_index := variant_sequence[serial % variant_sequence.size()] % dense_grass_prototypes.size()
+			var is_heavy_patch := serial in heavy_patch_serials
+			var prototype_index := 0 if is_heavy_patch else 1 + serial % maxi(dense_grass_prototypes.size() - 1, 1)
+			prototype_index %= dense_grass_prototypes.size()
 			var selected_prototypes: Array[Node3D] = [dense_grass_prototypes[prototype_index]]
 			_add_reference_plant(
 				root, selected_prototypes, position_value,
-				0.74 + float(serial % 4) * 0.08, 3000 + serial,
+				(0.36 + float(serial % 3) * 0.035) if is_heavy_patch else (0.58 + float(serial % 4) * 0.055),
+				3000 + serial,
 				"MainlandDenseGrass"
 			)
 			serial += 1

@@ -37,7 +37,7 @@
 
 - The active mainland understory uses the two denser variants from `vendor/lilac_bush_pack/`.
 - The sparse small lilac variant is excluded. Dense variants are placed in irregular masses and between mixed broadleaf/skinny-pine pairs.
-- Twenty-four patches from the existing dense-grass pack sit around the eight mainland infill groves; the lake islands are unchanged.
+- Twenty-four patches from the existing dense-grass pack sit around the eight mainland infill groves; the lake islands are unchanged. The heavy `Grass1` variant is corrected for dark transparent-blade self-shadowing and restricted to four reduced-scale deep-woodland accents; shoreline patches use only the two lighter variants.
 - The Meshy ground-clump scatter remains at 18,000 instances. Its imported bounds were measured at 0.796875 m high with a -0.378906 m base, so placement now uses the true base plus a fixed 3.5 cm reveal instead of an assumed centred one-metre pivot.
 
 ## Waterside and shoreline assets

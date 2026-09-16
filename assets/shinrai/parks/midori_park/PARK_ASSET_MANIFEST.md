@@ -8,7 +8,7 @@ This manifest is the single checklist for the first production park. The user au
 - Sakura trees replace the generic green tree canopy while preserving the artwork's lush density.
 - Current footprint blockout: 220 m x 180 m (39,600 m²), with a 284 m diagonal that extends beyond the 120–130 m fog visibility range.
 - Current canopy: 24 hand-placed dense sakura instances using a cleaned derivative of the user-supplied Winter Sentinel and 150 branch-attached, pink-only blossom bunches per tree.
-- Current artwork pass: two lake bridges, one eastern viewing deck, nine shoreline boulder groups, two planted islands, 36 reed-like waterside clusters, nine denser shoreline grass patches, and eight new mainland grove zones with 24 existing-pack grass patches are placed in the playable park.
+- Current artwork pass: two lake bridges, one eastern viewing deck, nine shoreline boulder groups, two planted islands, 36 reed-like waterside clusters, nine light shoreline grass patches, and eight mainland grove zones with 24 existing-pack grass patches are placed in the playable park. The heavy grass variant is limited to four reduced-scale deep-woodland accents.
 - Clear main entrance, secondary entrances, a loop path, lake crossing, modern pavilion, playground, sports area, viewing deck, and an open central gathering space.
 - Tree trunks and structures provide deliberate cover; the central space retains long sightlines.
 - All placements are local to the park scene, so every tree and prop follows the park when its city block changes.
