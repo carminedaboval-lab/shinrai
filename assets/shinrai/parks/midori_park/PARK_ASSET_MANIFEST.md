@@ -39,7 +39,7 @@ This manifest is the single checklist for the first production park. The user au
 | FUR-01 | Neon park bench | 1 | 3 | 12,616 supplied | Alternates across six distributed path-side placements with simple box collision |
 | FUR-02 | Futuristic eco bench | 1 | 3 | 13,035 supplied | Second bench variation; alternates with FUR-01 at the same scale and uses simple box collision |
 | FUR-03 | Recycling and rubbish station | 1 | 2 | 2k–4k | Pending |
-| FUR-04 | Modern Japanese park lamp | 1 | 8–12 | 2k–4k | Pending |
+| FUR-04 | Emerald halo path lamp | 1 | 10 | 7,987 supplied | Ten 3.6 m lamps (2× player height) with cyan-blue emissive halo/seam, downward light pools, simple pole collision, and no dynamic light shadows |
 | FUR-05 | Low modern path bollard light | 1 | 8–12 | 1k–3k | Pending |
 | FUR-06 | Park map and information board | 1 | 1 | 2k–4k | Pending |
 | FUR-07 | Directional signpost | 1 | 2–3 | 1k–2k | Pending |

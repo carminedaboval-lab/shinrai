@@ -19,6 +19,7 @@ const EmeraldFountainGrassScene: PackedScene = preload("res://assets/shinrai/par
 const JapaneseMapleMesh: Mesh = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/free3d_japanese_maple_n030123/Tree Japanese maple N030123.obj")
 const NeonParkBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/neon_park_bench/neon_park_bench.glb")
 const FuturisticEcoBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/futuristic_eco_bench/futuristic_eco_bench.glb")
+const EmeraldHaloLampScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/emerald_halo_lamp/emerald_halo_lamp.glb")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -41,6 +42,7 @@ var mat_boundary: StandardMaterial3D
 var mat_entry: StandardMaterial3D
 var mat_island: StandardMaterial3D
 var mat_plan_marker: StandardMaterial3D
+var mat_neon_blue: StandardMaterial3D
 var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
 var pine_sapling_prototypes: Array[Node3D] = []
@@ -54,6 +56,7 @@ var emerald_fountain_grass_prototype: Node3D
 var japanese_maple_prototype: Node3D
 var neon_park_bench_prototype: Node3D
 var futuristic_eco_bench_prototype: Node3D
+var emerald_halo_lamp_prototype: Node3D
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
@@ -80,6 +83,10 @@ func _create_materials() -> void:
 	mat_entry = _make_material(Color("#e3a14c"), 0.74)
 	mat_island = _make_material(Color("#405d3d"), 0.98)
 	mat_plan_marker = _make_material(Color(0.20, 0.78, 0.92, 0.55), 0.76, 0.08)
+	mat_neon_blue = _make_material(Color("#b8efff"), 0.22, 0.08)
+	mat_neon_blue.emission_enabled = true
+	mat_neon_blue.emission = Color("#55d9ff")
+	mat_neon_blue.emission_energy_multiplier = 5.5
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -98,6 +105,10 @@ func _create_environment() -> void:
 	environment.ambient_light_color = Color("#a8b3b7")
 	environment.ambient_light_energy = 0.40
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.glow_enabled = true
+	environment.glow_intensity = 0.85
+	environment.glow_strength = 0.70
+	environment.glow_bloom = 0.10
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#778489")
 	environment.fog_light_energy = 0.46
@@ -133,6 +144,7 @@ func _build_park_footprint() -> void:
 	_build_deadwood_pass(root)
 	_build_japanese_maple_pass(root)
 	_build_park_benches(root)
+	_build_park_lamps(root)
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
@@ -498,6 +510,7 @@ func _prepare_reference_vegetation() -> void:
 	japanese_maple_prototype = _extract_mesh_prototype(JapaneseMapleMesh, "Free3DJapaneseMaple", 6.4)
 	neon_park_bench_prototype = _extract_whole_scene_prototype(NeonParkBenchScene, "NeonParkBench")
 	futuristic_eco_bench_prototype = _extract_whole_scene_prototype(FuturisticEcoBenchScene, "FuturisticEcoBench")
+	emerald_halo_lamp_prototype = _extract_whole_scene_prototype(EmeraldHaloLampScene, "EmeraldHaloLamp")
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
 	var source_root := pack.instantiate() as Node3D
@@ -1320,6 +1333,74 @@ func _build_park_benches(parent: Node3D) -> void:
 		placed += 1
 	if placed < 6:
 		push_warning("Midori bench pass placed only %d of 6 because of tree clearance" % placed)
+
+func _build_park_lamps(parent: Node3D) -> void:
+	if emerald_halo_lamp_prototype == null:
+		push_warning("Midori lamp pass skipped because its source is unavailable")
+		return
+	var root := Node3D.new()
+	root.name = "EmeraldHaloPathLamps_10"
+	parent.add_child(root)
+	var placements: Array[Vector3] = [
+		Vector3(-88,-0.025,70),Vector3(-45,-0.025,72),
+		Vector3(5,-0.025,71),Vector3(58,-0.025,73),
+		Vector3(-82,-0.025,-72),Vector3(-34,-0.025,-73),
+		Vector3(22,-0.025,-71),Vector3(72,-0.025,-73),
+		Vector3(-92,-0.025,0),Vector3(92,-0.025,0),
+	]
+	for index: int in range(placements.size()):
+		var position_value := placements[index]
+		if not _is_tree_spaced(position_value, 1.8):
+			push_warning("Midori path lamp skipped for tree clearance at %s" % position_value)
+			continue
+		var lamp := emerald_halo_lamp_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		lamp.name = "EmeraldHaloLamp_%02d" % (index + 1)
+		lamp.position = position_value
+		lamp.rotation_degrees.y = fmod(float(index * 137 + 19), 360.0)
+		lamp.scale = Vector3.ONE * 3.6
+		root.add_child(lamp)
+		_add_lamp_neon_geometry(lamp)
+		_add_lamp_pool_light(root, index, position_value)
+		_add_deadwood_stump_collision(
+			root, "HaloLampCollision_%02d" % (index + 1),
+			position_value + Vector3(0.0,1.70,0.0), 0.20, 3.4
+		)
+
+func _add_lamp_neon_geometry(lamp: Node3D) -> void:
+	# The supplied model carries the physical silhouette. These small emissive
+	# inserts reproduce the concept's blue halo and vertical seam at runtime.
+	var halo := MeshInstance3D.new()
+	halo.name = "BlueNeonHalo"
+	var halo_mesh := TorusMesh.new()
+	halo_mesh.inner_radius = 0.095
+	halo_mesh.outer_radius = 0.138
+	halo_mesh.rings = 24
+	halo_mesh.ring_segments = 8
+	halo.mesh = halo_mesh
+	halo.position = Vector3(0.0,0.91,0.0)
+	halo.material_override = mat_neon_blue
+	lamp.add_child(halo)
+
+	var seam := MeshInstance3D.new()
+	seam.name = "BlueNeonSeam"
+	var seam_mesh := BoxMesh.new()
+	seam_mesh.size = Vector3(0.018,0.60,0.018)
+	seam.mesh = seam_mesh
+	seam.position = Vector3(0.0,0.48,-0.151)
+	seam.material_override = mat_neon_blue
+	lamp.add_child(seam)
+
+func _add_lamp_pool_light(parent: Node3D, index: int, position_value: Vector3) -> void:
+	var light := SpotLight3D.new()
+	light.name = "BluePathPool_%02d" % (index + 1)
+	light.position = position_value + Vector3(0.0,3.18,0.0)
+	light.rotation_degrees.x = -90.0
+	light.light_color = Color("#75ddff")
+	light.light_energy = 3.2
+	light.spot_range = 7.2
+	light.spot_angle = 58.0
+	light.shadow_enabled = false
+	parent.add_child(light)
 
 func _add_deadwood_box_collision(
 	parent: Node3D,
