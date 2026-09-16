@@ -9,6 +9,9 @@ const MossyBoulderScene: PackedScene = preload("res://assets/shinrai/parks/midor
 const MainBridgeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_main_arched_bridge_v1.glb")
 const SecondaryBridgeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_secondary_footbridge_v1.glb")
 const ViewingDeckScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_lakeside_viewing_deck_v1.glb")
+const BroadleafTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/realistic_trees_collection/scene.glb")
+const PineTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/scene.glb")
+const LilacBushPack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/lilac_bush_pack/scene.glb")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -26,10 +29,15 @@ var mat_boundary: StandardMaterial3D
 var mat_entry: StandardMaterial3D
 var mat_island: StandardMaterial3D
 var mat_plan_marker: StandardMaterial3D
+var broadleaf_prototypes: Array[Node3D] = []
+var pine_prototypes: Array[Node3D] = []
+var lilac_prototypes: Array[Node3D] = []
+var occupied_tree_positions: Array[Vector2] = []
 
 func _ready() -> void:
 	_create_materials()
 	_create_environment()
+	_prepare_reference_vegetation()
 	_build_park_footprint()
 	_spawn_scale_review_player()
 	_build_size_hud()
@@ -99,6 +107,8 @@ func _build_park_footprint() -> void:
 		_build_scale_ticks(root)
 	_build_sakura_trees(root)
 	_build_evergreen_shrubs(root)
+	_build_reference_canopy(root)
+	_build_wildflower_groundcover(root)
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
@@ -383,10 +393,421 @@ func _build_scale_ticks(parent: Node3D) -> void:
 		if x_value % 40 == 0:
 			_add_zone_label(parent, "%d m" % x_value, Vector3(float(x_value), 0.75, PARK_HALF.y - 4.5), Color("#fff1ca"))
 
+func _prepare_reference_vegetation() -> void:
+	var broadleaf_specs: Array = [
+		["Tree EZTree0.Large", 7.8], ["Tree EZTree0.Medium010", 6.4],
+		["Tree EZTree0.Medium011", 6.1], ["Tree EZTree1.Large001", 7.4],
+		["Tree EZTree1.Medium002", 6.0],
+	]
+	var pine_specs: Array = [
+		["Pine_big_1_LOD1", 9.0], ["Pine_large_2_LOD1", 7.6],
+		["Pine_medium_3_LOD1", 6.2],
+	]
+	var lilac_specs: Array = [
+		["Lilac_bush_1_LOD1", 1.65], ["Lilac_bush_2_LOD1", 1.50],
+		["Lilac_small_bush_3_LOD1", 1.05],
+	]
+	for spec: Array in broadleaf_specs:
+		var prototype := _extract_vegetation_prototype(BroadleafTreePack, spec[0], spec[1])
+		if prototype != null:
+			broadleaf_prototypes.append(prototype)
+	for spec: Array in pine_specs:
+		var prototype := _extract_vegetation_prototype(PineTreePack, spec[0], spec[1])
+		if prototype != null:
+			pine_prototypes.append(prototype)
+	for spec: Array in lilac_specs:
+		var prototype := _extract_vegetation_prototype(LilacBushPack, spec[0], spec[1])
+		if prototype != null:
+			lilac_prototypes.append(prototype)
+	print("Midori reference vegetation: %d broadleaf | %d pine | %d lilac" % [
+		broadleaf_prototypes.size(), pine_prototypes.size(), lilac_prototypes.size(),
+	])
+
+func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
+	var source_root := pack.instantiate() as Node3D
+	if source_root == null:
+		push_warning("Midori vegetation pack failed to instantiate: %s" % source_name)
+		return null
+	var source_node := _find_vegetation_source(source_root, source_name)
+	if source_node == null:
+		push_warning("Midori vegetation model not found: %s" % source_name)
+		source_root.free()
+		return null
+
+	var retained_transform := _vegetation_relative_transform(source_node, source_root)
+	var prototype := Node3D.new()
+	prototype.name = source_name.replace(" ", "_").replace(".", "_")
+	var content := Node3D.new()
+	content.name = "Content"
+	prototype.add_child(content)
+	_clear_vegetation_owner(source_node)
+	source_node.reparent(content, false)
+	source_node.transform = retained_transform
+	source_root.free()
+
+	var bounds_data := _vegetation_visual_bounds(content)
+	if not bounds_data["valid"]:
+		prototype.free()
+		return null
+	var bounds: AABB = bounds_data["bounds"]
+	var height_scale := target_height / maxf(bounds.size.y, 0.001)
+	content.scale = Vector3.ONE * height_scale
+	content.position = -Vector3(
+		bounds.position.x + bounds.size.x * 0.5,
+		bounds.position.y,
+		bounds.position.z + bounds.size.z * 0.5
+	) * height_scale
+	_configure_vegetation_visibility(content)
+	return prototype
+
+func _find_vegetation_source(root: Node, source_name: String) -> Node3D:
+	var wanted := _normalized_vegetation_name(source_name)
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var current: Node = pending.pop_back()
+		if current is Node3D and _normalized_vegetation_name(str(current.name)) == wanted:
+			return current as Node3D
+		for child: Node in current.get_children():
+			pending.append(child)
+	return null
+
+func _normalized_vegetation_name(value: String) -> String:
+	return value.to_lower().replace(" ", "").replace(".", "").replace("_", "").replace("-", "")
+
+func _clear_vegetation_owner(node: Node) -> void:
+	node.owner = null
+	for child: Node in node.get_children():
+		_clear_vegetation_owner(child)
+
+func _vegetation_relative_transform(node: Node3D, ancestor: Node3D) -> Transform3D:
+	var result := node.transform
+	var parent_node := node.get_parent()
+	while parent_node != null:
+		if parent_node is Node3D:
+			result = (parent_node as Node3D).transform * result
+		if parent_node == ancestor:
+			break
+		parent_node = parent_node.get_parent()
+	return result
+
+func _vegetation_visual_bounds(root: Node3D) -> Dictionary:
+	var combined := AABB()
+	var has_bounds := false
+	var pending: Array[Dictionary] = [{"node": root, "transform": Transform3D.IDENTITY}]
+	while not pending.is_empty():
+		var entry: Dictionary = pending.pop_back()
+		var current: Node = entry["node"]
+		var current_transform: Transform3D = entry["transform"]
+		if current is MeshInstance3D:
+			var mesh_instance := current as MeshInstance3D
+			if mesh_instance.mesh != null:
+				var mesh_bounds: AABB = current_transform * mesh_instance.get_aabb()
+				combined = mesh_bounds if not has_bounds else combined.merge(mesh_bounds)
+				has_bounds = true
+		for child: Node in current.get_children():
+			var child_transform := current_transform
+			if child is Node3D:
+				child_transform = current_transform * (child as Node3D).transform
+			pending.append({"node": child, "transform": child_transform})
+	return {"valid": has_bounds, "bounds": combined}
+
+func _add_reference_plant(
+	parent: Node3D,
+	prototypes: Array[Node3D],
+	position_value: Vector3,
+	scale_value: float,
+	serial: int,
+	node_prefix: String
+) -> void:
+	if prototypes.is_empty():
+		return
+	var instance := prototypes[posmod(serial, prototypes.size())].duplicate() as Node3D
+	if instance == null:
+		return
+	instance.name = "%s_%03d" % [node_prefix, serial]
+	instance.position = position_value
+	instance.rotation_degrees.y = fmod(float(serial) * 137.507, 360.0)
+	instance.scale = Vector3.ONE * scale_value
+	parent.add_child(instance)
+
+func _add_reference_tree_cluster(
+	parent: Node3D,
+	center: Vector2,
+	radius_value: float,
+	count: int,
+	serial_offset: int
+) -> void:
+	var placed := 0
+	var attempt := 0
+	while placed < count and attempt < count * 8:
+		var radial_t := sqrt((float(attempt % count) + 0.42) / float(count))
+		var angle := float(attempt) * 2.399963 + float(serial_offset) * 0.31
+		var position_value := Vector3(
+			center.x + cos(angle) * radius_value * radial_t,
+			0.14,
+			center.y + sin(angle) * radius_value * radial_t * 0.72
+		)
+		attempt += 1
+		if not _is_vegetation_clear(position_value, 3.2):
+			continue
+		if not _is_tree_spaced(position_value, 7.0):
+			continue
+		var serial := serial_offset * 20 + placed
+		var scale_value := 0.82 + 0.055 * float(serial % 6)
+		if serial % 9 == 3 or serial % 13 == 7:
+			_add_reference_plant(parent, pine_prototypes, position_value, scale_value, serial, "ReferencePine")
+		else:
+			_add_reference_plant(parent, broadleaf_prototypes, position_value, scale_value, serial, "ReferenceBroadleaf")
+		occupied_tree_positions.append(Vector2(position_value.x, position_value.z))
+		placed += 1
+
+func _is_tree_spaced(position_value: Vector3, minimum_distance: float) -> bool:
+	var point := Vector2(position_value.x, position_value.z)
+	var minimum_distance_squared := minimum_distance * minimum_distance
+	for occupied: Vector2 in occupied_tree_positions:
+		if point.distance_squared_to(occupied) < minimum_distance_squared:
+			return false
+	return true
+
+func _distance_to_park_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var segment := b - a
+	var length_squared := segment.length_squared()
+	if length_squared <= 0.0001:
+		return point.distance_to(a)
+	var t := clampf((point - a).dot(segment) / length_squared, 0.0, 1.0)
+	return point.distance_to(a + segment * t)
+
+func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
+	var point := Vector2(position_value.x, position_value.z)
+	if absf(point.x) > PARK_HALF.x - padding or absf(point.y) > PARK_HALF.y - padding:
+		return false
+	# Straight circulation: perimeter loop, central spine, and main cross path.
+	if absf(absf(point.x) - 97.0) < 2.5 + padding and absf(point.y) < 80.0:
+		return false
+	if absf(absf(point.y) - 77.0) < 2.5 + padding and absf(point.x) < 100.0:
+		return false
+	if absf(point.x + 37.0) < 2.5 + padding and absf(point.y) < 77.0:
+		return false
+	if absf(point.y - 42.0) < 2.5 + padding and absf(point.x) < 98.0:
+		return false
+
+	# Curved lake promenades use the same authored control points as the meshes.
+	var promenade_sets: Array = [
+		[Vector2(-37,42),Vector2(-27,31),Vector2(-23,14),Vector2(-27,-4),Vector2(-31,-24),Vector2(-37,-42)],
+		[Vector2(43,42),Vector2(59,34),Vector2(72,21),Vector2(80,3),Vector2(80,-15),Vector2(84,-35),Vector2(78,-54),Vector2(76,-64)],
+		[Vector2(-37,-42),Vector2(-18,-53),Vector2(5,-61),Vector2(28,-65),Vector2(47,-64),Vector2(65,-66),Vector2(76,-64)],
+	]
+	for promenade: Array in promenade_sets:
+		for index: int in range(promenade.size() - 1):
+			if _distance_to_park_segment(point, promenade[index], promenade[index + 1]) < 2.4 + padding:
+				return false
+
+	# Keep activity surfaces, plaza, pavilion, and all four entrances open.
+	var reserved_rects: Array[Vector4] = [
+		Vector4(-70,-43,30.7,21.2),Vector4(-72,45,20.0,17.0),
+		Vector4(62,51,26.0,22.0),Vector4(76,-64,14.0,11.0),
+		Vector4(0,86,11.0,7.0),Vector4(-38,-86,9.0,7.0),
+		Vector4(-106,20,7.0,9.0),Vector4(106,-20,7.0,9.0),
+	]
+	for rect: Vector4 in reserved_rects:
+		if absf(point.x - rect.x) < rect.z + padding and absf(point.y - rect.y) < rect.w + padding:
+			return false
+	return true
+
+func _build_reference_canopy(parent: Node3D) -> void:
+	var canopy_root := Node3D.new()
+	canopy_root.name = "ArtworkReferenceCanopy"
+	parent.add_child(canopy_root)
+	# Dense outer woodland and the internal seams match the aerial reference while
+	# preserving the sports field, playground, plaza, promenades, and entrances.
+	var clusters: Array[Vector4] = [
+		Vector4(-88,-85,6,8),Vector4(-66,-85,7,10),Vector4(-39,-85,7,10),
+		Vector4(-10,-85,7,9),Vector4(20,-85,7,9),Vector4(86,-84,6,8),
+		Vector4(-105,-58,5,8),Vector4(-105,-28,5,9),Vector4(-105,3,5,9),
+		Vector4(-105,39,5,9),Vector4(-105,67,5,8),Vector4(-85,85,6,8),
+		Vector4(-58,85,7,9),Vector4(-29,85,7,9),Vector4(4,85,7,8),
+		Vector4(88,85,6,7),Vector4(105,58,5,7),Vector4(105,28,5,7),
+		Vector4(105,4,5,7),Vector4(105,-42,5,8),Vector4(104,-68,5,7),
+		Vector4(-51,-55,6,7),Vector4(-50,-27,6,8),Vector4(-50,1,6,7),
+		Vector4(-50,26,6,7),Vector4(-52,58,6,8),Vector4(1,57,8,6),
+		Vector4(35,57,8,6),Vector4(81,31,8,6),Vector4(84,-50,8,6),
+	]
+	for cluster_index: int in range(clusters.size()):
+		var cluster := clusters[cluster_index]
+		_add_reference_tree_cluster(
+			canopy_root, Vector2(cluster.x, cluster.y), cluster.z,
+			int(cluster.w), cluster_index
+		)
+
+	# Each green island has a small vertical silhouette in the screenshot.
+	var island_trees: Array[Vector4] = [
+		Vector4(21,-13,0.86,0),Vector4(26,-10,0.74,1),Vector4(57,-37,0.72,1),
+		Vector4(53,-35,0.68,0),Vector4(-10,19,0.72,0),Vector4(3,25,0.70,1),
+		Vector4(46,19,0.78,0),Vector4(68,-4,0.76,1),
+	]
+	for index: int in range(island_trees.size()):
+		var item := island_trees[index]
+		var island_position := Vector3(item.x, 0.20, item.y)
+		if not _is_tree_spaced(island_position, 7.0):
+			continue
+		var prototypes: Array[Node3D] = pine_prototypes if int(item.w) == 1 else broadleaf_prototypes
+		_add_reference_plant(
+			canopy_root, prototypes, island_position,
+			item.z, 800 + index, "IslandTree"
+		)
+		occupied_tree_positions.append(Vector2(island_position.x, island_position.z))
+
+	var understory_root := Node3D.new()
+	understory_root.name = "ArtworkLilacUnderstory"
+	parent.add_child(understory_root)
+	var shrub_lines: Array = [
+		[Vector3(-94,0.12,-69),Vector3(-75,0.12,-70),Vector3(-55,0.12,-69),Vector3(-34,0.12,-67)],
+		[Vector3(-91,0.12,-8),Vector3(-91,0.12,15),Vector3(-90,0.12,39),Vector3(-88,0.12,62)],
+		[Vector3(-45,0.12,-46),Vector3(-45,0.12,-18),Vector3(-44,0.12,9),Vector3(-43,0.12,35)],
+		[Vector3(-70,0.12,68),Vector3(-42,0.12,67),Vector3(-14,0.12,68),Vector3(16,0.12,68)],
+		[Vector3(91,0.12,-57),Vector3(93,0.12,-31),Vector3(93,0.12,0),Vector3(92,0.12,28)],
+		[Vector3(17,0.18,-16),Vector3(29,0.18,-9),Vector3(53,0.18,-38),Vector3(58,0.18,-34)],
+	]
+	var shrub_serial := 0
+	for shrub_line: Array in shrub_lines:
+		for shrub_position: Vector3 in shrub_line:
+			_add_reference_plant(
+				understory_root, lilac_prototypes, shrub_position,
+				0.78 + float(shrub_serial % 4) * 0.07,
+				shrub_serial, "ReferenceLilac"
+			)
+			shrub_serial += 1
+
+	# Broad shrub masses fill the woodland floor instead of leaving isolated
+	# ornamental dots. Path-clearance checks keep every trunk and crown readable.
+	var shrub_clusters: Array[Vector4] = [
+		Vector4(-82,-84,9,14),Vector4(-50,-84,9,14),Vector4(-17,-84,9,14),
+		Vector4(16,-84,9,12),Vector4(78,-83,8,12),Vector4(-106,-48,7,12),
+		Vector4(-106,-8,7,12),Vector4(-106,53,7,12),Vector4(-72,84,8,12),
+		Vector4(-35,84,8,12),Vector4(3,84,8,12),Vector4(104,48,7,12),
+		Vector4(104,8,7,12),Vector4(103,-48,7,12),Vector4(-52,-15,8,12),
+		Vector4(-52,20,8,12),Vector4(-54,57,7,10),Vector4(2,56,7,10),
+		Vector4(34,56,7,10),Vector4(86,-48,6,10),
+	]
+	for cluster_index: int in range(shrub_clusters.size()):
+		var cluster := shrub_clusters[cluster_index]
+		_add_reference_shrub_cluster(
+			understory_root, Vector2(cluster.x, cluster.y), cluster.z,
+			int(cluster.w), 1000 + cluster_index * 20
+		)
+
+func _add_reference_shrub_cluster(
+	parent: Node3D,
+	center: Vector2,
+	radius_value: float,
+	count: int,
+	serial_offset: int
+) -> void:
+	var placed := 0
+	var attempt := 0
+	while placed < count and attempt < count * 8:
+		var radial_t := sqrt((float(attempt % count) + 0.35) / float(count))
+		var angle := float(attempt) * 2.399963 + float(serial_offset) * 0.017
+		var position_value := Vector3(
+			center.x + cos(angle) * radius_value * radial_t,
+			0.11,
+			center.y + sin(angle) * radius_value * radial_t * 0.72
+		)
+		attempt += 1
+		if not _is_vegetation_clear(position_value, 1.0):
+			continue
+		var serial := serial_offset + placed
+		_add_reference_plant(
+			parent, lilac_prototypes, position_value,
+			0.68 + float(serial % 5) * 0.065, serial, "ReferenceLilacMass"
+		)
+		placed += 1
+
+func _build_wildflower_groundcover(parent: Node3D) -> void:
+	var root := Node3D.new()
+	root.name = "ColorfulWildflowerMeadows"
+	parent.add_child(root)
+	var palettes: Array[Color] = [
+		Color("#f2b9cf"), Color("#f0d978"), Color("#bfa7e8"),
+		Color("#e8eee4"), Color("#e99a78"),
+	]
+	var transforms_by_color: Array = []
+	for color: Color in palettes:
+		transforms_by_color.append([])
+	var stem_transforms: Array[Transform3D] = []
+	var patches: Array[Vector4] = [
+		Vector4(-78,7,15,55),Vector4(-70,68,13,45),Vector4(-18,18,13,50),
+		Vector4(-12,55,12,45),Vector4(25,52,11,42),Vector4(67,73,10,36),
+		Vector4(89,10,9,34),Vector4(87,-35,10,36),Vector4(8,-73,11,40),
+		Vector4(45,-72,10,38),Vector4(70,-57,9,34),
+	]
+	var flower_serial := 0
+	for patch: Vector4 in patches:
+		var desired := int(patch.w)
+		var placed := 0
+		var attempt := 0
+		while placed < desired and attempt < desired * 10:
+			var radial_t := sqrt((float(attempt % desired) + 0.30) / float(desired))
+			var angle := float(attempt) * 2.399963 + patch.x * 0.03
+			var position_value := Vector3(
+				patch.x + cos(angle) * patch.z * radial_t,
+				0.0,
+				patch.y + sin(angle) * patch.z * radial_t * 0.68
+			)
+			attempt += 1
+			if not _is_vegetation_clear(position_value, 0.35):
+				continue
+			var height := 0.24 + 0.035 * float(flower_serial % 5)
+			var head_transform := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * (0.70 + 0.08 * float(flower_serial % 4))), position_value + Vector3(0,height,0))
+			transforms_by_color[flower_serial % palettes.size()].append(head_transform)
+			stem_transforms.append(Transform3D(Basis.IDENTITY, position_value + Vector3(0,height * 0.5,0)).scaled_local(Vector3(1,height / 0.30,1)))
+			flower_serial += 1
+			placed += 1
+
+	var stem_mesh := CylinderMesh.new()
+	stem_mesh.top_radius = 0.012
+	stem_mesh.bottom_radius = 0.015
+	stem_mesh.height = 0.30
+	stem_mesh.radial_segments = 5
+	_add_flower_multimesh(root, "WildflowerStems", stem_mesh, stem_transforms, _make_material(Color("#496d3e"), 0.96))
+	for color_index: int in range(palettes.size()):
+		var head_mesh := SphereMesh.new()
+		head_mesh.radius = 0.095
+		head_mesh.height = 0.13
+		head_mesh.radial_segments = 6
+		head_mesh.rings = 4
+		_add_flower_multimesh(
+			root, "WildflowerHeads_%d" % color_index, head_mesh,
+			transforms_by_color[color_index], _make_material(palettes[color_index], 0.82)
+		)
+
+func _add_flower_multimesh(
+	parent: Node3D,
+	node_name: String,
+	mesh: Mesh,
+	transforms: Array,
+	material: Material
+) -> void:
+	if transforms.is_empty():
+		return
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = mesh
+	multimesh.instance_count = transforms.size()
+	for index: int in range(transforms.size()):
+		multimesh.set_instance_transform(index, transforms[index])
+	var instance := MultiMeshInstance3D.new()
+	instance.name = node_name
+	instance.multimesh = multimesh
+	instance.material_override = material
+	instance.visibility_range_end = 90.0
+	parent.add_child(instance)
+
 func _build_sakura_trees(parent: Node3D) -> void:
 	var trees_root := Node3D.new()
 	trees_root.name = "HandPlacedDenseSakuraTrees_48"
 	parent.add_child(trees_root)
+	occupied_tree_positions.clear()
 	var placements: Array[Vector3] = [
 		Vector3(-92.0, 0.0, -66.0), Vector3(-68.0, 0.0, -70.0), Vector3(-43.0, 0.0, -67.0),
 		Vector3(-15.0, 0.0, -71.0), Vector3(15.0, 0.0, -70.0), Vector3(58.0, 0.0, -72.0),
@@ -407,14 +828,41 @@ func _build_sakura_trees(parent: Node3D) -> void:
 	]
 	for index: int in range(placements.size()):
 		var scale_value: float = 0.80 + float(index % 7) * 0.04
+		var tree_position := _clear_sakura_position(placements[index])
 		var tree := SakuraTreeScene.instantiate() as Node3D
 		tree.name = "DenseSakura_%02d" % (index + 1)
-		tree.position = placements[index]
+		tree.position = tree_position
 		tree.rotation_degrees.y = fmod(float(index) * 137.5, 360.0)
 		tree.scale = Vector3.ONE * scale_value
 		trees_root.add_child(tree)
 		_configure_vegetation_visibility(tree)
-		_add_sakura_trunk_collision(trees_root, index, placements[index], scale_value)
+		_add_sakura_trunk_collision(trees_root, index, tree_position, scale_value)
+		occupied_tree_positions.append(Vector2(tree_position.x, tree_position.z))
+
+func _clear_sakura_position(authored_position: Vector3) -> Vector3:
+	if _is_vegetation_clear(authored_position, 3.6) and _is_tree_spaced(authored_position, 7.0):
+		return authored_position
+	var offsets: Array[Vector3] = [
+		Vector3(-9,0,0),Vector3(9,0,0),Vector3(0,0,-9),Vector3(0,0,9),
+		Vector3(-9,0,-9),Vector3(9,0,-9),Vector3(-9,0,9),Vector3(9,0,9),
+		Vector3(-15,0,0),Vector3(15,0,0),Vector3(0,0,-15),Vector3(0,0,15),
+		Vector3(-20,0,-10),Vector3(20,0,-10),Vector3(-20,0,10),Vector3(20,0,10),
+	]
+	for offset: Vector3 in offsets:
+		var candidate := authored_position + offset
+		if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, 7.0):
+			return candidate
+	for ring: int in range(5, 16):
+		var radius_value := float(ring) * 4.0
+		for step: int in range(ring * 8):
+			var angle := TAU * float(step) / float(ring * 8)
+			var candidate := authored_position + Vector3(
+				cos(angle) * radius_value, 0.0, sin(angle) * radius_value
+			)
+			if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, 7.0):
+				return candidate
+	push_warning("Midori sakura has no unoccupied park position near %s" % str(authored_position))
+	return authored_position
 
 func _add_sakura_trunk_collision(parent: Node3D, index: int, position_value: Vector3, scale_value: float) -> void:
 	var body := StaticBody3D.new()
