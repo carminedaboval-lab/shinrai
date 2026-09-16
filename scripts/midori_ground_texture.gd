@@ -89,10 +89,11 @@ void fragment() {
 	float source_roughness = texture(roughness_tex, ground_uv).r;
 	vec3 source_normal = texture(normal_tex, ground_uv).rgb;
 
-	// The source scan is bright daylight photography. Compensate for that baked
-	// illumination before the park's real-time sun and ambient light are added.
-	ALBEDO = ground_color * vec3(0.62, 0.68, 0.58);
+	// The source scan contains baked daylight. Darken its midtones and reduce
+	// specular response before the park's real-time sun and ambient are added.
+	ALBEDO = pow(ground_color, vec3(1.20)) * vec3(0.44, 0.48, 0.38);
 	ROUGHNESS = clamp(source_roughness * 0.96 + 0.035, 0.70, 1.0);
+	SPECULAR = 0.12;
 	NORMAL_MAP = source_normal;
 	NORMAL_MAP_DEPTH = 0.52;
 }

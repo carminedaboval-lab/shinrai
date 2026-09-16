@@ -73,7 +73,7 @@ func _ready() -> void:
 
 func _create_materials() -> void:
 	mat_grass = _make_material(Color("#344f38"), 0.98)
-	mat_path = _make_material(Color("#77756f"), 0.92)
+	mat_path = _make_material(Color("#545752"), 0.94)
 	mat_water = _make_material(Color("#315d70"), 0.30, 0.12)
 	mat_sports = _make_material(Color("#536d61"), 0.88)
 	mat_playground = _make_material(Color("#8b6255"), 0.91)
@@ -86,7 +86,7 @@ func _create_materials() -> void:
 	mat_neon_blue = _make_material(Color("#b8efff"), 0.22, 0.08)
 	mat_neon_blue.emission_enabled = true
 	mat_neon_blue.emission = Color("#55d9ff")
-	mat_neon_blue.emission_energy_multiplier = 5.5
+	mat_neon_blue.emission_energy_multiplier = 2.2
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -103,15 +103,11 @@ func _create_environment() -> void:
 	environment.background_color = Color("#65727a")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color("#a8b3b7")
-	environment.ambient_light_energy = 0.40
+	environment.ambient_light_energy = 0.30
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.glow_enabled = true
-	environment.glow_intensity = 0.85
-	environment.glow_strength = 0.70
-	environment.glow_bloom = 0.10
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#778489")
-	environment.fog_light_energy = 0.46
+	environment.fog_light_energy = 0.38
 	environment.fog_density = 0.0105
 	environment.fog_sky_affect = 0.72
 	world_environment.environment = environment
@@ -121,7 +117,7 @@ func _create_environment() -> void:
 	sun.name = "ParkReviewSun"
 	sun.rotation_degrees = Vector3(-48.0, -32.0, 0.0)
 	sun.light_color = Color("#fff0d1")
-	sun.light_energy = 0.84
+	sun.light_energy = 0.68
 	sun.shadow_enabled = true
 	add_child(sun)
 
@@ -1342,11 +1338,11 @@ func _build_park_lamps(parent: Node3D) -> void:
 	root.name = "EmeraldHaloPathLamps_10"
 	parent.add_child(root)
 	var placements: Array[Vector3] = [
-		Vector3(-88,-0.025,70),Vector3(-45,-0.025,72),
-		Vector3(5,-0.025,71),Vector3(58,-0.025,73),
-		Vector3(-82,-0.025,-72),Vector3(-34,-0.025,-73),
-		Vector3(22,-0.025,-71),Vector3(72,-0.025,-73),
-		Vector3(-92,-0.025,0),Vector3(92,-0.025,0),
+		Vector3(-88,-0.025,73.2),Vector3(-45,-0.025,73.2),
+		Vector3(5,-0.025,73.2),Vector3(58,-0.025,73.2),
+		Vector3(-82,-0.025,-73.2),Vector3(-34,-0.025,-73.2),
+		Vector3(22,-0.025,-73.2),Vector3(72,-0.025,-73.2),
+		Vector3(-93.2,-0.025,0),Vector3(93.2,-0.025,0),
 	]
 	for index: int in range(placements.size()):
 		var position_value := placements[index]
@@ -1384,9 +1380,10 @@ func _add_lamp_neon_geometry(lamp: Node3D) -> void:
 	var seam := MeshInstance3D.new()
 	seam.name = "BlueNeonSeam"
 	var seam_mesh := BoxMesh.new()
-	seam_mesh.size = Vector3(0.018,0.60,0.018)
+	seam_mesh.size = Vector3(0.016,0.30,0.016)
 	seam.mesh = seam_mesh
-	seam.position = Vector3(0.0,0.48,-0.151)
+	# Sit inside the lower-left body opening instead of floating in front of the pole.
+	seam.position = Vector3(-0.065,0.18,0.0)
 	seam.material_override = mat_neon_blue
 	lamp.add_child(seam)
 
@@ -1396,9 +1393,9 @@ func _add_lamp_pool_light(parent: Node3D, index: int, position_value: Vector3) -
 	light.position = position_value + Vector3(0.0,3.18,0.0)
 	light.rotation_degrees.x = -90.0
 	light.light_color = Color("#75ddff")
-	light.light_energy = 3.2
-	light.spot_range = 7.2
-	light.spot_angle = 58.0
+	light.light_energy = 0.55
+	light.spot_range = 5.5
+	light.spot_angle = 52.0
 	light.shadow_enabled = false
 	parent.add_child(light)
 
