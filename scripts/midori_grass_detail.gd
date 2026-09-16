@@ -1,15 +1,15 @@
 extends Node
 
-# Lightweight near-camera 3D grass/leaf tufts for the Midori Park review scene.
-# The flat park material remains the base; this adds small living blades above it
-# with deterministic placement and a gentle wind sway. Paths, water and the
-# current zone placeholders are excluded so the tufts only appear on lawn.
+# Lightweight 3D lawn detail for the Midori Park review scene.
+# The first version used one park-wide MultiMesh with a short visibility range;
+# because the MultiMesh node sits at the park origin, Godot could range-cull the
+# entire batch while the player was standing near the park edge. This version
+# keeps the batch always available, gives it an explicit park-sized AABB, and
+# increases density/scale so the blades are readable at first-person height.
 
 const PARK_HALF := Vector2(110.0, 90.0)
-const GRASS_INSTANCE_COUNT := 4200
-const GRASS_Y := 0.018
-const VISIBILITY_RANGE_M := 38.0
-const VISIBILITY_MARGIN_M := 10.0
+const GRASS_INSTANCE_COUNT := 24000
+const GRASS_Y := 0.014
 const RNG_SEED := 20260916
 
 var _installed := false
@@ -42,6 +42,10 @@ func _install_grass() -> void:
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.mesh = grass_mesh
 	multimesh.instance_count = GRASS_INSTANCE_COUNT
+	multimesh.custom_aabb = AABB(
+		Vector3(-PARK_HALF.x - 2.0, -0.10, -PARK_HALF.y - 2.0),
+		Vector3(PARK_HALF.x * 2.0 + 4.0, 0.55, PARK_HALF.y * 2.0 + 4.0)
+	)
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = RNG_SEED
@@ -57,40 +61,38 @@ func _install_grass() -> void:
 			continue
 
 		var yaw := rng.randf_range(0.0, TAU)
-		var width_scale := rng.randf_range(0.72, 1.25)
-		var height_scale := rng.randf_range(0.70, 1.38)
+		var width_scale := rng.randf_range(0.72, 1.42)
+		var height_scale := rng.randf_range(0.72, 1.65)
 		var basis := Basis(Vector3.UP, yaw)
 		basis = basis.scaled(Vector3(width_scale, height_scale, width_scale))
 		var position := Vector3(x, GRASS_Y + rng.randf_range(-0.002, 0.004), z)
 		multimesh.set_instance_transform(placed, Transform3D(basis, position))
 		placed += 1
 
-	# In the unlikely event exclusions prevent filling every slot, hide leftovers
-	# under the park rather than leaving identity transforms at the origin.
 	for index: int in range(placed, GRASS_INSTANCE_COUNT):
 		multimesh.set_instance_transform(index, Transform3D(Basis.IDENTITY, Vector3(0.0, -100.0, 0.0)))
 
 	var grass := MultiMeshInstance3D.new()
 	grass.name = "MidoriGrassDetail"
 	grass.multimesh = multimesh
-	grass.visibility_range_end = VISIBILITY_RANGE_M
-	grass.visibility_range_end_margin = VISIBILITY_MARGIN_M
 	grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	grass.extra_cull_margin = 6.0
 	scene.add_child(grass)
 	_installed = true
+	print("Midori grass detail installed: %d lawn clumps" % placed)
 
 
 func _build_grass_clump_mesh() -> ArrayMesh:
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var height := 0.070
-	var half_width := 0.010
-	for blade_index: int in range(3):
-		var angle := float(blade_index) * PI / 3.0
+	var base_height := 0.115
+	var half_width := 0.014
+	for blade_index: int in range(4):
+		var angle := float(blade_index) * PI / 4.0
 		var side := Vector3(cos(angle), 0.0, sin(angle)) * half_width
-		var lean := Vector3(cos(angle + 1.1), 0.0, sin(angle + 1.1)) * (0.006 + float(blade_index) * 0.0015)
-		var blade_height := height * (0.88 + float(blade_index) * 0.07)
+		var lean := Vector3(cos(angle + 1.1), 0.0, sin(angle + 1.1)) * (0.009 + float(blade_index) * 0.0015)
+		var blade_height := base_height * (0.82 + float(blade_index) * 0.08)
 		var p0 := -side
 		var p1 := side
 		var p2 := side + Vector3(0.0, blade_height, 0.0) + lean
@@ -109,23 +111,23 @@ func _build_grass_clump_mesh() -> ArrayMesh:
 shader_type spatial;
 render_mode cull_disabled, depth_draw_opaque;
 
-uniform vec4 grass_color : source_color = vec4(0.22, 0.39, 0.16, 1.0);
-uniform float sway_amount = 0.0075;
-uniform float sway_speed = 1.35;
+uniform vec4 grass_color : source_color = vec4(0.18, 0.43, 0.12, 1.0);
+uniform float sway_amount = 0.012;
+uniform float sway_speed = 1.25;
 
 void vertex() {
-	float tip = clamp(VERTEX.y / 0.075, 0.0, 1.0);
-	float phase = MODEL_MATRIX[3].x * 0.21 + MODEL_MATRIX[3].z * 0.17;
+	float tip = clamp(VERTEX.y / 0.13, 0.0, 1.0);
+	float phase = MODEL_MATRIX[3].x * 0.19 + MODEL_MATRIX[3].z * 0.15;
 	float wave = sin(TIME * sway_speed + phase) * sway_amount * tip * tip;
 	VERTEX.x += wave;
-	VERTEX.z += cos(TIME * (sway_speed * 0.82) + phase * 1.7) * sway_amount * 0.45 * tip * tip;
+	VERTEX.z += cos(TIME * (sway_speed * 0.83) + phase * 1.63) * sway_amount * 0.45 * tip * tip;
 }
 
 void fragment() {
-	float height_tint = clamp(UV.y, 0.0, 1.0);
-	vec3 base_col = grass_color.rgb * mix(1.12, 0.72, height_tint);
+	float vertical = clamp(1.0 - UV.y, 0.0, 1.0);
+	vec3 base_col = grass_color.rgb * mix(0.70, 1.18, vertical);
 	ALBEDO = base_col;
-	ROUGHNESS = 0.93;
+	ROUGHNESS = 0.94;
 }
 """
 	mesh.surface_set_material(0, material)
@@ -158,7 +160,7 @@ func _is_lawn_position(x: float, z: float) -> bool:
 	if abs(z - 42.0) < 3.2 and abs(x) < 97.0:
 		return false
 
-	# Lake lobes, with a little safety margin around their visible surfaces.
+	# Lake lobes, with a safety margin around their visible surfaces.
 	if _inside_ellipse(x, z, 27.0, -10.0, 57.0, 38.0):
 		return false
 	if _inside_ellipse(x, z, 47.0, -42.0, 37.0, 26.0):
@@ -166,8 +168,7 @@ func _is_lawn_position(x: float, z: float) -> bool:
 	if _inside_ellipse(x, z, 8.0, 20.0, 33.0, 23.0):
 		return false
 
-	# Current colored zone placeholders. These can be relaxed later when the
-	# blockout becomes final terrain.
+	# Current colored zone placeholders.
 	if _inside_box(x, z, -70.0, -43.0, 59.0, 40.0):
 		return false
 	if _inside_box(x, z, -72.0, 45.0, 36.0, 30.0):
