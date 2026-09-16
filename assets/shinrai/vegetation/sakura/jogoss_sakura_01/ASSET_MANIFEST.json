@@ -1,0 +1,38 @@
+{
+  "ATTRIBUTION.md": {
+    "bytes": 647,
+    "sha256": "6bc37df7a3bff80dc2e67b30475b5ac36b664603624712ee876751ca35ea7ed6"
+  },
+  "Bark001_2K_JPG.png": {
+    "bytes": 3952531,
+    "sha256": "5c8f49624861164a417e6d6c185eb60edad34064cf8270e47970b6e540fe7f98"
+  },
+  "Bark_Albedo.jpg": {
+    "bytes": 646439,
+    "sha256": "084a34d571c2fe63a290d16841c74013cf11d6cfe98fe21c7f61dfd7e70dc714"
+  },
+  "Bark_Normal.png": {
+    "bytes": 1357210,
+    "sha256": "c12f43d5a831f13ea12605597450a15173e9ed8e756d1dc2723e11bf4981973b"
+  },
+  "Bark_Roughness.png": {
+    "bytes": 387565,
+    "sha256": "315573953ba10be1897bbc8392c6d0a2b9f2c81eb3487f9c228e09e3cc5a13a1"
+  },
+  "Sakura.fbx": {
+    "bytes": 372080,
+    "sha256": "8d38b3fdd83d69f131f64e36c9ca496a6e89d8cd67ea155734439afd1cd61b3e"
+  },
+  "Sakura.png": {
+    "bytes": 706406,
+    "sha256": "a1ccf55e0ab50a12c137e0a6ecc13a1d6b0822112c3fd12692504fe53793604b"
+  },
+  "Sakura_Opacity.png": {
+    "bytes": 44944,
+    "sha256": "847dcf249b30f0f791d8d541acba70e13c04d209c8b00fb173d562e86809fa14"
+  },
+  "Sakura_RGBA.png": {
+    "bytes": 694635,
+    "sha256": "9ec98c4a3c9f929f2d0763947cfbfc16273cfd9b95540c3f64f627c88fbcbb03"
+  }
+}
