@@ -18,7 +18,7 @@ const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
 const LAKE_SIZE_M := Vector2(110.0, 72.0)
 const SHOW_PLANNING_LABELS := false
 const MATURE_TREE_MIN_SPACING_M := 3.0
-const SKINNY_TREE_MIN_SPACING_M := 1.8
+const SKINNY_TREE_MIN_SPACING_M := 2.3
 const SKINNY_TO_SKINNY_MIN_SPACING_M := 1.2
 const SAKURA_TREE_COUNT := 24
 
@@ -685,6 +685,7 @@ func _build_reference_canopy(parent: Node3D) -> void:
 	var understory_root := Node3D.new()
 	understory_root.name = "ArtworkLilacUnderstory"
 	parent.add_child(understory_root)
+	_add_mixed_tree_pair_shrubs(understory_root)
 	var shrub_lines: Array = [
 		[Vector3(-94,0.12,-69),Vector3(-75,0.12,-70),Vector3(-55,0.12,-69),Vector3(-34,0.12,-67)],
 		[Vector3(-91,0.12,-8),Vector3(-91,0.12,15),Vector3(-90,0.12,39),Vector3(-88,0.12,62)],
@@ -720,6 +721,44 @@ func _build_reference_canopy(parent: Node3D) -> void:
 			understory_root, Vector2(cluster.x, cluster.y), cluster.z,
 			int(cluster.w), 1000 + cluster_index * 20
 		)
+
+func _add_mixed_tree_pair_shrubs(parent: Node3D) -> void:
+	# Give each skinny pine's nearest mature neighbour a soft two-bush bridge.
+	# This fills the eye-level gap without creating straight hedge lines.
+	var shrub_serial := 2000
+	for skinny_index: int in range(occupied_tree_positions.size()):
+		if skinny_index >= occupied_tree_is_skinny.size() or not occupied_tree_is_skinny[skinny_index]:
+			continue
+		var skinny_position := occupied_tree_positions[skinny_index]
+		var nearest_mature := Vector2.ZERO
+		var nearest_distance_squared := 5.5 * 5.5
+		var found_mature := false
+		for mature_index: int in range(occupied_tree_positions.size()):
+			if mature_index == skinny_index:
+				continue
+			if mature_index < occupied_tree_is_skinny.size() and occupied_tree_is_skinny[mature_index]:
+				continue
+			var distance_squared := skinny_position.distance_squared_to(occupied_tree_positions[mature_index])
+			if distance_squared < nearest_distance_squared:
+				nearest_distance_squared = distance_squared
+				nearest_mature = occupied_tree_positions[mature_index]
+				found_mature = true
+		if not found_mature:
+			continue
+		var direction := (nearest_mature - skinny_position).normalized()
+		var perpendicular := Vector2(-direction.y, direction.x)
+		var midpoint := (skinny_position + nearest_mature) * 0.5
+		for side: float in [-1.0, 1.0]:
+			var bush_point := midpoint + perpendicular * side * 0.42
+			var bush_position := Vector3(bush_point.x, 0.12, bush_point.y)
+			if not _is_vegetation_clear(bush_position, 0.55):
+				continue
+			_add_reference_plant(
+				parent, lilac_prototypes, bush_position,
+				0.72 + float(shrub_serial % 4) * 0.06,
+				shrub_serial, "MixedTreeGapBush"
+			)
+			shrub_serial += 1
 
 func _add_reference_shrub_cluster(
 	parent: Node3D,
