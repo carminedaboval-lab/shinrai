@@ -1,7 +1,7 @@
 extends Node
 
 const SakuraScene: PackedScene = preload("res://assets/shinrai/vegetation/sakura/jogoss_sakura_01/Sakura.fbx")
-const IMPORT_SCALE := 10.8
+const IMPORT_SCALE := 15.0
 const VISIBILITY_RANGE_M := 150.0
 const REPLACED_META: StringName = &"midori_jogoss_sakura"
 
