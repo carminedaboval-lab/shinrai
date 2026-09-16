@@ -737,6 +737,38 @@ func _build_reference_canopy(parent: Node3D) -> void:
 			int(cluster.w), 200 + cluster_index, true, 4
 		)
 
+	# Four small, hand-authored edge groves interrupt the remaining broad lawn
+	# gaps without filling their centres. Uneven points avoid circular procedural
+	# silhouettes; each group has exactly one skinny pine and strict 3 m spacing.
+	var mainland_micro_groves: Array = [
+		[
+			Vector3(-28.2,0.14,-37.0),Vector3(-20.4,0.14,-33.7),
+			Vector3(-26.6,0.14,-29.9),Vector3(-26.1,0.14,-33.7),
+			Vector3(-20.0,0.14,-37.4),
+		],
+		[
+			Vector3(-4.1,0.14,-46.3),Vector3(-10.5,0.14,-46.7),
+			Vector3(-16.9,0.14,-44.7),Vector3(-16.6,0.14,-41.1),
+			Vector3(-9.5,0.14,-42.3),
+		],
+		[
+			Vector3(-69.8,0.14,6.0),Vector3(-78.3,0.14,-0.4),
+			Vector3(-67.7,0.14,3.2),Vector3(-68.4,0.14,-1.7),
+			Vector3(-77.1,0.14,4.1),
+		],
+		[
+			Vector3(88.5,0.14,-12.7),Vector3(88.6,0.14,-18.9),
+			Vector3(88.4,0.14,-9.2),Vector3(86.4,0.14,-16.1),
+			Vector3(90.8,0.14,-16.1),
+		],
+	]
+	var micro_grove_pine_indices: Array[int] = [1,3,0,2]
+	for grove_index: int in range(mainland_micro_groves.size()):
+		_add_authored_mainland_micro_grove(
+			canopy_root, mainland_micro_groves[grove_index],
+			micro_grove_pine_indices[grove_index], 600 + grove_index
+		)
+
 	# Each green island has a small vertical silhouette in the screenshot.
 	var island_trees: Array[Vector4] = [
 		Vector4(21,-13,0.86,0),Vector4(26,-10,0.74,1),Vector4(57,-37,0.72,1),
@@ -801,6 +833,31 @@ func _build_reference_canopy(parent: Node3D) -> void:
 			int(cluster.w), 1000 + cluster_index * 20
 		)
 	_build_mainland_groundcover_patches(parent)
+
+func _add_authored_mainland_micro_grove(
+	parent: Node3D,
+	positions: Array,
+	pine_index: int,
+	serial_offset: int
+) -> void:
+	for point_index: int in range(positions.size()):
+		var position_value: Vector3 = positions[point_index]
+		if not _is_vegetation_clear(position_value, 3.2):
+			push_warning("Midori micro-grove point entered a reserved route: %s" % position_value)
+			continue
+		if not _is_tree_spaced(position_value, MATURE_TREE_MIN_SPACING_M):
+			push_warning("Midori micro-grove point is below 3 m trunk spacing: %s" % position_value)
+			continue
+		var is_skinny_tree := point_index == pine_index
+		var prototypes: Array[Node3D] = pine_prototypes if is_skinny_tree else broadleaf_prototypes
+		var serial := serial_offset * 20 + point_index
+		var scale_value := 0.80 + 0.045 * float((point_index + serial_offset) % 6)
+		_add_reference_plant(
+			parent, prototypes, position_value, scale_value, serial,
+			"MicroGrovePine" if is_skinny_tree else "MicroGroveBroadleaf"
+		)
+		occupied_tree_positions.append(Vector2(position_value.x, position_value.z))
+		occupied_tree_is_skinny.append(is_skinny_tree)
 
 func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 	if dense_grass_prototypes.is_empty():
