@@ -1,24 +1,25 @@
 extends Node
 
 # Midori Park near-ground vegetation scatter using the uploaded Meshy clump.
-# This version makes the clumps clearly readable at first-person height and
-# avoids distance-range culling issues by relying on per-chunk frustum culling.
+# The clumps are kept short and broad so they read as natural lawn/forest-floor
+# detail rather than isolated weeds. Distribution is slightly patchy instead of
+# perfectly uniform, while the existing path/lake/zone masks remain unchanged.
 
 const GroundClumpScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_meshy_ground_clump_v1.glb")
 
 const PARK_HALF := Vector2(110.0, 90.0)
-const CLUMP_INSTANCE_COUNT := 12000
+const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 2
+const DETAIL_VERSION := 3
 
 # The original uploaded Meshy GLB measures 1.0 m tall with its pivot centered.
-# Scale it down to small but visible park-floor foliage.
+# Keep it small and broad so it blends into the Forest Ground 01 material.
 const SOURCE_HEIGHT_M := 1.0
 const SOURCE_BOTTOM_Y := -0.5
-const MIN_CLUMP_HEIGHT_M := 0.14
-const MAX_CLUMP_HEIGHT_M := 0.26
+const MIN_CLUMP_HEIGHT_M := 0.07
+const MAX_CLUMP_HEIGHT_M := 0.14
 const GROUND_SURFACE_Y := 0.010
 
 var _installed_scene_id: int = 0
@@ -71,13 +72,23 @@ func _install_ground_clumps() -> void:
 	rng.seed = RNG_SEED
 	var placed := 0
 	var attempts := 0
-	var max_attempts := CLUMP_INSTANCE_COUNT * 20
+	var max_attempts := CLUMP_INSTANCE_COUNT * 24
 
 	while placed < CLUMP_INSTANCE_COUNT and attempts < max_attempts:
 		attempts += 1
 		var x := rng.randf_range(-PARK_HALF.x + 2.0, PARK_HALF.x - 2.0)
 		var z := rng.randf_range(-PARK_HALF.y + 2.0, PARK_HALF.y - 2.0)
 		if not _is_lawn_position(x, z):
+			continue
+
+		# Gentle macro patching: some lawn areas stay sparse while nearby areas
+		# gather more clumps, avoiding an artificial evenly-spaced look.
+		var macro := 0.5
+		macro += sin(x * 0.115) * 0.16
+		macro += cos(z * 0.095) * 0.14
+		macro += sin((x + z) * 0.061) * 0.12
+		var keep_probability := clamp(0.44 + macro * 0.58, 0.34, 0.96)
+		if rng.randf() > keep_probability:
 			continue
 
 		var chunk_x := clampi(int(floor((x + PARK_HALF.x) / chunk_width)), 0, CHUNKS_X - 1)
@@ -88,7 +99,7 @@ func _install_ground_clumps() -> void:
 
 		var target_height := rng.randf_range(MIN_CLUMP_HEIGHT_M, MAX_CLUMP_HEIGHT_M)
 		var uniform_scale := target_height / SOURCE_HEIGHT_M
-		var width_variation := rng.randf_range(0.88, 1.22)
+		var width_variation := rng.randf_range(1.45, 2.10)
 		var yaw := rng.randf_range(0.0, TAU)
 		var basis := Basis(Vector3.UP, yaw)
 		basis = basis.scaled(Vector3(
@@ -100,7 +111,7 @@ func _install_ground_clumps() -> void:
 		# Meshy's source pivot is centered, so lift half the scaled source height
 		# to plant the base directly on the park surface.
 		var grounded_y := GROUND_SURFACE_Y - SOURCE_BOTTOM_Y * uniform_scale
-		grounded_y += rng.randf_range(-0.002, 0.003)
+		grounded_y += rng.randf_range(-0.002, 0.002)
 		var local_position := Vector3(x - center_x, grounded_y, z - center_z)
 		buckets[chunk_index].append(Transform3D(basis, local_position))
 		placed += 1
@@ -131,7 +142,7 @@ func _install_ground_clumps() -> void:
 			multimesh.instance_count = transforms.size()
 			multimesh.custom_aabb = AABB(
 				Vector3(-chunk_width * 0.5 - 1.0, -0.02, -chunk_depth * 0.5 - 1.0),
-				Vector3(chunk_width + 2.0, MAX_CLUMP_HEIGHT_M + 0.12, chunk_depth + 2.0)
+				Vector3(chunk_width + 2.0, MAX_CLUMP_HEIGHT_M + 0.10, chunk_depth + 2.0)
 			)
 
 			for transform_index: int in range(transforms.size()):
@@ -142,14 +153,12 @@ func _install_ground_clumps() -> void:
 			clumps.multimesh = multimesh
 			clumps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			clumps.extra_cull_margin = 8.0
-			# Do not set visibility_range_end here. The previous short range could
-			# hide whole chunks depending on the player's position.
 			if fallback_material != null:
 				clumps.material_override = fallback_material
 			chunk_root.add_child(clumps)
 
 	_installed_scene_id = scene_id
-	print("Midori Meshy ground clumps installed: %d visible instances" % placed)
+	print("Midori Meshy ground clumps installed: %d naturalized instances" % placed)
 
 
 func _extract_source_mesh() -> Mesh:
