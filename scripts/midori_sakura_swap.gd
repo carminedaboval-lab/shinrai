@@ -5,23 +5,29 @@ const BlossomTexture: Texture2D = preload("res://assets/shinrai/vegetation/sakur
 const IMPORT_SCALE := 15.0
 const VISIBILITY_RANGE_M := 150.0
 const REPLACED_META: StringName = &"midori_jogoss_sakura"
-const EXTRA_BLOSSOM_CARD_SIZE := 0.016
+
+# Keep the added blossom clusters close to the canopy so they read as branch-tip
+# flowers instead of detached floating clumps.
+const EXTRA_BLOSSOM_CARD_SIZE := 0.014
 const EXTRA_BLOSSOM_TIPS := [
-	Vector3(0.00, 0.395, 0.00),
-	Vector3(0.105, 0.365, 0.035),
-	Vector3(-0.105, 0.365, -0.025),
-	Vector3(0.185, 0.325, 0.060),
-	Vector3(-0.185, 0.325, 0.050),
-	Vector3(0.155, 0.310, -0.120),
-	Vector3(-0.150, 0.310, -0.125),
-	Vector3(0.060, 0.345, 0.175),
-	Vector3(-0.065, 0.345, 0.175),
-	Vector3(0.225, 0.285, -0.015),
-	Vector3(-0.225, 0.285, 0.005),
-	Vector3(0.125, 0.275, 0.205),
-	Vector3(-0.125, 0.275, 0.205),
-	Vector3(0.020, 0.300, -0.220),
+	Vector3(0.000, 0.335, 0.000),
+	Vector3(0.095, 0.315, 0.030),
+	Vector3(-0.095, 0.315, -0.020),
+	Vector3(0.150, 0.290, 0.045),
+	Vector3(-0.150, 0.290, 0.040),
+	Vector3(0.120, 0.285, -0.095),
+	Vector3(-0.120, 0.285, -0.095),
+	Vector3(0.050, 0.305, 0.135),
+	Vector3(-0.055, 0.305, 0.135),
+	Vector3(0.015, 0.280, -0.150),
 ]
+
+# A small looping GPU particle system handles the intentionally detached petals.
+# Each petal falls from the canopy, fades near ground level, expires, and is
+# automatically emitted again by GPUParticles3D.
+const FALLING_PETAL_AMOUNT := 12
+const FALLING_PETAL_LIFETIME := 5.0
+const FALLING_PETAL_CARD_SIZE := Vector2(0.0045, 0.0065)
 
 func _ready() -> void:
 	get_tree().node_added.connect(_on_node_added)
@@ -73,17 +79,23 @@ func _replace_tree(old_tree: Node) -> void:
 	parent.add_child(new_tree)
 	parent.move_child(new_tree, old_index)
 	_add_tip_blossoms(new_tree)
+	_add_falling_petals(new_tree)
 	_configure_visibility(new_tree)
 	old_tree.queue_free()
 
-func _add_tip_blossoms(tree_root: Node3D) -> void:
+func _make_blossom_material(resource_name_value: String) -> StandardMaterial3D:
 	var blossom_material := StandardMaterial3D.new()
-	blossom_material.resource_name = "SHINRAI_Midori_ExtraTipBlossoms"
+	blossom_material.resource_name = resource_name_value
 	blossom_material.albedo_texture = BlossomTexture
 	blossom_material.roughness = 0.72
 	blossom_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	blossom_material.alpha_scissor_threshold = 0.42
 	blossom_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	blossom_material.vertex_color_use_as_albedo = true
+	return blossom_material
+
+func _add_tip_blossoms(tree_root: Node3D) -> void:
+	var blossom_material := _make_blossom_material("SHINRAI_Midori_ExtraTipBlossoms")
 
 	var card_mesh := QuadMesh.new()
 	card_mesh.size = Vector2(EXTRA_BLOSSOM_CARD_SIZE, EXTRA_BLOSSOM_CARD_SIZE)
@@ -112,10 +124,60 @@ func _add_tip_blossoms(tree_root: Node3D) -> void:
 			card_index += 1
 
 	var blossom_cards := MultiMeshInstance3D.new()
-	blossom_cards.name = "ExtraBranchTipBlossoms"
+	blossom_cards.name = "AttachedBranchTipBlossoms"
 	blossom_cards.multimesh = multimesh
 	blossom_cards.visibility_range_end = VISIBILITY_RANGE_M
 	tree_root.add_child(blossom_cards)
+
+func _add_falling_petals(tree_root: Node3D) -> void:
+	var petal_material := _make_blossom_material("SHINRAI_Midori_FallingPetals")
+
+	var petal_mesh := QuadMesh.new()
+	petal_mesh.size = FALLING_PETAL_CARD_SIZE
+	petal_mesh.material = petal_material
+
+	var particle_material := ParticleProcessMaterial.new()
+	particle_material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	particle_material.emission_box_extents = Vector3(0.18, 0.025, 0.18)
+	particle_material.direction = Vector3(0.10, -1.0, 0.05)
+	particle_material.spread = 32.0
+	particle_material.initial_velocity_min = 0.018
+	particle_material.initial_velocity_max = 0.040
+	particle_material.gravity = Vector3(0.0045, -0.014, 0.0025)
+	particle_material.angular_velocity_min = -1.8
+	particle_material.angular_velocity_max = 1.8
+	particle_material.scale_min = 0.72
+	particle_material.scale_max = 1.15
+
+	# Fade in quickly, stay visible through the fall, then fade out near the
+	# ground before the particle lifetime resets it back into the canopy.
+	var fade_gradient := Gradient.new()
+	fade_gradient.offsets = PackedFloat32Array([0.0, 0.08, 0.78, 1.0])
+	fade_gradient.colors = PackedColorArray([
+		Color(1.0, 1.0, 1.0, 0.0),
+		Color(1.0, 1.0, 1.0, 1.0),
+		Color(1.0, 1.0, 1.0, 0.92),
+		Color(1.0, 1.0, 1.0, 0.0),
+	])
+	var fade_texture := GradientTexture1D.new()
+	fade_texture.gradient = fade_gradient
+	particle_material.color_ramp = fade_texture
+
+	var petals := GPUParticles3D.new()
+	petals.name = "LoopingFallingSakuraPetals"
+	petals.position = Vector3(0.0, 0.315, 0.0)
+	petals.amount = FALLING_PETAL_AMOUNT
+	petals.lifetime = FALLING_PETAL_LIFETIME
+	petals.randomness = 0.65
+	petals.preprocess = 4.0
+	petals.one_shot = false
+	petals.emitting = true
+	petals.local_coords = true
+	petals.process_material = particle_material
+	petals.draw_pass_1 = petal_mesh
+	petals.visibility_aabb = AABB(Vector3(-0.35, -0.38, -0.35), Vector3(0.70, 0.72, 0.70))
+	petals.visibility_range_end = VISIBILITY_RANGE_M
+	tree_root.add_child(petals)
 
 func _configure_visibility(node: Node) -> void:
 	if node is GeometryInstance3D:
