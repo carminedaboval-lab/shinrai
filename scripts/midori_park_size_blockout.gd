@@ -17,6 +17,10 @@ const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
 const LAKE_SIZE_M := Vector2(110.0, 72.0)
 const SHOW_PLANNING_LABELS := false
+const MATURE_TREE_MIN_SPACING_M := 3.0
+const SKINNY_TREE_MIN_SPACING_M := 1.8
+const SKINNY_TO_SKINNY_MIN_SPACING_M := 1.2
+const SAKURA_TREE_COUNT := 24
 
 var mat_grass: StandardMaterial3D
 var mat_path: StandardMaterial3D
@@ -33,6 +37,7 @@ var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
 var lilac_prototypes: Array[Node3D] = []
 var occupied_tree_positions: Array[Vector2] = []
+var occupied_tree_is_skinny: Array[bool] = []
 
 func _ready() -> void:
 	_create_materials()
@@ -108,7 +113,6 @@ func _build_park_footprint() -> void:
 	_build_sakura_trees(root)
 	_build_evergreen_shrubs(root)
 	_build_reference_canopy(root)
-	_build_wildflower_groundcover(root)
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
@@ -550,15 +554,17 @@ func _add_reference_tree_cluster(
 		attempt += 1
 		if not _is_vegetation_clear(position_value, 3.2):
 			continue
-		if not _is_tree_spaced(position_value, 7.0):
-			continue
 		var serial := serial_offset * 20 + placed
 		var scale_value := 0.82 + 0.055 * float(serial % 6)
-		if serial % 9 == 3 or serial % 13 == 7:
+		var is_skinny_tree := serial % 9 == 3 or serial % 13 == 7
+		if not _is_tree_spaced_for_type(position_value, is_skinny_tree):
+			continue
+		if is_skinny_tree:
 			_add_reference_plant(parent, pine_prototypes, position_value, scale_value, serial, "ReferencePine")
 		else:
 			_add_reference_plant(parent, broadleaf_prototypes, position_value, scale_value, serial, "ReferenceBroadleaf")
 		occupied_tree_positions.append(Vector2(position_value.x, position_value.z))
+		occupied_tree_is_skinny.append(is_skinny_tree)
 		placed += 1
 
 func _is_tree_spaced(position_value: Vector3, minimum_distance: float) -> bool:
@@ -566,6 +572,23 @@ func _is_tree_spaced(position_value: Vector3, minimum_distance: float) -> bool:
 	var minimum_distance_squared := minimum_distance * minimum_distance
 	for occupied: Vector2 in occupied_tree_positions:
 		if point.distance_squared_to(occupied) < minimum_distance_squared:
+			return false
+	return true
+
+func _is_tree_spaced_for_type(position_value: Vector3, is_skinny_tree: bool) -> bool:
+	var point := Vector2(position_value.x, position_value.z)
+	for occupied_index: int in range(occupied_tree_positions.size()):
+		var occupied_is_skinny := (
+			occupied_tree_is_skinny[occupied_index]
+			if occupied_index < occupied_tree_is_skinny.size()
+			else false
+		)
+		var minimum_distance := MATURE_TREE_MIN_SPACING_M
+		if is_skinny_tree and occupied_is_skinny:
+			minimum_distance = SKINNY_TO_SKINNY_MIN_SPACING_M
+		elif is_skinny_tree or occupied_is_skinny:
+			minimum_distance = SKINNY_TREE_MIN_SPACING_M
+		if point.distance_squared_to(occupied_tree_positions[occupied_index]) < minimum_distance * minimum_distance:
 			return false
 	return true
 
@@ -648,14 +671,16 @@ func _build_reference_canopy(parent: Node3D) -> void:
 	for index: int in range(island_trees.size()):
 		var item := island_trees[index]
 		var island_position := Vector3(item.x, 0.20, item.y)
-		if not _is_tree_spaced(island_position, 7.0):
+		var is_skinny_tree := int(item.w) == 1
+		if not _is_tree_spaced_for_type(island_position, is_skinny_tree):
 			continue
-		var prototypes: Array[Node3D] = pine_prototypes if int(item.w) == 1 else broadleaf_prototypes
+		var prototypes: Array[Node3D] = pine_prototypes if is_skinny_tree else broadleaf_prototypes
 		_add_reference_plant(
 			canopy_root, prototypes, island_position,
 			item.z, 800 + index, "IslandTree"
 		)
 		occupied_tree_positions.append(Vector2(island_position.x, island_position.z))
+		occupied_tree_is_skinny.append(is_skinny_tree)
 
 	var understory_root := Node3D.new()
 	understory_root.name = "ArtworkLilacUnderstory"
@@ -805,9 +830,10 @@ func _add_flower_multimesh(
 
 func _build_sakura_trees(parent: Node3D) -> void:
 	var trees_root := Node3D.new()
-	trees_root.name = "HandPlacedDenseSakuraTrees_48"
+	trees_root.name = "HandPlacedSakuraAccentTrees_%d" % SAKURA_TREE_COUNT
 	parent.add_child(trees_root)
 	occupied_tree_positions.clear()
+	occupied_tree_is_skinny.clear()
 	var placements: Array[Vector3] = [
 		Vector3(-92.0, 0.0, -66.0), Vector3(-68.0, 0.0, -70.0), Vector3(-43.0, 0.0, -67.0),
 		Vector3(-15.0, 0.0, -71.0), Vector3(15.0, 0.0, -70.0), Vector3(58.0, 0.0, -72.0),
@@ -826,7 +852,7 @@ func _build_sakura_trees(parent: Node3D) -> void:
 		Vector3(-28.0, 0.0, 58.0), Vector3(2.0, 0.0, 58.0), Vector3(32.0, 0.0, 60.0),
 		Vector3(90.0, 0.0, 35.0), Vector3(90.0, 0.0, -55.0), Vector3(30.0, 0.0, -70.0),
 	]
-	for index: int in range(placements.size()):
+	for index: int in range(mini(placements.size(), SAKURA_TREE_COUNT)):
 		var scale_value: float = 0.80 + float(index % 7) * 0.04
 		var tree_position := _clear_sakura_position(placements[index])
 		var tree := SakuraTreeScene.instantiate() as Node3D
@@ -838,9 +864,10 @@ func _build_sakura_trees(parent: Node3D) -> void:
 		_configure_vegetation_visibility(tree)
 		_add_sakura_trunk_collision(trees_root, index, tree_position, scale_value)
 		occupied_tree_positions.append(Vector2(tree_position.x, tree_position.z))
+		occupied_tree_is_skinny.append(false)
 
 func _clear_sakura_position(authored_position: Vector3) -> Vector3:
-	if _is_vegetation_clear(authored_position, 3.6) and _is_tree_spaced(authored_position, 7.0):
+	if _is_vegetation_clear(authored_position, 3.6) and _is_tree_spaced(authored_position, MATURE_TREE_MIN_SPACING_M):
 		return authored_position
 	var offsets: Array[Vector3] = [
 		Vector3(-9,0,0),Vector3(9,0,0),Vector3(0,0,-9),Vector3(0,0,9),
@@ -850,7 +877,7 @@ func _clear_sakura_position(authored_position: Vector3) -> Vector3:
 	]
 	for offset: Vector3 in offsets:
 		var candidate := authored_position + offset
-		if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, 7.0):
+		if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M):
 			return candidate
 	for ring: int in range(5, 16):
 		var radius_value := float(ring) * 4.0
@@ -859,7 +886,7 @@ func _clear_sakura_position(authored_position: Vector3) -> Vector3:
 			var candidate := authored_position + Vector3(
 				cos(angle) * radius_value, 0.0, sin(angle) * radius_value
 			)
-			if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, 7.0):
+			if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M):
 				return candidate
 	push_warning("Midori sakura has no unoccupied park position near %s" % str(authored_position))
 	return authored_position
@@ -982,7 +1009,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n48 sakura | 30 shrubs | 36 waterside grass clusters\nProp sockets are planned and hidden until their assets arrive."
+	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | mature woodland infill | existing shrubs\nProp sockets are planned and hidden until their assets arrive."
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
