@@ -89,9 +89,9 @@ void fragment() {
 	float source_roughness = texture(roughness_tex, ground_uv).r;
 	vec3 source_normal = texture(normal_tex, ground_uv).rgb;
 
-	// Keep the scanned material natural while slightly controlling the very
-	// bright outdoor response under Midori Park's review lighting.
-	ALBEDO = ground_color * vec3(0.96, 0.98, 0.94);
+	// The source scan is bright daylight photography. Compensate for that baked
+	// illumination before the park's real-time sun and ambient light are added.
+	ALBEDO = ground_color * vec3(0.62, 0.68, 0.58);
 	ROUGHNESS = clamp(source_roughness * 0.96 + 0.035, 0.70, 1.0);
 	NORMAL_MAP = source_normal;
 	NORMAL_MAP_DEPTH = 0.52;
@@ -158,7 +158,7 @@ void fragment() {
 	vec3 color = mix(vec3(0.31, 0.43, 0.20), vec3(0.40, 0.51, 0.25), lush * 0.62);
 	color = mix(color, vec3(0.48, 0.42, 0.27), dry_grass * 0.38);
 	color = mix(color, vec3(0.28, 0.23, 0.15), soil * 0.28);
-	color *= mix(0.90, 1.11, detail);
+	color *= mix(0.66, 0.86, detail);
 	ALBEDO = color;
 	ROUGHNESS = clamp(0.84 + soil * 0.10 + (1.0 - detail) * 0.05, 0.80, 0.98);
 }

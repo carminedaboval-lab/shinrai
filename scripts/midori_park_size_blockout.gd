@@ -85,12 +85,12 @@ func _create_environment() -> void:
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color("#65727a")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("#b9c4c8")
-	environment.ambient_light_energy = 0.72
+	environment.ambient_light_color = Color("#a8b3b7")
+	environment.ambient_light_energy = 0.40
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.fog_enabled = true
-	environment.fog_light_color = Color("#9da9ac")
-	environment.fog_light_energy = 0.78
+	environment.fog_light_color = Color("#778489")
+	environment.fog_light_energy = 0.46
 	environment.fog_density = 0.0105
 	environment.fog_sky_affect = 0.72
 	world_environment.environment = environment
@@ -100,7 +100,7 @@ func _create_environment() -> void:
 	sun.name = "ParkReviewSun"
 	sun.rotation_degrees = Vector3(-48.0, -32.0, 0.0)
 	sun.light_color = Color("#fff0d1")
-	sun.light_energy = 1.25
+	sun.light_energy = 0.84
 	sun.shadow_enabled = true
 	add_child(sun)
 
