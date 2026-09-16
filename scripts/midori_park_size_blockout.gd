@@ -20,6 +20,7 @@ const SHOW_PLANNING_LABELS := false
 const MATURE_TREE_MIN_SPACING_M := 3.0
 const SKINNY_TREE_MIN_SPACING_M := 2.3
 const SKINNY_TO_SKINNY_MIN_SPACING_M := 1.2
+const SHRUB_PATH_CLEARANCE_M := 1.3
 const SAKURA_TREE_COUNT := 24
 
 var mat_grass: StandardMaterial3D
@@ -793,38 +794,21 @@ func _build_reference_canopy(parent: Node3D) -> void:
 	understory_root.name = "ArtworkLilacUnderstory"
 	parent.add_child(understory_root)
 	_add_mixed_tree_pair_shrubs(understory_root)
-	var shrub_lines: Array = [
-		[Vector3(-94,0.12,-69),Vector3(-75,0.12,-70),Vector3(-55,0.12,-69),Vector3(-34,0.12,-67)],
-		[Vector3(-91,0.12,-8),Vector3(-91,0.12,15),Vector3(-90,0.12,39),Vector3(-88,0.12,62)],
-		[Vector3(-45,0.12,-46),Vector3(-45,0.12,-18),Vector3(-44,0.12,9),Vector3(-43,0.12,35)],
-		[Vector3(-70,0.12,68),Vector3(-42,0.12,67),Vector3(-14,0.12,68),Vector3(16,0.12,68)],
-		[Vector3(91,0.12,-57),Vector3(93,0.12,-31),Vector3(93,0.12,0),Vector3(92,0.12,28)],
-		[Vector3(17,0.18,-16),Vector3(29,0.18,-9),Vector3(53,0.18,-38),Vector3(58,0.18,-34)],
-	]
-	var shrub_serial := 0
-	for shrub_line: Array in shrub_lines:
-		for shrub_position: Vector3 in shrub_line:
-			_add_reference_plant(
-				understory_root, lilac_prototypes, shrub_position,
-				0.78 + float(shrub_serial % 4) * 0.07,
-				shrub_serial, "ReferenceLilac"
-			)
-			shrub_serial += 1
 
-	# Broad shrub masses fill the woodland floor instead of leaving isolated
-	# ornamental dots. Path-clearance checks keep every trunk and crown readable.
+	# Irregular groups replace the former evenly spaced single-shrub lines. Each
+	# mass stays within 5–7 plants and preserves a 1.3 m path-side shoulder.
 	var shrub_clusters: Array[Vector4] = [
-		Vector4(-82,-84,9,14),Vector4(-50,-84,9,14),Vector4(-17,-84,9,14),
-		Vector4(16,-84,9,12),Vector4(78,-83,8,12),Vector4(-106,-48,7,12),
-		Vector4(-106,-8,7,12),Vector4(-106,53,7,12),Vector4(-72,84,8,12),
-		Vector4(-35,84,8,12),Vector4(3,84,8,12),Vector4(104,48,7,12),
-		Vector4(104,8,7,12),Vector4(103,-48,7,12),Vector4(-52,-15,8,12),
-		Vector4(-52,20,8,12),Vector4(-54,57,7,10),Vector4(2,56,7,10),
-		Vector4(34,56,7,10),Vector4(86,-48,6,10),
-		Vector4(-86,-16,12,10),Vector4(-63,-14,11,9),
-		Vector4(-86,17,12,10),Vector4(-63,18,11,9),
-		Vector4(-28,61,12,10),Vector4(23,63,12,10),
-		Vector4(-18,-66,12,10),Vector4(4,-69,11,9),
+		Vector4(-82,-84,9,6),Vector4(-50,-84,9,6),Vector4(-17,-84,9,6),
+		Vector4(16,-84,9,6),Vector4(78,-83,8,6),Vector4(-106,-48,7,6),
+		Vector4(-106,-8,7,6),Vector4(-106,53,7,6),Vector4(-72,84,8,6),
+		Vector4(-35,84,8,6),Vector4(3,84,8,6),Vector4(104,48,7,6),
+		Vector4(104,8,7,6),Vector4(103,-48,7,6),Vector4(-52,-15,8,6),
+		Vector4(-52,20,8,6),Vector4(-54,57,7,5),Vector4(2,56,7,5),
+		Vector4(34,56,7,5),Vector4(86,-48,6,5),
+		Vector4(-86,-16,12,7),Vector4(-63,-14,11,7),
+		Vector4(-86,17,12,7),Vector4(-63,18,11,7),
+		Vector4(-28,61,12,7),Vector4(23,63,12,7),
+		Vector4(-18,-66,12,7),Vector4(4,-69,11,7),
 	]
 	for cluster_index: int in range(shrub_clusters.size()):
 		var cluster := shrub_clusters[cluster_index]
@@ -899,8 +883,8 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 			serial += 1
 
 func _add_mixed_tree_pair_shrubs(parent: Node3D) -> void:
-	# Give each skinny pine's nearest mature neighbour a soft two-bush bridge.
-	# This fills the eye-level gap without creating straight hedge lines.
+	# Give each skinny pine's nearest mature neighbour a soft three-bush pocket.
+	# The asymmetric offsets fill the eye-level gap without forming a hedge line.
 	var shrub_serial := 2000
 	for skinny_index: int in range(occupied_tree_positions.size()):
 		if skinny_index >= occupied_tree_is_skinny.size() or not occupied_tree_is_skinny[skinny_index]:
@@ -924,14 +908,19 @@ func _add_mixed_tree_pair_shrubs(parent: Node3D) -> void:
 		var direction := (nearest_mature - skinny_position).normalized()
 		var perpendicular := Vector2(-direction.y, direction.x)
 		var midpoint := (skinny_position + nearest_mature) * 0.5
-		for side: float in [-1.0, 1.0]:
-			var bush_point := midpoint + perpendicular * side * 0.42
+		var bush_offsets: Array[Vector2] = [
+			perpendicular * -0.58,
+			perpendicular * 0.52 + direction * 0.18,
+			direction * 0.72 + perpendicular * 0.10,
+		]
+		for offset: Vector2 in bush_offsets:
+			var bush_point := midpoint + offset
 			var bush_position := Vector3(bush_point.x, 0.12, bush_point.y)
-			if not _is_vegetation_clear(bush_position, 0.55):
+			if not _is_vegetation_clear(bush_position, SHRUB_PATH_CLEARANCE_M):
 				continue
 			_add_reference_plant(
 				parent, lilac_prototypes, bush_position,
-				0.72 + float(shrub_serial % 4) * 0.06,
+				0.62 + float(posmod(shrub_serial * 7, 6)) * 0.06,
 				shrub_serial, "MixedTreeGapBush"
 			)
 			shrub_serial += 1
@@ -946,7 +935,7 @@ func _add_reference_shrub_cluster(
 	var placed := 0
 	var attempt := 0
 	while placed < count and attempt < count * 8:
-		var radial_t := sqrt((float(attempt % count) + 0.35) / float(count))
+		var radial_t := sqrt((float(attempt % count) + 0.18) / float(count))
 		var angle := float(attempt) * 2.399963 + float(serial_offset) * 0.017
 		var position_value := Vector3(
 			center.x + cos(angle) * radius_value * radial_t,
@@ -954,12 +943,13 @@ func _add_reference_shrub_cluster(
 			center.y + sin(angle) * radius_value * radial_t * 0.72
 		)
 		attempt += 1
-		if not _is_vegetation_clear(position_value, 1.0):
+		if not _is_vegetation_clear(position_value, SHRUB_PATH_CLEARANCE_M):
 			continue
 		var serial := serial_offset + placed
 		_add_reference_plant(
 			parent, lilac_prototypes, position_value,
-			0.68 + float(serial % 5) * 0.065, serial, "ReferenceLilacMass"
+			0.58 + float(posmod(serial * 7, 6)) * 0.065,
+			serial, "ReferenceLilacMass"
 		)
 		placed += 1
 

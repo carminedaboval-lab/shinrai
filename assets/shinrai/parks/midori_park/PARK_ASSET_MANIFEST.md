@@ -22,7 +22,7 @@ This manifest is the single checklist for the first production park. The user au
 | VEG-01-FOL | Reusable sakura blossom branch cluster | 1 source; variants later | Canopy distribution later | 8,192 source; optimize later | Collected, approved, optimized, and used in sakura v1 |
 | VEG-02 | Medium upright sakura | 1 | 5–6 | 6k–9k | Source covered by VEG-01 derivative; attempt 02 rejected as flattened |
 | VEG-03 | Small leaning sakura | 1 | 4–7 | 5k–8k | Source covered by VEG-01 derivative; no separate Meshy generation |
-| VEG-04 | Low shrub cluster, broad | 2 dense lilac variants | Clustered understory | Existing imported pack | Dense lilac masses and tree-gap vegetation; sparse legacy shrub removed from placement |
+| VEG-04 | Low shrub cluster, broad | 2 dense lilac variants | Groups of 3–7 | Existing imported pack | Irregular lilac masses and three-shrub tree-gap pockets; isolated rows removed and a 1.3 m path-side shoulder preserved |
 | VEG-05 | Low shrub cluster, narrow | Derived from VEG-04 modular sources | 6–10 | 1k–2k assembled | Source covered; no separate Meshy generation |
 | VEG-06 | Reed and waterside grass cluster | 5 | 45 | 3,877 and 4,262 source plus three extracted grass groups | Thirty-six reed-like clusters mixed with nine denser landward grass patches |
 | VEG-08 | Near-ground clump scatter | 1 existing source | 18,000 | MultiMesh instances | Count retained at 18,000; measured GLB bounds now keep the enlarged clumps 3.5 cm above the lawn surface |
