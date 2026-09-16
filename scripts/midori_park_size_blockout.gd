@@ -18,6 +18,7 @@ const MidnightFernScene: PackedScene = preload("res://assets/shinrai/parks/midor
 const EmeraldFountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/emerald_fountain_grass/emerald_fountain_grass.glb")
 const JapaneseMapleMesh: Mesh = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/free3d_japanese_maple_n030123/Tree Japanese maple N030123.obj")
 const NeonParkBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/neon_park_bench/neon_park_bench.glb")
+const FuturisticEcoBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/futuristic_eco_bench/futuristic_eco_bench.glb")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -52,6 +53,7 @@ var midnight_fern_prototype: Node3D
 var emerald_fountain_grass_prototype: Node3D
 var japanese_maple_prototype: Node3D
 var neon_park_bench_prototype: Node3D
+var futuristic_eco_bench_prototype: Node3D
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
@@ -495,6 +497,7 @@ func _prepare_reference_vegetation() -> void:
 	emerald_fountain_grass_prototype = _extract_whole_scene_prototype(EmeraldFountainGrassScene, "EmeraldFountainGrass")
 	japanese_maple_prototype = _extract_mesh_prototype(JapaneseMapleMesh, "Free3DJapaneseMaple", 6.4)
 	neon_park_bench_prototype = _extract_whole_scene_prototype(NeonParkBenchScene, "NeonParkBench")
+	futuristic_eco_bench_prototype = _extract_whole_scene_prototype(FuturisticEcoBenchScene, "FuturisticEcoBench")
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
 	var source_root := pack.instantiate() as Node3D
@@ -1259,11 +1262,11 @@ func _build_japanese_maple_pass(parent: Node3D) -> void:
 	)
 
 func _build_park_benches(parent: Node3D) -> void:
-	if neon_park_bench_prototype == null:
+	if neon_park_bench_prototype == null and futuristic_eco_bench_prototype == null:
 		push_warning("Midori bench pass skipped because its source is unavailable")
 		return
 	var root := Node3D.new()
-	root.name = "NeonParkBenches_6"
+	root.name = "ParkBenches_6_TwoVariations"
 	parent.add_child(root)
 	# Candidates sit just beyond path shoulders. Extra candidates allow the pass
 	# to reject trees while retaining six useful, widely separated rest points.
@@ -1299,14 +1302,18 @@ func _build_park_benches(parent: Node3D) -> void:
 			yaw = 90.0
 		elif candidate.x > 90.0:
 			yaw = -90.0
-		var bench := neon_park_bench_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
-		bench.name = "NeonParkBench_%02d" % (placed + 1)
+		var use_eco := placed % 2 == 1 and futuristic_eco_bench_prototype != null
+		var source := futuristic_eco_bench_prototype if use_eco else neon_park_bench_prototype
+		if source == null:
+			source = futuristic_eco_bench_prototype
+		var bench := source.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		bench.name = ("FuturisticEcoBench_%02d" if use_eco else "NeonParkBench_%02d") % (placed + 1)
 		bench.position = candidate
 		bench.rotation_degrees.y = yaw
 		bench.scale = Vector3.ONE * 2.1
 		root.add_child(bench)
 		_add_invisible_collision_box(
-			root, "NeonParkBenchCollision_%02d" % (placed + 1),
+			root, "ParkBenchCollision_%02d" % (placed + 1),
 			candidate + Vector3(0.0,0.46,0.0), Vector3(2.05,0.92,0.72), yaw
 		)
 		bench_positions.append(point)
