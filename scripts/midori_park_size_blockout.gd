@@ -17,6 +17,7 @@ const HollowBarkScene: PackedScene = preload("res://assets/shinrai/parks/midori_
 const MidnightFernScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/midnight_fern/midnight_fern.glb")
 const EmeraldFountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/emerald_fountain_grass/emerald_fountain_grass.glb")
 const JapaneseMapleMesh: Mesh = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/free3d_japanese_maple_n030123/Tree Japanese maple N030123.obj")
+const NeonParkBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/neon_park_bench/neon_park_bench.glb")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -50,6 +51,7 @@ var hollow_bark_prototype: Node3D
 var midnight_fern_prototype: Node3D
 var emerald_fountain_grass_prototype: Node3D
 var japanese_maple_prototype: Node3D
+var neon_park_bench_prototype: Node3D
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
@@ -128,6 +130,7 @@ func _build_park_footprint() -> void:
 	_build_reference_canopy(root)
 	_build_deadwood_pass(root)
 	_build_japanese_maple_pass(root)
+	_build_park_benches(root)
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
@@ -491,6 +494,7 @@ func _prepare_reference_vegetation() -> void:
 	midnight_fern_prototype = _extract_whole_scene_prototype(MidnightFernScene, "MidnightFern")
 	emerald_fountain_grass_prototype = _extract_whole_scene_prototype(EmeraldFountainGrassScene, "EmeraldFountainGrass")
 	japanese_maple_prototype = _extract_mesh_prototype(JapaneseMapleMesh, "Free3DJapaneseMaple", 6.4)
+	neon_park_bench_prototype = _extract_whole_scene_prototype(NeonParkBenchScene, "NeonParkBench")
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
 	var source_root := pack.instantiate() as Node3D
@@ -1253,6 +1257,62 @@ func _build_japanese_maple_pass(parent: Node3D) -> void:
 		root, "JapaneseMapleCollision_01",
 		maple_position + Vector3(0.0,1.25,0.0), 0.48, 2.5
 	)
+
+func _build_park_benches(parent: Node3D) -> void:
+	if neon_park_bench_prototype == null:
+		push_warning("Midori bench pass skipped because its source is unavailable")
+		return
+	var root := Node3D.new()
+	root.name = "NeonParkBenches_6"
+	parent.add_child(root)
+	# Candidates sit just beyond path shoulders. Extra candidates allow the pass
+	# to reject trees while retaining six useful, widely separated rest points.
+	var candidates: Array[Vector3] = [
+		Vector3(-78,-0.025,72),Vector3(-78,-0.025,-72),
+		Vector3(-15,-0.025,72),Vector3(-12,-0.025,-72),
+		Vector3(-42,-0.025,35),Vector3(92,-0.025,-28),
+		Vector3(48,-0.025,72),Vector3(55,-0.025,-72),
+		Vector3(-92,-0.025,-28),Vector3(-32,-0.025,50),
+		Vector3(18,-0.025,72),Vector3(22,-0.025,-72),
+		Vector3(-48,-0.025,72),Vector3(-48,-0.025,-72),
+		Vector3(78,-0.025,72),Vector3(88,-0.025,-72),
+	]
+	var bench_positions: Array[Vector2] = []
+	var placed := 0
+	for candidate: Vector3 in candidates:
+		if placed >= 6:
+			break
+		if not _is_tree_spaced(candidate, 2.2):
+			continue
+		var point := Vector2(candidate.x, candidate.z)
+		var separated := true
+		for occupied: Vector2 in bench_positions:
+			if point.distance_squared_to(occupied) < 18.0 * 18.0:
+				separated = false
+				break
+		if not separated:
+			continue
+		var yaw := 0.0
+		if candidate.z < -68.0:
+			yaw = 180.0
+		elif candidate.x < -90.0:
+			yaw = 90.0
+		elif candidate.x > 90.0:
+			yaw = -90.0
+		var bench := neon_park_bench_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		bench.name = "NeonParkBench_%02d" % (placed + 1)
+		bench.position = candidate
+		bench.rotation_degrees.y = yaw
+		bench.scale = Vector3.ONE * 2.1
+		root.add_child(bench)
+		_add_invisible_collision_box(
+			root, "NeonParkBenchCollision_%02d" % (placed + 1),
+			candidate + Vector3(0.0,0.46,0.0), Vector3(2.05,0.92,0.72), yaw
+		)
+		bench_positions.append(point)
+		placed += 1
+	if placed < 6:
+		push_warning("Midori bench pass placed only %d of 6 because of tree clearance" % placed)
 
 func _add_deadwood_box_collision(
 	parent: Node3D,

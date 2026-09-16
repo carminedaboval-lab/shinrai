@@ -36,7 +36,7 @@ This manifest is the single checklist for the first production park. The user au
 | ARC-01 | Open modern Japanese park pavilion | 1 | 1 | 10k–15k | Pending |
 | ARC-02 | Small maintenance and restroom building | 1 | 1 | 8k–12k | Pending |
 | ARC-03 | Modern park entrance marker | 1 | 1 | 4k–7k | Pending |
-| FUR-01 | Weathered timber and metal bench | 1 | 5–7 | 2k–4k | Pending |
+| FUR-01 | Neon park bench | 1 | 6 | 12,616 supplied | Six path-side placements with simple box collision; source is heavier than target, so instance count remains limited |
 | FUR-02 | Backless stone bench | 1 | 2–3 | 1k–2k | Pending |
 | FUR-03 | Recycling and rubbish station | 1 | 2 | 2k–4k | Pending |
 | FUR-04 | Modern Japanese park lamp | 1 | 8–12 | 2k–4k | Pending |
