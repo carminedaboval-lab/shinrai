@@ -849,6 +849,7 @@ func _build_reference_canopy(parent: Node3D) -> void:
 			int(cluster.w), 1000 + cluster_index * 20
 		)
 	_build_mainland_groundcover_patches(parent)
+	_build_mainland_meadow_transitions(parent)
 
 func _add_authored_mainland_micro_grove(
 	parent: Node3D,
@@ -911,6 +912,41 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 				(0.36 + float(serial % 3) * 0.035) if is_heavy_patch else (0.58 + float(serial % 4) * 0.055),
 				3000 + serial,
 				"MainlandDenseGrass"
+			)
+			serial += 1
+
+func _build_mainland_meadow_transitions(parent: Node3D) -> void:
+	var root := Node3D.new()
+	root.name = "MainlandMeadowTransitions_25"
+	parent.add_child(root)
+	# Light fountain and meadow grasses bridge the visual gap between the 18k
+	# near-ground clumps and the shrub/tree layer. Uneven groups avoid a tiled
+	# field while leaving the important routes and open plaza readable.
+	var clusters: Array[Vector4] = [
+		Vector4(-89,-22,4.8,4),Vector4(-63,-8,4.2,3),
+		Vector4(-90,22,4.6,4),Vector4(-59,23,4.0,3),
+		Vector4(-31,66,4.8,4),Vector4(20,69,4.6,4),
+		Vector4(-22,-70,4.4,4),Vector4(8,-73,4.1,4),
+	]
+	var serial := 0
+	for cluster_index: int in range(clusters.size()):
+		var cluster := clusters[cluster_index]
+		for plant_index: int in range(int(cluster.w)):
+			var angle := float(cluster_index) * 1.71 + float(plant_index) * 2.29
+			var radius_value := 1.25 + float(plant_index % 3) * cluster.z * 0.42
+			var position_value := Vector3(
+				cluster.x + cos(angle) * radius_value,
+				0.035,
+				cluster.y + sin(angle) * radius_value * 0.68
+			)
+			if not _is_vegetation_clear(position_value, 0.55):
+				continue
+			var source := FountainGrassScene if (serial + cluster_index) % 3 == 0 else MeadowGrassScene
+			var scale_value := 0.62 + float((serial * 7 + cluster_index) % 5) * 0.075
+			_instance_park_asset(
+				root, source, "VEG06_MainlandTransition_%02d" % (serial + 1),
+				position_value, fmod(float(serial * 137 + cluster_index * 31), 360.0),
+				Vector3.ONE * scale_value
 			)
 			serial += 1
 

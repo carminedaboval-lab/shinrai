@@ -44,6 +44,7 @@
 
 - `midori_green_fountain_grass_v1.glb` and `midori_swaying_meadow_grass_v1.glb` are exact working copies of the preserved VEG-06 originals. Thirty-six varied instances provide the reed-like lake-edge layer.
 - `vendor/cosmic_dust_grass/grass_1k.glb` supplies three denser grass forms. Nine landward patches are mixed between the reed-like clusters to thicken the shoreline without reaching full Grey Zone Warfare density. The 1K GLB is used to control memory cost; the full source scene is not repeated as one 81K-triangle unit.
+- Twenty-five reduced-scale fountain/meadow grass accents create irregular mainland transition pockets around grove floors. They add a mid-height layer without changing the 18,000 near-ground clumps or repeating the heavy grass mesh.
 - `midori_mossy_boulder_cluster_v1.glb` is an exact working copy of VEG-07. Nine scaled and rotated groups provide shoreline landmarks and combat cover.
 - The running scene supplies simple boulder collision. The grass clusters remain decorative and stop rendering beyond the park fog range.
 
