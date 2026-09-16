@@ -8,6 +8,7 @@ This manifest is the single checklist for the first production park. The user au
 - Sakura trees replace the generic green tree canopy while preserving the artwork's lush density.
 - Current footprint blockout: 220 m x 180 m (39,600 m²), with a 284 m diagonal that extends beyond the 120–130 m fog visibility range.
 - Current canopy: 48 hand-placed dense sakura instances using a cleaned derivative of the user-supplied Winter Sentinel and 150 branch-attached, pink-only blossom bunches per tree.
+- Current artwork pass: two lake bridges, one eastern viewing deck, nine shoreline boulder groups, two planted islands, and 36 waterside grass clusters are placed in the playable park.
 - Clear main entrance, secondary entrances, a loop path, lake crossing, modern pavilion, playground, sports area, viewing deck, and an open central gathering space.
 - Tree trunks and structures provide deliberate cover; the central space retains long sightlines.
 - All placements are local to the park scene, so every tree and prop follows the park when its city block changes.
@@ -23,12 +24,12 @@ This manifest is the single checklist for the first production park. The user au
 | VEG-03 | Small leaning sakura | 1 | 4–7 | 5k–8k | Source covered by VEG-01 derivative; no separate Meshy generation |
 | VEG-04 | Low shrub cluster, broad | 2 modular sources | 8–12 | Optimize assembled result to 1k–2k | Game-ready v1 assembled; 30 varied park instances placed |
 | VEG-05 | Low shrub cluster, narrow | Derived from VEG-04 modular sources | 6–10 | 1k–2k assembled | Source covered; no separate Meshy generation |
-| VEG-06 | Reed and waterside grass cluster | 1 | 6–10 | 1k–2k | Pending |
-| VEG-07 | Mossy boulder cluster, large | 1 | 3–4 | 2k–4k target; 5,350 source | Collected and approved |
+| VEG-06 | Reed and waterside grass cluster | 2 | 36 | 3,877 and 4,262 source | Fountain-grass and meadow-grass working copies placed around the lake edge |
+| VEG-07 | Mossy boulder cluster, large | 1 | 9 | 5,350 source | Game-ready working copy placed as shoreline cover and island landmarks |
 | VEG-08 | Mossy boulder cluster, small | Derived from VEG-07 | 5–7 | 1k–3k | Source covered; no separate Meshy generation |
-| WAT-01 | Main modern arched pedestrian bridge | 1 | 1 | 8k–12k | Provisionally accepted and collected; railing cleanup later |
-| WAT-02 | Small secondary lake footbridge | 1 | 1–2 | 5k–8k | Accepted and collected; underside cleanup later |
-| WAT-03 | Lakeside viewing deck and railing | 1 | 1 | 6k–10k | Provisionally accepted and collected; entrance and centre-triangle repair later |
+| WAT-01 | Main modern arched pedestrian bridge | 1 | 1 | 11,553 source | Game-ready working copy placed on the south lake approach; railing cleanup later |
+| WAT-02 | Small secondary lake footbridge | 1 | 1 | 7,200 source | Game-ready working copy placed across the north lobe; underside cleanup later |
+| WAT-03 | Lakeside viewing deck and railing | 1 | 1 | 8,492 source | Game-ready working copy placed on the east overlook; entrance and centre-triangle repair later |
 | ARC-01 | Open modern Japanese park pavilion | 1 | 1 | 10k–15k | Pending |
 | ARC-02 | Small maintenance and restroom building | 1 | 1 | 8k–12k | Pending |
 | ARC-03 | Modern park entrance marker | 1 | 1 | 4k–7k | Pending |
@@ -122,6 +123,8 @@ After collection is complete:
 ## Current reference
 
 - `res://assets/shinrai/vegetation/sakura/references/shinrai_sakura_tree_meshy_reference_v1.png`
+- `res://assets/shinrai/parks/midori_park/references/midori_park_layout_pass_v1.png`
+- See `MIDORI_PARK_LAYOUT_PLAN.md` for the implemented district layout and every planned prop socket.
 
 
 

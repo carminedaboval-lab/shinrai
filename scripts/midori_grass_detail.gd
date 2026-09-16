@@ -12,7 +12,21 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 5
+const DETAIL_VERSION := 6
+const WEST_PROMENADE: Array[Vector2] = [
+	Vector2(-37.0, 42.0), Vector2(-27.0, 31.0), Vector2(-23.0, 14.0),
+	Vector2(-27.0, -4.0), Vector2(-31.0, -24.0), Vector2(-37.0, -42.0),
+]
+const EAST_PROMENADE: Array[Vector2] = [
+	Vector2(43.0, 42.0), Vector2(59.0, 34.0), Vector2(72.0, 21.0),
+	Vector2(80.0, 3.0), Vector2(80.0, -15.0), Vector2(84.0, -35.0),
+	Vector2(78.0, -54.0), Vector2(76.0, -64.0),
+]
+const NORTH_PROMENADE: Array[Vector2] = [
+	Vector2(-37.0, -42.0), Vector2(-18.0, -53.0), Vector2(5.0, -61.0),
+	Vector2(28.0, -65.0), Vector2(47.0, -64.0), Vector2(65.0, -66.0),
+	Vector2(76.0, -64.0),
+]
 
 # The original uploaded Meshy GLB measures 1.0 m tall with its pivot centered.
 # Keep it small and broad so it blends into the Forest Ground 01 material.
@@ -218,6 +232,12 @@ func _is_lawn_position(x: float, z: float) -> bool:
 		return false
 	if abs(z - 42.0) < 3.2 and abs(x) < 97.0:
 		return false
+	if _near_polyline(Vector2(x, z), WEST_PROMENADE, 2.8):
+		return false
+	if _near_polyline(Vector2(x, z), EAST_PROMENADE, 2.9):
+		return false
+	if _near_polyline(Vector2(x, z), NORTH_PROMENADE, 2.7):
+		return false
 
 	# Lake lobes, with a safety margin around their visible surfaces.
 	if _inside_ellipse(x, z, 27.0, -10.0, 57.0, 38.0):
@@ -238,6 +258,20 @@ func _is_lawn_position(x: float, z: float) -> bool:
 		return false
 
 	return true
+
+
+func _near_polyline(point: Vector2, points: Array[Vector2], half_width: float) -> bool:
+	for index: int in range(points.size() - 1):
+		var start := points[index]
+		var end := points[index + 1]
+		var segment := end - start
+		var length_squared := segment.length_squared()
+		if length_squared <= 0.0001:
+			continue
+		var t := clampf((point - start).dot(segment) / length_squared, 0.0, 1.0)
+		if point.distance_to(start + segment * t) <= half_width:
+			return true
+	return false
 
 
 func _inside_ellipse(x: float, z: float, center_x: float, center_z: float, radius_x: float, radius_z: float) -> bool:

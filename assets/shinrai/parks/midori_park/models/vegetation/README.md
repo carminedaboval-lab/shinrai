@@ -33,4 +33,10 @@
 - Godot placement: 30 hand-authored transforms with varied rotation and scale.
 - Decorative only; no collision.
 
+## Waterside and shoreline assets
+
+- `midori_green_fountain_grass_v1.glb` and `midori_swaying_meadow_grass_v1.glb` are exact working copies of the preserved VEG-06 originals. Thirty-six varied instances define the lake edge.
+- `midori_mossy_boulder_cluster_v1.glb` is an exact working copy of VEG-07. Nine scaled and rotated groups provide shoreline landmarks and combat cover.
+- The running scene supplies simple boulder collision. The grass clusters remain decorative and stop rendering beyond the park fog range.
+
 The untouched Meshy downloads remain under `source_glb/`. These GLBs are derived game-ready assets and can be rebuilt from those sources.
