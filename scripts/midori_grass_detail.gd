@@ -12,7 +12,7 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 7
+const DETAIL_VERSION := 8
 const WEST_PROMENADE: Array[Vector2] = [
 	Vector2(-37.0, 42.0), Vector2(-27.0, 31.0), Vector2(-23.0, 14.0),
 	Vector2(-27.0, -4.0), Vector2(-31.0, -24.0), Vector2(-37.0, -42.0),
@@ -37,7 +37,7 @@ const MAX_CLUMP_HEIGHT_M := 0.17
 const GROUND_SURFACE_Y := 0.010
 # The textured ground was visually swallowing the lower leaves. Keep the source
 # pivot correction, then expose more of each clump without changing its scale.
-const HEIGHT_OFFSET_FACTOR := 0.40
+const HEIGHT_OFFSET_FACTOR := 0.70
 
 var _installed_scene_id: int = 0
 
