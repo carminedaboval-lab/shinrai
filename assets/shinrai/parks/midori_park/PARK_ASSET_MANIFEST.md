@@ -8,7 +8,8 @@ This manifest is the single checklist for the first production park. The user au
 - Sakura trees replace the generic green tree canopy while preserving the artwork's lush density.
 - Current footprint blockout: 220 m x 180 m (39,600 m²), with a 284 m diagonal that extends beyond the 120–130 m fog visibility range.
 - Current canopy: 24 hand-placed dense sakura instances using a cleaned derivative of the user-supplied Winter Sentinel and 150 branch-attached, pink-only blossom bunches per tree.
-- Current artwork pass: two lake bridges, one eastern viewing deck, nine shoreline boulder groups, two planted islands, 36 reed-like waterside clusters, nine light shoreline grass patches, eight mainland grove zones, four five-tree mainland edge groves, 14 young pines, 24 existing-pack grass patches, 25 light mainland meadow-transition accents, seven fallen beech pieces, five stump bases, and one heavy hollow-bark focal prop are placed in the playable park. The heavy grass variant is limited to four reduced-scale deep-woodland accents.
+- Current artwork pass: two lake bridges, one eastern viewing deck, nine shoreline boulder groups, two planted islands, 36 reed-like waterside clusters, nine light shoreline grass patches, eight mainland grove zones, four five-tree mainland edge groves, 14 young pines, 56 low woodland bushes, 24 existing-pack grass patches, 25 light mainland meadow-transition accents, seven fallen beech pieces, five stump bases, and one heavy hollow-bark focal prop are placed in the playable park. The heavy grass variant is limited to four reduced-scale deep-woodland accents.
+- Grounding audit: all 196 generated mainland broadleaf, pine, micro-grove, and sapling visuals are settled 3.5 cm below the lawn surface instead of floating 8–14 cm above it.
 - Clear main entrance, secondary entrances, a loop path, lake crossing, modern pavilion, playground, sports area, viewing deck, and an open central gathering space.
 - Tree trunks and structures provide deliberate cover; the central space retains long sightlines.
 - All placements are local to the park scene, so every tree and prop follows the park when its city block changes.
@@ -28,6 +29,7 @@ This manifest is the single checklist for the first production park. The user au
 | VEG-08 | Near-ground clump scatter | 1 existing source | 18,000 | MultiMesh instances | Count retained at 18,000; measured GLB bounds now keep the enlarged clumps 3.5 cm above the lawn surface |
 | VEG-07 | Mossy boulder cluster, large | 1 | 9 | 5,350 source | Game-ready working copy placed as shoreline cover and island landmarks |
 | VEG-08 | Mossy boulder cluster, small | Derived from VEG-07 | 5–7 | 1k–3k | Source covered; no separate Meshy generation |
+| VEG-09 | Japanese maple accent tree | 1–2 | 2 | 8k–15k | Requested; genuine maple asset still required |
 | WAT-01 | Main modern arched pedestrian bridge | 1 | 1 | 11,553 source | Game-ready working copy placed on the south lake approach; railing cleanup later |
 | WAT-02 | Small secondary lake footbridge | 1 | 1 | 7,200 source | Game-ready working copy placed across the north lobe; underside cleanup later |
 | WAT-03 | Lakeside viewing deck and railing | 1 | 1 | 8,492 source | Game-ready working copy placed on the east overlook; entrance and centre-triangle repair later |

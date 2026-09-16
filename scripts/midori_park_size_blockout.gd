@@ -39,6 +39,7 @@ var mat_plan_marker: StandardMaterial3D
 var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
 var pine_sapling_prototypes: Array[Node3D] = []
+var forest_floor_bush_prototypes: Array[Node3D] = []
 var lilac_prototypes: Array[Node3D] = []
 var dense_grass_prototypes: Array[Node3D] = []
 var deadwood_trunk_prototype: Node3D
@@ -58,7 +59,7 @@ func _ready() -> void:
 	])
 
 func _create_materials() -> void:
-	mat_grass = _make_material(Color("#4a6a45"), 0.96)
+	mat_grass = _make_material(Color("#344f38"), 0.98)
 	mat_path = _make_material(Color("#77756f"), 0.92)
 	mat_water = _make_material(Color("#315d70"), 0.30, 0.12)
 	mat_sports = _make_material(Color("#536d61"), 0.88)
@@ -441,6 +442,9 @@ func _prepare_reference_vegetation() -> void:
 		["Pine_sapling_1_LOD1", 3.0], ["Pine_sapling_2_LOD1", 2.7],
 		["Pine_sapling_3_LOD1", 3.2],
 	]
+	var forest_floor_bush_specs: Array = [
+		["Tree EZTree1.Bush006", 0.90],
+	]
 	var lilac_specs: Array = [
 		["Lilac_bush_1_LOD1", 1.65], ["Lilac_bush_2_LOD1", 1.50],
 	]
@@ -459,6 +463,10 @@ func _prepare_reference_vegetation() -> void:
 		var prototype := _extract_vegetation_prototype(PineTreePack, spec[0], spec[1])
 		if prototype != null:
 			pine_sapling_prototypes.append(prototype)
+	for spec: Array in forest_floor_bush_specs:
+		var prototype := _extract_vegetation_prototype(BroadleafTreePack, spec[0], spec[1])
+		if prototype != null:
+			forest_floor_bush_prototypes.append(prototype)
 	for spec: Array in lilac_specs:
 		var prototype := _extract_vegetation_prototype(LilacBushPack, spec[0], spec[1])
 		if prototype != null:
@@ -468,8 +476,8 @@ func _prepare_reference_vegetation() -> void:
 		if prototype != null:
 			_naturalize_dense_grass_prototype(prototype)
 			dense_grass_prototypes.append(prototype)
-	print("Midori reference vegetation: %d broadleaf | %d pine | %d pine sapling | %d lilac | %d dense grass" % [
-		broadleaf_prototypes.size(), pine_prototypes.size(), pine_sapling_prototypes.size(), lilac_prototypes.size(), dense_grass_prototypes.size(),
+	print("Midori reference vegetation: %d broadleaf | %d pine | %d pine sapling | %d floor bush | %d lilac | %d dense grass" % [
+		broadleaf_prototypes.size(), pine_prototypes.size(), pine_sapling_prototypes.size(), forest_floor_bush_prototypes.size(), lilac_prototypes.size(), dense_grass_prototypes.size(),
 	])
 	deadwood_trunk_prototype = _extract_whole_scene_prototype(DeadwoodTrunkScene, "BeechDeadwood")
 	hollow_bark_prototype = _extract_whole_scene_prototype(HollowBarkScene, "HeavyHollowBark")
@@ -623,6 +631,10 @@ func _add_reference_plant(
 		return
 	instance.name = "%s_%03d" % [node_prefix, serial]
 	instance.position = position_value
+	if node_prefix.begins_with("ReferenceBroadleaf") or node_prefix.begins_with("ReferencePine") or node_prefix.begins_with("MicroGrove") or node_prefix.begins_with("MainlandPineSapling"):
+		# Extracted prototypes already have their visual base at local Y=0. Settle
+		# mainland trunks slightly into the lawn instead of floating 8–14 cm.
+		instance.position.y = -0.035
 	instance.rotation_degrees.y = fmod(float(serial) * 137.507, 360.0)
 	instance.scale = Vector3.ONE * scale_value
 	parent.add_child(instance)
@@ -860,6 +872,40 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		)
 	_build_mainland_groundcover_patches(parent)
 	_build_mainland_meadow_transitions(parent)
+	_build_forest_floor_bush_pockets(parent)
+
+func _build_forest_floor_bush_pockets(parent: Node3D) -> void:
+	if forest_floor_bush_prototypes.is_empty():
+		return
+	var root := Node3D.new()
+	root.name = "MainlandForestFloorBushPockets"
+	parent.add_child(root)
+	# Low woodland plants sit in uneven five-plant pockets around the main groves.
+	# They remain decorative, avoid routes, and never form isolated specimen rows.
+	var centers: Array[Vector2] = [
+		Vector2(-86,-16),Vector2(-63,-14),Vector2(-86,17),Vector2(-63,18),
+		Vector2(-28,61),Vector2(23,63),Vector2(-18,-66),Vector2(4,-69),
+		Vector2(-26,-34),Vector2(-11,-44),Vector2(88,-15),Vector2(84,-49),
+	]
+	var serial := 0
+	for center_index: int in range(centers.size()):
+		var center := centers[center_index]
+		for plant_index: int in range(5):
+			var angle := float(center_index) * 1.43 + float(plant_index) * 2.17
+			var radius_value := 2.1 + float((plant_index * 3 + center_index) % 5) * 1.05
+			var position_value := Vector3(
+				center.x + cos(angle) * radius_value,
+				-0.018,
+				center.y + sin(angle) * radius_value * 0.72
+			)
+			if not _is_vegetation_clear(position_value, 0.55):
+				continue
+			_add_reference_plant(
+				root, forest_floor_bush_prototypes, position_value,
+				0.72 + float((serial * 5 + center_index) % 6) * 0.045,
+				5200 + serial, "ForestFloorBush"
+			)
+			serial += 1
 
 func _build_mainland_pine_saplings(parent: Node3D) -> void:
 	if pine_sapling_prototypes.is_empty():

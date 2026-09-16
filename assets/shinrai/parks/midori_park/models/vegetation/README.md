@@ -36,6 +36,7 @@
 ## Mainland understory
 
 - The pine pack's three dedicated sapling LOD1 meshes supply fourteen varied young-pine placements on the mainland. They use the skinny-tree clearance rules and no collision.
+- The previously unused `Tree EZTree1.Bush006` mesh supplies fifty-six low woodland plants in uneven five-plant floor pockets. They remain decorative and are kept out of important routes.
 - The active mainland understory uses the two denser variants from `vendor/lilac_bush_pack/`.
 - The sparse small lilac variant is excluded. Dense variants are placed in irregular 3–7 plant masses and asymmetric three-shrub pockets between mixed broadleaf/skinny-pine pairs. Former isolated shrub rows are removed, and active lilacs preserve approximately 1.3 m beside important paths.
 - Twenty-four patches from the existing dense-grass pack sit around the eight mainland infill groves; the lake islands are unchanged. The heavy `Grass1` variant is corrected for dark transparent-blade self-shadowing and restricted to four reduced-scale deep-woodland accents; shoreline patches use only the two lighter variants.
