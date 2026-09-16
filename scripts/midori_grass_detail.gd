@@ -83,11 +83,11 @@ func _install_ground_clumps() -> void:
 
 		# Gentle macro patching: some lawn areas stay sparse while nearby areas
 		# gather more clumps, avoiding an artificial evenly-spaced look.
-		var macro := 0.5
+		var macro: float = 0.5
 		macro += sin(x * 0.115) * 0.16
 		macro += cos(z * 0.095) * 0.14
 		macro += sin((x + z) * 0.061) * 0.12
-		var keep_probability := clamp(0.44 + macro * 0.58, 0.34, 0.96)
+		var keep_probability: float = clampf(0.44 + macro * 0.58, 0.34, 0.96)
 		if rng.randf() > keep_probability:
 			continue
 
