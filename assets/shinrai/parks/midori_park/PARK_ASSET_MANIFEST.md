@@ -8,7 +8,7 @@ This manifest is the single checklist for the first production park. The user au
 - Sakura trees replace the generic green tree canopy while preserving the artwork's lush density.
 - Current footprint blockout: 220 m x 180 m (39,600 m²), with a 284 m diagonal that extends beyond the 120–130 m fog visibility range.
 - Current canopy: 24 hand-placed dense sakura instances using a cleaned derivative of the user-supplied Winter Sentinel and 150 branch-attached, pink-only blossom bunches per tree.
-- Current artwork pass: two lake bridges, one eastern viewing deck, nine shoreline boulder groups, two planted islands, 36 reed-like waterside clusters, and nine denser shoreline grass patches are placed in the playable park.
+- Current artwork pass: two lake bridges, one eastern viewing deck, nine shoreline boulder groups, two planted islands, 36 reed-like waterside clusters, nine denser shoreline grass patches, and eight new mainland grove zones with 24 existing-pack grass patches are placed in the playable park.
 - Clear main entrance, secondary entrances, a loop path, lake crossing, modern pavilion, playground, sports area, viewing deck, and an open central gathering space.
 - Tree trunks and structures provide deliberate cover; the central space retains long sightlines.
 - All placements are local to the park scene, so every tree and prop follows the park when its city block changes.
@@ -22,9 +22,10 @@ This manifest is the single checklist for the first production park. The user au
 | VEG-01-FOL | Reusable sakura blossom branch cluster | 1 source; variants later | Canopy distribution later | 8,192 source; optimize later | Collected, approved, optimized, and used in sakura v1 |
 | VEG-02 | Medium upright sakura | 1 | 5–6 | 6k–9k | Source covered by VEG-01 derivative; attempt 02 rejected as flattened |
 | VEG-03 | Small leaning sakura | 1 | 4–7 | 5k–8k | Source covered by VEG-01 derivative; no separate Meshy generation |
-| VEG-04 | Low shrub cluster, broad | 2 modular sources | 8–12 | Optimize assembled result to 1k–2k | Game-ready v1 assembled; 30 varied park instances placed |
+| VEG-04 | Low shrub cluster, broad | 2 dense lilac variants | Clustered understory | Existing imported pack | Dense lilac masses and tree-gap vegetation; sparse legacy shrub removed from placement |
 | VEG-05 | Low shrub cluster, narrow | Derived from VEG-04 modular sources | 6–10 | 1k–2k assembled | Source covered; no separate Meshy generation |
 | VEG-06 | Reed and waterside grass cluster | 5 | 45 | 3,877 and 4,262 source plus three extracted grass groups | Thirty-six reed-like clusters mixed with nine denser landward grass patches |
+| VEG-08 | Near-ground clump scatter | 1 existing source | 18,000 | MultiMesh instances | Count retained at 18,000; measured GLB bounds now keep the enlarged clumps 3.5 cm above the lawn surface |
 | VEG-07 | Mossy boulder cluster, large | 1 | 9 | 5,350 source | Game-ready working copy placed as shoreline cover and island landmarks |
 | VEG-08 | Mossy boulder cluster, small | Derived from VEG-07 | 5–7 | 1k–3k | Source covered; no separate Meshy generation |
 | WAT-01 | Main modern arched pedestrian bridge | 1 | 1 | 11,553 source | Game-ready working copy placed on the south lake approach; railing cleanup later |

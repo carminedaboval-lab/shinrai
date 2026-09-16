@@ -25,13 +25,20 @@
 - This temporary rebuild is not referenced by the park. It was superseded by the active Winter Sentinel version and is retained only as a build reference.
 - Collision: simple generated trunk cylinders; decorative branches and foliage have no mesh collision.
 
-## `midori_evergreen_shrub_v1.glb`
+## `midori_evergreen_shrub_v1.glb` — inactive
 
 - Built from the preserved VEG-04A woody base and VEG-04B evergreen leafy sprig.
 - Uses three linked, decimated leafy clusters.
 - Approximate rendered triangle cost per shrub instance: 2,635.
-- Godot placement: 30 hand-authored transforms with varied rotation and scale.
-- Decorative only; no collision.
+- Removed from park placement because its low spreading form read as an isolated artificial bush.
+- Retained only as a source reference; no collision.
+
+## Mainland understory
+
+- The active mainland understory uses the two denser variants from `vendor/lilac_bush_pack/`.
+- The sparse small lilac variant is excluded. Dense variants are placed in irregular masses and between mixed broadleaf/skinny-pine pairs.
+- Twenty-four patches from the existing dense-grass pack sit around the eight mainland infill groves; the lake islands are unchanged.
+- The Meshy ground-clump scatter remains at 18,000 instances. Its imported bounds were measured at 0.796875 m high with a -0.378906 m base, so placement now uses the true base plus a fixed 3.5 cm reveal instead of an assumed centred one-metre pivot.
 
 ## Waterside and shoreline assets
 

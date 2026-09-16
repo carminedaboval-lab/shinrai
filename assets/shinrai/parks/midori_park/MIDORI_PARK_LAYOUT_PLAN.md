@@ -11,7 +11,8 @@ The active scene is a 220 m × 180 m landmark park based on the supplied SHINRAI
 - Curved west, north, and east promenades connect the grid paths to the lake districts.
 - Nine mossy boulder groups around the shoreline, used as cover and recognizable navigation points.
 - Thirty-six fountain-grass and meadow-grass clusters around the water edge.
-- Forty-eight sakura trees and thirty evergreen shrubs, with the main routes kept readable.
+- Twenty-four sakura accents, dense mainland tree groves, and clustered lilac understory, with the main routes kept readable.
+- Twenty-four knee-height grass patches from the existing grass pack break up the mainland grove floors; the 18,000 near-ground clumps remain a separate low layer.
 - Sports district west, playground southwest, central plaza southeast, and pavilion overlook northeast.
 - Main arrival from the south with secondary entrances on the north, east, and west edges.
 

@@ -2,7 +2,6 @@ extends Node3D
 
 const PlayerScript = preload("res://scripts/player.gd")
 const SakuraTreeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_sakura_winter_sentinel_clean_v2.glb")
-const EvergreenShrubScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_evergreen_shrub_v1.glb")
 const FountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_green_fountain_grass_v1.glb")
 const MeadowGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_swaying_meadow_grass_v1.glb")
 const MossyBoulderScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_mossy_boulder_cluster_v1.glb")
@@ -113,7 +112,6 @@ func _build_park_footprint() -> void:
 	if SHOW_PLANNING_LABELS:
 		_build_scale_ticks(root)
 	_build_sakura_trees(root)
-	_build_evergreen_shrubs(root)
 	_build_reference_canopy(root)
 
 func _build_boundary(parent: Node3D) -> void:
@@ -432,7 +430,6 @@ func _prepare_reference_vegetation() -> void:
 	]
 	var lilac_specs: Array = [
 		["Lilac_bush_1_LOD1", 1.65], ["Lilac_bush_2_LOD1", 1.50],
-		["Lilac_small_bush_3_LOD1", 1.05],
 	]
 	var dense_grass_specs: Array = [
 		["Grass1", 0.95], ["GrassLawnAutumn", 0.72], ["GrassAutumn3", 0.55],
@@ -569,7 +566,9 @@ func _add_reference_tree_cluster(
 	center: Vector2,
 	radius_value: float,
 	count: int,
-	serial_offset: int
+	serial_offset: int,
+	strict_three_meter_spacing: bool = false,
+	pine_stride: int = 9
 ) -> void:
 	var placed := 0
 	var attempt := 0
@@ -586,8 +585,14 @@ func _add_reference_tree_cluster(
 			continue
 		var serial := serial_offset * 20 + placed
 		var scale_value := 0.82 + 0.055 * float(serial % 6)
-		var is_skinny_tree := serial % 9 == 3 or serial % 13 == 7
-		if not _is_tree_spaced_for_type(position_value, is_skinny_tree):
+		var safe_pine_stride := maxi(pine_stride, 3)
+		var is_skinny_tree := serial % safe_pine_stride == 2
+		var has_tree_spacing := (
+			_is_tree_spaced(position_value, MATURE_TREE_MIN_SPACING_M)
+			if strict_three_meter_spacing
+			else _is_tree_spaced_for_type(position_value, is_skinny_tree)
+		)
+		if not has_tree_spacing:
 			continue
 		if is_skinny_tree:
 			_add_reference_plant(parent, pine_prototypes, position_value, scale_value, serial, "ReferencePine")
@@ -692,6 +697,22 @@ func _build_reference_canopy(parent: Node3D) -> void:
 			int(cluster.w), cluster_index
 		)
 
+	# Mainland infill groves occupy the large empty lawn panels seen from ground
+	# level. These use a strict 3 m trunk spacing and a more frequent skinny pine
+	# to break up the broadleaf rhythm without touching either lake island.
+	var mainland_infill_clusters: Array[Vector4] = [
+		Vector4(-86,-16,11,9),Vector4(-63,-14,10,8),
+		Vector4(-86,17,11,9),Vector4(-63,18,10,8),
+		Vector4(-28,61,11,9),Vector4(23,63,11,9),
+		Vector4(-18,-66,11,9),Vector4(4,-69,10,8),
+	]
+	for cluster_index: int in range(mainland_infill_clusters.size()):
+		var cluster := mainland_infill_clusters[cluster_index]
+		_add_reference_tree_cluster(
+			canopy_root, Vector2(cluster.x, cluster.y), cluster.z,
+			int(cluster.w), 200 + cluster_index, true, 4
+		)
+
 	# Each green island has a small vertical silhouette in the screenshot.
 	var island_trees: Array[Vector4] = [
 		Vector4(21,-13,0.86,0),Vector4(26,-10,0.74,1),Vector4(57,-37,0.72,1),
@@ -744,6 +765,10 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		Vector4(104,8,7,12),Vector4(103,-48,7,12),Vector4(-52,-15,8,12),
 		Vector4(-52,20,8,12),Vector4(-54,57,7,10),Vector4(2,56,7,10),
 		Vector4(34,56,7,10),Vector4(86,-48,6,10),
+		Vector4(-86,-16,12,10),Vector4(-63,-14,11,9),
+		Vector4(-86,17,12,10),Vector4(-63,18,11,9),
+		Vector4(-28,61,12,10),Vector4(23,63,12,10),
+		Vector4(-18,-66,12,10),Vector4(4,-69,11,9),
 	]
 	for cluster_index: int in range(shrub_clusters.size()):
 		var cluster := shrub_clusters[cluster_index]
@@ -751,6 +776,43 @@ func _build_reference_canopy(parent: Node3D) -> void:
 			understory_root, Vector2(cluster.x, cluster.y), cluster.z,
 			int(cluster.w), 1000 + cluster_index * 20
 		)
+	_build_mainland_groundcover_patches(parent)
+
+func _build_mainland_groundcover_patches(parent: Node3D) -> void:
+	if dense_grass_prototypes.is_empty():
+		return
+	var root := Node3D.new()
+	root.name = "MainlandDenseGrassPatches_24"
+	parent.add_child(root)
+	# These are the mainland infill groves only. Three offset patches per grove
+	# create a readable knee-height layer without raising the 18k clump count or
+	# changing the lake islands.
+	var centers: Array[Vector2] = [
+		Vector2(-86,-16),Vector2(-63,-14),Vector2(-86,17),Vector2(-63,18),
+		Vector2(-28,61),Vector2(23,63),Vector2(-18,-66),Vector2(4,-69),
+	]
+	var variant_sequence: Array[int] = [0,0,1,0,0,2,0,0]
+	var serial := 0
+	for center_index: int in range(centers.size()):
+		var center := centers[center_index]
+		for patch_index: int in range(3):
+			var angle := float(center_index) * 1.31 + float(patch_index) * 2.17
+			var radius_value := 3.4 + float(patch_index) * 2.1
+			var position_value := Vector3(
+				center.x + cos(angle) * radius_value,
+				0.12,
+				center.y + sin(angle) * radius_value * 0.72
+			)
+			if not _is_vegetation_clear(position_value, 0.35):
+				continue
+			var prototype_index := variant_sequence[serial % variant_sequence.size()] % dense_grass_prototypes.size()
+			var selected_prototypes: Array[Node3D] = [dense_grass_prototypes[prototype_index]]
+			_add_reference_plant(
+				root, selected_prototypes, position_value,
+				0.74 + float(serial % 4) * 0.08, 3000 + serial,
+				"MainlandDenseGrass"
+			)
+			serial += 1
 
 func _add_mixed_tree_pair_shrubs(parent: Node3D) -> void:
 	# Give each skinny pine's nearest mature neighbour a soft two-bush bridge.
@@ -979,32 +1041,6 @@ func _configure_vegetation_visibility(node: Node) -> void:
 	for child: Node in node.get_children():
 		_configure_vegetation_visibility(child)
 
-func _build_evergreen_shrubs(parent: Node3D) -> void:
-	var shrubs_root := Node3D.new()
-	shrubs_root.name = "HandPlacedEvergreenShrubs_30"
-	parent.add_child(shrubs_root)
-	var placements: Array[Vector3] = [
-		Vector3(-100.0, 0.02, -55.0), Vector3(-100.0, 0.02, -25.0), Vector3(-100.0, 0.02, 5.0),
-		Vector3(-100.0, 0.02, 34.0), Vector3(-100.0, 0.02, 62.0), Vector3(100.0, 0.02, -52.0),
-		Vector3(100.0, 0.02, -25.0), Vector3(100.0, 0.02, 5.0), Vector3(100.0, 0.02, 34.0),
-		Vector3(100.0, 0.02, 62.0), Vector3(-36.0, 0.02, -38.0), Vector3(-35.0, 0.02, -5.0),
-		Vector3(-28.0, 0.02, 28.0), Vector3(-10.0, 0.02, 44.0), Vector3(12.0, 0.02, 47.0),
-		Vector3(38.0, 0.02, 45.0), Vector3(67.0, 0.02, 36.0), Vector3(88.0, 0.02, 24.0),
-		Vector3(91.0, 0.02, -2.0), Vector3(88.0, 0.02, -28.0), Vector3(72.0, 0.02, -48.0),
-		Vector3(48.0, 0.02, -58.0), Vector3(18.0, 0.02, -67.0), Vector3(-10.0, 0.02, -65.0),
-		Vector3(-42.0, 0.02, -52.0), Vector3(-38.0, 0.02, -28.0), Vector3(-50.0, 0.02, 30.0),
-		Vector3(-48.0, 0.02, 60.0), Vector3(38.0, 0.02, 63.0), Vector3(87.0, 0.02, 60.0),
-	]
-	for index: int in range(placements.size()):
-		var scale_value: float = 0.78 + float(index % 6) * 0.065
-		var shrub := EvergreenShrubScene.instantiate() as Node3D
-		shrub.name = "EvergreenShrub_%02d" % (index + 1)
-		shrub.position = placements[index]
-		shrub.rotation_degrees.y = fmod(float(index) * 111.7, 360.0)
-		shrub.scale = Vector3.ONE * scale_value
-		shrubs_root.add_child(shrub)
-		_configure_vegetation_visibility(shrub)
-
 func _add_zone_box(parent: Node3D, node_name: String, center: Vector3, size_2d: Vector2, material: Material) -> void:
 	_add_visual_box(parent, node_name, center, Vector3(size_2d.x, 0.07, size_2d.y), material)
 
@@ -1078,7 +1114,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | mature woodland infill | existing shrubs\nProp sockets are planned and hidden until their assets arrive."
+	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | dense mainland groves | clustered understory\nProp sockets are planned and hidden until their assets arrive."
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))

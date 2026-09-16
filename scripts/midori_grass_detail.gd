@@ -12,7 +12,7 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 8
+const DETAIL_VERSION := 9
 const WEST_PROMENADE: Array[Vector2] = [
 	Vector2(-37.0, 42.0), Vector2(-27.0, 31.0), Vector2(-23.0, 14.0),
 	Vector2(-27.0, -4.0), Vector2(-31.0, -24.0), Vector2(-37.0, -42.0),
@@ -28,16 +28,15 @@ const NORTH_PROMENADE: Array[Vector2] = [
 	Vector2(76.0, -64.0),
 ]
 
-# The original uploaded Meshy GLB measures 1.0 m tall with its pivot centered.
-# Keep it small and broad so it blends into the Forest Ground 01 material.
-const SOURCE_HEIGHT_M := 1.0
-const SOURCE_BOTTOM_Y := -0.5
-const MIN_CLUMP_HEIGHT_M := 0.09
-const MAX_CLUMP_HEIGHT_M := 0.17
+# Measured from the imported GLB rather than assuming a centered one-metre mesh.
+# Accurate bounds keep the leaves above the lawn as their scale changes.
+const SOURCE_HEIGHT_M := 0.796875
+const SOURCE_BOTTOM_Y := -0.378906
+const MIN_CLUMP_HEIGHT_M := 0.13
+const MAX_CLUMP_HEIGHT_M := 0.24
 const GROUND_SURFACE_Y := 0.010
-# The textured ground was visually swallowing the lower leaves. Keep the source
-# pivot correction, then expose more of each clump without changing its scale.
-const HEIGHT_OFFSET_FACTOR := 0.70
+# A small fixed reveal prevents z-fighting without making the clumps float.
+const EXPOSED_BASE_OFFSET_M := 0.035
 
 var _installed_scene_id: int = 0
 
@@ -116,7 +115,7 @@ func _install_ground_clumps() -> void:
 
 		var target_height := rng.randf_range(MIN_CLUMP_HEIGHT_M, MAX_CLUMP_HEIGHT_M)
 		var uniform_scale := target_height / SOURCE_HEIGHT_M
-		var width_variation := rng.randf_range(1.45, 2.10)
+		var width_variation := rng.randf_range(1.55, 2.35)
 		var yaw := rng.randf_range(0.0, TAU)
 		var basis := Basis(Vector3.UP, yaw)
 		basis = basis.scaled(Vector3(
@@ -125,11 +124,10 @@ func _install_ground_clumps() -> void:
 			uniform_scale * width_variation
 		))
 
-		# Meshy's source pivot is centered, so lift half the scaled source height
-		# to plant the base directly on the park surface, then raise it slightly
-		# more so the clumps read clearly above the detailed ground texture.
+		# Plant the measured source base on the park surface, then expose it just
+		# enough to remain legible over the detailed ground texture.
 		var grounded_y := GROUND_SURFACE_Y - SOURCE_BOTTOM_Y * uniform_scale
-		grounded_y += target_height * HEIGHT_OFFSET_FACTOR
+		grounded_y += EXPOSED_BASE_OFFSET_M
 		grounded_y += rng.randf_range(-0.002, 0.002)
 		var local_position := Vector3(x - center_x, grounded_y, z - center_z)
 		buckets[chunk_index].append(Transform3D(basis, local_position))
