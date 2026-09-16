@@ -14,6 +14,8 @@ const LilacBushPack: PackedScene = preload("res://assets/shinrai/parks/midori_pa
 const DenseGrassPack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/cosmic_dust_grass/grass_1k.glb")
 const DeadwoodTrunkScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/mistrzjang1_tree_trunk/tree_trunk_002.fbx")
 const HollowBarkScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/michaeldebbarma_hollow_bark/hollow_bark.fbx")
+const MidnightFernScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/midnight_fern/midnight_fern.glb")
+const JapaneseMapleMesh: Mesh = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/free3d_japanese_maple_n030123/Tree Japanese maple N030123.obj")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -44,6 +46,8 @@ var lilac_prototypes: Array[Node3D] = []
 var dense_grass_prototypes: Array[Node3D] = []
 var deadwood_trunk_prototype: Node3D
 var hollow_bark_prototype: Node3D
+var midnight_fern_prototype: Node3D
+var japanese_maple_prototype: Node3D
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
@@ -121,6 +125,7 @@ func _build_park_footprint() -> void:
 	_build_sakura_trees(root)
 	_build_reference_canopy(root)
 	_build_deadwood_pass(root)
+	_build_japanese_maple_pass(root)
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
@@ -481,6 +486,8 @@ func _prepare_reference_vegetation() -> void:
 	])
 	deadwood_trunk_prototype = _extract_whole_scene_prototype(DeadwoodTrunkScene, "BeechDeadwood")
 	hollow_bark_prototype = _extract_whole_scene_prototype(HollowBarkScene, "HeavyHollowBark")
+	midnight_fern_prototype = _extract_whole_scene_prototype(MidnightFernScene, "MidnightFern")
+	japanese_maple_prototype = _extract_mesh_prototype(JapaneseMapleMesh, "Free3DJapaneseMaple", 6.4)
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
 	var source_root := pack.instantiate() as Node3D
@@ -542,6 +549,28 @@ func _extract_whole_scene_prototype(pack: PackedScene, prototype_name: String) -
 		bounds.position.z + bounds.size.z * 0.5
 	)
 	_configure_vegetation_visibility(content)
+	return prototype
+
+func _extract_mesh_prototype(mesh: Mesh, prototype_name: String, target_height: float) -> Node3D:
+	if mesh == null:
+		return null
+	var bounds := mesh.get_aabb()
+	if bounds.size.y <= 0.001:
+		return null
+	var prototype := Node3D.new()
+	prototype.name = prototype_name
+	var visual := MeshInstance3D.new()
+	visual.name = "Visual"
+	visual.mesh = mesh
+	var scale_factor := target_height / bounds.size.y
+	visual.position = -Vector3(
+		bounds.position.x + bounds.size.x * 0.5,
+		bounds.position.y,
+		bounds.position.z + bounds.size.z * 0.5
+	) * scale_factor
+	visual.scale = Vector3.ONE * scale_factor
+	prototype.add_child(visual)
+	_configure_vegetation_visibility(visual)
 	return prototype
 
 func _naturalize_dense_grass_prototype(node: Node) -> void:
@@ -873,6 +902,39 @@ func _build_reference_canopy(parent: Node3D) -> void:
 	_build_mainland_groundcover_patches(parent)
 	_build_mainland_meadow_transitions(parent)
 	_build_forest_floor_bush_pockets(parent)
+	_build_midnight_fern_pockets(parent)
+
+func _build_midnight_fern_pockets(parent: Node3D) -> void:
+	if midnight_fern_prototype == null:
+		return
+	var root := Node3D.new()
+	root.name = "MainlandMidnightFernPockets"
+	parent.add_child(root)
+	var centers: Array[Vector2] = [
+		Vector2(-86,-16),Vector2(-63,-14),Vector2(-86,17),Vector2(-63,18),
+		Vector2(-28,61),Vector2(23,63),Vector2(-18,-66),Vector2(4,-69),
+		Vector2(-26,-34),Vector2(-11,-44),Vector2(-72,3),Vector2(87,-16),
+	]
+	var serial := 0
+	for center_index: int in range(centers.size()):
+		var center := centers[center_index]
+		for plant_index: int in range(4):
+			var angle := float(center_index) * 1.57 + float(plant_index) * 2.33
+			var radius_value := 2.6 + float((center_index + plant_index * 2) % 4) * 1.2
+			var position_value := Vector3(
+				center.x + cos(angle) * radius_value,
+				-0.015,
+				center.y + sin(angle) * radius_value * 0.70
+			)
+			if not _is_vegetation_clear(position_value, 0.50):
+				continue
+			var fern := midnight_fern_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+			fern.name = "MidnightFern_%03d" % (serial + 1)
+			fern.position = position_value
+			fern.rotation_degrees.y = fmod(float(serial * 137 + center_index * 29), 360.0)
+			fern.scale = Vector3.ONE * (0.42 + float((serial * 3 + center_index) % 6) * 0.055)
+			root.add_child(fern)
+			serial += 1
 
 func _build_forest_floor_bush_pockets(parent: Node3D) -> void:
 	if forest_floor_bush_prototypes.is_empty():
@@ -1115,6 +1177,40 @@ func _build_deadwood_pass(parent: Node3D) -> void:
 			hollow_position + Vector3(0.0, 0.38, 0.0), Vector3(0.0,23.0,0.0),
 			Vector3(3.55,0.76,2.55)
 		)
+
+func _build_japanese_maple_pass(parent: Node3D) -> void:
+	if japanese_maple_prototype == null:
+		push_warning("Midori Japanese maple pass skipped because its source is unavailable")
+		return
+	var candidates: Array[Vector3] = [
+		Vector3(-17.0,-0.055,52.0),Vector3(-8.0,-0.055,54.0),
+		Vector3(-25.0,-0.055,53.0),Vector3(12.0,-0.055,53.0),
+		Vector3(-17.0,-0.055,63.0),
+	]
+	var maple_position := Vector3.ZERO
+	var found := false
+	for candidate: Vector3 in candidates:
+		if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M):
+			maple_position = candidate
+			found = true
+			break
+	if not found:
+		push_warning("Midori Japanese maple has no clear authored position")
+		return
+	var root := Node3D.new()
+	root.name = "JapaneseMapleAccents_1Of2"
+	parent.add_child(root)
+	var maple := japanese_maple_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+	maple.name = "Free3DJapaneseMaple_01"
+	maple.position = maple_position
+	maple.rotation_degrees.y = 214.0
+	root.add_child(maple)
+	occupied_tree_positions.append(Vector2(maple_position.x, maple_position.z))
+	occupied_tree_is_skinny.append(false)
+	_add_deadwood_stump_collision(
+		root, "JapaneseMapleCollision_01",
+		maple_position + Vector3(0.0,1.25,0.0), 0.48, 2.5
+	)
 
 func _add_deadwood_box_collision(
 	parent: Node3D,

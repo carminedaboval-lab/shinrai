@@ -41,6 +41,12 @@
 - The sparse small lilac variant is excluded. Dense variants are placed in irregular 3–7 plant masses and asymmetric three-shrub pockets between mixed broadleaf/skinny-pine pairs. Former isolated shrub rows are removed, and active lilacs preserve approximately 1.3 m beside important paths.
 - Twenty-four patches from the existing dense-grass pack sit around the eight mainland infill groves; the lake islands are unchanged. The heavy `Grass1` variant is corrected for dark transparent-blade self-shadowing and restricted to four reduced-scale deep-woodland accents; shoreline patches use only the two lighter variants.
 - The Meshy ground-clump scatter remains at 18,000 instances. Its imported bounds were measured at 0.796875 m high with a -0.378906 m base, so placement now uses the true base plus a fixed 3.5 cm reveal instead of an assumed centred one-metre pivot.
+- `vendor/midnight_fern/midnight_fern.glb` supplies up to 48 reduced-scale fern accents in twelve irregular mainland pockets. These decorative plants add recognizable floor foliage without changing the 18,000-clump scatter or touching the islands.
+
+## Japanese maple accents
+
+- `vendor/free3d_japanese_maple_n030123/` supplies the first distinct Japanese maple. Its 545,103-triangle source is restricted to one 6.4 m hero placement with simple trunk collision.
+- A second, lighter 3D Warehouse maple remains pending its actual download. The heavy first maple is not duplicated as a substitute.
 
 ## Waterside and shoreline assets
 

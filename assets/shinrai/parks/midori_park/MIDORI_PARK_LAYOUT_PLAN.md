@@ -18,7 +18,8 @@ The active scene is a 220 m × 180 m landmark park based on the supplied SHINRAI
 - Twenty-five light fountain/meadow grass accents form irregular mainland transition pockets around grove floors; the 18,000 near-ground clumps and four heavy grass accents remain unchanged.
 - Fourteen young pines use three dedicated sapling meshes to break the mature-tree rhythm on the mainland. They share the skinny-tree spacing rules and have no collision.
 - Fifty-six low broadleaf woodland bushes form irregular five-plant floor pockets around mainland groves. The lawn uses a deeper green value, and all 196 generated mainland tree visuals are settled 3.5 cm into the terrain.
-- Two Japanese maple accents remain planned but unplaced until a genuine maple asset is supplied; the existing ash/oak-like broadleaf pack is not relabelled as maple.
+- One supplied Japanese maple is used as a single hero accent; the second distinct maple remains unplaced until its 3D Warehouse download is supplied. The existing ash/oak-like broadleaf pack is not relabelled as maple.
+- The supplied Midnight Fern creates small, irregular mainland floor pockets beneath and between groves; it is decorative, reduced in scale, and kept off the lake islands.
 - Daylight exposure is balanced at the runtime sources: the scanned forest-floor albedo is reduced before lighting, while park ambient, fog, sun, and first-person fill energies are kept below their former clipping values.
 - Sports district west, playground southwest, central plaza southeast, and pavilion overlook northeast.
 - Main arrival from the south with secondary entrances on the north, east, and west edges.
