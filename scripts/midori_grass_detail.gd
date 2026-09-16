@@ -1,30 +1,41 @@
 extends Node
 
-# Lightweight 3D lawn detail for the Midori Park review scene.
-# The first version used one park-wide MultiMesh with a short visibility range;
-# because the MultiMesh node sits at the park origin, Godot could range-cull the
-# entire batch while the player was standing near the park edge. This version
-# keeps the batch always available, gives it an explicit park-sized AABB, and
-# increases density/scale so the blades are readable at first-person height.
+# Midori Park near-ground vegetation scatter.
+# The former procedural blade cards are replaced by the uploaded Meshy clump.
+# The source model is optimized for repeated use, then instanced through
+# spatially chunked MultiMeshes so only nearby areas need to render.
+
+const GroundClumpScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_meshy_ground_clump_v1.glb")
 
 const PARK_HALF := Vector2(110.0, 90.0)
-const GRASS_INSTANCE_COUNT := 24000
-const GRASS_Y := 0.014
+const CLUMP_INSTANCE_COUNT := 9000
+const CHUNKS_X := 8
+const CHUNKS_Z := 6
+const VISIBILITY_RANGE_M := 52.0
+const VISIBILITY_MARGIN_M := 10.0
 const RNG_SEED := 20260916
+
+# Measured from the optimized uploaded GLB.
+const SOURCE_HEIGHT_M := 0.796875
+const SOURCE_BOTTOM_Y := -0.378906
+const MIN_CLUMP_HEIGHT_M := 0.055
+const MAX_CLUMP_HEIGHT_M := 0.120
+const GROUND_SURFACE_Y := 0.008
 
 var _installed := false
 
 
 func _ready() -> void:
-	call_deferred("_install_grass")
+	call_deferred("_install_ground_clumps")
 
 
-func _install_grass() -> void:
+func _install_ground_clumps() -> void:
 	if _installed:
 		return
+
 	var scene := get_tree().current_scene
 	if scene == null:
-		call_deferred("_install_grass")
+		call_deferred("_install_ground_clumps")
 		return
 	if String(scene.name) != "MidoriParkSizeBlockout":
 		return
@@ -34,113 +45,120 @@ func _install_grass() -> void:
 		_installed = true
 		return
 
-	var grass_mesh := _build_grass_clump_mesh()
-	if grass_mesh == null:
+	var clump_mesh := _extract_source_mesh()
+	if clump_mesh == null:
+		push_warning("Midori ground detail: Meshy clump mesh was not found")
 		return
 
-	var multimesh := MultiMesh.new()
-	multimesh.transform_format = MultiMesh.TRANSFORM_3D
-	multimesh.mesh = grass_mesh
-	multimesh.instance_count = GRASS_INSTANCE_COUNT
-	multimesh.custom_aabb = AABB(
-		Vector3(-PARK_HALF.x - 2.0, -0.10, -PARK_HALF.y - 2.0),
-		Vector3(PARK_HALF.x * 2.0 + 4.0, 0.55, PARK_HALF.y * 2.0 + 4.0)
-	)
+	var chunk_width := PARK_HALF.x * 2.0 / float(CHUNKS_X)
+	var chunk_depth := PARK_HALF.y * 2.0 / float(CHUNKS_Z)
+	var bucket_count := CHUNKS_X * CHUNKS_Z
+	var buckets: Array = []
+	for _bucket_index: int in range(bucket_count):
+		buckets.append([])
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = RNG_SEED
 	var placed := 0
 	var attempts := 0
-	var max_attempts := GRASS_INSTANCE_COUNT * 18
+	var max_attempts := CLUMP_INSTANCE_COUNT * 20
 
-	while placed < GRASS_INSTANCE_COUNT and attempts < max_attempts:
+	while placed < CLUMP_INSTANCE_COUNT and attempts < max_attempts:
 		attempts += 1
 		var x := rng.randf_range(-PARK_HALF.x + 2.0, PARK_HALF.x - 2.0)
 		var z := rng.randf_range(-PARK_HALF.y + 2.0, PARK_HALF.y - 2.0)
 		if not _is_lawn_position(x, z):
 			continue
 
+		var chunk_x := clampi(int(floor((x + PARK_HALF.x) / chunk_width)), 0, CHUNKS_X - 1)
+		var chunk_z := clampi(int(floor((z + PARK_HALF.y) / chunk_depth)), 0, CHUNKS_Z - 1)
+		var chunk_index := chunk_z * CHUNKS_X + chunk_x
+		var center_x := -PARK_HALF.x + (float(chunk_x) + 0.5) * chunk_width
+		var center_z := -PARK_HALF.y + (float(chunk_z) + 0.5) * chunk_depth
+
+		var target_height := rng.randf_range(MIN_CLUMP_HEIGHT_M, MAX_CLUMP_HEIGHT_M)
+		var uniform_scale := target_height / SOURCE_HEIGHT_M
+		var width_variation := rng.randf_range(0.86, 1.16)
 		var yaw := rng.randf_range(0.0, TAU)
-		var width_scale := rng.randf_range(0.72, 1.42)
-		var height_scale := rng.randf_range(0.72, 1.65)
 		var basis := Basis(Vector3.UP, yaw)
-		basis = basis.scaled(Vector3(width_scale, height_scale, width_scale))
-		var position := Vector3(x, GRASS_Y + rng.randf_range(-0.002, 0.004), z)
-		multimesh.set_instance_transform(placed, Transform3D(basis, position))
+		basis = basis.scaled(Vector3(
+			uniform_scale * width_variation,
+			uniform_scale,
+			uniform_scale * width_variation
+		))
+
+		# The Meshy model pivot is near its center. Lift each instance by the
+		# measured source-bottom offset so the leaves sit on the forest ground.
+		var grounded_y := GROUND_SURFACE_Y - SOURCE_BOTTOM_Y * uniform_scale
+		grounded_y += rng.randf_range(-0.002, 0.002)
+		var local_position := Vector3(x - center_x, grounded_y, z - center_z)
+		buckets[chunk_index].append(Transform3D(basis, local_position))
 		placed += 1
 
-	for index: int in range(placed, GRASS_INSTANCE_COUNT):
-		multimesh.set_instance_transform(index, Transform3D(Basis.IDENTITY, Vector3(0.0, -100.0, 0.0)))
+	var root := Node3D.new()
+	root.name = "MidoriGrassDetail"
+	scene.add_child(root)
 
-	var grass := MultiMeshInstance3D.new()
-	grass.name = "MidoriGrassDetail"
-	grass.multimesh = multimesh
-	grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	grass.extra_cull_margin = 6.0
-	scene.add_child(grass)
+	for chunk_z: int in range(CHUNKS_Z):
+		for chunk_x: int in range(CHUNKS_X):
+			var chunk_index := chunk_z * CHUNKS_X + chunk_x
+			var transforms: Array = buckets[chunk_index]
+			if transforms.is_empty():
+				continue
+
+			var center_x := -PARK_HALF.x + (float(chunk_x) + 0.5) * chunk_width
+			var center_z := -PARK_HALF.y + (float(chunk_z) + 0.5) * chunk_depth
+
+			var chunk_root := Node3D.new()
+			chunk_root.name = "GroundClumpChunk_%02d_%02d" % [chunk_x, chunk_z]
+			chunk_root.position = Vector3(center_x, 0.0, center_z)
+			root.add_child(chunk_root)
+
+			var multimesh := MultiMesh.new()
+			multimesh.transform_format = MultiMesh.TRANSFORM_3D
+			multimesh.mesh = clump_mesh
+			multimesh.instance_count = transforms.size()
+			multimesh.custom_aabb = AABB(
+				Vector3(-chunk_width * 0.5 - 1.0, -0.02, -chunk_depth * 0.5 - 1.0),
+				Vector3(chunk_width + 2.0, MAX_CLUMP_HEIGHT_M + 0.08, chunk_depth + 2.0)
+			)
+
+			for transform_index: int in range(transforms.size()):
+				multimesh.set_instance_transform(transform_index, transforms[transform_index])
+
+			var clumps := MultiMeshInstance3D.new()
+			clumps.name = "MeshyGroundClumps"
+			clumps.multimesh = multimesh
+			clumps.visibility_range_end = VISIBILITY_RANGE_M
+			clumps.visibility_range_end_margin = VISIBILITY_MARGIN_M
+			clumps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			clumps.extra_cull_margin = 3.0
+			chunk_root.add_child(clumps)
+
 	_installed = true
-	print("Midori grass detail installed: %d lawn clumps" % placed)
+	print("Midori Meshy ground clumps installed: %d instances" % placed)
 
 
-func _build_grass_clump_mesh() -> ArrayMesh:
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	var base_height := 0.115
-	var half_width := 0.014
-	for blade_index: int in range(4):
-		var angle := float(blade_index) * PI / 4.0
-		var side := Vector3(cos(angle), 0.0, sin(angle)) * half_width
-		var lean := Vector3(cos(angle + 1.1), 0.0, sin(angle + 1.1)) * (0.009 + float(blade_index) * 0.0015)
-		var blade_height := base_height * (0.82 + float(blade_index) * 0.08)
-		var p0 := -side
-		var p1 := side
-		var p2 := side + Vector3(0.0, blade_height, 0.0) + lean
-		var p3 := -side + Vector3(0.0, blade_height, 0.0) + lean
-		_add_triangle(surface, p0, p1, p2, Vector2(0.0, 1.0), Vector2(1.0, 1.0), Vector2(1.0, 0.0))
-		_add_triangle(surface, p0, p2, p3, Vector2(0.0, 1.0), Vector2(1.0, 0.0), Vector2(0.0, 0.0))
-
-	surface.generate_normals()
-	var mesh := surface.commit()
-	if mesh == null:
+func _extract_source_mesh() -> Mesh:
+	var source_root := GroundClumpScene.instantiate()
+	if source_root == null:
 		return null
-
-	var material := ShaderMaterial.new()
-	material.shader = Shader.new()
-	material.shader.code = """
-shader_type spatial;
-render_mode cull_disabled, depth_draw_opaque;
-
-uniform vec4 grass_color : source_color = vec4(0.18, 0.43, 0.12, 1.0);
-uniform float sway_amount = 0.012;
-uniform float sway_speed = 1.25;
-
-void vertex() {
-	float tip = clamp(VERTEX.y / 0.13, 0.0, 1.0);
-	float phase = MODEL_MATRIX[3].x * 0.19 + MODEL_MATRIX[3].z * 0.15;
-	float wave = sin(TIME * sway_speed + phase) * sway_amount * tip * tip;
-	VERTEX.x += wave;
-	VERTEX.z += cos(TIME * (sway_speed * 0.83) + phase * 1.63) * sway_amount * 0.45 * tip * tip;
-}
-
-void fragment() {
-	float vertical = clamp(1.0 - UV.y, 0.0, 1.0);
-	vec3 base_col = grass_color.rgb * mix(0.70, 1.18, vertical);
-	ALBEDO = base_col;
-	ROUGHNESS = 0.94;
-}
-"""
-	mesh.surface_set_material(0, material)
+	var mesh := _find_first_mesh(source_root)
+	source_root.free()
 	return mesh
 
 
-func _add_triangle(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, uv_a: Vector2, uv_b: Vector2, uv_c: Vector2) -> void:
-	surface.set_uv(uv_a)
-	surface.add_vertex(a)
-	surface.set_uv(uv_b)
-	surface.add_vertex(b)
-	surface.set_uv(uv_c)
-	surface.add_vertex(c)
+func _find_first_mesh(node: Node) -> Mesh:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			return mesh_instance.mesh
+
+	for child: Node in node.get_children():
+		var found := _find_first_mesh(child)
+		if found != null:
+			return found
+	return null
 
 
 func _is_lawn_position(x: float, z: float) -> bool:
