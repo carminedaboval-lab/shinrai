@@ -22,6 +22,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 MidoriSakuraSwap="*res://scripts/midori_sakura_swap.gd"
 MidoriGrassDetail="*res://scripts/midori_grass_detail.gd"
+MidoriGroundTexture="*res://scripts/midori_ground_texture.gd"
 
 [display]
 
