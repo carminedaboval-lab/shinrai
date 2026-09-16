@@ -12,6 +12,7 @@ const ViewingDeckScene: PackedScene = preload("res://assets/shinrai/parks/midori
 const BroadleafTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/realistic_trees_collection/scene.glb")
 const PineTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/scene.glb")
 const LilacBushPack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/lilac_bush_pack/scene.glb")
+const DenseGrassPack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/cosmic_dust_grass/grass_1k.glb")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -36,6 +37,7 @@ var mat_plan_marker: StandardMaterial3D
 var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
 var lilac_prototypes: Array[Node3D] = []
+var dense_grass_prototypes: Array[Node3D] = []
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
@@ -283,7 +285,7 @@ func _build_mossy_shoreline_cover(parent: Node3D) -> void:
 
 func _build_waterside_grasses(parent: Node3D) -> void:
 	var root := Node3D.new()
-	root.name = "WatersideGrassClusters_36"
+	root.name = "WatersideVegetation_36Reed_9DenseGrass"
 	parent.add_child(root)
 	var edge_points: Array[Vector3] = [
 		Vector3(-24.0, 0.55, -17.0), Vector3(-18.0, 0.55, 5.0), Vector3(-12.0, 0.55, 23.0),
@@ -303,6 +305,27 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 				root, source, "VEG06_WatersideGrass_%02d_%d" % [index + 1, variant + 1],
 				edge_points[index] + offset, fmod(float(index * 97 + variant * 43), 360.0), Vector3.ONE * scale_value
 			)
+
+	if dense_grass_prototypes.is_empty():
+		return
+	var lake_center := Vector3(28.0, 0.0, -14.0)
+	var dense_patch_indices: Array[int] = [0, 2, 4, 6, 8, 10, 12, 14, 16]
+	var dense_variant_sequence: Array[int] = [0, 0, 1, 0, 2, 0, 1, 0, 2]
+	for patch_index: int in range(dense_patch_indices.size()):
+		var edge_index: int = dense_patch_indices[patch_index]
+		var edge_position: Vector3 = edge_points[edge_index]
+		var landward := Vector3(edge_position.x - lake_center.x, 0.0, edge_position.z - lake_center.z).normalized()
+		var dense_position := edge_position + landward * (1.15 + float(patch_index % 3) * 0.35)
+		dense_position.y = 0.12
+		var prototype_index: int = dense_variant_sequence[patch_index] % dense_grass_prototypes.size()
+		var prototype: Node3D = dense_grass_prototypes[prototype_index]
+		var patch := prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		patch.name = "VEG06_DenseGrass_%02d" % (patch_index + 1)
+		patch.position = dense_position
+		patch.rotation_degrees.y = fmod(float(patch_index * 137 + 23), 360.0)
+		patch.scale = Vector3.ONE * (0.86 + float(patch_index % 4) * 0.07)
+		root.add_child(patch)
+		_configure_vegetation_visibility(patch)
 
 func _build_prop_placement_plan(parent: Node3D) -> void:
 	var root := Node3D.new()
@@ -411,6 +434,9 @@ func _prepare_reference_vegetation() -> void:
 		["Lilac_bush_1_LOD1", 1.65], ["Lilac_bush_2_LOD1", 1.50],
 		["Lilac_small_bush_3_LOD1", 1.05],
 	]
+	var dense_grass_specs: Array = [
+		["Grass1", 0.95], ["GrassLawnAutumn", 0.72], ["GrassAutumn3", 0.55],
+	]
 	for spec: Array in broadleaf_specs:
 		var prototype := _extract_vegetation_prototype(BroadleafTreePack, spec[0], spec[1])
 		if prototype != null:
@@ -423,8 +449,12 @@ func _prepare_reference_vegetation() -> void:
 		var prototype := _extract_vegetation_prototype(LilacBushPack, spec[0], spec[1])
 		if prototype != null:
 			lilac_prototypes.append(prototype)
-	print("Midori reference vegetation: %d broadleaf | %d pine | %d lilac" % [
-		broadleaf_prototypes.size(), pine_prototypes.size(), lilac_prototypes.size(),
+	for spec: Array in dense_grass_specs:
+		var prototype := _extract_vegetation_prototype(DenseGrassPack, spec[0], spec[1])
+		if prototype != null:
+			dense_grass_prototypes.append(prototype)
+	print("Midori reference vegetation: %d broadleaf | %d pine | %d lilac | %d dense grass" % [
+		broadleaf_prototypes.size(), pine_prototypes.size(), lilac_prototypes.size(), dense_grass_prototypes.size(),
 	])
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:

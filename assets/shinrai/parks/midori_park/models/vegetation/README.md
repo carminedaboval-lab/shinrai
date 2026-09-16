@@ -7,7 +7,7 @@
 - The derivative flower module contains pink and pale petals only. Its green leaf faces and 4,847 mismatched twig faces are removed, so the green geometry cannot appear in Godot.
 - All blossom bunches are merged into one canopy mesh, giving the tree two rendered mesh groups in total.
 - Rendered triangle cost per tree: 68,531 (2,381 trunk and branches; 66,150 blossoms).
-- Godot placement: 48 hand-authored transforms with varied rotation and scale.
+- Godot placement: 24 hand-authored transforms with varied rotation and scale.
 - Collision: simple generated trunk cylinders; branches and flowers have no mesh collision.
 - Visibility range: 150 metres, hidden by the park fog.
 
@@ -35,8 +35,14 @@
 
 ## Waterside and shoreline assets
 
-- `midori_green_fountain_grass_v1.glb` and `midori_swaying_meadow_grass_v1.glb` are exact working copies of the preserved VEG-06 originals. Thirty-six varied instances define the lake edge.
+- `midori_green_fountain_grass_v1.glb` and `midori_swaying_meadow_grass_v1.glb` are exact working copies of the preserved VEG-06 originals. Thirty-six varied instances provide the reed-like lake-edge layer.
+- `vendor/cosmic_dust_grass/grass_1k.glb` supplies three denser grass forms. Nine landward patches are mixed between the reed-like clusters to thicken the shoreline without reaching full Grey Zone Warfare density. The 1K GLB is used to control memory cost; the full source scene is not repeated as one 81K-triangle unit.
 - `midori_mossy_boulder_cluster_v1.glb` is an exact working copy of VEG-07. Nine scaled and rotated groups provide shoreline landmarks and combat cover.
 - The running scene supplies simple boulder collision. The grass clusters remain decorative and stop rendering beyond the park fog range.
+
+## Staged deadwood sources
+
+- `vendor/mistrzjang1_tree_trunk/` contains the downloaded retopologized beech trunk and PBR maps. It is staged for the fallen-log pass and is not spawned yet.
+- `vendor/michaeldebbarma_hollow_bark/` contains the 220,222-polygon hollow-bark source. It is intentionally staged only; when placed, it must be limited to one or two focal props or reduced first.
 
 The untouched Meshy downloads remain under `source_glb/`. These GLBs are derived game-ready assets and can be rebuilt from those sources.
