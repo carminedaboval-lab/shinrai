@@ -45,8 +45,8 @@ var mat_boundary: StandardMaterial3D
 var mat_entry: StandardMaterial3D
 var mat_island: StandardMaterial3D
 var mat_plan_marker: StandardMaterial3D
-var mat_neon_blue: StandardMaterial3D
 var mat_path_light_streak: ShaderMaterial
+var lamp_emissive_materials: Array[StandardMaterial3D] = []
 var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
 var pine_sapling_prototypes: Array[Node3D] = []
@@ -102,10 +102,6 @@ func _create_materials() -> void:
 	mat_entry = _make_material(Color("#e3a14c"), 0.74)
 	mat_island = _make_material(Color("#405d3d"), 0.98)
 	mat_plan_marker = _make_material(Color(0.20, 0.78, 0.92, 0.55), 0.76, 0.08)
-	mat_neon_blue = _make_material(Color("#b8efff"), 0.22, 0.08)
-	mat_neon_blue.emission_enabled = true
-	mat_neon_blue.emission = Color("#55d9ff")
-	mat_neon_blue.emission_energy_multiplier = 2.2
 	mat_path_light_streak = _make_path_light_streak_material()
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
@@ -126,10 +122,10 @@ void fragment() {
 	float along = abs(UV.y - 0.5) * 2.0;
 	float side_fade = 1.0 - smoothstep(0.28, 1.0, across);
 	float end_fade = 1.0 - smoothstep(0.58, 1.0, along);
-	float alpha = side_fade * end_fade * 0.58;
+	float alpha = side_fade * end_fade * 0.76;
 	vec3 blue = vec3(0.20, 0.76, 1.0);
 	ALBEDO = blue;
-	EMISSION = blue * 1.35;
+	EMISSION = blue * 2.0;
 	ALPHA = alpha;
 }
 """
@@ -149,6 +145,13 @@ func _create_environment() -> void:
 	environment.fog_enabled = true
 	environment.fog_density = 0.0105
 	environment.fog_sky_affect = 0.72
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		environment.volumetric_fog_enabled = true
+		environment.volumetric_fog_density = 0.012
+		environment.volumetric_fog_length = 100.0
+		environment.volumetric_fog_albedo = Color("#263b54")
+		environment.volumetric_fog_ambient_inject = 0.08
+		environment.volumetric_fog_sky_affect = 0.65
 	world_environment.environment = environment
 	park_environment = environment
 	add_child(world_environment)
@@ -167,14 +170,20 @@ func _apply_time_of_day() -> void:
 		park_environment.background_color = Color("#050912")
 		park_environment.ambient_light_color = Color("#1b2d49")
 		park_environment.ambient_light_energy = 0.12
-		park_environment.adjustment_brightness = 0.52
+		park_environment.adjustment_brightness = 0.46
 		park_environment.adjustment_contrast = 1.15
 		park_environment.adjustment_saturation = 0.86
 		park_environment.fog_light_color = Color("#101b2e")
-		park_environment.fog_light_energy = 0.10
+		park_environment.fog_light_energy = 0.06
+		park_environment.fog_density = 0.035
+		park_environment.fog_sky_affect = 1.0
+		if RenderingServer.get_current_rendering_method() == "forward_plus":
+			park_environment.volumetric_fog_density = 0.018
 		park_directional_light.name = "ParkNightMoon"
 		park_directional_light.light_color = Color("#7899c8")
 		park_directional_light.light_energy = 0.12
+		mat_path.albedo_color = Color("#171c22")
+		mat_boundary.albedo_color = Color("#202832")
 	else:
 		park_environment.background_color = Color("#65727a")
 		park_environment.ambient_light_color = Color("#a8b3b7")
@@ -184,9 +193,20 @@ func _apply_time_of_day() -> void:
 		park_environment.adjustment_saturation = 0.96
 		park_environment.fog_light_color = Color("#778489")
 		park_environment.fog_light_energy = 0.38
+		park_environment.fog_density = 0.0105
+		park_environment.fog_sky_affect = 0.72
+		if RenderingServer.get_current_rendering_method() == "forward_plus":
+			park_environment.volumetric_fog_density = 0.004
 		park_directional_light.name = "ParkReviewSun"
 		park_directional_light.light_color = Color("#fff0d1")
 		park_directional_light.light_energy = 0.68
+		mat_path.albedo_color = Color("#545752")
+		mat_boundary.albedo_color = Color("#d6d0bf")
+	for material: StandardMaterial3D in lamp_emissive_materials:
+		material.emission_energy_multiplier = 1.85 if is_night_mode else 0.0
+	var ground_service := get_node_or_null("/root/MidoriGroundTexture")
+	if ground_service != null and ground_service.has_method("set_night_mode"):
+		ground_service.call("set_night_mode", is_night_mode)
 	for node: Node in get_tree().get_nodes_in_group("midori_night_effect"):
 		if node is Node3D:
 			(node as Node3D).visible = is_night_mode
@@ -697,7 +717,12 @@ func _make_lamp_reflective(node: Node) -> void:
 				var material := source_material.duplicate() as StandardMaterial3D
 				material.roughness = 0.18
 				material.metallic_specular = 0.85
+				material.emission_enabled = true
+				material.emission = Color("#6be5ff")
+				material.emission_texture = material.albedo_texture
+				material.emission_energy_multiplier = 1.85 if is_night_mode else 0.0
 				mesh_instance.set_surface_override_material(surface_index, material)
+				lamp_emissive_materials.append(material)
 	for child: Node in node.get_children():
 		_make_lamp_reflective(child)
 
@@ -1457,41 +1482,12 @@ func _build_park_lamps(parent: Node3D) -> void:
 		lamp.rotation_degrees.y = lamp_yaw
 		lamp.scale = Vector3.ONE * 7.2
 		root.add_child(lamp)
-		_add_lamp_neon_geometry(lamp)
 		_add_lamp_lights(root, index, position_value, path_direction)
 		_add_lamp_path_streak(root, index, position_value, path_direction)
 		_add_deadwood_stump_collision(
 			root, "HaloLampCollision_%02d" % (index + 1),
 			position_value + Vector3(0.0,3.40,0.0), 0.28, 6.8
 		)
-
-func _add_lamp_neon_geometry(lamp: Node3D) -> void:
-	# The supplied model carries the physical silhouette. These small emissive
-	# inserts reproduce the concept's blue halo and vertical seam at runtime.
-	var halo := MeshInstance3D.new()
-	halo.name = "BlueNeonHalo"
-	var halo_mesh := TorusMesh.new()
-	halo_mesh.inner_radius = 0.075
-	halo_mesh.outer_radius = 0.112
-	halo_mesh.rings = 24
-	halo_mesh.ring_segments = 8
-	halo.mesh = halo_mesh
-	halo.position = Vector3(0.0,0.972,0.0)
-	halo.material_override = mat_neon_blue
-	lamp.add_child(halo)
-	halo.add_to_group("midori_night_effect")
-
-	var seam := MeshInstance3D.new()
-	seam.name = "BlueNeonSeam"
-	var seam_mesh := BoxMesh.new()
-	seam_mesh.size = Vector3(0.004,0.27,0.006)
-	seam.mesh = seam_mesh
-	# Sit flush within the narrow lower slit. The tiny width prevents the emitter
-	# from reading as a separate bar beside the pole at the 7.2 m final scale.
-	seam.position = Vector3(-0.010,0.19,-0.142)
-	seam.material_override = mat_neon_blue
-	lamp.add_child(seam)
-	seam.add_to_group("midori_night_effect")
 
 func _add_lamp_lights(
 	parent: Node3D,
@@ -1507,6 +1503,7 @@ func _add_lamp_lights(
 	halo_light.light_energy = 0.35
 	halo_light.omni_range = 7.0
 	halo_light.shadow_enabled = false
+	halo_light.light_volumetric_fog_energy = 1.25
 	parent.add_child(halo_light)
 	halo_light.add_to_group("midori_night_effect")
 
@@ -1520,6 +1517,7 @@ func _add_lamp_lights(
 	slit_light.spot_range = 5.5
 	slit_light.spot_angle = 6.0
 	slit_light.shadow_enabled = false
+	slit_light.light_volumetric_fog_energy = 2.0
 	parent.add_child(slit_light)
 	slit_light.add_to_group("midori_night_effect")
 	slit_light.look_at(position_value + path_direction * 3.4 + Vector3(0.0,0.05,0.0), Vector3.UP)
@@ -1535,7 +1533,8 @@ func _add_lamp_path_streak(
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(0.22,3.4)
 	streak.mesh = plane
-	streak.position = position_value + path_direction * 2.15 + Vector3(0.0,0.016,0.0)
+	# Path surfaces reach roughly 0.11 m; keep the projection just above them.
+	streak.position = position_value + path_direction * 2.15 + Vector3(0.0,0.125,0.0)
 	if absf(path_direction.x) > 0.5:
 		streak.rotation_degrees.y = 90.0
 	streak.material_override = mat_path_light_streak

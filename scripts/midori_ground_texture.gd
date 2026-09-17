@@ -15,6 +15,8 @@ const NORMAL_PATH := "res://assets/shinrai/parks/midori_park/materials/forrest_g
 const ROUGHNESS_PATH := "res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_rough_2k.jpg"
 
 var _installed := false
+var _night_mode := true
+var _active_ground_material: ShaderMaterial
 
 
 func _ready() -> void:
@@ -47,8 +49,22 @@ func _try_install() -> void:
 	if ground_mesh == null:
 		return
 
-	ground_mesh.material_override = _build_ground_material()
+	var material := _build_ground_material()
+	ground_mesh.material_override = material
+	if material is ShaderMaterial:
+		_active_ground_material = material as ShaderMaterial
+		_apply_time_factor()
 	_installed = true
+
+
+func set_night_mode(value: bool) -> void:
+	_night_mode = value
+	_apply_time_factor()
+
+
+func _apply_time_factor() -> void:
+	if _active_ground_material != null:
+		_active_ground_material.set_shader_parameter("scene_light_factor", 0.24 if _night_mode else 1.0)
 
 
 func _build_ground_material() -> Material:
@@ -76,6 +92,7 @@ uniform sampler2D albedo_tex : source_color, repeat_enable, filter_linear_mipmap
 uniform sampler2D normal_tex : hint_normal, repeat_enable, filter_linear_mipmap_anisotropic;
 uniform sampler2D roughness_tex : repeat_enable, filter_linear_mipmap_anisotropic;
 uniform float texture_world_size_m = 2.0;
+uniform float scene_light_factor = 1.0;
 
 varying vec3 world_pos;
 
@@ -91,7 +108,7 @@ void fragment() {
 
 	// The source scan contains baked daylight. Darken its midtones and reduce
 	// specular response before the park's real-time sun and ambient are added.
-	ALBEDO = pow(ground_color, vec3(1.20)) * vec3(0.44, 0.48, 0.38);
+	ALBEDO = pow(ground_color, vec3(1.20)) * vec3(0.44, 0.48, 0.38) * scene_light_factor;
 	ROUGHNESS = clamp(source_roughness * 0.96 + 0.035, 0.70, 1.0);
 	SPECULAR = 0.12;
 	NORMAL_MAP = source_normal;
@@ -141,6 +158,7 @@ render_mode depth_draw_opaque, cull_back;
 
 uniform sampler2D macro_tex : repeat_enable, filter_linear_mipmap_anisotropic;
 uniform sampler2D fine_tex : repeat_enable, filter_linear_mipmap_anisotropic;
+uniform float scene_light_factor = 1.0;
 varying vec3 world_pos;
 
 void vertex() {
@@ -160,7 +178,7 @@ void fragment() {
 	color = mix(color, vec3(0.48, 0.42, 0.27), dry_grass * 0.38);
 	color = mix(color, vec3(0.28, 0.23, 0.15), soil * 0.28);
 	color *= mix(0.66, 0.86, detail);
-	ALBEDO = color;
+	ALBEDO = color * scene_light_factor;
 	ROUGHNESS = clamp(0.84 + soil * 0.10 + (1.0 - detail) * 0.05, 0.80, 0.98);
 }
 """
