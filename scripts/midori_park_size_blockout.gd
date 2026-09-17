@@ -39,46 +39,79 @@ const SKINNY_TO_SKINNY_MIN_SPACING_M := 0.6
 const SHRUB_PATH_CLEARANCE_M := 0.65
 const SAKURA_TREE_COUNT := 24
 const LAKE_TREE_BUFFER_M := 2.0
+const LAKE_PROMENADE_WIDTH_M := 3.6
+const LAKE_PROMENADE_BANK_MARGIN_M := 1.0
 
-# Phase-two circulation follows the destination-led, nested-loop logic of the
+# Final circulation follows the destination-led, nested-loop logic of the
 # Pymmes Park reference. The routes intentionally avoid a rectangular grid:
 # entrances feed soft three-way merges, short loops offer alternate woodland
 # approaches, and the lake promenades remain the park's central circulation.
 const OUTER_CIRCUIT: Array[Vector2] = [
-	Vector2(-97,70),Vector2(-72,75),Vector2(-38,77),Vector2(0,76),
-	Vector2(38,73),Vector2(72,71),Vector2(94,60),Vector2(98,30),
-	Vector2(98,-3),Vector2(96,-36),Vector2(88,-62),Vector2(72,-73),
-	Vector2(38,-77),Vector2(0,-77),Vector2(-38,-76),Vector2(-72,-74),
-	Vector2(-94,-62),Vector2(-99,-32),Vector2(-98,2),Vector2(-97,35),
-	Vector2(-97,70),
+	Vector2(-98,70),Vector2(-72,77),Vector2(-38,82),Vector2(0,84),
+	Vector2(38,85),Vector2(70,85),Vector2(98,84),Vector2(105,70),
+	Vector2(106,48),Vector2(105,25),Vector2(104,0),Vector2(103,-25),
+	Vector2(101,-50),Vector2(98,-68),Vector2(91,-82),Vector2(62,-85),
+	Vector2(25,-84),Vector2(-18,-82),Vector2(-55,-80),Vector2(-83,-76),
+	Vector2(-103,-66),Vector2(-106,-42),Vector2(-106,-10),Vector2(-105,22),
+	Vector2(-103,49),Vector2(-98,70),
 ]
 const SOUTH_ARRIVAL_ROUTE: Array[Vector2] = [
-	Vector2(0,90),Vector2(-2,80),Vector2(-11,70),Vector2(-22,59),
-	Vector2(-31,49),Vector2(-37,42),
+	Vector2(0,90),Vector2(-1,81),Vector2(-7,71),Vector2(-12,58),
+	Vector2(-17,43),
 ]
 const WEST_DESTINATION_ROUTE: Array[Vector2] = [
-	Vector2(-110,20),Vector2(-97,20),Vector2(-85,28),Vector2(-70,36),
-	Vector2(-53,41),Vector2(-37,42),Vector2(-20,43),Vector2(-4,41),
-	Vector2(8,38),
+	Vector2(-110,20),Vector2(-98,20),Vector2(-88,17),Vector2(-77,12),
+	Vector2(-64,6),Vector2(-51,1),Vector2(-39,-4),Vector2(-29,-7),
 ]
 const NORTH_ENTRY_ROUTE: Array[Vector2] = [
-	Vector2(-38,-90),Vector2(-38,-76),Vector2(-40,-60),Vector2(-37,-42),
+	Vector2(-38,-90),Vector2(-38,-79),Vector2(-36,-68),Vector2(-34,-58),
+	Vector2(-33,-50),
 ]
 const EAST_DECK_ROUTE: Array[Vector2] = [
-	Vector2(110,-20),Vector2(98,-20),Vector2(89,-18),Vector2(80,-15),
+	Vector2(110,-20),Vector2(101,-21),Vector2(96,-27),Vector2(91,-35),
+	Vector2(86,-45),Vector2(85,-43),
 ]
 const SPORTS_LINK_ROUTE: Array[Vector2] = [
-	Vector2(-98,-27),Vector2(-90,-28),Vector2(-82,-25),Vector2(-70,-23),
-	Vector2(-56,-23),Vector2(-44,-30),Vector2(-37,-42),
+	Vector2(-105,-20),Vector2(-99,-20),Vector2(-90,-19),Vector2(-75,-18),Vector2(-58,-19),
+	Vector2(-44,-20),Vector2(-38,-28),Vector2(-38,-42),Vector2(-39,-42),
 ]
 const PLAYGROUND_LOOP: Array[Vector2] = [
-	Vector2(-97,20),Vector2(-92,37),Vector2(-88,54),Vector2(-78,63),
-	Vector2(-64,63),Vector2(-50,54),Vector2(-37,42),Vector2(-54,41),
-	Vector2(-71,39),Vector2(-87,31),Vector2(-97,20),
+	Vector2(-97,20),Vector2(-96,29),Vector2(-97,46),Vector2(-94,60),
+	Vector2(-84,66),Vector2(-69,67),Vector2(-53,65),Vector2(-49,58),
+	Vector2(-35,48),Vector2(-17,43),Vector2(-37,39),Vector2(-52,31),
+	Vector2(-65,27),Vector2(-80,25),Vector2(-92,25),Vector2(-97,20),
 ]
 const NORTH_WOODLAND_LOOP: Array[Vector2] = [
-	Vector2(-37,-42),Vector2(-46,-49),Vector2(-43,-61),Vector2(-31,-71),
-	Vector2(-16,-71),Vector2(-8,-61),Vector2(-18,-53),Vector2(-37,-42),
+	Vector2(-39,-42),Vector2(-36,-48),Vector2(-35,-58),Vector2(-33,-68),
+	Vector2(-24,-76),Vector2(-12,-78),Vector2(-4,-73),Vector2(-3,-66),
+	Vector2(-12,-61),Vector2(-23,-57),Vector2(-33,-50),Vector2(-39,-42),
+]
+const LAKE_PROMENADE_LOOP: Array[Vector2] = [
+	Vector2(-33,-50),Vector2(-18,-63),Vector2(2,-70),Vector2(24,-72),
+	Vector2(46,-71),Vector2(64,-64),Vector2(79,-55),Vector2(86,-45),
+	Vector2(87,-35),Vector2(93,-28),Vector2(99,-17),Vector2(100,-5),
+	Vector2(94,5),Vector2(86,7),Vector2(94,13),Vector2(101,24),
+	Vector2(101,36),Vector2(96,47),Vector2(86,56),Vector2(73,62),
+	Vector2(58,62),Vector2(45,58),Vector2(36,51),Vector2(30,43),
+	Vector2(27,35),Vector2(21,29),Vector2(14,25),Vector2(8,31),
+	Vector2(-4,40),Vector2(-17,43),Vector2(-29,38),Vector2(-38,29),
+	Vector2(-43,18),Vector2(-44,7),Vector2(-39,-4),Vector2(-31,-11),
+	Vector2(-24,-13),Vector2(-32,-21),Vector2(-40,-30),Vector2(-39,-42),
+	Vector2(-33,-50),
+]
+const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [
+	Vector2(0,90),Vector2(18,84),Vector2(38,78),Vector2(58,75),
+	Vector2(75,72),Vector2(82,68),Vector2(92,61),
+]
+const SOUTH_BRIDGE_APPROACH: Array[Vector2] = [
+	Vector2(82,68),Vector2(69,63),Vector2(59,60),Vector2(52,60),
+]
+const PAVILION_LINK_ROUTE: Array[Vector2] = [
+	Vector2(64,-64),Vector2(70,-69),Vector2(76,-73),Vector2(86,-75),
+	Vector2(94,-70),Vector2(98,-68),
+]
+const VIEWING_DECK_APPROACH_ROUTE: Array[Vector2] = [
+	Vector2(99,-17),Vector2(96,-18),Vector2(92,-18),
 ]
 const LAKE_SHORELINE: Array[Vector2] = [
 	Vector2(-18,-48),Vector2(-8,-56),Vector2(5,-61),Vector2(20,-65),
@@ -152,6 +185,7 @@ func _ready() -> void:
 	_create_environment()
 	_prepare_reference_vegetation()
 	_build_park_footprint()
+	_validate_approved_lake_promenade()
 	_spawn_scale_review_player()
 	_build_size_hud()
 	print("Midori Park size blockout: %.0f m x %.0f m | diagonal %.1f m" % [
@@ -342,7 +376,7 @@ func _build_park_footprint() -> void:
 	_build_boundary(root)
 	_build_paths(root)
 	_build_curved_promenades(root)
-	_build_modular_path_phase_two(root)
+	_build_modular_final_path(root)
 	_build_zone_placeholders(root)
 	_build_artwork_assets(root)
 	_build_prop_placement_plan(root)
@@ -373,16 +407,20 @@ func _build_boundary(parent: Node3D) -> void:
 
 func _build_paths(parent: Node3D) -> void:
 	var root := Node3D.new()
-	root.name = "DestinationLedPathNetwork_Phase2"
+	root.name = "FinalDestinationLedPathHierarchy"
 	parent.add_child(root)
-	_add_path_strip_2d(root, "OuterWalkingCircuit", OUTER_CIRCUIT, 4.2, 0.108)
-	_add_path_strip_2d(root, "SouthEntranceToLake", SOUTH_ARRIVAL_ROUTE, 4.4, 0.111)
-	_add_path_strip_2d(root, "WestEntranceToMainBridge", WEST_DESTINATION_ROUTE, 4.4, 0.112)
-	_add_path_strip_2d(root, "NorthEntranceToLake", NORTH_ENTRY_ROUTE, 4.0, 0.110)
-	_add_path_strip_2d(root, "EastEntranceToViewingDeck", EAST_DECK_ROUTE, 4.0, 0.110)
+	_add_path_strip_2d(root, "OuterWalkingCircuit", OUTER_CIRCUIT, 3.8, 0.108)
+	_add_path_strip_2d(root, "SouthEntranceToLake", SOUTH_ARRIVAL_ROUTE, 4.0, 0.111)
+	_add_path_strip_2d(root, "SouthEntranceToPlaza", PLAZA_ARRIVAL_ROUTE, 4.0, 0.112)
+	_add_path_strip_2d(root, "WestEntranceToBridgeLanding", WEST_DESTINATION_ROUTE, 4.0, 0.112)
+	_add_path_strip_2d(root, "NorthEntranceToLake", NORTH_ENTRY_ROUTE, 3.8, 0.110)
+	_add_path_strip_2d(root, "EastEntranceToBridgeLanding", EAST_DECK_ROUTE, 3.8, 0.110)
 	_add_path_strip_2d(root, "SportsConnector", SPORTS_LINK_ROUTE, 3.0, 0.109)
 	_add_path_strip_2d(root, "PlaygroundWoodlandLoop", PLAYGROUND_LOOP, 2.7, 0.109)
 	_add_path_strip_2d(root, "NorthWoodlandLoop", NORTH_WOODLAND_LOOP, 2.5, 0.109)
+	_add_path_strip_2d(root, "PlazaToSouthBridgeLanding", SOUTH_BRIDGE_APPROACH, 3.2, 0.111)
+	_add_path_strip_2d(root, "PavilionGardenLink", PAVILION_LINK_ROUTE, 2.8, 0.110)
+	_add_path_strip_2d(root, "EastPromenadeToViewingDeck", VIEWING_DECK_APPROACH_ROUTE, 3.0, 0.112)
 
 func _add_path_strip_2d(
 	parent: Node3D,
@@ -398,25 +436,9 @@ func _add_path_strip_2d(
 
 func _build_curved_promenades(parent: Node3D) -> void:
 	var root := Node3D.new()
-	root.name = "ArtworkCurvedPromenades"
+	root.name = "ApprovedLakePromenadeLoop"
 	parent.add_child(root)
-	_add_path_strip(root, "WestLakePromenade", [
-		Vector3(-37.0, 0.112, 42.0), Vector3(-27.0, 0.112, 31.0),
-		Vector3(-23.0, 0.112, 14.0), Vector3(-27.0, 0.112, -4.0),
-		Vector3(-31.0, 0.112, -24.0), Vector3(-37.0, 0.112, -42.0),
-	], 4.2, mat_path)
-	_add_path_strip(root, "EastLakePromenade", [
-		Vector3(43.0, 0.114, 42.0), Vector3(59.0, 0.114, 34.0),
-		Vector3(72.0, 0.114, 21.0), Vector3(80.0, 0.114, 3.0),
-		Vector3(80.0, 0.114, -15.0), Vector3(84.0, 0.114, -35.0),
-		Vector3(78.0, 0.114, -54.0), Vector3(76.0, 0.114, -64.0),
-	], 4.4, mat_path)
-	_add_path_strip(root, "NorthLakePromenade", [
-		Vector3(-37.0, 0.113, -42.0), Vector3(-18.0, 0.113, -53.0),
-		Vector3(5.0, 0.113, -61.0), Vector3(28.0, 0.113, -65.0),
-		Vector3(47.0, 0.113, -64.0), Vector3(65.0, 0.113, -66.0),
-		Vector3(76.0, 0.113, -64.0),
-	], 4.0, mat_path)
+	_add_path_strip_2d(root, "ContinuousLakePromenade", LAKE_PROMENADE_LOOP, LAKE_PROMENADE_WIDTH_M, 0.114)
 
 func _add_path_strip(parent: Node3D, node_name: String, points: Array[Vector3], width: float, material: Material) -> void:
 	if points.size() < 2:
@@ -450,9 +472,9 @@ func _add_path_vertex(surface: SurfaceTool, position_value: Vector3, uv_value: V
 	surface.set_uv(uv_value)
 	surface.add_vertex(position_value)
 
-func _build_modular_path_phase_two(parent: Node3D) -> void:
+func _build_modular_final_path(parent: Node3D) -> void:
 	var root := Node3D.new()
-	root.name = "MidoriModularPath_Phase2"
+	root.name = "MidoriModularPath_FinalHierarchy"
 	parent.add_child(root)
 
 	# Four landmark merges provide orientation without repeating the junction at
@@ -460,10 +482,14 @@ func _build_modular_path_phase_two(parent: Node3D) -> void:
 	# border and guarantee continuous, walkable-looking routes between modules.
 	if midori_path_junction_prototype != null:
 		var junctions: Array[Dictionary] = [
-			{"name":"MainLakeMerge", "p":Vector3(-37,0.118,42), "yaw":8.0},
-			{"name":"WestEntranceMerge", "p":Vector3(-97,0.118,20), "yaw":-82.0},
-			{"name":"NorthLakeMerge", "p":Vector3(-37,0.118,-42), "yaw":176.0},
-			{"name":"ViewingDeckMerge", "p":Vector3(80,0.118,-15), "yaw":88.0},
+			{"name":"SouthEntranceSplit", "p":Vector3(0,0.118,90), "yaw":0.0},
+			{"name":"MainLakeMerge", "p":Vector3(-17,0.118,43), "yaw":12.0},
+			{"name":"WestEntranceMerge", "p":Vector3(-98,0.118,20), "yaw":-82.0},
+			{"name":"NorthLakeMerge", "p":Vector3(-33,0.118,-50), "yaw":176.0},
+			{"name":"EastBridgeMerge", "p":Vector3(86,0.118,-45), "yaw":88.0},
+			{"name":"ViewingDeckSplit", "p":Vector3(99,0.118,-17), "yaw":-92.0},
+			{"name":"PlazaBridgeMerge", "p":Vector3(82,0.118,68), "yaw":-36.0},
+			{"name":"PavilionMerge", "p":Vector3(64,0.118,-64), "yaw":138.0},
 		]
 		for junction: Dictionary in junctions:
 			_add_modular_path_piece(
@@ -472,16 +498,26 @@ func _build_modular_path_phase_two(parent: Node3D) -> void:
 			)
 	if midori_path_straight_prototype != null:
 		_add_modular_path_run(root, SOUTH_ARRIVAL_ROUTE, "SouthArrival", 5.75)
+		_add_modular_path_run(root, PLAZA_ARRIVAL_ROUTE, "PlazaArrival", 5.75)
 		_add_modular_path_run(root, WEST_DESTINATION_ROUTE, "WestApproach", 5.75)
 		_add_modular_path_run(root, NORTH_ENTRY_ROUTE, "NorthArrival", 5.75)
 		_add_modular_path_run(root, EAST_DECK_ROUTE, "EastDeckApproach", 5.75)
+		_add_modular_path_run(root, LAKE_PROMENADE_LOOP, "LakePromenade", 5.75)
+		_add_modular_path_run(root, SOUTH_BRIDGE_APPROACH, "SouthBridgeApproach", 5.75)
+		_add_modular_path_run(root, PAVILION_LINK_ROUTE, "PavilionLink", 5.75)
+		_add_modular_path_run(root, VIEWING_DECK_APPROACH_ROUTE, "ViewingDeckApproach", 5.75)
 	if midori_path_curve_prototype != null:
 		var bends: Array[Dictionary] = [
-			{"name":"SouthCanopy", "p":Vector3(-11,0.121,70), "yaw":-34.0},
-			{"name":"PlaygroundEdge", "p":Vector3(-85,0.121,28), "yaw":-65.0},
-			{"name":"SportsEdge", "p":Vector3(-44,0.121,-30), "yaw":148.0},
-			{"name":"NorthWoodland", "p":Vector3(-31,0.121,-71), "yaw":92.0},
-			{"name":"WestLake", "p":Vector3(-27,0.121,14), "yaw":90.0},
+			{"name":"SouthCanopy", "p":Vector3(-7,0.121,71), "yaw":-28.0},
+			{"name":"PlazaArrival", "p":Vector3(38,0.121,78), "yaw":76.0},
+			{"name":"PlaygroundEdge", "p":Vector3(-87,0.121,31), "yaw":-65.0},
+			{"name":"SportsEdge", "p":Vector3(-38,0.121,-28), "yaw":166.0},
+			{"name":"NorthWoodland", "p":Vector3(-35,0.121,-73), "yaw":92.0},
+			{"name":"WestLakeCove", "p":Vector3(-44,0.121,7), "yaw":8.0},
+			{"name":"NorthLakeArc", "p":Vector3(24,0.121,-72), "yaw":88.0},
+			{"name":"EastLakeCove", "p":Vector3(86,0.121,7), "yaw":12.0},
+			{"name":"SouthLakeArc", "p":Vector3(58,0.121,62), "yaw":-84.0},
+			{"name":"WestBridgeTurn", "p":Vector3(-39,0.121,-4), "yaw":146.0},
 		]
 		for bend: Dictionary in bends:
 			_add_modular_path_piece(
@@ -490,9 +526,11 @@ func _build_modular_path_phase_two(parent: Node3D) -> void:
 			)
 	if midori_path_resting_pocket_prototype != null:
 		var pockets: Array[Dictionary] = [
-			{"name":"WestRestStop", "p":Vector3(-21,0.118,48), "yaw":180.0},
-			{"name":"NorthWoodlandRestStop", "p":Vector3(-15,0.118,-72), "yaw":0.0},
-			{"name":"EastPromenadeRestStop", "p":Vector3(88,0.118,-28), "yaw":-90.0},
+			{"name":"WestRestStop", "p":Vector3(-49,0.118,58), "yaw":160.0},
+			{"name":"NorthWoodlandRestStop", "p":Vector3(-20,0.118,-75), "yaw":0.0},
+			{"name":"EastPromenadeRestStop", "p":Vector3(100,0.118,6), "yaw":-90.0},
+			{"name":"SouthPromenadeRestStop", "p":Vector3(36,0.118,51), "yaw":180.0},
+			{"name":"PavilionRestStop", "p":Vector3(76,0.118,-73), "yaw":0.0},
 		]
 		for pocket: Dictionary in pockets:
 			_add_modular_path_piece(
@@ -516,7 +554,9 @@ func _add_modular_path_run(
 			continue
 		var direction := delta / segment_length
 		var distance := spacing * 0.5
-		while distance < segment_length - spacing * 0.25:
+		# Let the last tile slightly overlap each control point. The dedicated curve
+		# or junction module then hides the join without exposing a bare underlay gap.
+		while distance < segment_length:
 			var point := start + direction * distance
 			var yaw := rad_to_deg(atan2(direction.x, direction.y))
 			_add_modular_path_piece(
@@ -612,11 +652,11 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 	_add_zone_box(parent, "PlaygroundZone", Vector3(-72.0, 0.106, 45.0), Vector2(32.0, 26.0), mat_playground)
 	_add_zone_label(parent, "PLAYGROUND 32 x 26 m", Vector3(-72.0, 1.0, 45.0), Color.WHITE)
 
-	_add_zone_box(parent, "CentralPlazaZone", Vector3(62.0, 0.107, 51.0), Vector2(44.0, 34.0), mat_plaza)
-	_add_zone_label(parent, "PLAZA 44 x 34 m", Vector3(62.0, 1.0, 51.0), Color("#252525"))
+	_add_zone_box(parent, "CentralPlazaZone", Vector3(82.0, 0.107, 68.0), Vector2(34.0, 26.0), mat_plaza)
+	_add_zone_label(parent, "PLAZA 34 x 26 m", Vector3(82.0, 1.0, 68.0), Color("#252525"))
 
-	_add_zone_box(parent, "PavilionZone", Vector3(76.0, 0.108, -64.0), Vector2(20.0, 14.0), mat_pavilion)
-	_add_zone_label(parent, "PAVILION 20 x 14 m", Vector3(76.0, 1.0, -64.0), Color.WHITE)
+	_add_zone_box(parent, "PavilionZone", Vector3(76.0, 0.108, -73.0), Vector2(20.0, 14.0), mat_pavilion)
+	_add_zone_label(parent, "PAVILION 20 x 14 m", Vector3(76.0, 1.0, -73.0), Color.WHITE)
 
 func _build_artwork_assets(parent: Node3D) -> void:
 	var structures := Node3D.new()
@@ -720,7 +760,7 @@ func _build_prop_placement_plan(parent: Node3D) -> void:
 	root.name = "PlannedPropSockets"
 	parent.add_child(root)
 	var sockets: Array[Dictionary] = [
-		{"id": "ARC01_Pavilion", "category": "architecture", "p": Vector3(76.0, 0.1, -64.0), "yaw": 90.0},
+		{"id": "ARC01_Pavilion", "category": "architecture", "p": Vector3(76.0, 0.1, -73.0), "yaw": 90.0},
 		{"id": "ARC02_MaintenanceRestroom", "category": "architecture", "p": Vector3(-88.0, 0.1, -63.0), "yaw": 0.0},
 		{"id": "ARC03_MainEntranceMarker", "category": "architecture", "p": Vector3(0.0, 0.1, 84.0), "yaw": 0.0},
 		{"id": "ACT01_PlaygroundSet", "category": "activity", "p": Vector3(-72.0, 0.1, 45.0), "yaw": -12.0},
@@ -729,31 +769,31 @@ func _build_prop_placement_plan(parent: Node3D) -> void:
 		{"id": "ACT03_TennisNet", "category": "activity", "p": Vector3(-70.0, 0.1, -43.0), "yaw": 0.0},
 		{"id": "FUR06_MainInformationBoard", "category": "furniture", "p": Vector3(-7.0, 0.1, 79.0), "yaw": 0.0},
 		{"id": "FUR08_DrinkingFountain", "category": "furniture", "p": Vector3(-54.0, 0.1, 57.0), "yaw": 90.0},
-		{"id": "FUR09_BicycleRack", "category": "furniture", "p": Vector3(57.0, 0.1, 68.0), "yaw": 0.0},
-		{"id": "FUR10_VendingMachine", "category": "furniture", "p": Vector3(69.0, 0.1, 62.0), "yaw": 180.0},
+		{"id": "FUR09_BicycleRack", "category": "furniture", "p": Vector3(74.0, 0.1, 78.0), "yaw": 0.0},
+		{"id": "FUR10_VendingMachine", "category": "furniture", "p": Vector3(88.0, 0.1, 76.0), "yaw": 180.0},
 		{"id": "FUR13_EmergencyPoint", "category": "furniture", "p": Vector3(88.0, 0.1, -23.0), "yaw": -90.0},
-		{"id": "GAM01_PlazaPlanterA", "category": "cover", "p": Vector3(50.0, 0.1, 44.0), "yaw": 15.0},
-		{"id": "GAM01_PlazaPlanterB", "category": "cover", "p": Vector3(72.0, 0.1, 44.0), "yaw": -12.0},
+		{"id": "GAM01_PlazaPlanterA", "category": "cover", "p": Vector3(73.0, 0.1, 66.0), "yaw": 15.0},
+		{"id": "GAM01_PlazaPlanterB", "category": "cover", "p": Vector3(91.0, 0.1, 69.0), "yaw": -12.0},
 		{"id": "GAM03_UtilityCabinet", "category": "cover", "p": Vector3(-96.0, 0.1, -68.0), "yaw": 90.0},
 		{"id": "GAM04_SecurityCamera", "category": "security", "p": Vector3(87.0, 0.1, 66.0), "yaw": 215.0},
-		{"id": "GAMEPLAY_Loot_Pavilion", "category": "gameplay", "p": Vector3(78.0, 0.1, -62.0), "yaw": 0.0},
+		{"id": "GAMEPLAY_Loot_Pavilion", "category": "gameplay", "p": Vector3(78.0, 0.1, -72.0), "yaw": 0.0},
 		{"id": "GAMEPLAY_Loot_Playground", "category": "gameplay", "p": Vector3(-67.0, 0.1, 51.0), "yaw": 0.0},
 		{"id": "GAMEPLAY_Loot_Deck", "category": "gameplay", "p": Vector3(80.0, 0.1, -15.0), "yaw": 0.0},
-		{"id": "GAMEPLAY_Extraction_Plaza", "category": "gameplay", "p": Vector3(62.0, 0.1, 51.0), "yaw": 0.0},
+		{"id": "GAMEPLAY_Extraction_Plaza", "category": "gameplay", "p": Vector3(82.0, 0.1, 68.0), "yaw": 0.0},
 	]
 	var bench_points: Array[Vector3] = [
-		Vector3(-55.0, 0.1, 34.0), Vector3(-21.0, 0.1, 48.0), Vector3(9.0, 0.1, 47.0),
-		Vector3(40.0, 0.1, 42.0), Vector3(83.0, 0.1, 29.0), Vector3(84.0, 0.1, -48.0),
-		Vector3(32.0, 0.1, -68.0), Vector3(-23.0, 0.1, -68.0), Vector3(-91.0, 0.1, 7.0),
+		Vector3(-49.0, 0.1, 58.0), Vector3(-17.0, 0.1, 46.0), Vector3(36.0, 0.1, 54.0),
+		Vector3(94.0, 0.1, 45.0), Vector3(86.0, 0.1, -50.0), Vector3(24.0, 0.1, -75.0),
+		Vector3(-20.0, 0.1, -75.0), Vector3(-91.0, 0.1, 31.0), Vector3(73.0, 0.1, 64.0),
 	]
 	for index: int in range(bench_points.size()):
 		sockets.append({"id": "FUR01_Bench_%02d" % (index + 1), "category": "furniture", "p": bench_points[index], "yaw": fmod(float(index) * 90.0, 360.0)})
 
 	var lamp_points: Array[Vector3] = [
-		Vector3(-75.0, 0.1, 42.0), Vector3(-37.0, 0.1, 42.0), Vector3(0.0, 0.1, 42.0),
-		Vector3(38.0, 0.1, 42.0), Vector3(78.0, 0.1, 42.0), Vector3(-37.0, 0.1, 12.0),
-		Vector3(-37.0, 0.1, -20.0), Vector3(-37.0, 0.1, -54.0), Vector3(97.0, 0.1, 5.0),
-		Vector3(97.0, 0.1, -38.0), Vector3(-97.0, 0.1, 44.0), Vector3(-97.0, 0.1, -35.0),
+		Vector3(-78.0, 0.1, 66.0), Vector3(-17.0, 0.1, 46.0), Vector3(36.0, 0.1, 54.0),
+		Vector3(86.0, 0.1, 56.0), Vector3(86.0, 0.1, -45.0), Vector3(24.0, 0.1, -72.0),
+		Vector3(-33.0, 0.1, -50.0), Vector3(-39.0, 0.1, -4.0), Vector3(99.0, 0.1, 24.0),
+		Vector3(-98.0, 0.1, 20.0), Vector3(-98.0, 0.1, -27.0), Vector3(76.0, 0.1, -73.0),
 	]
 	for index: int in range(lamp_points.size()):
 		sockets.append({"id": "FUR04_PathLamp_%02d" % (index + 1), "category": "lighting", "p": lamp_points[index], "yaw": 0.0})
@@ -1245,6 +1285,21 @@ func _distance_to_park_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
 	var t := clampf((point - a).dot(segment) / length_squared, 0.0, 1.0)
 	return point.distance_to(a + segment * t)
 
+func _validate_approved_lake_promenade() -> void:
+	# The base strip must never become an accidental bridge when the shoreline is
+	# revised. Sample the full loop and report the first unsafe centreline point.
+	for index: int in range(LAKE_PROMENADE_LOOP.size() - 1):
+		var start := LAKE_PROMENADE_LOOP[index]
+		var finish := LAKE_PROMENADE_LOOP[index + 1]
+		var segment_length := start.distance_to(finish)
+		var sample_count := maxi(2, int(ceil(segment_length / 0.5)))
+		for sample_index: int in range(sample_count + 1):
+			var sample := start.lerp(finish, float(sample_index) / float(sample_count))
+			var required_clearance := LAKE_PROMENADE_WIDTH_M * 0.5 + LAKE_PROMENADE_BANK_MARGIN_M
+			if _is_point_in_or_near_lake(sample, required_clearance):
+				push_warning("Midori lake promenade is too close to water at %s" % sample)
+				return
+
 func _lake_shore_tangent(index: int) -> Vector2:
 	var previous := LAKE_SHORELINE[(index - 1 + LAKE_SHORELINE.size()) % LAKE_SHORELINE.size()]
 	var following := LAKE_SHORELINE[(index + 1) % LAKE_SHORELINE.size()]
@@ -1274,21 +1329,10 @@ func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
 	if _is_near_destination_path(point, padding):
 		return false
 
-	# Curved lake promenades use the same authored control points as the meshes.
-	var promenade_sets: Array = [
-		[Vector2(-37,42),Vector2(-27,31),Vector2(-23,14),Vector2(-27,-4),Vector2(-31,-24),Vector2(-37,-42)],
-		[Vector2(43,42),Vector2(59,34),Vector2(72,21),Vector2(80,3),Vector2(80,-15),Vector2(84,-35),Vector2(78,-54),Vector2(76,-64)],
-		[Vector2(-37,-42),Vector2(-18,-53),Vector2(5,-61),Vector2(28,-65),Vector2(47,-64),Vector2(65,-66),Vector2(76,-64)],
-	]
-	for promenade: Array in promenade_sets:
-		for index: int in range(promenade.size() - 1):
-			if _distance_to_park_segment(point, promenade[index], promenade[index + 1]) < 2.4 + padding:
-				return false
-
 	# Keep activity surfaces, plaza, pavilion, and all four entrances open.
 	var reserved_rects: Array[Vector4] = [
 		Vector4(-70,-43,30.7,21.2),Vector4(-72,45,20.0,17.0),
-		Vector4(62,51,26.0,22.0),Vector4(76,-64,14.0,11.0),
+		Vector4(82,68,19.0,15.0),Vector4(76,-73,14.0,11.0),
 		Vector4(0,86,11.0,7.0),Vector4(-38,-86,9.0,7.0),
 		Vector4(-106,20,7.0,9.0),Vector4(106,-20,7.0,9.0),
 	]
@@ -1307,6 +1351,11 @@ func _is_near_destination_path(point: Vector2, padding: float) -> bool:
 		{"points":SPORTS_LINK_ROUTE, "half_width":1.5},
 		{"points":PLAYGROUND_LOOP, "half_width":1.35},
 		{"points":NORTH_WOODLAND_LOOP, "half_width":1.25},
+		{"points":LAKE_PROMENADE_LOOP, "half_width":1.8},
+		{"points":PLAZA_ARRIVAL_ROUTE, "half_width":2.0},
+		{"points":SOUTH_BRIDGE_APPROACH, "half_width":1.6},
+		{"points":PAVILION_LINK_ROUTE, "half_width":1.4},
+		{"points":VIEWING_DECK_APPROACH_ROUTE, "half_width":1.5},
 	]
 	for spec: Dictionary in route_specs:
 		var route: Array[Vector2] = spec["points"]
@@ -1882,14 +1931,14 @@ func _build_park_benches(parent: Node3D) -> void:
 	# Candidates sit just beyond path shoulders. Extra candidates allow the pass
 	# to reject trees while retaining six useful, widely separated rest points.
 	var candidates: Array[Vector3] = [
-		Vector3(-78,-0.025,72),Vector3(-78,-0.025,-72),
-		Vector3(-15,-0.025,72),Vector3(-12,-0.025,-72),
-		Vector3(-42,-0.025,35),Vector3(92,-0.025,-28),
-		Vector3(48,-0.025,72),Vector3(55,-0.025,-72),
-		Vector3(-92,-0.025,-28),Vector3(-32,-0.025,50),
-		Vector3(18,-0.025,72),Vector3(22,-0.025,-72),
-		Vector3(-48,-0.025,72),Vector3(-48,-0.025,-72),
-		Vector3(78,-0.025,72),Vector3(88,-0.025,-72),
+		Vector3(-78,-0.025,72.5),Vector3(-78,-0.025,-72.5),
+		Vector3(-15,-0.025,79.5),Vector3(-12,-0.025,-78.5),
+		Vector3(-45,-0.025,35),Vector3(96,-0.025,-30),
+		Vector3(48,-0.025,81),Vector3(55,-0.025,-81),
+		Vector3(-101,-0.025,-28),Vector3(-32,-0.025,48),
+		Vector3(18,-0.025,81),Vector3(22,-0.025,-81),
+		Vector3(-48,-0.025,78),Vector3(-48,-0.025,-77),
+		Vector3(96,-0.025,74),Vector3(97,-0.025,-73),
 	]
 	var bench_positions: Array[Vector2] = []
 	var placed := 0
@@ -1941,11 +1990,11 @@ func _build_park_lamps(parent: Node3D) -> void:
 	root.name = "EmeraldHaloPathLamps_10"
 	parent.add_child(root)
 	var placements: Array[Vector3] = [
-		Vector3(-88,-0.025,73.2),Vector3(-45,-0.025,73.2),
-		Vector3(5,-0.025,73.2),Vector3(58,-0.025,73.2),
-		Vector3(-82,-0.025,-73.2),Vector3(-34,-0.025,-73.2),
-		Vector3(22,-0.025,-73.2),Vector3(72,-0.025,-73.2),
-		Vector3(-93.2,-0.025,0),Vector3(93.2,-0.025,0),
+		Vector3(-72,-0.025,74.4),Vector3(-20,-0.025,79.5),
+		Vector3(38,-0.025,81.8),Vector3(88,-0.025,81.0),
+		Vector3(-55,-0.025,-77.2),Vector3(-10,-0.025,-79.2),
+		Vector3(62,-0.025,-81.6),Vector3(91,-0.025,-78.8),
+		Vector3(-102.5,-0.025,5),Vector3(101.5,-0.025,0),
 	]
 	for index: int in range(placements.size()):
 		var position_value := placements[index]
@@ -2504,7 +2553,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 two-basin lake | 7 islands | 3 future bridge corridors\n24 sakura accents | regenerated mainland groves | shoreline relocation\nPHASE 2 PATHS | destination loop + 4 soft merges + 3 rest pockets"
+	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 two-basin lake | 7 islands | 3 future bridge corridors\n24 sakura accents | regenerated mainland groves | shoreline relocation\nFINAL PATHS | perimeter + lake loops | 4 entries | 3 bridge approaches"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
