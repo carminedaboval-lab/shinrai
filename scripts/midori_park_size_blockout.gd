@@ -30,7 +30,7 @@ const MidoriPathRestingPocketScene: PackedScene = preload("res://assets/shinrai/
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
-const LAKE_SIZE_M := Vector2(110.0, 72.0)
+const LAKE_SIZE_M := Vector2(110.0, 100.0)
 const SHOW_PLANNING_LABELS := false
 const MATURE_TREE_MIN_SPACING_M := 3.0
 const SKINNY_TREE_MIN_SPACING_M := 2.3
@@ -77,6 +77,17 @@ const PLAYGROUND_LOOP: Array[Vector2] = [
 const NORTH_WOODLAND_LOOP: Array[Vector2] = [
 	Vector2(-37,-42),Vector2(-46,-49),Vector2(-43,-61),Vector2(-31,-71),
 	Vector2(-16,-71),Vector2(-8,-61),Vector2(-18,-53),Vector2(-37,-42),
+]
+const LAKE_SHORELINE: Array[Vector2] = [
+	Vector2(-13,-47),Vector2(-2,-54),Vector2(12,-58),Vector2(29,-62),
+	Vector2(46,-61),Vector2(61,-56),Vector2(72,-48),Vector2(76,-39),
+	Vector2(73,-32),Vector2(79,-26),Vector2(85,-17),Vector2(82,-8),
+	Vector2(74,-2),Vector2(80,5),Vector2(86,13),Vector2(84,22),
+	Vector2(76,30),Vector2(65,36),Vector2(53,38),Vector2(42,35),
+	Vector2(34,29),Vector2(28,21),Vector2(23,14),Vector2(16,11),
+	Vector2(9,16),Vector2(2,24),Vector2(-7,29),Vector2(-16,26),
+	Vector2(-23,18),Vector2(-24,8),Vector2(-20,-1),Vector2(-14,-8),
+	Vector2(-19,-17),Vector2(-23,-27),Vector2(-21,-36),
 ]
 
 var mat_grass: StandardMaterial3D
@@ -510,13 +521,39 @@ func _add_modular_path_piece(
 	return piece
 
 func _build_zone_placeholders(parent: Node3D) -> void:
-	# The lake uses overlapping broad forms only to judge scale. Its final shoreline will be irregular.
-	_add_cylinder_zone(parent, "LakeMain", Vector3(27.0, 0.10, -10.0), Vector2(LAKE_SIZE_M.x * 0.50, LAKE_SIZE_M.y * 0.50), mat_water)
-	_add_cylinder_zone(parent, "LakeNorthLobe", Vector3(47.0, 0.102, -42.0), Vector2(34.0, 23.0), mat_water)
-	_add_cylinder_zone(parent, "LakeSouthLobe", Vector3(8.0, 0.104, 20.0), Vector2(30.0, 20.0), mat_water)
-	_add_cylinder_zone(parent, "LakeCentralIsland", Vector3(24.0, 0.145, -12.0), Vector2(8.5, 6.5), mat_island)
-	_add_cylinder_zone(parent, "LakeNorthIsland", Vector3(56.0, 0.146, -36.0), Vector2(5.0, 3.8), mat_island)
-	_add_zone_label(parent, "LAKE 110 x 72 m", Vector3(28.0, 1.0, -10.0), Color("#d4eff7"))
+	# The concept artwork has one connected lake with alternating coves, narrow
+	# necks and peninsulas. This single triangulated shoreline replaces the old
+	# three-circle blockout while retaining the same mainland scale.
+	var lake_root := Node3D.new()
+	lake_root.name = "ConceptMatchedIrregularLake_110x100m"
+	parent.add_child(lake_root)
+	_add_polygon_zone(lake_root, "LakeWaterSurface", LAKE_SHORELINE, 0.102, mat_water)
+	_add_shoreline_ribbon(lake_root, "LakeNaturalStoneBank", LAKE_SHORELINE, 1.15, 0.116, mat_boundary)
+
+	# Irregular islands reproduce the layered silhouettes in the aerial artwork.
+	# They sit over the single water surface, so no artificial circular seams are
+	# visible between lake lobes.
+	_add_polygon_zone(lake_root, "LakeCentralIsland", [
+		Vector2(11,-13),Vector2(15,-18),Vector2(22,-19),Vector2(29,-16),
+		Vector2(31,-10),Vector2(27,-5),Vector2(20,-3),Vector2(14,-6),
+	], 0.148, mat_island)
+	_add_polygon_zone(lake_root, "LakeNorthIsland", [
+		Vector2(49,-40),Vector2(52,-44),Vector2(58,-45),Vector2(62,-41),
+		Vector2(61,-36),Vector2(56,-33),Vector2(51,-35),
+	], 0.149, mat_island)
+	_add_polygon_zone(lake_root, "LakeSouthIsland", [
+		Vector2(41,23),Vector2(44,19),Vector2(51,18),Vector2(56,22),
+		Vector2(55,27),Vector2(49,30),Vector2(43,28),
+	], 0.149, mat_island)
+	_add_polygon_zone(lake_root, "LakeEastIslet", [
+		Vector2(68,7),Vector2(71,3),Vector2(76,4),Vector2(79,8),
+		Vector2(76,12),Vector2(71,12),
+	], 0.150, mat_island)
+	_add_polygon_zone(lake_root, "LakeWestIslet", [
+		Vector2(-7,8),Vector2(-4,5),Vector2(0,6),Vector2(2,10),
+		Vector2(-1,13),Vector2(-5,12),
+	], 0.150, mat_island)
+	_add_zone_label(parent, "IRREGULAR LAKE 110 x 100 m", Vector3(28.0, 1.0, -10.0), Color("#d4eff7"))
 
 	_add_zone_box(parent, "SportsZone", Vector3(-70.0, 0.105, -43.0), Vector2(55.0, 36.0), mat_sports)
 	_add_zone_label(parent, "SPORTS 55 x 36 m", Vector3(-70.0, 1.0, -43.0), Color.WHITE)
@@ -535,34 +572,45 @@ func _build_artwork_assets(parent: Node3D) -> void:
 	structures.name = "ArtworkMatchedStructures"
 	parent.add_child(structures)
 
-	# The arched crossing is the park's visual anchor and the shortest route
-	# between the south entrance and the central lake island.
+	# The arched crossing is the visual anchor from the concept: a diagonal link
+	# from the western shore to the central island at the lake's narrow waist.
 	_instance_park_asset(
 		structures, MainBridgeScene, "WAT01_MainArchedBridge",
-		Vector3(8.0, 2.15, 38.0), 0.0, Vector3.ONE * 26.0
+		Vector3(8.5, 2.15, -14.5), -12.0, Vector3.ONE * 26.0
 	)
 	_add_invisible_collision_box(
 		structures, "WAT01_WalkwayCollision",
-		Vector3(8.0, 2.05, 38.0), Vector3(25.0, 0.45, 4.6), 0.0
+		Vector3(8.5, 2.05, -14.5), Vector3(25.0, 0.45, 4.6), -12.0
 	)
 
-	# A flatter tactical route crosses the north lake lobe and gives two ways
-	# around the pavilion side of the park.
+	# A flatter bridge crosses the northern channel and connects its island to
+	# the pavilion-side promenade.
 	_instance_park_asset(
 		structures, SecondaryBridgeScene, "WAT02_SecondaryFootbridge",
-		Vector3(47.0, 1.25, -64.0), 0.0, Vector3.ONE * 20.0
+		Vector3(45.0, 1.25, -40.0), 5.0, Vector3.ONE * 20.0
 	)
 	_add_invisible_collision_box(
 		structures, "WAT02_WalkwayCollision",
-		Vector3(47.0, 1.28, -64.0), Vector3(19.5, 0.40, 4.2), 0.0
+		Vector3(45.0, 1.28, -40.0), Vector3(19.5, 0.40, 4.2), 5.0
+	)
+
+	# Reusing the secondary bridge model for the lower crossing mirrors the
+	# artwork's third, quieter footbridge without introducing a new asset.
+	_instance_park_asset(
+		structures, SecondaryBridgeScene, "WAT03_SouthFootbridge",
+		Vector3(40.0, 1.25, 25.0), -10.0, Vector3.ONE * 20.0
+	)
+	_add_invisible_collision_box(
+		structures, "WAT03_WalkwayCollision",
+		Vector3(40.0, 1.28, 25.0), Vector3(19.5, 0.40, 4.2), -10.0
 	)
 
 	_instance_park_asset(
-		structures, ViewingDeckScene, "WAT03_EastViewingDeck",
+		structures, ViewingDeckScene, "WAT04_EastViewingDeck",
 		Vector3(80.0, 1.75, -15.0), 90.0, Vector3.ONE * 13.0
 	)
 	_add_invisible_collision_box(
-		structures, "WAT03_DeckCollision",
+		structures, "WAT04_DeckCollision",
 		Vector3(80.0, 1.55, -15.0), Vector3(12.5, 0.45, 11.5), 90.0
 	)
 
@@ -600,12 +648,12 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 	root.name = "WatersideVegetation_36Reed_9DenseGrass"
 	parent.add_child(root)
 	var edge_points: Array[Vector3] = [
-		Vector3(-24.0, 0.55, -17.0), Vector3(-18.0, 0.55, 5.0), Vector3(-12.0, 0.55, 23.0),
-		Vector3(1.0, 0.55, 34.0), Vector3(22.0, 0.55, 36.0), Vector3(43.0, 0.55, 28.0),
-		Vector3(61.0, 0.55, 18.0), Vector3(75.0, 0.55, 2.0), Vector3(79.0, 0.55, -18.0),
-		Vector3(73.0, 0.55, -39.0), Vector3(61.0, 0.55, -58.0), Vector3(40.0, 0.55, -64.0),
-		Vector3(18.0, 0.55, -51.0), Vector3(1.0, 0.55, -40.0), Vector3(-13.0, 0.55, -30.0),
-		Vector3(17.0, 0.55, -5.0), Vector3(30.0, 0.55, -18.0), Vector3(52.0, 0.55, -31.0),
+		Vector3(-13.0, 0.55, -47.0), Vector3(2.0, 0.55, -54.0), Vector3(29.0, 0.55, -62.0),
+		Vector3(61.0, 0.55, -56.0), Vector3(76.0, 0.55, -39.0), Vector3(85.0, 0.55, -17.0),
+		Vector3(74.0, 0.55, -2.0), Vector3(86.0, 0.55, 13.0), Vector3(76.0, 0.55, 30.0),
+		Vector3(53.0, 0.55, 38.0), Vector3(34.0, 0.55, 29.0), Vector3(23.0, 0.55, 14.0),
+		Vector3(9.0, 0.55, 16.0), Vector3(-7.0, 0.55, 29.0), Vector3(-23.0, 0.55, 18.0),
+		Vector3(-20.0, 0.55, -1.0), Vector3(-23.0, 0.55, -27.0), Vector3(-21.0, 0.55, -36.0),
 	]
 	for index: int in range(edge_points.size()):
 		for variant: int in range(2):
@@ -1167,6 +1215,8 @@ func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
 	var point := Vector2(position_value.x, position_value.z)
 	if absf(point.x) > PARK_HALF.x - padding or absf(point.y) > PARK_HALF.y - padding:
 		return false
+	if _is_point_in_or_near_lake(point, padding):
+		return false
 	if _is_near_destination_path(point, padding):
 		return false
 
@@ -1210,6 +1260,15 @@ func _is_near_destination_path(point: Vector2, padding: float) -> bool:
 		for index: int in range(route.size() - 1):
 			if _distance_to_park_segment(point, route[index], route[index + 1]) < clearance:
 				return true
+	return false
+
+func _is_point_in_or_near_lake(point: Vector2, padding: float) -> bool:
+	if Geometry2D.is_point_in_polygon(point, PackedVector2Array(LAKE_SHORELINE)):
+		return true
+	for index: int in range(LAKE_SHORELINE.size()):
+		var following := (index + 1) % LAKE_SHORELINE.size()
+		if _distance_to_park_segment(point, LAKE_SHORELINE[index], LAKE_SHORELINE[following]) < padding:
+			return true
 	return false
 
 func _build_reference_canopy(parent: Node3D) -> void:
@@ -2128,6 +2187,78 @@ func _add_cylinder_zone(parent: Node3D, node_name: String, center: Vector3, radi
 	mesh_instance.material_override = material
 	parent.add_child(mesh_instance)
 
+func _add_polygon_zone(
+	parent: Node3D,
+	node_name: String,
+	points: Array[Vector2],
+	y_value: float,
+	material: Material
+) -> void:
+	if points.size() < 3:
+		return
+	var packed_points := PackedVector2Array(points)
+	var triangle_indices := Geometry2D.triangulate_polygon(packed_points)
+	if triangle_indices.is_empty():
+		push_warning("Midori polygon could not be triangulated: %s" % node_name)
+		return
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for triangle_index: int in triangle_indices:
+		var point := points[triangle_index]
+		surface.set_normal(Vector3.UP)
+		surface.set_uv(Vector2(point.x, point.y) * 0.05)
+		surface.add_vertex(Vector3(point.x, y_value, point.y))
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = node_name
+	mesh_instance.mesh = surface.commit()
+	mesh_instance.material_override = material
+	parent.add_child(mesh_instance)
+
+func _add_shoreline_ribbon(
+	parent: Node3D,
+	node_name: String,
+	points: Array[Vector2],
+	width: float,
+	y_value: float,
+	material: Material
+) -> void:
+	if points.size() < 3:
+		return
+	var centroid := Vector2.ZERO
+	for point: Vector2 in points:
+		centroid += point
+	centroid /= float(points.size())
+	var outer_points: Array[Vector2] = []
+	for index: int in range(points.size()):
+		var previous := points[(index - 1 + points.size()) % points.size()]
+		var current := points[index]
+		var following := points[(index + 1) % points.size()]
+		var tangent := (following - previous).normalized()
+		var outward := Vector2(-tangent.y, tangent.x)
+		if (current + outward - centroid).length_squared() < (current - centroid).length_squared():
+			outward = -outward
+		outer_points.append(current + outward * width)
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for index: int in range(points.size()):
+		var next_index := (index + 1) % points.size()
+		_add_shoreline_vertex(surface, points[index], y_value, Vector2(0.0, float(index)))
+		_add_shoreline_vertex(surface, outer_points[next_index], y_value, Vector2(1.0, float(next_index)))
+		_add_shoreline_vertex(surface, outer_points[index], y_value, Vector2(1.0, float(index)))
+		_add_shoreline_vertex(surface, points[index], y_value, Vector2(0.0, float(index)))
+		_add_shoreline_vertex(surface, points[next_index], y_value, Vector2(0.0, float(next_index)))
+		_add_shoreline_vertex(surface, outer_points[next_index], y_value, Vector2(1.0, float(next_index)))
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = node_name
+	mesh_instance.mesh = surface.commit()
+	mesh_instance.material_override = material
+	parent.add_child(mesh_instance)
+
+func _add_shoreline_vertex(surface: SurfaceTool, point: Vector2, y_value: float, uv_value: Vector2) -> void:
+	surface.set_normal(Vector3.UP)
+	surface.set_uv(uv_value)
+	surface.add_vertex(Vector3(point.x, y_value, point.y))
+
 func _add_zone_label(parent: Node3D, text_value: String, position_value: Vector3, color_value: Color) -> void:
 	if not SHOW_PLANNING_LABELS:
 		return
@@ -2184,7 +2315,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | dense mainland groves | clustered understory\nPHASE 2 PATHS | destination loop + 4 soft merges + 3 rest pockets"
+	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n1 irregular lake | 3 bridge crossings | east viewing deck\n24 sakura accents | dense mainland groves | clustered understory\nPHASE 2 PATHS | destination loop + 4 soft merges + 3 rest pockets"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))

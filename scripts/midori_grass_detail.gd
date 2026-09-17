@@ -12,7 +12,7 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 10
+const DETAIL_VERSION := 11
 const WEST_PROMENADE: Array[Vector2] = [
 	Vector2(-37.0, 42.0), Vector2(-27.0, 31.0), Vector2(-23.0, 14.0),
 	Vector2(-27.0, -4.0), Vector2(-31.0, -24.0), Vector2(-37.0, -42.0),
@@ -42,6 +42,17 @@ const EAST_DECK_ROUTE: Array[Vector2] = [Vector2(110,-20),Vector2(98,-20),Vector
 const SPORTS_LINK_ROUTE: Array[Vector2] = [Vector2(-98,-27),Vector2(-90,-28),Vector2(-82,-25),Vector2(-70,-23),Vector2(-56,-23),Vector2(-44,-30),Vector2(-37,-42)]
 const PLAYGROUND_LOOP: Array[Vector2] = [Vector2(-97,20),Vector2(-92,37),Vector2(-88,54),Vector2(-78,63),Vector2(-64,63),Vector2(-50,54),Vector2(-37,42),Vector2(-54,41),Vector2(-71,39),Vector2(-87,31),Vector2(-97,20)]
 const NORTH_WOODLAND_LOOP: Array[Vector2] = [Vector2(-37,-42),Vector2(-46,-49),Vector2(-43,-61),Vector2(-31,-71),Vector2(-16,-71),Vector2(-8,-61),Vector2(-18,-53),Vector2(-37,-42)]
+const LAKE_SHORELINE: Array[Vector2] = [
+	Vector2(-13,-47),Vector2(-2,-54),Vector2(12,-58),Vector2(29,-62),
+	Vector2(46,-61),Vector2(61,-56),Vector2(72,-48),Vector2(76,-39),
+	Vector2(73,-32),Vector2(79,-26),Vector2(85,-17),Vector2(82,-8),
+	Vector2(74,-2),Vector2(80,5),Vector2(86,13),Vector2(84,22),
+	Vector2(76,30),Vector2(65,36),Vector2(53,38),Vector2(42,35),
+	Vector2(34,29),Vector2(28,21),Vector2(23,14),Vector2(16,11),
+	Vector2(9,16),Vector2(2,24),Vector2(-7,29),Vector2(-16,26),
+	Vector2(-23,18),Vector2(-24,8),Vector2(-20,-1),Vector2(-14,-8),
+	Vector2(-19,-17),Vector2(-23,-27),Vector2(-21,-36),
+]
 
 # Measured from the imported GLB rather than assuming a centered one-metre mesh.
 # Accurate bounds keep the leaves above the lawn as their scale changes.
@@ -253,12 +264,10 @@ func _is_lawn_position(x: float, z: float) -> bool:
 	if _near_polyline(Vector2(x, z), NORTH_PROMENADE, 2.7):
 		return false
 
-	# Lake lobes, with a safety margin around their visible surfaces.
-	if _inside_ellipse(x, z, 27.0, -10.0, 57.0, 38.0):
+	# One concept-matched shoreline replaces the three legacy ellipse masks.
+	if Geometry2D.is_point_in_polygon(point, PackedVector2Array(LAKE_SHORELINE)):
 		return false
-	if _inside_ellipse(x, z, 47.0, -42.0, 37.0, 26.0):
-		return false
-	if _inside_ellipse(x, z, 8.0, 20.0, 33.0, 23.0):
+	if _near_closed_polyline(point, LAKE_SHORELINE, 1.35):
 		return false
 
 	# Current colored zone placeholders.
@@ -278,6 +287,20 @@ func _near_polyline(point: Vector2, points: Array[Vector2], half_width: float) -
 	for index: int in range(points.size() - 1):
 		var start := points[index]
 		var end := points[index + 1]
+		var segment := end - start
+		var length_squared := segment.length_squared()
+		if length_squared <= 0.0001:
+			continue
+		var t := clampf((point - start).dot(segment) / length_squared, 0.0, 1.0)
+		if point.distance_to(start + segment * t) <= half_width:
+			return true
+	return false
+
+
+func _near_closed_polyline(point: Vector2, points: Array[Vector2], half_width: float) -> bool:
+	for index: int in range(points.size()):
+		var start := points[index]
+		var end := points[(index + 1) % points.size()]
 		var segment := end - start
 		var length_squared := segment.length_squared()
 		if length_squared <= 0.0001:
