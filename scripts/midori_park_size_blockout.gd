@@ -26,6 +26,7 @@ const EmeraldHaloLampScene: PackedScene = preload("res://assets/shinrai/parks/mi
 const MidoriPathStraightScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_straight.glb")
 const MidoriPathCurveScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_curve.glb")
 const MidoriPathJunctionScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_junction.glb")
+const MidoriPathRestingPocketScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_resting_pocket.glb")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -69,6 +70,7 @@ var emerald_halo_lamp_prototype: Node3D
 var midori_path_straight_prototype: Node3D
 var midori_path_curve_prototype: Node3D
 var midori_path_junction_prototype: Node3D
+var midori_path_resting_pocket_prototype: Node3D
 var park_environment: Environment
 var park_directional_light: DirectionalLight3D
 var time_of_day_label: Label
@@ -382,6 +384,13 @@ func _build_modular_path_phase_one(parent: Node3D) -> void:
 		_add_modular_path_piece(
 			root, midori_path_curve_prototype, "PathCurve_WestLake_Test",
 			Vector3(-27.0, 0.118, 14.0), 90.0
+		)
+	if midori_path_resting_pocket_prototype != null:
+		# This pocket opens directly off the main east-west walk and contains the
+		# existing authored bench point at (-21, 48), turning it into a real stop.
+		_add_modular_path_piece(
+			root, midori_path_resting_pocket_prototype, "PathPocket_WestRestStop",
+			Vector3(-21.0, 0.105, 47.0), 180.0
 		)
 
 func _add_modular_path_piece(
@@ -698,6 +707,10 @@ func _prepare_reference_vegetation() -> void:
 	midori_path_junction_prototype = _prepare_path_module(
 		MidoriPathJunctionScene, "MidoriPathJunction",
 		Vector3(-90.0, 0.0, 0.0), Vector3(9.0, 9.0, 0.70)
+	)
+	midori_path_resting_pocket_prototype = _prepare_path_module(
+		MidoriPathRestingPocketScene, "MidoriPathRestingPocket",
+		Vector3(-90.0, 0.0, 0.0), Vector3(8.03, 8.0, 1.08)
 	)
 
 func _prepare_path_module(
@@ -2059,7 +2072,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | dense mainland groves | clustered understory\n3-piece modular path kit | phase-one south spine"
+	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | dense mainland groves | clustered understory\n4-piece modular path kit | south spine + west rest stop"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
