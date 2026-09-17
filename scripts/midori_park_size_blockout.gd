@@ -23,6 +23,9 @@ const JapaneseMapleMesh: Mesh = preload("res://assets/shinrai/parks/midori_park/
 const NeonParkBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/neon_park_bench/neon_park_bench.glb")
 const FuturisticEcoBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/futuristic_eco_bench/futuristic_eco_bench.glb")
 const EmeraldHaloLampScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/emerald_halo_lamp/emerald_halo_lamp.glb")
+const MidoriPathStraightScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_straight.glb")
+const MidoriPathCurveScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_curve.glb")
+const MidoriPathJunctionScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_junction.glb")
 
 const PARK_SIZE_M := Vector2(220.0, 180.0)
 const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
@@ -46,7 +49,9 @@ var mat_entry: StandardMaterial3D
 var mat_island: StandardMaterial3D
 var mat_plan_marker: StandardMaterial3D
 var mat_path_light_streak: ShaderMaterial
+var modular_path_shader: Shader
 var lamp_emissive_materials: Array[StandardMaterial3D] = []
+var modular_path_emissive_materials: Array[ShaderMaterial] = []
 var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
 var pine_sapling_prototypes: Array[Node3D] = []
@@ -61,6 +66,9 @@ var japanese_maple_prototype: Node3D
 var neon_park_bench_prototype: Node3D
 var futuristic_eco_bench_prototype: Node3D
 var emerald_halo_lamp_prototype: Node3D
+var midori_path_straight_prototype: Node3D
+var midori_path_curve_prototype: Node3D
+var midori_path_junction_prototype: Node3D
 var park_environment: Environment
 var park_directional_light: DirectionalLight3D
 var time_of_day_label: Label
@@ -103,6 +111,7 @@ func _create_materials() -> void:
 	mat_island = _make_material(Color("#405d3d"), 0.98)
 	mat_plan_marker = _make_material(Color(0.20, 0.78, 0.92, 0.55), 0.76, 0.08)
 	mat_path_light_streak = _make_path_light_streak_material()
+	modular_path_shader = _make_modular_path_shader()
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -133,6 +142,38 @@ void fragment() {
 	material.resource_name = "SHINRAI_BlueSlitPathStreak"
 	material.shader = shader
 	return material
+
+func _make_modular_path_shader() -> Shader:
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode depth_draw_opaque, cull_back;
+
+uniform sampler2D source_albedo : source_color, filter_linear_mipmap_anisotropic;
+uniform sampler2D source_normal : hint_normal, filter_linear_mipmap_anisotropic;
+uniform sampler2D source_orm : filter_linear_mipmap_anisotropic;
+uniform float night_emission = 1.0;
+
+void fragment() {
+	vec4 texel = texture(source_albedo, UV);
+	vec3 orm = texture(source_orm, UV).rgb;
+	vec3 base = texel.rgb;
+	float high_channel = max(base.r, max(base.g, base.b));
+	float low_channel = min(base.r, min(base.g, base.b));
+	float cyan_bias = min(base.g, base.b) - base.r;
+	float cyan_mask = smoothstep(0.08, 0.26, cyan_bias)
+		* smoothstep(0.16, 0.48, high_channel - low_channel);
+	ALBEDO = base;
+	NORMAL_MAP = texture(source_normal, UV).rgb;
+	NORMAL_MAP_DEPTH = 0.62;
+	AO = orm.r;
+	ROUGHNESS = mix(clamp(orm.g, 0.58, 0.92), 0.28, cyan_mask);
+	METALLIC = mix(orm.b * 0.18, 0.18, cyan_mask);
+	EMISSION = vec3(0.28, 0.84, 1.0) * cyan_mask * 2.2 * night_emission;
+}
+"""
+	shader.resource_name = "SHINRAI_MidoriModularPath"
+	return shader
 
 func _create_environment() -> void:
 	var world_environment := WorldEnvironment.new()
@@ -204,6 +245,8 @@ func _apply_time_of_day() -> void:
 		mat_boundary.albedo_color = Color("#d6d0bf")
 	for material: StandardMaterial3D in lamp_emissive_materials:
 		material.emission_energy_multiplier = 1.85 if is_night_mode else 0.0
+	for material: ShaderMaterial in modular_path_emissive_materials:
+		material.set_shader_parameter("night_emission", 1.0 if is_night_mode else 0.0)
 	var ground_service := get_node_or_null("/root/MidoriGroundTexture")
 	if ground_service != null and ground_service.has_method("set_night_mode"):
 		ground_service.call("set_night_mode", is_night_mode)
@@ -222,6 +265,7 @@ func _build_park_footprint() -> void:
 	_build_boundary(root)
 	_build_paths(root)
 	_build_curved_promenades(root)
+	_build_modular_path_phase_one(root)
 	_build_zone_placeholders(root)
 	_build_artwork_assets(root)
 	_build_prop_placement_plan(root)
@@ -314,6 +358,47 @@ func _add_path_vertex(surface: SurfaceTool, position_value: Vector3, uv_value: V
 	surface.set_normal(Vector3.UP)
 	surface.set_uv(uv_value)
 	surface.add_vertex(position_value)
+
+func _build_modular_path_phase_one(parent: Node3D) -> void:
+	var root := Node3D.new()
+	root.name = "MidoriModularPath_Phase1"
+	parent.add_child(root)
+
+	# The original blockout remains underneath until the resting-pocket module
+	# arrives. This first reversible route proves scale, grounding, materials and
+	# night emission without committing the park's final circulation plan.
+	if midori_path_junction_prototype != null:
+		_add_modular_path_piece(
+			root, midori_path_junction_prototype, "PathJunction_MainCrossing",
+			Vector3(-37.0, 0.105, 42.0), 0.0
+		)
+	if midori_path_straight_prototype != null:
+		for index: int in range(7):
+			_add_modular_path_piece(
+				root, midori_path_straight_prototype, "PathStraight_South_%02d" % (index + 1),
+				Vector3(-37.0, 0.105, 49.2 + float(index) * 6.0), 0.0
+			)
+	if midori_path_curve_prototype != null:
+		_add_modular_path_piece(
+			root, midori_path_curve_prototype, "PathCurve_WestLake_Test",
+			Vector3(-27.0, 0.118, 14.0), 90.0
+		)
+
+func _add_modular_path_piece(
+	parent: Node3D,
+	prototype: Node3D,
+	node_name: String,
+	position_value: Vector3,
+	yaw_degrees: float
+) -> Node3D:
+	var piece := prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+	if piece == null:
+		return null
+	piece.name = node_name
+	piece.position = position_value
+	piece.rotation_degrees.y = yaw_degrees
+	parent.add_child(piece)
+	return piece
 
 func _build_zone_placeholders(parent: Node3D) -> void:
 	# The lake uses overlapping broad forms only to judge scale. Its final shoreline will be irregular.
@@ -600,6 +685,97 @@ func _prepare_reference_vegetation() -> void:
 	futuristic_eco_bench_prototype = _extract_whole_scene_prototype(FuturisticEcoBenchScene, "FuturisticEcoBench")
 	emerald_halo_lamp_prototype = _extract_whole_scene_prototype(EmeraldHaloLampScene, "EmeraldHaloLamp")
 	_make_lamp_reflective(emerald_halo_lamp_prototype)
+	# Meshy exported the straight and junction on the XY plane while the curve
+	# arrived on XZ. Normalize all three to the same 3 m-wide, 0.12 m-high kit.
+	midori_path_straight_prototype = _prepare_path_module(
+		MidoriPathStraightScene, "MidoriPathStraight",
+		Vector3(-90.0, 0.0, 0.0), Vector3(6.32, 6.0, 0.875)
+	)
+	midori_path_curve_prototype = _prepare_path_module(
+		MidoriPathCurveScene, "MidoriPathCurve",
+		Vector3.ZERO, Vector3(3.90, 1.155, 3.90)
+	)
+	midori_path_junction_prototype = _prepare_path_module(
+		MidoriPathJunctionScene, "MidoriPathJunction",
+		Vector3(-90.0, 0.0, 0.0), Vector3(9.0, 9.0, 0.70)
+	)
+
+func _prepare_path_module(
+	pack: PackedScene,
+	prototype_name: String,
+	source_rotation_degrees: Vector3,
+	source_scale: Vector3
+) -> Node3D:
+	var source_root := pack.instantiate() as Node3D
+	if source_root == null:
+		push_warning("Midori path module failed to instantiate: %s" % prototype_name)
+		return null
+	_clear_vegetation_owner(source_root)
+	source_root.rotation_degrees = source_rotation_degrees
+	source_root.scale = source_scale
+
+	var prototype := Node3D.new()
+	prototype.name = prototype_name
+	var content := Node3D.new()
+	content.name = "Content"
+	prototype.add_child(content)
+	content.add_child(source_root)
+
+	var bounds_data := _vegetation_visual_bounds(content)
+	if not bounds_data["valid"]:
+		prototype.free()
+		return null
+	var bounds: AABB = bounds_data["bounds"]
+	content.position = -Vector3(
+		bounds.position.x + bounds.size.x * 0.5,
+		bounds.position.y,
+		bounds.position.z + bounds.size.z * 0.5
+	)
+	print("Midori path module %s normalized: %.2f x %.2f x %.2f m" % [
+		prototype_name, bounds.size.x, bounds.size.y, bounds.size.z,
+	])
+	_configure_path_module_visuals(content)
+	_add_path_module_collision_shapes(content)
+	return prototype
+
+func _configure_path_module_visuals(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		mesh_instance.visibility_range_end = 165.0
+		for surface_index: int in range(mesh_instance.mesh.get_surface_count()):
+			var source_material := mesh_instance.mesh.surface_get_material(surface_index)
+			if source_material is BaseMaterial3D:
+				var base_material := source_material as BaseMaterial3D
+				if base_material.albedo_texture != null and base_material.normal_texture != null:
+					var material := ShaderMaterial.new()
+					material.shader = modular_path_shader
+					material.set_shader_parameter("source_albedo", base_material.albedo_texture)
+					material.set_shader_parameter("source_normal", base_material.normal_texture)
+					if source_material is ORMMaterial3D:
+						material.set_shader_parameter("source_orm", (source_material as ORMMaterial3D).orm_texture)
+					else:
+						material.set_shader_parameter("source_orm", base_material.roughness_texture)
+					material.set_shader_parameter("night_emission", 1.0 if is_night_mode else 0.0)
+					mesh_instance.set_surface_override_material(surface_index, material)
+					modular_path_emissive_materials.append(material)
+	for child: Node in node.get_children():
+		_configure_path_module_visuals(child)
+
+func _add_path_module_collision_shapes(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			var shape := mesh_instance.mesh.create_trimesh_shape()
+			if shape != null:
+				var body := StaticBody3D.new()
+				body.name = "WalkableCollision"
+				var collision := CollisionShape3D.new()
+				collision.shape = shape
+				body.add_child(collision)
+				mesh_instance.add_child(body)
+	for child: Node in node.get_children():
+		if not (child is StaticBody3D):
+			_add_path_module_collision_shapes(child)
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
 	var source_root := pack.instantiate() as Node3D
@@ -1883,7 +2059,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | dense mainland groves | clustered understory\nProp sockets are planned and hidden until their assets arrive."
+	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | dense mainland groves | clustered understory\n3-piece modular path kit | phase-one south spine"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
