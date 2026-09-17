@@ -1,5 +1,8 @@
 extends Node3D
 
+@export var start_at_night := true
+@export var time_of_day_toggle_key: Key = KEY_N
+
 const PlayerScript = preload("res://scripts/player.gd")
 const SakuraTreeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_sakura_winter_sentinel_clean_v2.glb")
 const FountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_green_fountain_grass_v1.glb")
@@ -58,10 +61,15 @@ var japanese_maple_prototype: Node3D
 var neon_park_bench_prototype: Node3D
 var futuristic_eco_bench_prototype: Node3D
 var emerald_halo_lamp_prototype: Node3D
+var park_environment: Environment
+var park_directional_light: DirectionalLight3D
+var time_of_day_label: Label
+var is_night_mode := true
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
 func _ready() -> void:
+	is_night_mode = start_at_night
 	_create_materials()
 	_create_environment()
 	_prepare_reference_vegetation()
@@ -71,6 +79,16 @@ func _ready() -> void:
 	print("Midori Park size blockout: %.0f m x %.0f m | diagonal %.1f m" % [
 		PARK_SIZE_M.x, PARK_SIZE_M.y, PARK_SIZE_M.length()
 	])
+
+func _unhandled_input(event: InputEvent) -> void:
+	if (
+		event is InputEventKey
+		and event.pressed
+		and not event.echo
+		and event.physical_keycode == time_of_day_toggle_key
+	):
+		is_night_mode = not is_night_mode
+		_apply_time_of_day()
 
 func _create_materials() -> void:
 	mat_grass = _make_material(Color("#344f38"), 0.98)
@@ -125,30 +143,55 @@ func _create_environment() -> void:
 	world_environment.name = "ParkReviewEnvironment"
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color("#65727a")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("#a8b3b7")
-	environment.ambient_light_energy = 0.30
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.adjustment_enabled = true
-	environment.adjustment_brightness = 0.72
-	environment.adjustment_contrast = 1.08
-	environment.adjustment_saturation = 0.96
 	environment.fog_enabled = true
-	environment.fog_light_color = Color("#778489")
-	environment.fog_light_energy = 0.38
 	environment.fog_density = 0.0105
 	environment.fog_sky_affect = 0.72
 	world_environment.environment = environment
+	park_environment = environment
 	add_child(world_environment)
 
 	var sun := DirectionalLight3D.new()
-	sun.name = "ParkReviewSun"
 	sun.rotation_degrees = Vector3(-48.0, -32.0, 0.0)
-	sun.light_color = Color("#fff0d1")
-	sun.light_energy = 0.68
 	sun.shadow_enabled = true
+	park_directional_light = sun
 	add_child(sun)
+	_apply_time_of_day()
+
+func _apply_time_of_day() -> void:
+	if park_environment == null or park_directional_light == null:
+		return
+	if is_night_mode:
+		park_environment.background_color = Color("#050912")
+		park_environment.ambient_light_color = Color("#1b2d49")
+		park_environment.ambient_light_energy = 0.12
+		park_environment.adjustment_brightness = 0.52
+		park_environment.adjustment_contrast = 1.15
+		park_environment.adjustment_saturation = 0.86
+		park_environment.fog_light_color = Color("#101b2e")
+		park_environment.fog_light_energy = 0.10
+		park_directional_light.name = "ParkNightMoon"
+		park_directional_light.light_color = Color("#7899c8")
+		park_directional_light.light_energy = 0.12
+	else:
+		park_environment.background_color = Color("#65727a")
+		park_environment.ambient_light_color = Color("#a8b3b7")
+		park_environment.ambient_light_energy = 0.30
+		park_environment.adjustment_brightness = 0.72
+		park_environment.adjustment_contrast = 1.08
+		park_environment.adjustment_saturation = 0.96
+		park_environment.fog_light_color = Color("#778489")
+		park_environment.fog_light_energy = 0.38
+		park_directional_light.name = "ParkReviewSun"
+		park_directional_light.light_color = Color("#fff0d1")
+		park_directional_light.light_energy = 0.68
+	for node: Node in get_tree().get_nodes_in_group("midori_night_effect"):
+		if node is Node3D:
+			(node as Node3D).visible = is_night_mode
+	if time_of_day_label != null:
+		time_of_day_label.text = "TIME: %s  |  N: toggle day/night" % ("NIGHT" if is_night_mode else "DAY")
 
 func _build_park_footprint() -> void:
 	var root := Node3D.new()
@@ -1436,6 +1479,7 @@ func _add_lamp_neon_geometry(lamp: Node3D) -> void:
 	halo.position = Vector3(0.0,0.972,0.0)
 	halo.material_override = mat_neon_blue
 	lamp.add_child(halo)
+	halo.add_to_group("midori_night_effect")
 
 	var seam := MeshInstance3D.new()
 	seam.name = "BlueNeonSeam"
@@ -1447,6 +1491,7 @@ func _add_lamp_neon_geometry(lamp: Node3D) -> void:
 	seam.position = Vector3(-0.010,0.19,-0.142)
 	seam.material_override = mat_neon_blue
 	lamp.add_child(seam)
+	seam.add_to_group("midori_night_effect")
 
 func _add_lamp_lights(
 	parent: Node3D,
@@ -1463,6 +1508,7 @@ func _add_lamp_lights(
 	halo_light.omni_range = 7.0
 	halo_light.shadow_enabled = false
 	parent.add_child(halo_light)
+	halo_light.add_to_group("midori_night_effect")
 
 	# The emitter inside the lower slit throws a narrow, oblique streak onto the
 	# adjacent path. The shallow projection elongates the pool into a line.
@@ -1475,6 +1521,7 @@ func _add_lamp_lights(
 	slit_light.spot_angle = 6.0
 	slit_light.shadow_enabled = false
 	parent.add_child(slit_light)
+	slit_light.add_to_group("midori_night_effect")
 	slit_light.look_at(position_value + path_direction * 3.4 + Vector3(0.0,0.05,0.0), Vector3.UP)
 
 func _add_lamp_path_streak(
@@ -1493,6 +1540,7 @@ func _add_lamp_path_streak(
 		streak.rotation_degrees.y = 90.0
 	streak.material_override = mat_path_light_streak
 	parent.add_child(streak)
+	streak.add_to_group("midori_night_effect")
 
 func _add_deadwood_box_collision(
 	parent: Node3D,
@@ -1843,4 +1891,13 @@ func _build_size_hud() -> void:
 	label.add_theme_constant_override("shadow_offset_x", 2)
 	label.add_theme_constant_override("shadow_offset_y", 2)
 	canvas.add_child(label)
+	time_of_day_label = Label.new()
+	time_of_day_label.position = Vector2(22.0, 132.0)
+	time_of_day_label.add_theme_font_size_override("font_size", 17)
+	time_of_day_label.add_theme_color_override("font_color", Color("#8fdfff"))
+	time_of_day_label.add_theme_color_override("font_shadow_color", Color(0.0,0.0,0.0,0.9))
+	time_of_day_label.add_theme_constant_override("shadow_offset_x", 2)
+	time_of_day_label.add_theme_constant_override("shadow_offset_y", 2)
+	canvas.add_child(time_of_day_label)
+	_apply_time_of_day()
 
