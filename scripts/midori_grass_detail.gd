@@ -13,7 +13,7 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 14
+const DETAIL_VERSION := 15
 const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-98,70),Vector2(-72,77),Vector2(-38,82),Vector2(0,84),
@@ -44,8 +44,8 @@ const LAKE_PROMENADE_LOOP: Array[Vector2] = [
 	Vector2(-24,-13),Vector2(-32,-21),Vector2(-40,-30),Vector2(-39,-42),
 	Vector2(-33,-50),
 ]
-const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [Vector2(0,90),Vector2(18,84),Vector2(38,78),Vector2(58,75),Vector2(75,72),Vector2(82,68),Vector2(92,61)]
-const SOUTH_BRIDGE_APPROACH: Array[Vector2] = [Vector2(82,68),Vector2(69,63),Vector2(59,60),Vector2(52,60)]
+const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [Vector2(0,90),Vector2(18,84),Vector2(38,78),Vector2(58,75),Vector2(75,72),Vector2(77,74),Vector2(83,75),Vector2(88,72),Vector2(90,67),Vector2(92,61)]
+const SOUTH_BRIDGE_APPROACH: Array[Vector2] = [Vector2(77,74),Vector2(73,69),Vector2(69,63),Vector2(59,60),Vector2(52,60)]
 const PAVILION_LINK_ROUTE: Array[Vector2] = [Vector2(64,-64),Vector2(70,-69),Vector2(76,-73),Vector2(86,-75),Vector2(94,-70),Vector2(98,-68)]
 const VIEWING_DECK_APPROACH_ROUTE: Array[Vector2] = [Vector2(99,-17),Vector2(96,-18),Vector2(92,-18)]
 const LAKE_SHORELINE: Array[Vector2] = [

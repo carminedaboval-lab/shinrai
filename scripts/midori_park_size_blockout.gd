@@ -41,6 +41,8 @@ const SAKURA_TREE_COUNT := 24
 const LAKE_TREE_BUFFER_M := 2.0
 const LAKE_PROMENADE_WIDTH_M := 3.6
 const LAKE_PROMENADE_BANK_MARGIN_M := 1.0
+const PLAZA_CENTER := Vector2(82.0, 68.0)
+const PLAZA_CENTERPIECE_CLEARANCE_M := 3.5
 
 # Final circulation follows the destination-led, nested-loop logic of the
 # Pymmes Park reference. The routes intentionally avoid a rectangular grid:
@@ -101,10 +103,12 @@ const LAKE_PROMENADE_LOOP: Array[Vector2] = [
 ]
 const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [
 	Vector2(0,90),Vector2(18,84),Vector2(38,78),Vector2(58,75),
-	Vector2(75,72),Vector2(82,68),Vector2(92,61),
+	Vector2(75,72),Vector2(77,74),Vector2(83,75),Vector2(88,72),
+	Vector2(90,67),Vector2(92,61),
 ]
 const SOUTH_BRIDGE_APPROACH: Array[Vector2] = [
-	Vector2(82,68),Vector2(69,63),Vector2(59,60),Vector2(52,60),
+	Vector2(77,74),Vector2(73,69),Vector2(69,63),Vector2(59,60),
+	Vector2(52,60),
 ]
 const PAVILION_LINK_ROUTE: Array[Vector2] = [
 	Vector2(64,-64),Vector2(70,-69),Vector2(76,-73),Vector2(86,-75),
@@ -142,6 +146,8 @@ var mat_water: StandardMaterial3D
 var mat_sports: StandardMaterial3D
 var mat_playground: StandardMaterial3D
 var mat_plaza: StandardMaterial3D
+var mat_plaza_border: StandardMaterial3D
+var mat_plaza_inlay: StandardMaterial3D
 var mat_pavilion: StandardMaterial3D
 var mat_boundary: StandardMaterial3D
 var mat_entry: StandardMaterial3D
@@ -153,6 +159,7 @@ var mat_plan_marker: StandardMaterial3D
 var mat_path_light_streak: ShaderMaterial
 var modular_path_shader: Shader
 var lamp_emissive_materials: Array[StandardMaterial3D] = []
+var plaza_emissive_materials: Array[StandardMaterial3D] = []
 var modular_path_emissive_materials: Array[ShaderMaterial] = []
 var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
@@ -186,6 +193,7 @@ func _ready() -> void:
 	_prepare_reference_vegetation()
 	_build_park_footprint()
 	_validate_approved_lake_promenade()
+	_validate_plaza_centerpiece_clearance()
 	_spawn_scale_review_player()
 	_build_size_hud()
 	print("Midori Park size blockout: %.0f m x %.0f m | diagonal %.1f m" % [
@@ -208,7 +216,13 @@ func _create_materials() -> void:
 	mat_water = _make_material(Color("#315d70"), 0.30, 0.12)
 	mat_sports = _make_material(Color("#536d61"), 0.88)
 	mat_playground = _make_material(Color("#8b6255"), 0.91)
-	mat_plaza = _make_material(Color("#9a9589"), 0.94)
+	mat_plaza = _make_material(Color("#777871"), 0.90)
+	mat_plaza_border = _make_material(Color("#30383a"), 0.76, 0.16)
+	mat_plaza_inlay = _make_material(Color("#356f7c"), 0.34, 0.34)
+	mat_plaza_inlay.emission_enabled = true
+	mat_plaza_inlay.emission = Color("#42b9d4")
+	mat_plaza_inlay.emission_energy_multiplier = 0.0
+	plaza_emissive_materials.append(mat_plaza_inlay)
 	mat_pavilion = _make_material(Color("#8a755e"), 0.88)
 	mat_boundary = _make_material(Color("#d6d0bf"), 0.82)
 	mat_entry = _make_material(Color("#e3a14c"), 0.74)
@@ -352,6 +366,8 @@ func _apply_time_of_day() -> void:
 		mat_boundary.albedo_color = Color("#d6d0bf")
 	for material: StandardMaterial3D in lamp_emissive_materials:
 		material.emission_energy_multiplier = 1.85 if is_night_mode else 0.0
+	for material: StandardMaterial3D in plaza_emissive_materials:
+		material.emission_energy_multiplier = 0.72 if is_night_mode else 0.0
 	for material: ShaderMaterial in modular_path_emissive_materials:
 		material.set_shader_parameter("night_emission", 1.0 if is_night_mode else 0.0)
 	var ground_service := get_node_or_null("/root/MidoriGroundTexture")
@@ -388,6 +404,7 @@ func _build_park_footprint() -> void:
 	_build_japanese_maple_pass(root)
 	_build_park_benches(root)
 	_build_park_lamps(root)
+	_build_landmark_plaza_furniture(root)
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
@@ -477,7 +494,7 @@ func _build_modular_final_path(parent: Node3D) -> void:
 	root.name = "MidoriModularPath_FinalHierarchy"
 	parent.add_child(root)
 
-	# Four landmark merges provide orientation without repeating the junction at
+	# Landmark merges provide orientation without repeating the junction at
 	# every bend. The narrower procedural paths beneath them remain visible as a
 	# border and guarantee continuous, walkable-looking routes between modules.
 	if midori_path_junction_prototype != null:
@@ -488,7 +505,7 @@ func _build_modular_final_path(parent: Node3D) -> void:
 			{"name":"NorthLakeMerge", "p":Vector3(-33,0.118,-50), "yaw":176.0},
 			{"name":"EastBridgeMerge", "p":Vector3(86,0.118,-45), "yaw":88.0},
 			{"name":"ViewingDeckSplit", "p":Vector3(99,0.118,-17), "yaw":-92.0},
-			{"name":"PlazaBridgeMerge", "p":Vector3(82,0.118,68), "yaw":-36.0},
+			{"name":"PlazaBridgeMerge", "p":Vector3(77,0.118,74), "yaw":-36.0},
 			{"name":"PavilionMerge", "p":Vector3(64,0.118,-64), "yaw":138.0},
 		]
 		for junction: Dictionary in junctions:
@@ -652,11 +669,86 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 	_add_zone_box(parent, "PlaygroundZone", Vector3(-72.0, 0.106, 45.0), Vector2(32.0, 26.0), mat_playground)
 	_add_zone_label(parent, "PLAYGROUND 32 x 26 m", Vector3(-72.0, 1.0, 45.0), Color.WHITE)
 
-	_add_zone_box(parent, "CentralPlazaZone", Vector3(82.0, 0.107, 68.0), Vector2(34.0, 26.0), mat_plaza)
+	_build_landmark_plaza(parent)
 	_add_zone_label(parent, "PLAZA 34 x 26 m", Vector3(82.0, 1.0, 68.0), Color("#252525"))
 
 	_add_zone_box(parent, "PavilionZone", Vector3(76.0, 0.108, -73.0), Vector2(20.0, 14.0), mat_pavilion)
 	_add_zone_label(parent, "PAVILION 20 x 14 m", Vector3(76.0, 1.0, -73.0), Color.WHITE)
+
+func _build_landmark_plaza(parent: Node3D) -> void:
+	var root := Node3D.new()
+	root.name = "SoutheastLandmarkPlaza_AwaitingCenterpiece"
+	parent.add_child(root)
+
+	# The rectangular grounding court receives the three approach paths while
+	# concentric stone terraces create the strong circular landmark silhouette
+	# visible in the concept artwork. The innermost 12 m world-space cap remains
+	# empty so the user's final monument can drop in without rebuilding the plaza.
+	_add_zone_box(
+		root, "PlazaGroundingCourt",
+		Vector3(PLAZA_CENTER.x, 0.107, PLAZA_CENTER.y), Vector2(34.0, 26.0),
+		mat_plaza_border
+	)
+	_add_cylinder_zone(
+		root, "PlazaOuterStoneTerrace",
+		Vector3(PLAZA_CENTER.x, 0.114, PLAZA_CENTER.y), Vector2(12.0, 12.0),
+		mat_plaza_border
+	)
+	_add_cylinder_zone(
+		root, "PlazaMainStoneCourt",
+		Vector3(PLAZA_CENTER.x, 0.120, PLAZA_CENTER.y), Vector2(10.8, 10.8),
+		mat_plaza
+	)
+	_add_cylinder_zone(
+		root, "PlazaInnerDarkStoneRing",
+		Vector3(PLAZA_CENTER.x, 0.126, PLAZA_CENTER.y), Vector2(7.0, 7.0),
+		mat_plaza_border
+	)
+	_add_cylinder_zone(
+		root, "PlazaCenterpieceSocketCap_12mWorld",
+		Vector3(PLAZA_CENTER.x, 0.132, PLAZA_CENTER.y), Vector2(3.0, 3.0),
+		mat_plaza
+	)
+	_add_plaza_ring(
+		root, "PlazaNavigationLightRing",
+		Vector3(PLAZA_CENTER.x, 0.164, PLAZA_CENTER.y), 6.52, 6.72,
+		mat_plaza_inlay
+	)
+	_add_plaza_ring(
+		root, "PlazaCenterpieceLightRing",
+		Vector3(PLAZA_CENTER.x, 0.166, PLAZA_CENTER.y), 3.04, 3.20,
+		mat_plaza_inlay
+	)
+
+	var socket := Marker3D.new()
+	socket.name = "ARC04_LandmarkFountainSocket_12m"
+	socket.position = Vector3(PLAZA_CENTER.x, 0.18, PLAZA_CENTER.y)
+	socket.set_meta("asset_id", "ARC04_LandmarkFountain")
+	socket.set_meta("category", "architecture")
+	socket.set_meta("status", "awaiting_user_glb")
+	socket.set_meta("base_diameter_world_m", 12.0)
+	socket.set_meta("target_height_world_m", Vector2(6.0, 8.0))
+	root.add_child(socket)
+
+func _add_plaza_ring(
+	parent: Node3D,
+	node_name: String,
+	center: Vector3,
+	inner_radius: float,
+	outer_radius: float,
+	material: Material
+) -> void:
+	var ring := MeshInstance3D.new()
+	ring.name = node_name
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = inner_radius
+	mesh.outer_radius = outer_radius
+	mesh.rings = 64
+	mesh.ring_segments = 8
+	ring.mesh = mesh
+	ring.position = center
+	ring.material_override = material
+	parent.add_child(ring)
 
 func _build_artwork_assets(parent: Node3D) -> void:
 	var structures := Node3D.new()
@@ -763,6 +855,7 @@ func _build_prop_placement_plan(parent: Node3D) -> void:
 		{"id": "ARC01_Pavilion", "category": "architecture", "p": Vector3(76.0, 0.1, -73.0), "yaw": 90.0},
 		{"id": "ARC02_MaintenanceRestroom", "category": "architecture", "p": Vector3(-88.0, 0.1, -63.0), "yaw": 0.0},
 		{"id": "ARC03_MainEntranceMarker", "category": "architecture", "p": Vector3(0.0, 0.1, 84.0), "yaw": 0.0},
+		{"id": "ARC04_LandmarkFountain", "category": "architecture", "p": Vector3(82.0, 0.18, 68.0), "yaw": 0.0},
 		{"id": "ACT01_PlaygroundSet", "category": "activity", "p": Vector3(-72.0, 0.1, 45.0), "yaw": -12.0},
 		{"id": "ACT02_BasketballHoopWest", "category": "activity", "p": Vector3(-92.0, 0.1, -43.0), "yaw": 90.0},
 		{"id": "ACT02_BasketballHoopEast", "category": "activity", "p": Vector3(-48.0, 0.1, -43.0), "yaw": -90.0},
@@ -772,14 +865,14 @@ func _build_prop_placement_plan(parent: Node3D) -> void:
 		{"id": "FUR09_BicycleRack", "category": "furniture", "p": Vector3(74.0, 0.1, 78.0), "yaw": 0.0},
 		{"id": "FUR10_VendingMachine", "category": "furniture", "p": Vector3(88.0, 0.1, 76.0), "yaw": 180.0},
 		{"id": "FUR13_EmergencyPoint", "category": "furniture", "p": Vector3(88.0, 0.1, -23.0), "yaw": -90.0},
-		{"id": "GAM01_PlazaPlanterA", "category": "cover", "p": Vector3(73.0, 0.1, 66.0), "yaw": 15.0},
-		{"id": "GAM01_PlazaPlanterB", "category": "cover", "p": Vector3(91.0, 0.1, 69.0), "yaw": -12.0},
+		{"id": "GAM01_PlazaPlanterA", "category": "cover", "p": Vector3(70.0, 0.1, 78.0), "yaw": 15.0},
+		{"id": "GAM01_PlazaPlanterB", "category": "cover", "p": Vector3(95.0, 0.1, 77.0), "yaw": -12.0},
 		{"id": "GAM03_UtilityCabinet", "category": "cover", "p": Vector3(-96.0, 0.1, -68.0), "yaw": 90.0},
 		{"id": "GAM04_SecurityCamera", "category": "security", "p": Vector3(87.0, 0.1, 66.0), "yaw": 215.0},
 		{"id": "GAMEPLAY_Loot_Pavilion", "category": "gameplay", "p": Vector3(78.0, 0.1, -72.0), "yaw": 0.0},
 		{"id": "GAMEPLAY_Loot_Playground", "category": "gameplay", "p": Vector3(-67.0, 0.1, 51.0), "yaw": 0.0},
 		{"id": "GAMEPLAY_Loot_Deck", "category": "gameplay", "p": Vector3(80.0, 0.1, -15.0), "yaw": 0.0},
-		{"id": "GAMEPLAY_Extraction_Plaza", "category": "gameplay", "p": Vector3(82.0, 0.1, 68.0), "yaw": 0.0},
+		{"id": "GAMEPLAY_Extraction_Plaza", "category": "gameplay", "p": Vector3(94.0, 0.1, 73.0), "yaw": 0.0},
 	]
 	var bench_points: Array[Vector3] = [
 		Vector3(-49.0, 0.1, 58.0), Vector3(-17.0, 0.1, 46.0), Vector3(36.0, 0.1, 54.0),
@@ -1298,6 +1391,14 @@ func _validate_approved_lake_promenade() -> void:
 			var required_clearance := LAKE_PROMENADE_WIDTH_M * 0.5 + LAKE_PROMENADE_BANK_MARGIN_M
 			if _is_point_in_or_near_lake(sample, required_clearance):
 				push_warning("Midori lake promenade is too close to water at %s" % sample)
+				return
+
+func _validate_plaza_centerpiece_clearance() -> void:
+	# No paved route may cross the future 12 m world-space landmark base.
+	for route: Array[Vector2] in [PLAZA_ARRIVAL_ROUTE, SOUTH_BRIDGE_APPROACH]:
+		for index: int in range(route.size() - 1):
+			if _distance_to_park_segment(PLAZA_CENTER, route[index], route[index + 1]) < PLAZA_CENTERPIECE_CLEARANCE_M:
+				push_warning("Midori plaza route enters the protected centerpiece socket")
 				return
 
 func _lake_shore_tangent(index: int) -> Vector2:
@@ -2029,6 +2130,69 @@ func _build_park_lamps(parent: Node3D) -> void:
 			position_value + Vector3(0.0,3.40,0.0), 0.28, 6.8
 		)
 
+func _build_landmark_plaza_furniture(parent: Node3D) -> void:
+	var root := Node3D.new()
+	root.name = "LandmarkPlazaFurniture_3Benches_4PathLamps"
+	parent.add_child(root)
+	var center_3d := Vector3(PLAZA_CENTER.x, 0.0, PLAZA_CENTER.y)
+
+	if neon_park_bench_prototype != null or futuristic_eco_bench_prototype != null:
+		var bench_points: Array[Vector3] = [
+			Vector3(72.0,-0.025,77.0),
+			Vector3(94.0,-0.025,76.0),
+			Vector3(82.0,-0.025,57.0),
+		]
+		for index: int in range(bench_points.size()):
+			var source := neon_park_bench_prototype
+			if index % 2 == 1 and futuristic_eco_bench_prototype != null:
+				source = futuristic_eco_bench_prototype
+			if source == null:
+				source = futuristic_eco_bench_prototype
+			var bench := source.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+			var position_value := bench_points[index]
+			var facing := center_3d - position_value
+			var yaw := rad_to_deg(atan2(-facing.x, -facing.z))
+			bench.name = "PlazaBench_%02d" % (index + 1)
+			bench.position = position_value
+			bench.rotation_degrees.y = yaw
+			bench.scale = Vector3.ONE * 2.1
+			_preserve_asset_world_scale(bench)
+			root.add_child(bench)
+			_add_invisible_collision_box(
+				root, "PlazaBenchCollision_%02d" % (index + 1),
+				position_value + Vector3(0.0,0.46,0.0), Vector3(2.05,0.92,0.72), yaw
+			)
+
+	if emerald_halo_lamp_prototype == null:
+		return
+	var lamp_specs: Array[Dictionary] = [
+		{"p":Vector3(73.0,-0.025,76.0), "target":Vector3(77.0,0.0,74.0)},
+		{"p":Vector3(88.0,-0.025,75.0), "target":Vector3(88.0,0.0,72.0)},
+		{"p":Vector3(94.0,-0.025,63.0), "target":Vector3(92.0,0.0,61.0)},
+		{"p":Vector3(72.0,-0.025,66.0), "target":Vector3(73.0,0.0,69.0)},
+	]
+	for index: int in range(lamp_specs.size()):
+		var position_value: Vector3 = lamp_specs[index]["p"]
+		var target_value: Vector3 = lamp_specs[index]["target"]
+		var path_direction := target_value - position_value
+		path_direction.y = 0.0
+		path_direction = path_direction.normalized()
+		var lamp_yaw := rad_to_deg(atan2(-path_direction.x, -path_direction.z))
+		var lamp := emerald_halo_lamp_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		var lamp_index := index + 10
+		lamp.name = "PlazaHaloLamp_%02d" % (index + 1)
+		lamp.position = position_value
+		lamp.rotation_degrees.y = lamp_yaw
+		lamp.scale = Vector3.ONE * 7.2
+		_preserve_asset_world_scale(lamp)
+		root.add_child(lamp)
+		_add_lamp_lights(root, lamp_index, position_value, path_direction)
+		_add_lamp_path_streak(root, lamp_index, position_value, path_direction)
+		_add_deadwood_stump_collision(
+			root, "PlazaHaloLampCollision_%02d" % (index + 1),
+			position_value + Vector3(0.0,3.40,0.0), 0.28, 6.8
+		)
+
 func _add_lamp_lights(
 	parent: Node3D,
 	index: int,
@@ -2553,7 +2717,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 two-basin lake | 7 islands | 3 future bridge corridors\n24 sakura accents | regenerated mainland groves | shoreline relocation\nFINAL PATHS | perimeter + lake loops | 4 entries | 3 bridge approaches"
+	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 two-basin lake | 7 islands | 3 future bridge corridors\n24 sakura accents | regenerated mainland groves | shoreline relocation\nLANDMARK PLAZA | protected 12 m centerpiece socket | 3 seats | 4 lamps"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
