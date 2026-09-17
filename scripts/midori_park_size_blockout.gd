@@ -31,13 +31,14 @@ const LAYOUT_REFERENCE_SIZE_M := Vector2(220.0, 180.0)
 const PARK_SIZE_M := LAYOUT_REFERENCE_SIZE_M * LAYOUT_SCALE
 const PARK_HALF := Vector2(LAYOUT_REFERENCE_SIZE_M.x * 0.5, LAYOUT_REFERENCE_SIZE_M.y * 0.5)
 const WORLD_PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
-const LAKE_SIZE_M := Vector2(220.0, 200.0)
+const LAKE_SIZE_M := Vector2(246.0, 234.0)
 const SHOW_PLANNING_LABELS := false
 const MATURE_TREE_MIN_SPACING_M := 1.5
 const SKINNY_TREE_MIN_SPACING_M := 1.15
 const SKINNY_TO_SKINNY_MIN_SPACING_M := 0.6
 const SHRUB_PATH_CLEARANCE_M := 0.65
 const SAKURA_TREE_COUNT := 24
+const LAKE_TREE_BUFFER_M := 2.0
 
 # Phase-two circulation follows the destination-led, nested-loop logic of the
 # Pymmes Park reference. The routes intentionally avoid a rectangular grid:
@@ -80,15 +81,26 @@ const NORTH_WOODLAND_LOOP: Array[Vector2] = [
 	Vector2(-16,-71),Vector2(-8,-61),Vector2(-18,-53),Vector2(-37,-42),
 ]
 const LAKE_SHORELINE: Array[Vector2] = [
-	Vector2(-13,-47),Vector2(-2,-54),Vector2(12,-58),Vector2(29,-62),
-	Vector2(46,-61),Vector2(61,-56),Vector2(72,-48),Vector2(76,-39),
-	Vector2(73,-32),Vector2(79,-26),Vector2(85,-17),Vector2(82,-8),
-	Vector2(74,-2),Vector2(80,5),Vector2(86,13),Vector2(84,22),
-	Vector2(76,30),Vector2(65,36),Vector2(53,38),Vector2(42,35),
-	Vector2(34,29),Vector2(28,21),Vector2(23,14),Vector2(16,11),
-	Vector2(9,16),Vector2(2,24),Vector2(-7,29),Vector2(-16,26),
-	Vector2(-23,18),Vector2(-24,8),Vector2(-20,-1),Vector2(-14,-8),
-	Vector2(-19,-17),Vector2(-23,-27),Vector2(-21,-36),
+	Vector2(-18,-48),Vector2(-8,-56),Vector2(5,-61),Vector2(20,-65),
+	Vector2(37,-64),Vector2(53,-60),Vector2(67,-53),Vector2(76,-44),
+	Vector2(79,-35),Vector2(75,-28),Vector2(82,-24),Vector2(89,-16),
+	Vector2(90,-7),Vector2(84,0),Vector2(75,2),Vector2(69,7),
+	Vector2(80,10),Vector2(88,18),Vector2(90,28),Vector2(86,38),
+	Vector2(77,46),Vector2(65,51),Vector2(52,52),Vector2(41,48),
+	Vector2(34,41),Vector2(31,33),Vector2(26,27),Vector2(21,21),
+	Vector2(15,17),Vector2(9,21),Vector2(2,30),Vector2(-8,35),
+	Vector2(-18,33),Vector2(-27,26),Vector2(-32,17),Vector2(-33,7),
+	Vector2(-29,-1),Vector2(-21,-6),Vector2(-13,-8),Vector2(-10,-13),
+	Vector2(-17,-17),Vector2(-25,-24),Vector2(-30,-33),Vector2(-28,-42),
+]
+const FUTURE_BRIDGE_WEST: Array[Vector2] = [
+	Vector2(-29,-7),Vector2(-13,-9),Vector2(7,-11),Vector2(12,-11),
+]
+const FUTURE_BRIDGE_NORTH_EAST: Array[Vector2] = [
+	Vector2(85,-43),Vector2(76,-43),Vector2(64,-40),Vector2(59,-39),
+]
+const FUTURE_BRIDGE_SOUTH: Array[Vector2] = [
+	Vector2(52,60),Vector2(52,52),Vector2(50,33),Vector2(49,28),
 ]
 
 var mat_grass: StandardMaterial3D
@@ -101,6 +113,9 @@ var mat_pavilion: StandardMaterial3D
 var mat_boundary: StandardMaterial3D
 var mat_entry: StandardMaterial3D
 var mat_island: StandardMaterial3D
+var mat_shore_bank: StandardMaterial3D
+var mat_shore_promenade: StandardMaterial3D
+var mat_shore_landing: StandardMaterial3D
 var mat_plan_marker: StandardMaterial3D
 var mat_path_light_streak: ShaderMaterial
 var modular_path_shader: Shader
@@ -164,6 +179,9 @@ func _create_materials() -> void:
 	mat_boundary = _make_material(Color("#d6d0bf"), 0.82)
 	mat_entry = _make_material(Color("#e3a14c"), 0.74)
 	mat_island = _make_material(Color("#405d3d"), 0.98)
+	mat_shore_bank = _make_material(Color("#4a503e"), 0.98)
+	mat_shore_promenade = _make_material(Color("#77776d"), 0.94)
+	mat_shore_landing = _make_material(Color("#aaa28d"), 0.88)
 	mat_plan_marker = _make_material(Color(0.20, 0.78, 0.92, 0.55), 0.76, 0.08)
 	mat_path_light_streak = _make_path_light_streak_material()
 	modular_path_shader = _make_modular_path_shader()
@@ -530,35 +548,63 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 	# necks and peninsulas. This single triangulated shoreline replaces the old
 	# three-circle blockout while retaining the same mainland scale.
 	var lake_root := Node3D.new()
-	lake_root.name = "ConceptMatchedIrregularLake_220x200m"
+	lake_root.name = "ConceptMatchedIrregularLake_246x234m"
 	parent.add_child(lake_root)
 	_add_polygon_zone(lake_root, "LakeWaterSurface", LAKE_SHORELINE, 0.102, mat_water)
-	_add_shoreline_ribbon(lake_root, "LakeNaturalStoneBank", LAKE_SHORELINE, 1.15, 0.116, mat_boundary)
+	# The artwork does not use a uniform bright curb. Most of the edge is a soft,
+	# planted bank, with only a few deliberate promenade and bridge-landing runs.
+	var promenade_edges: Array[int] = [2,3,4,5,10,11,17,18,19,30,31,32]
+	var landing_edges: Array[int] = [7,22,38]
+	var natural_edges: Array[int] = []
+	for edge_index: int in range(LAKE_SHORELINE.size()):
+		if edge_index not in promenade_edges and edge_index not in landing_edges:
+			natural_edges.append(edge_index)
+	_add_shoreline_ribbon(
+		lake_root, "LakeSoftPlantedBank", LAKE_SHORELINE,
+		1.45, 0.116, mat_shore_bank, natural_edges
+	)
+	_add_shoreline_ribbon(
+		lake_root, "LakeStonePromenadeSections", LAKE_SHORELINE,
+		1.35, 0.118, mat_shore_promenade, promenade_edges
+	)
+	_add_shoreline_ribbon(
+		lake_root, "LakeFutureBridgeLandings", LAKE_SHORELINE,
+		1.80, 0.120, mat_shore_landing, landing_edges
+	)
 
 	# Irregular islands reproduce the layered silhouettes in the aerial artwork.
 	# They sit over the single water surface, so no artificial circular seams are
 	# visible between lake lobes.
-	_add_polygon_zone(lake_root, "LakeCentralIsland", [
-		Vector2(11,-13),Vector2(15,-18),Vector2(22,-19),Vector2(29,-16),
-		Vector2(31,-10),Vector2(27,-5),Vector2(20,-3),Vector2(14,-6),
-	], 0.148, mat_island)
-	_add_polygon_zone(lake_root, "LakeNorthIsland", [
+	_add_lake_island(lake_root, "LakeCentralIsland", [
+		Vector2(5,-13),Vector2(9,-18),Vector2(17,-20),Vector2(24,-17),
+		Vector2(27,-11),Vector2(24,-5),Vector2(17,-2),Vector2(10,-5),
+	], 0.148)
+	_add_lake_island(lake_root, "LakeNorthIsland", [
 		Vector2(49,-40),Vector2(52,-44),Vector2(58,-45),Vector2(62,-41),
 		Vector2(61,-36),Vector2(56,-33),Vector2(51,-35),
-	], 0.149, mat_island)
-	_add_polygon_zone(lake_root, "LakeSouthIsland", [
+	], 0.149)
+	_add_lake_island(lake_root, "LakeSouthIsland", [
 		Vector2(41,23),Vector2(44,19),Vector2(51,18),Vector2(56,22),
 		Vector2(55,27),Vector2(49,30),Vector2(43,28),
-	], 0.149, mat_island)
-	_add_polygon_zone(lake_root, "LakeEastIslet", [
-		Vector2(68,7),Vector2(71,3),Vector2(76,4),Vector2(79,8),
-		Vector2(76,12),Vector2(71,12),
-	], 0.150, mat_island)
-	_add_polygon_zone(lake_root, "LakeWestIslet", [
-		Vector2(-7,8),Vector2(-4,5),Vector2(0,6),Vector2(2,10),
-		Vector2(-1,13),Vector2(-5,12),
-	], 0.150, mat_island)
-	_add_zone_label(parent, "IRREGULAR LAKE 220 x 200 m", Vector3(28.0, 1.0, -10.0), Color("#d4eff7"))
+	], 0.149)
+	_add_lake_island(lake_root, "LakeEastIslet", [
+		Vector2(69,11),Vector2(72,7),Vector2(77,8),Vector2(80,13),
+		Vector2(77,17),Vector2(72,17),
+	], 0.150)
+	_add_lake_island(lake_root, "LakeWestIslet", [
+		Vector2(-10,8),Vector2(-7,4),Vector2(-2,5),Vector2(1,9),
+		Vector2(-2,13),Vector2(-7,13),
+	], 0.150)
+	_add_lake_island(lake_root, "LakeNorthWestIslet", [
+		Vector2(5,-39),Vector2(9,-43),Vector2(15,-42),Vector2(18,-37),
+		Vector2(15,-33),Vector2(9,-34),
+	], 0.151)
+	_add_lake_island(lake_root, "LakeSouthEastIslet", [
+		Vector2(65,33),Vector2(69,29),Vector2(75,30),Vector2(78,35),
+		Vector2(74,39),Vector2(68,38),
+	], 0.151)
+	_build_future_bridge_sockets(lake_root)
+	_add_zone_label(parent, "IRREGULAR TWO-BASIN LAKE | 7 ISLANDS", Vector3(28.0, 1.0, -10.0), Color("#d4eff7"))
 
 	_add_zone_box(parent, "SportsZone", Vector3(-70.0, 0.105, -43.0), Vector2(55.0, 36.0), mat_sports)
 	_add_zone_label(parent, "SPORTS 55 x 36 m", Vector3(-70.0, 1.0, -43.0), Color.WHITE)
@@ -593,44 +639,51 @@ func _build_mossy_shoreline_cover(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "MossyShorelineCover_9"
 	parent.add_child(root)
-	var placements: Array[Dictionary] = [
-		{"p": Vector3(-20.0, 1.45, -4.0), "r": 18.0, "s": 5.6},
-		{"p": Vector3(-8.0, 1.20, 27.0), "r": 205.0, "s": 4.8},
-		{"p": Vector3(31.0, 1.30, 30.0), "r": 146.0, "s": 5.0},
-		{"p": Vector3(67.0, 1.40, 5.0), "r": 74.0, "s": 5.4},
-		{"p": Vector3(72.0, 1.10, -42.0), "r": 251.0, "s": 4.3},
-		{"p": Vector3(23.0, 1.00, -12.0), "r": 323.0, "s": 3.8},
-		{"p": Vector3(55.0, 0.95, -36.0), "r": 102.0, "s": 3.4},
-		{"p": Vector3(-28.0, 1.05, -26.0), "r": 287.0, "s": 4.1},
-		{"p": Vector3(48.0, 1.05, 22.0), "r": 41.0, "s": 4.0},
-	]
-	for index: int in range(placements.size()):
-		var placement: Dictionary = placements[index]
+	var shore_indices: Array[int] = [0,8,13,15,20,25,28,35,42]
+	for index: int in range(shore_indices.size()):
+		var shore_index := shore_indices[index]
+		var shore_point := LAKE_SHORELINE[shore_index]
+		var outward := _lake_shore_outward(shore_index)
+		var tangent := _lake_shore_tangent(shore_index)
+		var scale_value := 3.6 + float((index * 7) % 6) * 0.35
+		var position_value := Vector3(
+			shore_point.x + outward.x * (1.65 + float(index % 3) * 0.32),
+			0.96 + float(index % 4) * 0.11,
+			shore_point.y + outward.y * (1.65 + float(index % 3) * 0.32)
+		)
+		var rotation_value := rad_to_deg(atan2(tangent.x, tangent.y)) + float((index * 37) % 29 - 14)
 		_instance_park_asset(
 			root, MossyBoulderScene, "VEG07_MossyBoulders_%02d" % (index + 1),
-			placement["p"], placement["r"], Vector3.ONE * placement["s"]
+			position_value, rotation_value, Vector3.ONE * scale_value
 		)
 		_add_invisible_collision_box(
 			root, "VEG07_Collision_%02d" % (index + 1),
-			placement["p"], Vector3(placement["s"] * 0.78, placement["s"] * 0.42, placement["s"] * 0.58), placement["r"]
+			position_value, Vector3(scale_value * 0.78, scale_value * 0.42, scale_value * 0.58), rotation_value
 		)
 
 func _build_waterside_grasses(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "WatersideVegetation_36Reed_9DenseGrass"
 	parent.add_child(root)
-	var edge_points: Array[Vector3] = [
-		Vector3(-13.0, 0.55, -47.0), Vector3(2.0, 0.55, -54.0), Vector3(29.0, 0.55, -62.0),
-		Vector3(61.0, 0.55, -56.0), Vector3(76.0, 0.55, -39.0), Vector3(85.0, 0.55, -17.0),
-		Vector3(74.0, 0.55, -2.0), Vector3(86.0, 0.55, 13.0), Vector3(76.0, 0.55, 30.0),
-		Vector3(53.0, 0.55, 38.0), Vector3(34.0, 0.55, 29.0), Vector3(23.0, 0.55, 14.0),
-		Vector3(9.0, 0.55, 16.0), Vector3(-7.0, 0.55, 29.0), Vector3(-23.0, 0.55, 18.0),
-		Vector3(-20.0, 0.55, -1.0), Vector3(-23.0, 0.55, -27.0), Vector3(-21.0, 0.55, -36.0),
-	]
+	var natural_shore_indices: Array[int] = [0,6,8,9,12,13,14,15,20,21,24,25,26,27,28,33,35,42]
+	var edge_points: Array[Vector3] = []
+	var edge_tangents: Array[Vector2] = []
+	for shore_index: int in natural_shore_indices:
+		var shore_point := LAKE_SHORELINE[shore_index]
+		var outward := _lake_shore_outward(shore_index)
+		var tangent := _lake_shore_tangent(shore_index)
+		edge_points.append(Vector3(
+			shore_point.x + outward.x * 0.75, 0.55,
+			shore_point.y + outward.y * 0.75
+		))
+		edge_tangents.append(tangent)
 	for index: int in range(edge_points.size()):
 		for variant: int in range(2):
-			var offset_angle := float(index * 73 + variant * 149)
-			var offset := Vector3(cos(deg_to_rad(offset_angle)), 0.0, sin(deg_to_rad(offset_angle))) * (0.7 + variant * 0.9)
+			var tangent := edge_tangents[index]
+			var outward := _lake_shore_outward(natural_shore_indices[index])
+			var lateral := -0.55 if variant == 0 else 0.62
+			var offset_2d := outward * (0.42 + float(variant) * 0.34) + tangent * lateral
+			var offset := Vector3(offset_2d.x, 0.0, offset_2d.y)
 			var source := FountainGrassScene if (index + variant) % 2 == 0 else MeadowGrassScene
 			var scale_value := 1.00 + float((index + variant) % 5) * 0.10
 			_instance_park_asset(
@@ -640,7 +693,6 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 
 	if dense_grass_prototypes.is_empty():
 		return
-	var lake_center := Vector3(28.0, 0.0, -14.0)
 	var dense_patch_indices: Array[int] = [0, 2, 4, 6, 8, 10, 12, 14, 16]
 	# Keep the very dense Grass1 variant out of the open shoreline. Its layered
 	# blades are reserved for a few reduced-scale deep-woodland accents.
@@ -648,7 +700,8 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 	for patch_index: int in range(dense_patch_indices.size()):
 		var edge_index: int = dense_patch_indices[patch_index]
 		var edge_position: Vector3 = edge_points[edge_index]
-		var landward := Vector3(edge_position.x - lake_center.x, 0.0, edge_position.z - lake_center.z).normalized()
+		var shore_outward := _lake_shore_outward(natural_shore_indices[edge_index])
+		var landward := Vector3(shore_outward.x, 0.0, shore_outward.y)
 		var dense_position := edge_position + landward * (1.15 + float(patch_index % 3) * 0.35)
 		dense_position.y = 0.12
 		var prototype_index: int = dense_variant_sequence[patch_index] % dense_grass_prototypes.size()
@@ -1192,11 +1245,31 @@ func _distance_to_park_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
 	var t := clampf((point - a).dot(segment) / length_squared, 0.0, 1.0)
 	return point.distance_to(a + segment * t)
 
+func _lake_shore_tangent(index: int) -> Vector2:
+	var previous := LAKE_SHORELINE[(index - 1 + LAKE_SHORELINE.size()) % LAKE_SHORELINE.size()]
+	var following := LAKE_SHORELINE[(index + 1) % LAKE_SHORELINE.size()]
+	var tangent := following - previous
+	return tangent.normalized() if tangent.length_squared() > 0.0001 else Vector2.RIGHT
+
+func _lake_shore_outward(index: int) -> Vector2:
+	var centroid := Vector2.ZERO
+	for shore_point: Vector2 in LAKE_SHORELINE:
+		centroid += shore_point
+	centroid /= float(LAKE_SHORELINE.size())
+	var current := LAKE_SHORELINE[index]
+	var tangent := _lake_shore_tangent(index)
+	var outward := Vector2(-tangent.y, tangent.x)
+	if (current + outward - centroid).length_squared() < (current - centroid).length_squared():
+		outward = -outward
+	return outward
+
 func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
 	var point := Vector2(position_value.x, position_value.z)
 	if absf(point.x) > PARK_HALF.x - padding or absf(point.y) > PARK_HALF.y - padding:
 		return false
 	if _is_point_in_or_near_lake(point, padding):
+		return false
+	if _is_near_future_bridge_corridor(point, padding):
 		return false
 	if _is_near_destination_path(point, padding):
 		return false
@@ -1246,10 +1319,23 @@ func _is_near_destination_path(point: Vector2, padding: float) -> bool:
 func _is_point_in_or_near_lake(point: Vector2, padding: float) -> bool:
 	if Geometry2D.is_point_in_polygon(point, PackedVector2Array(LAKE_SHORELINE)):
 		return true
+	var shoreline_clearance := maxf(padding, LAKE_TREE_BUFFER_M)
 	for index: int in range(LAKE_SHORELINE.size()):
 		var following := (index + 1) % LAKE_SHORELINE.size()
-		if _distance_to_park_segment(point, LAKE_SHORELINE[index], LAKE_SHORELINE[following]) < padding:
+		if _distance_to_park_segment(point, LAKE_SHORELINE[index], LAKE_SHORELINE[following]) < shoreline_clearance:
 			return true
+	return false
+
+func _is_near_future_bridge_corridor(point: Vector2, padding: float) -> bool:
+	var corridors: Array = [
+		FUTURE_BRIDGE_WEST,
+		FUTURE_BRIDGE_NORTH_EAST,
+		FUTURE_BRIDGE_SOUTH,
+	]
+	for corridor: Array in corridors:
+		for index: int in range(corridor.size() - 1):
+			if _distance_to_park_segment(point, corridor[index], corridor[index + 1]) < 2.2 + padding:
+				return true
 	return false
 
 func _build_reference_canopy(parent: Node3D) -> void:
@@ -1551,7 +1637,7 @@ func _add_authored_mainland_micro_grove(
 func _find_lakeside_tree_position(original: Vector3, serial: int) -> Dictionary:
 	var point := Vector2(original.x, original.z)
 	var closest := LAKE_SHORELINE[0]
-	var closest_tangent := Vector2.RIGHT
+	var closest_edge_index := 0
 	var closest_distance_squared := INF
 	for index: int in range(LAKE_SHORELINE.size()):
 		var start := LAKE_SHORELINE[index]
@@ -1566,16 +1652,28 @@ func _find_lakeside_tree_position(original: Vector3, serial: int) -> Dictionary:
 		if distance_squared < closest_distance_squared:
 			closest_distance_squared = distance_squared
 			closest = on_edge
-			closest_tangent = segment.normalized()
-	var lake_center := Vector2(30.0, -12.0)
-	var outward := (closest - lake_center).normalized()
-	if outward.length_squared() < 0.1:
-		outward = Vector2(-closest_tangent.y, closest_tangent.x)
-	for attempt: int in range(32):
-		var band := float(attempt / 8)
-		var shore_distance := 2.4 + band * 1.4
-		var lateral_step := float((attempt + serial * 3) % 8) - 3.5
-		var candidate_2d := closest + outward * shore_distance + closest_tangent * lateral_step * 1.15
+			closest_edge_index = index
+	# Search adjacent shoreline edges in alternating directions and progressively
+	# wider landward bands. This preserves displaced trees as irregular shore
+	# groves instead of deleting them when the nearest bank meets a path socket.
+	var attempts_per_band := LAKE_SHORELINE.size()
+	for attempt: int in range(attempts_per_band * 4):
+		var band := attempt / attempts_per_band
+		var local_step := attempt % attempts_per_band
+		var edge_shift := 0
+		if local_step > 0:
+			edge_shift = int((local_step + 1) / 2)
+			if local_step % 2 == 0:
+				edge_shift = -edge_shift
+		var edge_index := (closest_edge_index + edge_shift + LAKE_SHORELINE.size()) % LAKE_SHORELINE.size()
+		var start := LAKE_SHORELINE[edge_index]
+		var finish := LAKE_SHORELINE[(edge_index + 1) % LAKE_SHORELINE.size()]
+		var anchor := closest if edge_shift == 0 else start.lerp(finish, 0.5)
+		var tangent := (finish - start).normalized()
+		var outward := _lake_shore_outward(edge_index)
+		var shore_distance := 2.7 + float(band) * 1.65
+		var lateral_step := float((serial * 5 + attempt * 3) % 9) - 4.0
+		var candidate_2d := anchor + outward * shore_distance + tangent * lateral_step * 0.48
 		var candidate := Vector3(candidate_2d.x, original.y, candidate_2d.y)
 		if not _is_vegetation_clear(candidate, 1.7):
 			continue
@@ -2251,13 +2349,59 @@ func _add_polygon_zone(
 	mesh_instance.material_override = material
 	parent.add_child(mesh_instance)
 
+func _add_lake_island(
+	parent: Node3D,
+	node_name: String,
+	points: Array[Vector2],
+	y_value: float
+) -> void:
+	_add_polygon_zone(parent, node_name, points, y_value, mat_island)
+	_add_shoreline_ribbon(
+		parent, "%s_SoftBank" % node_name, points,
+		0.42, y_value + 0.004, mat_shore_bank
+	)
+
+func _build_future_bridge_sockets(parent: Node3D) -> void:
+	var socket_root := Node3D.new()
+	socket_root.name = "FutureBridgeSockets_3_Empty"
+	parent.add_child(socket_root)
+	var corridors: Array[Dictionary] = [
+		{"id":"WestToCentralIsland", "route":FUTURE_BRIDGE_WEST, "shore":Vector2(-13,-9), "island":Vector2(7,-11)},
+		{"id":"NorthEastToNorthIsland", "route":FUTURE_BRIDGE_NORTH_EAST, "shore":Vector2(76,-43), "island":Vector2(64,-40)},
+		{"id":"SouthToSouthIsland", "route":FUTURE_BRIDGE_SOUTH, "shore":Vector2(52,52), "island":Vector2(50,33)},
+	]
+	for corridor: Dictionary in corridors:
+		var route: Array[Vector2] = corridor["route"]
+		var shore_point: Vector2 = corridor["shore"]
+		var island_point: Vector2 = corridor["island"]
+		var corridor_root := Node3D.new()
+		corridor_root.name = "BridgeSocket_%s" % corridor["id"]
+		corridor_root.set_meta("status", "reserved_empty_for_modular_bridge_kit")
+		corridor_root.set_meta("clear_width_world_m", 7.0)
+		corridor_root.set_meta(
+			"water_span_world_m",
+			shore_point.distance_to(island_point) * LAYOUT_SCALE
+		)
+		socket_root.add_child(corridor_root)
+		for point_index: int in range(route.size()):
+			var marker := Marker3D.new()
+			marker.name = "RoutePoint_%02d" % (point_index + 1)
+			marker.position = Vector3(route[point_index].x, 0.16, route[point_index].y)
+			corridor_root.add_child(marker)
+		if SHOW_PLANNING_LABELS:
+			_add_zone_label(
+				corridor_root, "FUTURE BRIDGE: %s" % corridor["id"],
+				Vector3(route[0].x, 0.8, route[0].y), Color("#92e8ff")
+			)
+
 func _add_shoreline_ribbon(
 	parent: Node3D,
 	node_name: String,
 	points: Array[Vector2],
 	width: float,
 	y_value: float,
-	material: Material
+	material: Material,
+	edge_indices: Array[int] = []
 ) -> void:
 	if points.size() < 3:
 		return
@@ -2275,9 +2419,17 @@ func _add_shoreline_ribbon(
 		if (current + outward - centroid).length_squared() < (current - centroid).length_squared():
 			outward = -outward
 		outer_points.append(current + outward * width)
+	var rendered_edges: Array[int] = []
+	if edge_indices.is_empty():
+		for edge_index: int in range(points.size()):
+			rendered_edges.append(edge_index)
+	else:
+		rendered_edges.assign(edge_indices)
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for index: int in range(points.size()):
+	for index: int in rendered_edges:
+		if index < 0 or index >= points.size():
+			continue
 		var next_index := (index + 1) % points.size()
 		_add_shoreline_vertex(surface, points[index], y_value, Vector2(0.0, float(index)))
 		_add_shoreline_vertex(surface, outer_points[next_index], y_value, Vector2(1.0, float(next_index)))
@@ -2352,7 +2504,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 irregular lake | bridges removed for modular rebuild\n24 sakura accents | regenerated mainland groves | shoreline relocation\nPHASE 2 PATHS | destination loop + 4 soft merges + 3 rest pockets"
+	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 two-basin lake | 7 islands | 3 future bridge corridors\n24 sakura accents | regenerated mainland groves | shoreline relocation\nPHASE 2 PATHS | destination loop + 4 soft merges + 3 rest pockets"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))

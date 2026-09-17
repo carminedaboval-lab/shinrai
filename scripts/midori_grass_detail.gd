@@ -13,7 +13,8 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 12
+const DETAIL_VERSION := 13
+const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const WEST_PROMENADE: Array[Vector2] = [
 	Vector2(-37.0, 42.0), Vector2(-27.0, 31.0), Vector2(-23.0, 14.0),
 	Vector2(-27.0, -4.0), Vector2(-31.0, -24.0), Vector2(-37.0, -42.0),
@@ -44,15 +45,26 @@ const SPORTS_LINK_ROUTE: Array[Vector2] = [Vector2(-98,-27),Vector2(-90,-28),Vec
 const PLAYGROUND_LOOP: Array[Vector2] = [Vector2(-97,20),Vector2(-92,37),Vector2(-88,54),Vector2(-78,63),Vector2(-64,63),Vector2(-50,54),Vector2(-37,42),Vector2(-54,41),Vector2(-71,39),Vector2(-87,31),Vector2(-97,20)]
 const NORTH_WOODLAND_LOOP: Array[Vector2] = [Vector2(-37,-42),Vector2(-46,-49),Vector2(-43,-61),Vector2(-31,-71),Vector2(-16,-71),Vector2(-8,-61),Vector2(-18,-53),Vector2(-37,-42)]
 const LAKE_SHORELINE: Array[Vector2] = [
-	Vector2(-13,-47),Vector2(-2,-54),Vector2(12,-58),Vector2(29,-62),
-	Vector2(46,-61),Vector2(61,-56),Vector2(72,-48),Vector2(76,-39),
-	Vector2(73,-32),Vector2(79,-26),Vector2(85,-17),Vector2(82,-8),
-	Vector2(74,-2),Vector2(80,5),Vector2(86,13),Vector2(84,22),
-	Vector2(76,30),Vector2(65,36),Vector2(53,38),Vector2(42,35),
-	Vector2(34,29),Vector2(28,21),Vector2(23,14),Vector2(16,11),
-	Vector2(9,16),Vector2(2,24),Vector2(-7,29),Vector2(-16,26),
-	Vector2(-23,18),Vector2(-24,8),Vector2(-20,-1),Vector2(-14,-8),
-	Vector2(-19,-17),Vector2(-23,-27),Vector2(-21,-36),
+	Vector2(-18,-48),Vector2(-8,-56),Vector2(5,-61),Vector2(20,-65),
+	Vector2(37,-64),Vector2(53,-60),Vector2(67,-53),Vector2(76,-44),
+	Vector2(79,-35),Vector2(75,-28),Vector2(82,-24),Vector2(89,-16),
+	Vector2(90,-7),Vector2(84,0),Vector2(75,2),Vector2(69,7),
+	Vector2(80,10),Vector2(88,18),Vector2(90,28),Vector2(86,38),
+	Vector2(77,46),Vector2(65,51),Vector2(52,52),Vector2(41,48),
+	Vector2(34,41),Vector2(31,33),Vector2(26,27),Vector2(21,21),
+	Vector2(15,17),Vector2(9,21),Vector2(2,30),Vector2(-8,35),
+	Vector2(-18,33),Vector2(-27,26),Vector2(-32,17),Vector2(-33,7),
+	Vector2(-29,-1),Vector2(-21,-6),Vector2(-13,-8),Vector2(-10,-13),
+	Vector2(-17,-17),Vector2(-25,-24),Vector2(-30,-33),Vector2(-28,-42),
+]
+const FUTURE_BRIDGE_WEST: Array[Vector2] = [
+	Vector2(-29,-7),Vector2(-13,-9),Vector2(7,-11),Vector2(12,-11),
+]
+const FUTURE_BRIDGE_NORTH_EAST: Array[Vector2] = [
+	Vector2(85,-43),Vector2(76,-43),Vector2(64,-40),Vector2(59,-39),
+]
+const FUTURE_BRIDGE_SOUTH: Array[Vector2] = [
+	Vector2(52,60),Vector2(52,52),Vector2(50,33),Vector2(49,28),
 ]
 
 # Measured from the imported GLB rather than assuming a centered one-metre mesh.
@@ -272,7 +284,13 @@ func _is_lawn_position(x: float, z: float) -> bool:
 	# One concept-matched shoreline replaces the three legacy ellipse masks.
 	if Geometry2D.is_point_in_polygon(point, PackedVector2Array(LAKE_SHORELINE)):
 		return false
-	if _near_closed_polyline(point, LAKE_SHORELINE, 1.35):
+	if _near_closed_polyline(point, LAKE_SHORELINE, LAKE_SHORE_GRASS_BUFFER_M):
+		return false
+	if _near_polyline(point, FUTURE_BRIDGE_WEST, 2.6):
+		return false
+	if _near_polyline(point, FUTURE_BRIDGE_NORTH_EAST, 2.6):
+		return false
+	if _near_polyline(point, FUTURE_BRIDGE_SOUTH, 2.6):
 		return false
 
 	# Current colored zone placeholders.
