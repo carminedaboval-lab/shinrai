@@ -105,6 +105,10 @@ func _create_environment() -> void:
 	environment.ambient_light_color = Color("#a8b3b7")
 	environment.ambient_light_energy = 0.30
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.adjustment_enabled = true
+	environment.adjustment_brightness = 0.72
+	environment.adjustment_contrast = 1.08
+	environment.adjustment_saturation = 0.96
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#778489")
 	environment.fog_light_energy = 0.38
@@ -507,6 +511,7 @@ func _prepare_reference_vegetation() -> void:
 	neon_park_bench_prototype = _extract_whole_scene_prototype(NeonParkBenchScene, "NeonParkBench")
 	futuristic_eco_bench_prototype = _extract_whole_scene_prototype(FuturisticEcoBenchScene, "FuturisticEcoBench")
 	emerald_halo_lamp_prototype = _extract_whole_scene_prototype(EmeraldHaloLampScene, "EmeraldHaloLamp")
+	_make_lamp_reflective(emerald_halo_lamp_prototype)
 
 func _extract_vegetation_prototype(pack: PackedScene, source_name: String, target_height: float) -> Node3D:
 	var source_root := pack.instantiate() as Node3D
@@ -612,6 +617,21 @@ func _naturalize_dense_grass_prototype(node: Node) -> void:
 				mesh_instance.set_surface_override_material(surface_index, material)
 	for child: Node in node.get_children():
 		_naturalize_dense_grass_prototype(child)
+
+func _make_lamp_reflective(node: Node) -> void:
+	if node == null:
+		return
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		for surface_index: int in range(mesh_instance.mesh.get_surface_count()):
+			var source_material := mesh_instance.mesh.surface_get_material(surface_index)
+			if source_material is StandardMaterial3D:
+				var material := source_material.duplicate() as StandardMaterial3D
+				material.roughness = 0.18
+				material.metallic_specular = 0.85
+				mesh_instance.set_surface_override_material(surface_index, material)
+	for child: Node in node.get_children():
+		_make_lamp_reflective(child)
 
 func _find_vegetation_source(root: Node, source_name: String) -> Node3D:
 	var wanted := _normalized_vegetation_name(source_name)
@@ -1352,14 +1372,28 @@ func _build_park_lamps(parent: Node3D) -> void:
 		var lamp := emerald_halo_lamp_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
 		lamp.name = "EmeraldHaloLamp_%02d" % (index + 1)
 		lamp.position = position_value
-		lamp.rotation_degrees.y = fmod(float(index * 137 + 19), 360.0)
-		lamp.scale = Vector3.ONE * 3.6
+		var path_direction := Vector3.ZERO
+		var lamp_yaw := 0.0
+		if position_value.z > 70.0:
+			path_direction = Vector3(0.0,0.0,1.0)
+			lamp_yaw = 180.0
+		elif position_value.z < -70.0:
+			path_direction = Vector3(0.0,0.0,-1.0)
+			lamp_yaw = 0.0
+		elif position_value.x < 0.0:
+			path_direction = Vector3(-1.0,0.0,0.0)
+			lamp_yaw = 90.0
+		else:
+			path_direction = Vector3(1.0,0.0,0.0)
+			lamp_yaw = -90.0
+		lamp.rotation_degrees.y = lamp_yaw
+		lamp.scale = Vector3.ONE * 7.2
 		root.add_child(lamp)
 		_add_lamp_neon_geometry(lamp)
-		_add_lamp_pool_light(root, index, position_value)
+		_add_lamp_lights(root, index, position_value, path_direction)
 		_add_deadwood_stump_collision(
 			root, "HaloLampCollision_%02d" % (index + 1),
-			position_value + Vector3(0.0,1.70,0.0), 0.20, 3.4
+			position_value + Vector3(0.0,3.40,0.0), 0.28, 6.8
 		)
 
 func _add_lamp_neon_geometry(lamp: Node3D) -> void:
@@ -1380,24 +1414,42 @@ func _add_lamp_neon_geometry(lamp: Node3D) -> void:
 	var seam := MeshInstance3D.new()
 	seam.name = "BlueNeonSeam"
 	var seam_mesh := BoxMesh.new()
-	seam_mesh.size = Vector3(0.016,0.30,0.016)
+	seam_mesh.size = Vector3(0.008,0.28,0.008)
 	seam.mesh = seam_mesh
-	# Sit inside the lower-left body opening instead of floating in front of the pole.
-	seam.position = Vector3(-0.065,0.18,0.0)
+	# Bury the emitter inside the lower cavity so only the model's real opening
+	# can reveal it; no emissive geometry may sit beside the pole silhouette.
+	seam.position = Vector3(-0.012,0.19,0.0)
 	seam.material_override = mat_neon_blue
 	lamp.add_child(seam)
 
-func _add_lamp_pool_light(parent: Node3D, index: int, position_value: Vector3) -> void:
-	var light := SpotLight3D.new()
-	light.name = "BluePathPool_%02d" % (index + 1)
-	light.position = position_value + Vector3(0.0,3.18,0.0)
-	light.rotation_degrees.x = -90.0
-	light.light_color = Color("#75ddff")
-	light.light_energy = 0.55
-	light.spot_range = 5.5
-	light.spot_angle = 52.0
-	light.shadow_enabled = false
-	parent.add_child(light)
+func _add_lamp_lights(
+	parent: Node3D,
+	index: int,
+	position_value: Vector3,
+	path_direction: Vector3
+) -> void:
+	# The upper halo softly illuminates the surrounding path and vegetation.
+	var halo_light := OmniLight3D.new()
+	halo_light.name = "BlueHaloArea_%02d" % (index + 1)
+	halo_light.position = position_value + Vector3(0.0,6.36,0.0)
+	halo_light.light_color = Color("#75ddff")
+	halo_light.light_energy = 0.45
+	halo_light.omni_range = 8.5
+	halo_light.shadow_enabled = false
+	parent.add_child(halo_light)
+
+	# The emitter inside the lower slit throws a narrow, oblique streak onto the
+	# adjacent path. The shallow projection elongates the pool into a line.
+	var slit_light := SpotLight3D.new()
+	slit_light.name = "BlueSlitPathLine_%02d" % (index + 1)
+	slit_light.position = position_value + Vector3(0.0,1.38,0.0) + path_direction * 0.08
+	slit_light.light_color = Color("#62dfff")
+	slit_light.light_energy = 1.10
+	slit_light.spot_range = 5.0
+	slit_light.spot_angle = 8.0
+	slit_light.shadow_enabled = false
+	parent.add_child(slit_light)
+	slit_light.look_at(position_value + path_direction * 3.4 + Vector3(0.0,0.05,0.0), Vector3.UP)
 
 func _add_deadwood_box_collision(
 	parent: Node3D,
