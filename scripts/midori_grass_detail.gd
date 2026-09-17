@@ -7,12 +7,13 @@ extends Node
 
 const GroundClumpScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_meshy_ground_clump_v1.glb")
 
-const PARK_HALF := Vector2(110.0, 90.0)
+const LAYOUT_SCALE := 2.0
+const PARK_HALF := Vector2(220.0, 180.0)
 const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 11
+const DETAIL_VERSION := 12
 const WEST_PROMENADE: Array[Vector2] = [
 	Vector2(-37.0, 42.0), Vector2(-27.0, 31.0), Vector2(-23.0, 14.0),
 	Vector2(-27.0, -4.0), Vector2(-31.0, -24.0), Vector2(-37.0, -42.0),
@@ -243,7 +244,11 @@ func _build_fallback_material() -> StandardMaterial3D:
 
 
 func _is_lawn_position(x: float, z: float) -> bool:
-	var point := Vector2(x, z)
+	# The authored route and lake data stays in the original 220 x 180 m layout
+	# coordinates. Scatter candidates are world-space points in the doubled park.
+	var authored_x := x / LAYOUT_SCALE
+	var authored_z := z / LAYOUT_SCALE
+	var point := Vector2(authored_x, authored_z)
 	var route_specs: Array[Dictionary] = [
 		{"points":OUTER_CIRCUIT, "half_width":2.65},
 		{"points":SOUTH_ARRIVAL_ROUTE, "half_width":2.75},
@@ -257,11 +262,11 @@ func _is_lawn_position(x: float, z: float) -> bool:
 	for spec: Dictionary in route_specs:
 		if _near_polyline(point, spec["points"], float(spec["half_width"])):
 			return false
-	if _near_polyline(Vector2(x, z), WEST_PROMENADE, 2.8):
+	if _near_polyline(point, WEST_PROMENADE, 2.8):
 		return false
-	if _near_polyline(Vector2(x, z), EAST_PROMENADE, 2.9):
+	if _near_polyline(point, EAST_PROMENADE, 2.9):
 		return false
-	if _near_polyline(Vector2(x, z), NORTH_PROMENADE, 2.7):
+	if _near_polyline(point, NORTH_PROMENADE, 2.7):
 		return false
 
 	# One concept-matched shoreline replaces the three legacy ellipse masks.
@@ -271,13 +276,13 @@ func _is_lawn_position(x: float, z: float) -> bool:
 		return false
 
 	# Current colored zone placeholders.
-	if _inside_box(x, z, -70.0, -43.0, 59.0, 40.0):
+	if _inside_box(authored_x, authored_z, -70.0, -43.0, 59.0, 40.0):
 		return false
-	if _inside_box(x, z, -72.0, 45.0, 36.0, 30.0):
+	if _inside_box(authored_x, authored_z, -72.0, 45.0, 36.0, 30.0):
 		return false
-	if _inside_box(x, z, 62.0, 51.0, 48.0, 38.0):
+	if _inside_box(authored_x, authored_z, 62.0, 51.0, 48.0, 38.0):
 		return false
-	if _inside_box(x, z, 76.0, -64.0, 24.0, 18.0):
+	if _inside_box(authored_x, authored_z, 76.0, -64.0, 24.0, 18.0):
 		return false
 
 	return true

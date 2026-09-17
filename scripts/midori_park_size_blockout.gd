@@ -8,8 +8,6 @@ const SakuraTreeScene: PackedScene = preload("res://assets/shinrai/parks/midori_
 const FountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_green_fountain_grass_v1.glb")
 const MeadowGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_swaying_meadow_grass_v1.glb")
 const MossyBoulderScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_mossy_boulder_cluster_v1.glb")
-const MainBridgeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_main_arched_bridge_v1.glb")
-const SecondaryBridgeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_secondary_footbridge_v1.glb")
 const ViewingDeckScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_lakeside_viewing_deck_v1.glb")
 const BroadleafTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/realistic_trees_collection/scene.glb")
 const PineTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/scene.glb")
@@ -28,14 +26,17 @@ const MidoriPathCurveScene: PackedScene = preload("res://assets/shinrai/parks/mi
 const MidoriPathJunctionScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_junction.glb")
 const MidoriPathRestingPocketScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_resting_pocket.glb")
 
-const PARK_SIZE_M := Vector2(220.0, 180.0)
-const PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
-const LAKE_SIZE_M := Vector2(110.0, 100.0)
+const LAYOUT_SCALE := 2.0
+const LAYOUT_REFERENCE_SIZE_M := Vector2(220.0, 180.0)
+const PARK_SIZE_M := LAYOUT_REFERENCE_SIZE_M * LAYOUT_SCALE
+const PARK_HALF := Vector2(LAYOUT_REFERENCE_SIZE_M.x * 0.5, LAYOUT_REFERENCE_SIZE_M.y * 0.5)
+const WORLD_PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
+const LAKE_SIZE_M := Vector2(220.0, 200.0)
 const SHOW_PLANNING_LABELS := false
-const MATURE_TREE_MIN_SPACING_M := 3.0
-const SKINNY_TREE_MIN_SPACING_M := 2.3
-const SKINNY_TO_SKINNY_MIN_SPACING_M := 1.2
-const SHRUB_PATH_CLEARANCE_M := 1.3
+const MATURE_TREE_MIN_SPACING_M := 1.5
+const SKINNY_TREE_MIN_SPACING_M := 1.15
+const SKINNY_TO_SKINNY_MIN_SPACING_M := 0.6
+const SHRUB_PATH_CLEARANCE_M := 0.65
 const SAKURA_TREE_COUNT := 24
 
 # Phase-two circulation follows the destination-led, nested-loop logic of the
@@ -312,10 +313,14 @@ func _apply_time_of_day() -> void:
 
 func _build_park_footprint() -> void:
 	var root := Node3D.new()
-	root.name = "MidoriPark_220x180m_Blockout"
+	root.name = "MidoriPark_440x360m_ProceduralLayout"
+	root.scale = Vector3(LAYOUT_SCALE, 1.0, LAYOUT_SCALE)
 	add_child(root)
 
-	_add_collidable_box(root, "ParkGround_220x180m", Vector3(0.0, -0.12, 0.0), Vector3(PARK_SIZE_M.x, 0.24, PARK_SIZE_M.y), mat_grass)
+	# Geometry is authored in the original 220 x 180 m coordinate system and
+	# expanded uniformly here. Placed assets compensate locally so only their
+	# positions spread out; trees, furniture and props keep real-world scale.
+	_add_collidable_box(root, "ParkGround_220x180m", Vector3(0.0, -0.12, 0.0), Vector3(LAYOUT_REFERENCE_SIZE_M.x, 0.24, LAYOUT_REFERENCE_SIZE_M.y), mat_grass)
 	_build_boundary(root)
 	_build_paths(root)
 	_build_curved_promenades(root)
@@ -334,10 +339,10 @@ func _build_park_footprint() -> void:
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
-	_add_visual_box(parent, "NorthBoundary", Vector3(0.0, 0.04, -PARK_HALF.y), Vector3(PARK_SIZE_M.x, 0.08, edge_t), mat_boundary)
-	_add_visual_box(parent, "SouthBoundary", Vector3(0.0, 0.04, PARK_HALF.y), Vector3(PARK_SIZE_M.x, 0.08, edge_t), mat_boundary)
-	_add_visual_box(parent, "WestBoundary", Vector3(-PARK_HALF.x, 0.04, 0.0), Vector3(edge_t, 0.08, PARK_SIZE_M.y), mat_boundary)
-	_add_visual_box(parent, "EastBoundary", Vector3(PARK_HALF.x, 0.04, 0.0), Vector3(edge_t, 0.08, PARK_SIZE_M.y), mat_boundary)
+	_add_visual_box(parent, "NorthBoundary", Vector3(0.0, 0.04, -PARK_HALF.y), Vector3(LAYOUT_REFERENCE_SIZE_M.x, 0.08, edge_t), mat_boundary)
+	_add_visual_box(parent, "SouthBoundary", Vector3(0.0, 0.04, PARK_HALF.y), Vector3(LAYOUT_REFERENCE_SIZE_M.x, 0.08, edge_t), mat_boundary)
+	_add_visual_box(parent, "WestBoundary", Vector3(-PARK_HALF.x, 0.04, 0.0), Vector3(edge_t, 0.08, LAYOUT_REFERENCE_SIZE_M.y), mat_boundary)
+	_add_visual_box(parent, "EastBoundary", Vector3(PARK_HALF.x, 0.04, 0.0), Vector3(edge_t, 0.08, LAYOUT_REFERENCE_SIZE_M.y), mat_boundary)
 
 	# Four broad entrances make the footprint readable before detailed paths exist.
 	for entry in [
@@ -525,7 +530,7 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 	# necks and peninsulas. This single triangulated shoreline replaces the old
 	# three-circle blockout while retaining the same mainland scale.
 	var lake_root := Node3D.new()
-	lake_root.name = "ConceptMatchedIrregularLake_110x100m"
+	lake_root.name = "ConceptMatchedIrregularLake_220x200m"
 	parent.add_child(lake_root)
 	_add_polygon_zone(lake_root, "LakeWaterSurface", LAKE_SHORELINE, 0.102, mat_water)
 	_add_shoreline_ribbon(lake_root, "LakeNaturalStoneBank", LAKE_SHORELINE, 1.15, 0.116, mat_boundary)
@@ -553,7 +558,7 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 		Vector2(-7,8),Vector2(-4,5),Vector2(0,6),Vector2(2,10),
 		Vector2(-1,13),Vector2(-5,12),
 	], 0.150, mat_island)
-	_add_zone_label(parent, "IRREGULAR LAKE 110 x 100 m", Vector3(28.0, 1.0, -10.0), Color("#d4eff7"))
+	_add_zone_label(parent, "IRREGULAR LAKE 220 x 200 m", Vector3(28.0, 1.0, -10.0), Color("#d4eff7"))
 
 	_add_zone_box(parent, "SportsZone", Vector3(-70.0, 0.105, -43.0), Vector2(55.0, 36.0), mat_sports)
 	_add_zone_label(parent, "SPORTS 55 x 36 m", Vector3(-70.0, 1.0, -43.0), Color.WHITE)
@@ -572,45 +577,12 @@ func _build_artwork_assets(parent: Node3D) -> void:
 	structures.name = "ArtworkMatchedStructures"
 	parent.add_child(structures)
 
-	# The arched crossing is the visual anchor from the concept: a diagonal link
-	# from the western shore to the central island at the lake's narrow waist.
 	_instance_park_asset(
-		structures, MainBridgeScene, "WAT01_MainArchedBridge",
-		Vector3(8.5, 2.15, -14.5), -12.0, Vector3.ONE * 26.0
-	)
-	_add_invisible_collision_box(
-		structures, "WAT01_WalkwayCollision",
-		Vector3(8.5, 2.05, -14.5), Vector3(25.0, 0.45, 4.6), -12.0
-	)
-
-	# A flatter bridge crosses the northern channel and connects its island to
-	# the pavilion-side promenade.
-	_instance_park_asset(
-		structures, SecondaryBridgeScene, "WAT02_SecondaryFootbridge",
-		Vector3(45.0, 1.25, -40.0), 5.0, Vector3.ONE * 20.0
-	)
-	_add_invisible_collision_box(
-		structures, "WAT02_WalkwayCollision",
-		Vector3(45.0, 1.28, -40.0), Vector3(19.5, 0.40, 4.2), 5.0
-	)
-
-	# Reusing the secondary bridge model for the lower crossing mirrors the
-	# artwork's third, quieter footbridge without introducing a new asset.
-	_instance_park_asset(
-		structures, SecondaryBridgeScene, "WAT03_SouthFootbridge",
-		Vector3(40.0, 1.25, 25.0), -10.0, Vector3.ONE * 20.0
-	)
-	_add_invisible_collision_box(
-		structures, "WAT03_WalkwayCollision",
-		Vector3(40.0, 1.28, 25.0), Vector3(19.5, 0.40, 4.2), -10.0
-	)
-
-	_instance_park_asset(
-		structures, ViewingDeckScene, "WAT04_EastViewingDeck",
+		structures, ViewingDeckScene, "WAT01_EastViewingDeck",
 		Vector3(80.0, 1.75, -15.0), 90.0, Vector3.ONE * 13.0
 	)
 	_add_invisible_collision_box(
-		structures, "WAT04_DeckCollision",
+		structures, "WAT01_DeckCollision",
 		Vector3(80.0, 1.55, -15.0), Vector3(12.5, 0.45, 11.5), 90.0
 	)
 
@@ -686,6 +658,7 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 		patch.position = dense_position
 		patch.rotation_degrees.y = fmod(float(patch_index * 137 + 23), 360.0)
 		patch.scale = Vector3.ONE * (0.86 + float(patch_index % 4) * 0.07)
+		_preserve_asset_world_scale(patch)
 		root.add_child(patch)
 		_configure_vegetation_visibility(patch)
 
@@ -753,6 +726,7 @@ func _instance_park_asset(parent: Node3D, source: PackedScene, node_name: String
 	instance.position = position_value
 	instance.rotation_degrees.y = yaw_degrees
 	instance.scale = scale_value
+	_preserve_asset_world_scale(instance)
 	parent.add_child(instance)
 	_configure_park_asset_visibility(instance)
 	return instance
@@ -769,12 +743,17 @@ func _add_invisible_collision_box(parent: Node3D, node_name: String, position_va
 	body.name = node_name
 	body.position = position_value
 	body.rotation_degrees.y = yaw_degrees
+	body.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
 	parent.add_child(body)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = size_value
 	collision.shape = shape
 	body.add_child(collision)
+
+func _preserve_asset_world_scale(asset_root: Node3D) -> void:
+	asset_root.scale.x /= LAYOUT_SCALE
+	asset_root.scale.z /= LAYOUT_SCALE
 
 func _build_scale_ticks(parent: Node3D) -> void:
 	for x_value: int in range(-100, 101, 20):
@@ -1135,6 +1114,7 @@ func _add_reference_plant(
 		instance.position.y = -0.035
 	instance.rotation_degrees.y = fmod(float(serial) * 137.507, 360.0)
 	instance.scale = Vector3.ONE * scale_value
+	_preserve_asset_world_scale(instance)
 	parent.add_child(instance)
 
 func _add_reference_tree_cluster(
@@ -1146,6 +1126,7 @@ func _add_reference_tree_cluster(
 	strict_three_meter_spacing: bool = false,
 	pine_stride: int = 9
 ) -> void:
+	count *= int(LAYOUT_SCALE * LAYOUT_SCALE)
 	var placed := 0
 	var attempt := 0
 	while placed < count and attempt < count * 8:
@@ -1159,7 +1140,7 @@ func _add_reference_tree_cluster(
 		attempt += 1
 		if not _is_vegetation_clear(position_value, 3.2):
 			continue
-		var serial := serial_offset * 20 + placed
+		var serial := serial_offset * 100 + placed
 		var scale_value := 0.82 + 0.055 * float(serial % 6)
 		var safe_pine_stride := maxi(pine_stride, 3)
 		var is_skinny_tree := serial % safe_pine_stride == 2
@@ -1426,6 +1407,7 @@ func _build_midnight_fern_pockets(parent: Node3D) -> void:
 			fern.position = position_value
 			fern.rotation_degrees.y = fmod(float(serial * 137 + center_index * 29), 360.0)
 			fern.scale = Vector3.ONE * (0.42 + float((serial * 3 + center_index) % 6) * 0.055)
+			_preserve_asset_world_scale(fern)
 			root.add_child(fern)
 			serial += 1
 
@@ -1464,6 +1446,7 @@ func _build_emerald_grass_clusters(parent: Node3D) -> void:
 			grass.rotation_degrees.y = fmod(float(serial * 137 + cluster_index * 41), 360.0)
 			var scale_value := 0.62 + float((serial * 5 + cluster_index) % 7) * 0.043
 			grass.scale = Vector3.ONE * scale_value
+			_preserve_asset_world_scale(grass)
 			root.add_child(grass)
 			serial += 1
 
@@ -1541,14 +1524,22 @@ func _add_authored_mainland_micro_grove(
 	for point_index: int in range(positions.size()):
 		var position_value: Vector3 = positions[point_index]
 		if not _is_vegetation_clear(position_value, 3.2):
-			push_warning("Midori micro-grove point entered a reserved route: %s" % position_value)
-			continue
+			var lake_point := Vector2(position_value.x, position_value.z)
+			if _is_point_in_or_near_lake(lake_point, 3.2):
+				var relocation := _find_lakeside_tree_position(position_value, serial_offset + point_index)
+				if not relocation["found"]:
+					push_warning("Midori lake tree could not find a clear shoreline position: %s" % position_value)
+					continue
+				position_value = relocation["position"]
+			else:
+				push_warning("Midori micro-grove point entered a reserved route: %s" % position_value)
+				continue
 		if not _is_tree_spaced(position_value, MATURE_TREE_MIN_SPACING_M):
 			push_warning("Midori micro-grove point is below 3 m trunk spacing: %s" % position_value)
 			continue
 		var is_skinny_tree := point_index == pine_index
 		var prototypes: Array[Node3D] = pine_prototypes if is_skinny_tree else broadleaf_prototypes
-		var serial := serial_offset * 20 + point_index
+		var serial := serial_offset * 100 + point_index
 		var scale_value := 0.80 + 0.045 * float((point_index + serial_offset) % 6)
 		_add_reference_plant(
 			parent, prototypes, position_value, scale_value, serial,
@@ -1556,6 +1547,42 @@ func _add_authored_mainland_micro_grove(
 		)
 		occupied_tree_positions.append(Vector2(position_value.x, position_value.z))
 		occupied_tree_is_skinny.append(is_skinny_tree)
+
+func _find_lakeside_tree_position(original: Vector3, serial: int) -> Dictionary:
+	var point := Vector2(original.x, original.z)
+	var closest := LAKE_SHORELINE[0]
+	var closest_tangent := Vector2.RIGHT
+	var closest_distance_squared := INF
+	for index: int in range(LAKE_SHORELINE.size()):
+		var start := LAKE_SHORELINE[index]
+		var finish := LAKE_SHORELINE[(index + 1) % LAKE_SHORELINE.size()]
+		var segment := finish - start
+		var length_squared := segment.length_squared()
+		if length_squared <= 0.0001:
+			continue
+		var t := clampf((point - start).dot(segment) / length_squared, 0.0, 1.0)
+		var on_edge := start + segment * t
+		var distance_squared := point.distance_squared_to(on_edge)
+		if distance_squared < closest_distance_squared:
+			closest_distance_squared = distance_squared
+			closest = on_edge
+			closest_tangent = segment.normalized()
+	var lake_center := Vector2(30.0, -12.0)
+	var outward := (closest - lake_center).normalized()
+	if outward.length_squared() < 0.1:
+		outward = Vector2(-closest_tangent.y, closest_tangent.x)
+	for attempt: int in range(32):
+		var band := float(attempt / 8)
+		var shore_distance := 2.4 + band * 1.4
+		var lateral_step := float((attempt + serial * 3) % 8) - 3.5
+		var candidate_2d := closest + outward * shore_distance + closest_tangent * lateral_step * 1.15
+		var candidate := Vector3(candidate_2d.x, original.y, candidate_2d.y)
+		if not _is_vegetation_clear(candidate, 1.7):
+			continue
+		if not _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M):
+			continue
+		return {"found":true, "position":candidate}
+	return {"found":false, "position":original}
 
 func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 	if dense_grass_prototypes.is_empty():
@@ -1660,6 +1687,7 @@ func _build_deadwood_pass(parent: Node3D) -> void:
 		log_instance.position = position_value
 		log_instance.rotation_degrees = Vector3(0.0, spec.z, 90.0 + float(index % 3 - 1) * 2.5)
 		log_instance.scale = Vector3(cross_scale, spec.w, cross_scale)
+		_preserve_asset_world_scale(log_instance)
 		root.add_child(log_instance)
 		if index % 2 == 0:
 			_add_deadwood_box_collision(
@@ -1685,6 +1713,7 @@ func _build_deadwood_pass(parent: Node3D) -> void:
 		stump_instance.position = position_value
 		stump_instance.rotation_degrees.y = spec.z
 		stump_instance.scale = Vector3(0.46 + float(index % 3) * 0.035, spec.w, 0.46 + float(index % 3) * 0.035)
+		_preserve_asset_world_scale(stump_instance)
 		root.add_child(stump_instance)
 		if index in [0,1,3]:
 			var stump_height := 2.78 * spec.w
@@ -1702,6 +1731,7 @@ func _build_deadwood_pass(parent: Node3D) -> void:
 		hollow.position = hollow_position
 		hollow.rotation_degrees.y = 23.0
 		hollow.scale = Vector3.ONE * 0.48
+		_preserve_asset_world_scale(hollow)
 		root.add_child(hollow)
 		_add_deadwood_box_collision(
 			root, "HeavyHollowBarkCollision_01",
@@ -1735,6 +1765,7 @@ func _build_japanese_maple_pass(parent: Node3D) -> void:
 	maple.name = "Free3DJapaneseMaple_01"
 	maple.position = maple_position
 	maple.rotation_degrees.y = 214.0
+	_preserve_asset_world_scale(maple)
 	root.add_child(maple)
 	occupied_tree_positions.append(Vector2(maple_position.x, maple_position.z))
 	occupied_tree_is_skinny.append(false)
@@ -1793,6 +1824,7 @@ func _build_park_benches(parent: Node3D) -> void:
 		bench.position = candidate
 		bench.rotation_degrees.y = yaw
 		bench.scale = Vector3.ONE * 2.1
+		_preserve_asset_world_scale(bench)
 		root.add_child(bench)
 		_add_invisible_collision_box(
 			root, "ParkBenchCollision_%02d" % (placed + 1),
@@ -1841,6 +1873,7 @@ func _build_park_lamps(parent: Node3D) -> void:
 			lamp_yaw = -90.0
 		lamp.rotation_degrees.y = lamp_yaw
 		lamp.scale = Vector3.ONE * 7.2
+		_preserve_asset_world_scale(lamp)
 		root.add_child(lamp)
 		_add_lamp_lights(root, index, position_value, path_direction)
 		_add_lamp_path_streak(root, index, position_value, path_direction)
@@ -1912,6 +1945,7 @@ func _add_deadwood_box_collision(
 	body.name = node_name
 	body.position = position_value
 	body.rotation_degrees = rotation_degrees_value
+	body.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
 	parent.add_child(body)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
@@ -1929,6 +1963,7 @@ func _add_deadwood_stump_collision(
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = position_value
+	body.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
 	parent.add_child(body)
 	var collision := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
@@ -2120,6 +2155,7 @@ func _build_sakura_trees(parent: Node3D) -> void:
 		tree.position = tree_position
 		tree.rotation_degrees.y = fmod(float(index) * 137.5, 360.0)
 		tree.scale = Vector3.ONE * scale_value
+		_preserve_asset_world_scale(tree)
 		trees_root.add_child(tree)
 		_configure_vegetation_visibility(tree)
 		_add_sakura_trunk_collision(trees_root, index, tree_position, scale_value)
@@ -2155,6 +2191,7 @@ func _add_sakura_trunk_collision(parent: Node3D, index: int, position_value: Vec
 	var body := StaticBody3D.new()
 	body.name = "DenseSakuraCollision_%02d" % (index + 1)
 	body.position = position_value + Vector3(0.0, 1.85 * scale_value, 0.0)
+	body.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
 	parent.add_child(body)
 	var collision := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
@@ -2305,7 +2342,7 @@ func _add_collidable_box(parent: Node3D, node_name: String, position_value: Vect
 func _spawn_scale_review_player() -> void:
 	var player := PlayerScript.new()
 	player.name = "ParkScaleReviewPlayer"
-	player.position = Vector3(0.0, 0.05, PARK_HALF.y - 10.0)
+	player.position = Vector3(0.0, 0.05, WORLD_PARK_HALF.y - 20.0)
 	player.rotation.y = 0.0
 	add_child(player)
 
@@ -2315,7 +2352,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n1 irregular lake | 3 bridge crossings | east viewing deck\n24 sakura accents | dense mainland groves | clustered understory\nPHASE 2 PATHS | destination loop + 4 soft merges + 3 rest pockets"
+	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 irregular lake | bridges removed for modular rebuild\n24 sakura accents | regenerated mainland groves | shoreline relocation\nPHASE 2 PATHS | destination loop + 4 soft merges + 3 rest pockets"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
