@@ -1,0 +1,4 @@
+# Godot writes import descriptors with LF line endings. Pinning them prevents
+# Windows core.autocrlf and OneDrive timestamp updates from repeatedly making
+# content-identical descriptors appear modified after every editor validation.
+*.import text eol=lf
