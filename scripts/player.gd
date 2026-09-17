@@ -8,6 +8,8 @@ const AUTO_FIRE_INTERVAL: float = 0.095
 # correction just like a conventional FPS spray.
 const ADS_RECOIL_DEGREES_PER_SHOT: float = 0.18
 const HIP_RECOIL_DEGREES_PER_SHOT: float = 0.28
+const FLY_SPEED: float = 20.0
+const FLY_BOOST_SPEED: float = 55.0
 
 signal died
 
@@ -31,6 +33,9 @@ var mantle_duration: float = 0.28
 var mantle_saved_layer: int = 1
 var mantle_saved_mask: int = 3
 var jump_was_down: bool = false
+var fly_mode: bool = false
+var fly_saved_layer: int = 1
+var fly_saved_mask: int = 3
 
 var health: float = 100.0
 var ammo: int = 30
@@ -119,6 +124,8 @@ var ads_weapon_pos: Vector3 = Vector3(0.0, -0.245, -0.625)
 func _ready() -> void:
     collision_layer = 1
     collision_mask = 1 | 2
+    fly_saved_layer = collision_layer
+    fly_saved_mask = collision_mask
     _build_collision()
     _build_camera()
     _build_weapon()
@@ -765,7 +772,7 @@ func _build_hud() -> void:
     hud_status.offset_bottom = -30
     hud_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     hud_status.add_theme_font_size_override("font_size", 18)
-    hud_status.text = "LMB fire · RMB ADS · R reload · WASD move · Shift sprint · Space jump"
+    hud_status.text = "F3 fly mode · LMB fire · RMB ADS · R reload · WASD move"
     canvas.add_child(hud_status)
 
     crosshair = Label.new()
@@ -850,7 +857,9 @@ func _unhandled_input(event: InputEvent) -> void:
                 Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
             else:
                 Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-        elif event.keycode == KEY_R:
+        elif event.keycode == KEY_F3:
+            _set_fly_mode(not fly_mode)
+        elif event.keycode == KEY_R and not fly_mode:
             start_reload()
 
     if not alive:
@@ -861,10 +870,13 @@ func _unhandled_input(event: InputEvent) -> void:
         rotate_y(-event.relative.x * sens)
         head.rotate_x(-event.relative.y * sens)
         var head_rot: Vector3 = head.rotation
-        head_rot.x = clampf(head_rot.x, deg_to_rad(-84.0), deg_to_rad(84.0))
+        var pitch_limit := 89.5 if fly_mode else 84.0
+        head_rot.x = clampf(head_rot.x, deg_to_rad(-pitch_limit), deg_to_rad(pitch_limit))
         head.rotation = head_rot
 
     if event is InputEventMouseButton:
+        if fly_mode:
+            return
         if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
             shoot()
         elif event.button_index == MOUSE_BUTTON_RIGHT:
@@ -874,6 +886,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
     if not alive:
+        return
+
+    if fly_mode:
+        _process_fly_mode(delta)
         return
 
     var jump_down: bool = Input.is_key_pressed(KEY_SPACE)
@@ -954,6 +970,58 @@ func _physics_process(delta: float) -> void:
         uzi_viewmodel.call("set_move_speed", horizontal_speed)
     _update_hud()
     jump_was_down = jump_down
+
+func _set_fly_mode(enabled: bool) -> void:
+    fly_mode = enabled
+    velocity = Vector3.ZERO
+    mantle_active = false
+    ads = false
+    reloading = false
+    jump_was_down = false
+    if fly_mode:
+        fly_saved_layer = collision_layer
+        fly_saved_mask = collision_mask
+        collision_layer = 0
+        collision_mask = 0
+        motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
+    else:
+        collision_layer = fly_saved_layer
+        collision_mask = fly_saved_mask
+        motion_mode = CharacterBody3D.MOTION_MODE_GROUNDED
+    if is_instance_valid(weapon):
+        weapon.visible = not fly_mode
+    if is_instance_valid(uzi_viewmodel):
+        uzi_viewmodel.visible = not fly_mode
+    if is_instance_valid(crosshair):
+        crosshair.visible = not fly_mode
+    if is_instance_valid(ads_dot):
+        ads_dot.visible = false
+    if is_instance_valid(hud_status):
+        hud_status.text = (
+            "FLY MODE · WASD move · Space/E rise · Ctrl/Q descend · Shift boost · F3 exit"
+            if fly_mode
+            else "F3 fly mode · LMB fire · RMB ADS · R reload · WASD move"
+        )
+
+func _process_fly_mode(delta: float) -> void:
+    var input_vec := Vector2.ZERO
+    if Input.is_key_pressed(KEY_W): input_vec.y -= 1.0
+    if Input.is_key_pressed(KEY_S): input_vec.y += 1.0
+    if Input.is_key_pressed(KEY_A): input_vec.x -= 1.0
+    if Input.is_key_pressed(KEY_D): input_vec.x += 1.0
+    input_vec = input_vec.normalized()
+
+    var basis := global_transform.basis
+    var fly_direction := basis.x * input_vec.x + basis.z * input_vec.y
+    if Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_E):
+        fly_direction.y += 1.0
+    if Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_Q):
+        fly_direction.y -= 1.0
+    if fly_direction.length_squared() > 0.0001:
+        fly_direction = fly_direction.normalized()
+    var speed := FLY_BOOST_SPEED if Input.is_key_pressed(KEY_SHIFT) else FLY_SPEED
+    global_position += fly_direction * speed * delta
+    velocity = Vector3.ZERO
 
 func _try_start_mantle(wish: Vector3) -> bool:
     var forward: Vector3 = wish

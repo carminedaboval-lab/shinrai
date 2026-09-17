@@ -9,6 +9,7 @@ const FountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/mido
 const MeadowGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_swaying_meadow_grass_v1.glb")
 const MossyBoulderScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_mossy_boulder_cluster_v1.glb")
 const ViewingDeckScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_lakeside_viewing_deck_v1.glb")
+const NeonToriiPortalScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/vendor/neon_torii_portal/neon_torii_portal.glb")
 const BroadleafTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/realistic_trees_collection/scene.glb")
 const PineTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/scene.glb")
 const LilacBushPack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/lilac_bush_pack/scene.glb")
@@ -43,6 +44,9 @@ const LAKE_PROMENADE_WIDTH_M := 3.6
 const LAKE_PROMENADE_BANK_MARGIN_M := 1.0
 const PLAZA_CENTER := Vector2(82.0, 68.0)
 const PLAZA_CENTERPIECE_CLEARANCE_M := 3.5
+const TORII_TARGET_HEIGHT_M := 7.0
+const TORII_SOURCE_HEIGHT_M := 0.691406
+const TORII_YAW_DEGREES := 106.0
 
 # Final circulation follows the destination-led, nested-loop logic of the
 # Pymmes Park reference. The routes intentionally avoid a rectangular grid:
@@ -677,13 +681,13 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 
 func _build_landmark_plaza(parent: Node3D) -> void:
 	var root := Node3D.new()
-	root.name = "SoutheastLandmarkPlaza_AwaitingCenterpiece"
+	root.name = "SoutheastLandmarkPlaza_NeonToriiInstalled"
 	parent.add_child(root)
 
 	# The rectangular grounding court receives the three approach paths while
 	# concentric stone terraces create the strong circular landmark silhouette
 	# visible in the concept artwork. The innermost 12 m world-space cap remains
-	# empty so the user's final monument can drop in without rebuilding the plaza.
+	# empty so the supplied Torii can sit on a clean, correctly scaled foundation.
 	_add_zone_box(
 		root, "PlazaGroundingCourt",
 		Vector3(PLAZA_CENTER.x, 0.107, PLAZA_CENTER.y), Vector2(34.0, 26.0),
@@ -721,14 +725,88 @@ func _build_landmark_plaza(parent: Node3D) -> void:
 	)
 
 	var socket := Marker3D.new()
-	socket.name = "ARC04_LandmarkFountainSocket_12m"
+	socket.name = "ARC04_NeonToriiPortalSocket_12m"
 	socket.position = Vector3(PLAZA_CENTER.x, 0.18, PLAZA_CENTER.y)
-	socket.set_meta("asset_id", "ARC04_LandmarkFountain")
+	socket.set_meta("asset_id", "ARC04_NeonToriiPortal")
 	socket.set_meta("category", "architecture")
-	socket.set_meta("status", "awaiting_user_glb")
+	socket.set_meta("status", "installed_neon_torii_portal")
 	socket.set_meta("base_diameter_world_m", 12.0)
 	socket.set_meta("target_height_world_m", Vector2(6.0, 8.0))
 	root.add_child(socket)
+	_install_neon_torii(root)
+
+func _install_neon_torii(parent: Node3D) -> void:
+	var uniform_scale := TORII_TARGET_HEIGHT_M / TORII_SOURCE_HEIGHT_M
+	# Meshy centered the source around its origin. Raising it by half the target
+	# height plants the lowest vertex on the plaza cap instead of burying it.
+	var position_value := Vector3(
+		PLAZA_CENTER.x,
+		0.16 + TORII_TARGET_HEIGHT_M * 0.5,
+		PLAZA_CENTER.y
+	)
+	var torii := _instance_park_asset(
+		parent, NeonToriiPortalScene, "ARC04_NeonToriiPortal",
+		position_value, TORII_YAW_DEGREES, Vector3.ONE * uniform_scale
+	)
+	if torii == null:
+		return
+	_configure_neon_torii_materials(torii)
+
+	# Two narrow pillar colliders preserve the walk-through opening. Their
+	# authored offsets compensate for the doubled park root scale.
+	var yaw_radians := deg_to_rad(TORII_YAW_DEGREES)
+	var local_x_axis := Vector2(cos(yaw_radians), -sin(yaw_radians))
+	for side_index: int in [-1, 1]:
+		var offset_2d := local_x_axis * 2.05 * float(side_index)
+		_add_invisible_collision_box(
+			parent, "NeonToriiPillarCollision_%s" % ("Left" if side_index < 0 else "Right"),
+			position_value + Vector3(offset_2d.x,0.0,offset_2d.y),
+			Vector3(1.25,6.8,1.65), TORII_YAW_DEGREES
+		)
+	_add_torii_night_lighting(parent)
+
+func _configure_neon_torii_materials(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			for surface_index: int in range(mesh_instance.mesh.get_surface_count()):
+				var source_material := mesh_instance.mesh.surface_get_material(surface_index)
+				if source_material is StandardMaterial3D:
+					var material := source_material.duplicate() as StandardMaterial3D
+					material.resource_local_to_scene = true
+					material.metallic = 0.58
+					material.roughness = 0.30
+					material.emission_enabled = true
+					material.emission = Color("#54cfea")
+					material.emission_texture = material.albedo_texture
+					material.emission_energy_multiplier = 0.0
+					mesh_instance.set_surface_override_material(surface_index, material)
+					plaza_emissive_materials.append(material)
+	for child: Node in node.get_children():
+		_configure_neon_torii_materials(child)
+
+func _add_torii_night_lighting(parent: Node3D) -> void:
+	var portal_light := OmniLight3D.new()
+	portal_light.name = "NeonToriiPortalGlow"
+	portal_light.position = Vector3(PLAZA_CENTER.x,3.8,PLAZA_CENTER.y)
+	portal_light.light_color = Color("#5bdcff")
+	portal_light.light_energy = 0.72
+	portal_light.omni_range = 8.5
+	portal_light.shadow_enabled = false
+	portal_light.light_volumetric_fog_energy = 1.15
+	parent.add_child(portal_light)
+	portal_light.add_to_group("midori_night_effect")
+
+	var threshold_light := OmniLight3D.new()
+	threshold_light.name = "NeonToriiThresholdGlow"
+	threshold_light.position = Vector3(PLAZA_CENTER.x,0.55,PLAZA_CENTER.y)
+	threshold_light.light_color = Color("#42b9d4")
+	threshold_light.light_energy = 0.38
+	threshold_light.omni_range = 5.0
+	threshold_light.shadow_enabled = false
+	threshold_light.light_volumetric_fog_energy = 0.72
+	parent.add_child(threshold_light)
+	threshold_light.add_to_group("midori_night_effect")
 
 func _add_plaza_ring(
 	parent: Node3D,
@@ -855,7 +933,7 @@ func _build_prop_placement_plan(parent: Node3D) -> void:
 		{"id": "ARC01_Pavilion", "category": "architecture", "p": Vector3(76.0, 0.1, -73.0), "yaw": 90.0},
 		{"id": "ARC02_MaintenanceRestroom", "category": "architecture", "p": Vector3(-88.0, 0.1, -63.0), "yaw": 0.0},
 		{"id": "ARC03_MainEntranceMarker", "category": "architecture", "p": Vector3(0.0, 0.1, 84.0), "yaw": 0.0},
-		{"id": "ARC04_LandmarkFountain", "category": "architecture", "p": Vector3(82.0, 0.18, 68.0), "yaw": 0.0},
+		{"id": "ARC04_NeonToriiPortal", "category": "architecture", "p": Vector3(82.0, 0.18, 68.0), "yaw": TORII_YAW_DEGREES},
 		{"id": "ACT01_PlaygroundSet", "category": "activity", "p": Vector3(-72.0, 0.1, 45.0), "yaw": -12.0},
 		{"id": "ACT02_BasketballHoopWest", "category": "activity", "p": Vector3(-92.0, 0.1, -43.0), "yaw": 90.0},
 		{"id": "ACT02_BasketballHoopEast", "category": "activity", "p": Vector3(-48.0, 0.1, -43.0), "yaw": -90.0},
@@ -2717,7 +2795,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 two-basin lake | 7 islands | 3 future bridge corridors\n24 sakura accents | regenerated mainland groves | shoreline relocation\nLANDMARK PLAZA | protected 12 m centerpiece socket | 3 seats | 4 lamps"
+	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 two-basin lake | 7 islands | 3 future bridge corridors\n24 sakura accents | regenerated mainland groves | shoreline relocation\nNEON TORII PLAZA | 7 m landmark | 3 seats | 4 lamps | F3 fly mode"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
