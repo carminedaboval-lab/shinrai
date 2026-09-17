@@ -12,7 +12,7 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 9
+const DETAIL_VERSION := 10
 const WEST_PROMENADE: Array[Vector2] = [
 	Vector2(-37.0, 42.0), Vector2(-27.0, 31.0), Vector2(-23.0, 14.0),
 	Vector2(-27.0, -4.0), Vector2(-31.0, -24.0), Vector2(-37.0, -42.0),
@@ -27,6 +27,21 @@ const NORTH_PROMENADE: Array[Vector2] = [
 	Vector2(28.0, -65.0), Vector2(47.0, -64.0), Vector2(65.0, -66.0),
 	Vector2(76.0, -64.0),
 ]
+const OUTER_CIRCUIT: Array[Vector2] = [
+	Vector2(-97,70),Vector2(-72,75),Vector2(-38,77),Vector2(0,76),
+	Vector2(38,73),Vector2(72,71),Vector2(94,60),Vector2(98,30),
+	Vector2(98,-3),Vector2(96,-36),Vector2(88,-62),Vector2(72,-73),
+	Vector2(38,-77),Vector2(0,-77),Vector2(-38,-76),Vector2(-72,-74),
+	Vector2(-94,-62),Vector2(-99,-32),Vector2(-98,2),Vector2(-97,35),
+	Vector2(-97,70),
+]
+const SOUTH_ARRIVAL_ROUTE: Array[Vector2] = [Vector2(0,90),Vector2(-2,80),Vector2(-11,70),Vector2(-22,59),Vector2(-31,49),Vector2(-37,42)]
+const WEST_DESTINATION_ROUTE: Array[Vector2] = [Vector2(-110,20),Vector2(-97,20),Vector2(-85,28),Vector2(-70,36),Vector2(-53,41),Vector2(-37,42),Vector2(-20,43),Vector2(-4,41),Vector2(8,38)]
+const NORTH_ENTRY_ROUTE: Array[Vector2] = [Vector2(-38,-90),Vector2(-38,-76),Vector2(-40,-60),Vector2(-37,-42)]
+const EAST_DECK_ROUTE: Array[Vector2] = [Vector2(110,-20),Vector2(98,-20),Vector2(89,-18),Vector2(80,-15)]
+const SPORTS_LINK_ROUTE: Array[Vector2] = [Vector2(-98,-27),Vector2(-90,-28),Vector2(-82,-25),Vector2(-70,-23),Vector2(-56,-23),Vector2(-44,-30),Vector2(-37,-42)]
+const PLAYGROUND_LOOP: Array[Vector2] = [Vector2(-97,20),Vector2(-92,37),Vector2(-88,54),Vector2(-78,63),Vector2(-64,63),Vector2(-50,54),Vector2(-37,42),Vector2(-54,41),Vector2(-71,39),Vector2(-87,31),Vector2(-97,20)]
+const NORTH_WOODLAND_LOOP: Array[Vector2] = [Vector2(-37,-42),Vector2(-46,-49),Vector2(-43,-61),Vector2(-31,-71),Vector2(-16,-71),Vector2(-8,-61),Vector2(-18,-53),Vector2(-37,-42)]
 
 # Measured from the imported GLB rather than assuming a centered one-metre mesh.
 # Accurate bounds keep the leaves above the lawn as their scale changes.
@@ -217,21 +232,20 @@ func _build_fallback_material() -> StandardMaterial3D:
 
 
 func _is_lawn_position(x: float, z: float) -> bool:
-	# Perimeter loop path.
-	if abs(z + 77.0) < 3.4 and abs(x) < 99.5:
-		return false
-	if abs(z - 77.0) < 3.4 and abs(x) < 99.5:
-		return false
-	if abs(x + 97.0) < 3.4 and abs(z) < 79.5:
-		return false
-	if abs(x - 97.0) < 3.4 and abs(z) < 79.5:
-		return false
-
-	# Main cross paths.
-	if abs(x + 37.0) < 3.2 and abs(z) < 77.0:
-		return false
-	if abs(z - 42.0) < 3.2 and abs(x) < 97.0:
-		return false
+	var point := Vector2(x, z)
+	var route_specs: Array[Dictionary] = [
+		{"points":OUTER_CIRCUIT, "half_width":2.65},
+		{"points":SOUTH_ARRIVAL_ROUTE, "half_width":2.75},
+		{"points":WEST_DESTINATION_ROUTE, "half_width":2.75},
+		{"points":NORTH_ENTRY_ROUTE, "half_width":2.55},
+		{"points":EAST_DECK_ROUTE, "half_width":2.55},
+		{"points":SPORTS_LINK_ROUTE, "half_width":2.05},
+		{"points":PLAYGROUND_LOOP, "half_width":1.90},
+		{"points":NORTH_WOODLAND_LOOP, "half_width":1.80},
+	]
+	for spec: Dictionary in route_specs:
+		if _near_polyline(point, spec["points"], float(spec["half_width"])):
+			return false
 	if _near_polyline(Vector2(x, z), WEST_PROMENADE, 2.8):
 		return false
 	if _near_polyline(Vector2(x, z), EAST_PROMENADE, 2.9):

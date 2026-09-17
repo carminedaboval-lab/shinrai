@@ -38,6 +38,47 @@ const SKINNY_TO_SKINNY_MIN_SPACING_M := 1.2
 const SHRUB_PATH_CLEARANCE_M := 1.3
 const SAKURA_TREE_COUNT := 24
 
+# Phase-two circulation follows the destination-led, nested-loop logic of the
+# Pymmes Park reference. The routes intentionally avoid a rectangular grid:
+# entrances feed soft three-way merges, short loops offer alternate woodland
+# approaches, and the lake promenades remain the park's central circulation.
+const OUTER_CIRCUIT: Array[Vector2] = [
+	Vector2(-97,70),Vector2(-72,75),Vector2(-38,77),Vector2(0,76),
+	Vector2(38,73),Vector2(72,71),Vector2(94,60),Vector2(98,30),
+	Vector2(98,-3),Vector2(96,-36),Vector2(88,-62),Vector2(72,-73),
+	Vector2(38,-77),Vector2(0,-77),Vector2(-38,-76),Vector2(-72,-74),
+	Vector2(-94,-62),Vector2(-99,-32),Vector2(-98,2),Vector2(-97,35),
+	Vector2(-97,70),
+]
+const SOUTH_ARRIVAL_ROUTE: Array[Vector2] = [
+	Vector2(0,90),Vector2(-2,80),Vector2(-11,70),Vector2(-22,59),
+	Vector2(-31,49),Vector2(-37,42),
+]
+const WEST_DESTINATION_ROUTE: Array[Vector2] = [
+	Vector2(-110,20),Vector2(-97,20),Vector2(-85,28),Vector2(-70,36),
+	Vector2(-53,41),Vector2(-37,42),Vector2(-20,43),Vector2(-4,41),
+	Vector2(8,38),
+]
+const NORTH_ENTRY_ROUTE: Array[Vector2] = [
+	Vector2(-38,-90),Vector2(-38,-76),Vector2(-40,-60),Vector2(-37,-42),
+]
+const EAST_DECK_ROUTE: Array[Vector2] = [
+	Vector2(110,-20),Vector2(98,-20),Vector2(89,-18),Vector2(80,-15),
+]
+const SPORTS_LINK_ROUTE: Array[Vector2] = [
+	Vector2(-98,-27),Vector2(-90,-28),Vector2(-82,-25),Vector2(-70,-23),
+	Vector2(-56,-23),Vector2(-44,-30),Vector2(-37,-42),
+]
+const PLAYGROUND_LOOP: Array[Vector2] = [
+	Vector2(-97,20),Vector2(-92,37),Vector2(-88,54),Vector2(-78,63),
+	Vector2(-64,63),Vector2(-50,54),Vector2(-37,42),Vector2(-54,41),
+	Vector2(-71,39),Vector2(-87,31),Vector2(-97,20),
+]
+const NORTH_WOODLAND_LOOP: Array[Vector2] = [
+	Vector2(-37,-42),Vector2(-46,-49),Vector2(-43,-61),Vector2(-31,-71),
+	Vector2(-16,-71),Vector2(-8,-61),Vector2(-18,-53),Vector2(-37,-42),
+]
+
 var mat_grass: StandardMaterial3D
 var mat_path: StandardMaterial3D
 var mat_water: StandardMaterial3D
@@ -267,7 +308,7 @@ func _build_park_footprint() -> void:
 	_build_boundary(root)
 	_build_paths(root)
 	_build_curved_promenades(root)
-	_build_modular_path_phase_one(root)
+	_build_modular_path_phase_two(root)
 	_build_zone_placeholders(root)
 	_build_artwork_assets(root)
 	_build_prop_placement_plan(root)
@@ -297,15 +338,29 @@ func _build_boundary(parent: Node3D) -> void:
 		_add_visual_box(parent, entry["name"], entry["position"], entry["size"], mat_entry)
 
 func _build_paths(parent: Node3D) -> void:
-	var loop_half_x := PARK_HALF.x - 13.0
-	var loop_half_z := PARK_HALF.y - 13.0
-	var loop_width := 5.0
-	_add_visual_box(parent, "LoopPathNorth", Vector3(0.0, 0.075, -loop_half_z), Vector3(loop_half_x * 2.0, 0.05, loop_width), mat_path)
-	_add_visual_box(parent, "LoopPathSouth", Vector3(0.0, 0.075, loop_half_z), Vector3(loop_half_x * 2.0, 0.05, loop_width), mat_path)
-	_add_visual_box(parent, "LoopPathWest", Vector3(-loop_half_x, 0.075, 0.0), Vector3(loop_width, 0.05, loop_half_z * 2.0), mat_path)
-	_add_visual_box(parent, "LoopPathEast", Vector3(loop_half_x, 0.075, 0.0), Vector3(loop_width, 0.05, loop_half_z * 2.0), mat_path)
-	_add_visual_box(parent, "MainNorthSouthPath", Vector3(-37.0, 0.078, 0.0), Vector3(5.0, 0.055, 150.0), mat_path)
-	_add_visual_box(parent, "MainEastWestPath", Vector3(0.0, 0.079, 42.0), Vector3(190.0, 0.055, 5.0), mat_path)
+	var root := Node3D.new()
+	root.name = "DestinationLedPathNetwork_Phase2"
+	parent.add_child(root)
+	_add_path_strip_2d(root, "OuterWalkingCircuit", OUTER_CIRCUIT, 4.2, 0.108)
+	_add_path_strip_2d(root, "SouthEntranceToLake", SOUTH_ARRIVAL_ROUTE, 4.4, 0.111)
+	_add_path_strip_2d(root, "WestEntranceToMainBridge", WEST_DESTINATION_ROUTE, 4.4, 0.112)
+	_add_path_strip_2d(root, "NorthEntranceToLake", NORTH_ENTRY_ROUTE, 4.0, 0.110)
+	_add_path_strip_2d(root, "EastEntranceToViewingDeck", EAST_DECK_ROUTE, 4.0, 0.110)
+	_add_path_strip_2d(root, "SportsConnector", SPORTS_LINK_ROUTE, 3.0, 0.109)
+	_add_path_strip_2d(root, "PlaygroundWoodlandLoop", PLAYGROUND_LOOP, 2.7, 0.109)
+	_add_path_strip_2d(root, "NorthWoodlandLoop", NORTH_WOODLAND_LOOP, 2.5, 0.109)
+
+func _add_path_strip_2d(
+	parent: Node3D,
+	node_name: String,
+	points_2d: Array[Vector2],
+	width: float,
+	y_value: float
+) -> void:
+	var points_3d: Array[Vector3] = []
+	for point: Vector2 in points_2d:
+		points_3d.append(Vector3(point.x, y_value, point.y))
+	_add_path_strip(parent, node_name, points_3d, width, mat_path)
 
 func _build_curved_promenades(parent: Node3D) -> void:
 	var root := Node3D.new()
@@ -361,37 +416,82 @@ func _add_path_vertex(surface: SurfaceTool, position_value: Vector3, uv_value: V
 	surface.set_uv(uv_value)
 	surface.add_vertex(position_value)
 
-func _build_modular_path_phase_one(parent: Node3D) -> void:
+func _build_modular_path_phase_two(parent: Node3D) -> void:
 	var root := Node3D.new()
-	root.name = "MidoriModularPath_Phase1"
+	root.name = "MidoriModularPath_Phase2"
 	parent.add_child(root)
 
-	# The original blockout remains underneath until the resting-pocket module
-	# arrives. This first reversible route proves scale, grounding, materials and
-	# night emission without committing the park's final circulation plan.
+	# Four landmark merges provide orientation without repeating the junction at
+	# every bend. The narrower procedural paths beneath them remain visible as a
+	# border and guarantee continuous, walkable-looking routes between modules.
 	if midori_path_junction_prototype != null:
-		_add_modular_path_piece(
-			root, midori_path_junction_prototype, "PathJunction_MainCrossing",
-			Vector3(-37.0, 0.105, 42.0), 0.0
-		)
-	if midori_path_straight_prototype != null:
-		for index: int in range(7):
+		var junctions: Array[Dictionary] = [
+			{"name":"MainLakeMerge", "p":Vector3(-37,0.118,42), "yaw":8.0},
+			{"name":"WestEntranceMerge", "p":Vector3(-97,0.118,20), "yaw":-82.0},
+			{"name":"NorthLakeMerge", "p":Vector3(-37,0.118,-42), "yaw":176.0},
+			{"name":"ViewingDeckMerge", "p":Vector3(80,0.118,-15), "yaw":88.0},
+		]
+		for junction: Dictionary in junctions:
 			_add_modular_path_piece(
-				root, midori_path_straight_prototype, "PathStraight_South_%02d" % (index + 1),
-				Vector3(-37.0, 0.105, 49.2 + float(index) * 6.0), 0.0
+				root, midori_path_junction_prototype,
+				"PathJunction_%s" % junction["name"], junction["p"], junction["yaw"]
 			)
+	if midori_path_straight_prototype != null:
+		_add_modular_path_run(root, SOUTH_ARRIVAL_ROUTE, "SouthArrival", 5.75)
+		_add_modular_path_run(root, WEST_DESTINATION_ROUTE, "WestApproach", 5.75)
+		_add_modular_path_run(root, NORTH_ENTRY_ROUTE, "NorthArrival", 5.75)
+		_add_modular_path_run(root, EAST_DECK_ROUTE, "EastDeckApproach", 5.75)
 	if midori_path_curve_prototype != null:
-		_add_modular_path_piece(
-			root, midori_path_curve_prototype, "PathCurve_WestLake_Test",
-			Vector3(-27.0, 0.118, 14.0), 90.0
-		)
+		var bends: Array[Dictionary] = [
+			{"name":"SouthCanopy", "p":Vector3(-11,0.121,70), "yaw":-34.0},
+			{"name":"PlaygroundEdge", "p":Vector3(-85,0.121,28), "yaw":-65.0},
+			{"name":"SportsEdge", "p":Vector3(-44,0.121,-30), "yaw":148.0},
+			{"name":"NorthWoodland", "p":Vector3(-31,0.121,-71), "yaw":92.0},
+			{"name":"WestLake", "p":Vector3(-27,0.121,14), "yaw":90.0},
+		]
+		for bend: Dictionary in bends:
+			_add_modular_path_piece(
+				root, midori_path_curve_prototype,
+				"PathCurve_%s" % bend["name"], bend["p"], bend["yaw"]
+			)
 	if midori_path_resting_pocket_prototype != null:
-		# This pocket opens directly off the main east-west walk and contains the
-		# existing authored bench point at (-21, 48), turning it into a real stop.
-		_add_modular_path_piece(
-			root, midori_path_resting_pocket_prototype, "PathPocket_WestRestStop",
-			Vector3(-21.0, 0.105, 47.0), 180.0
-		)
+		var pockets: Array[Dictionary] = [
+			{"name":"WestRestStop", "p":Vector3(-21,0.118,48), "yaw":180.0},
+			{"name":"NorthWoodlandRestStop", "p":Vector3(-15,0.118,-72), "yaw":0.0},
+			{"name":"EastPromenadeRestStop", "p":Vector3(88,0.118,-28), "yaw":-90.0},
+		]
+		for pocket: Dictionary in pockets:
+			_add_modular_path_piece(
+				root, midori_path_resting_pocket_prototype,
+				"PathPocket_%s" % pocket["name"], pocket["p"], pocket["yaw"]
+			)
+
+func _add_modular_path_run(
+	parent: Node3D,
+	points: Array[Vector2],
+	run_name: String,
+	spacing: float
+) -> void:
+	var serial := 1
+	for index: int in range(points.size() - 1):
+		var start := points[index]
+		var finish := points[index + 1]
+		var delta := finish - start
+		var segment_length := delta.length()
+		if segment_length < 0.1:
+			continue
+		var direction := delta / segment_length
+		var distance := spacing * 0.5
+		while distance < segment_length - spacing * 0.25:
+			var point := start + direction * distance
+			var yaw := rad_to_deg(atan2(direction.x, direction.y))
+			_add_modular_path_piece(
+				parent, midori_path_straight_prototype,
+				"PathStraight_%s_%02d" % [run_name, serial],
+				Vector3(point.x,0.116,point.y), yaw
+			)
+			serial += 1
+			distance += spacing
 
 func _add_modular_path_piece(
 	parent: Node3D,
@@ -1067,14 +1167,7 @@ func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
 	var point := Vector2(position_value.x, position_value.z)
 	if absf(point.x) > PARK_HALF.x - padding or absf(point.y) > PARK_HALF.y - padding:
 		return false
-	# Straight circulation: perimeter loop, central spine, and main cross path.
-	if absf(absf(point.x) - 97.0) < 2.5 + padding and absf(point.y) < 80.0:
-		return false
-	if absf(absf(point.y) - 77.0) < 2.5 + padding and absf(point.x) < 100.0:
-		return false
-	if absf(point.x + 37.0) < 2.5 + padding and absf(point.y) < 77.0:
-		return false
-	if absf(point.y - 42.0) < 2.5 + padding and absf(point.x) < 98.0:
+	if _is_near_destination_path(point, padding):
 		return false
 
 	# Curved lake promenades use the same authored control points as the meshes.
@@ -1099,6 +1192,25 @@ func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
 		if absf(point.x - rect.x) < rect.z + padding and absf(point.y - rect.y) < rect.w + padding:
 			return false
 	return true
+
+func _is_near_destination_path(point: Vector2, padding: float) -> bool:
+	var route_specs: Array[Dictionary] = [
+		{"points":OUTER_CIRCUIT, "half_width":2.1},
+		{"points":SOUTH_ARRIVAL_ROUTE, "half_width":2.2},
+		{"points":WEST_DESTINATION_ROUTE, "half_width":2.2},
+		{"points":NORTH_ENTRY_ROUTE, "half_width":2.0},
+		{"points":EAST_DECK_ROUTE, "half_width":2.0},
+		{"points":SPORTS_LINK_ROUTE, "half_width":1.5},
+		{"points":PLAYGROUND_LOOP, "half_width":1.35},
+		{"points":NORTH_WOODLAND_LOOP, "half_width":1.25},
+	]
+	for spec: Dictionary in route_specs:
+		var route: Array[Vector2] = spec["points"]
+		var clearance: float = float(spec["half_width"]) + padding
+		for index: int in range(route.size() - 1):
+			if _distance_to_park_segment(point, route[index], route[index + 1]) < clearance:
+				return true
+	return false
 
 func _build_reference_canopy(parent: Node3D) -> void:
 	var canopy_root := Node3D.new()
@@ -2072,7 +2184,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | dense mainland groves | clustered understory\n4-piece modular path kit | south spine + west rest stop"
+	label.text = "MIDORI PARK — ARTWORK COMPOSITION PASS\n220 m x 180 m | fog-limited urban landmark park\n2 lake crossings | east viewing deck | 9 stone cover groups\n24 sakura accents | dense mainland groves | clustered understory\nPHASE 2 PATHS | destination loop + 4 soft merges + 3 rest pockets"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
