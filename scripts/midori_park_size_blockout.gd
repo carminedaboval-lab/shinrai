@@ -43,6 +43,7 @@ var mat_entry: StandardMaterial3D
 var mat_island: StandardMaterial3D
 var mat_plan_marker: StandardMaterial3D
 var mat_neon_blue: StandardMaterial3D
+var mat_path_light_streak: ShaderMaterial
 var broadleaf_prototypes: Array[Node3D] = []
 var pine_prototypes: Array[Node3D] = []
 var pine_sapling_prototypes: Array[Node3D] = []
@@ -87,12 +88,36 @@ func _create_materials() -> void:
 	mat_neon_blue.emission_enabled = true
 	mat_neon_blue.emission = Color("#55d9ff")
 	mat_neon_blue.emission_energy_multiplier = 2.2
+	mat_path_light_streak = _make_path_light_streak_material()
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color_value
 	material.roughness = roughness_value
 	material.metallic = metallic_value
+	return material
+
+func _make_path_light_streak_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode unshaded, blend_add, cull_disabled, depth_draw_never;
+
+void fragment() {
+	float across = abs(UV.x - 0.5) * 2.0;
+	float along = abs(UV.y - 0.5) * 2.0;
+	float side_fade = 1.0 - smoothstep(0.28, 1.0, across);
+	float end_fade = 1.0 - smoothstep(0.58, 1.0, along);
+	float alpha = side_fade * end_fade * 0.58;
+	vec3 blue = vec3(0.20, 0.76, 1.0);
+	ALBEDO = blue;
+	EMISSION = blue * 1.35;
+	ALPHA = alpha;
+}
+"""
+	var material := ShaderMaterial.new()
+	material.resource_name = "SHINRAI_BlueSlitPathStreak"
+	material.shader = shader
 	return material
 
 func _create_environment() -> void:
@@ -1391,6 +1416,7 @@ func _build_park_lamps(parent: Node3D) -> void:
 		root.add_child(lamp)
 		_add_lamp_neon_geometry(lamp)
 		_add_lamp_lights(root, index, position_value, path_direction)
+		_add_lamp_path_streak(root, index, position_value, path_direction)
 		_add_deadwood_stump_collision(
 			root, "HaloLampCollision_%02d" % (index + 1),
 			position_value + Vector3(0.0,3.40,0.0), 0.28, 6.8
@@ -1402,23 +1428,23 @@ func _add_lamp_neon_geometry(lamp: Node3D) -> void:
 	var halo := MeshInstance3D.new()
 	halo.name = "BlueNeonHalo"
 	var halo_mesh := TorusMesh.new()
-	halo_mesh.inner_radius = 0.095
-	halo_mesh.outer_radius = 0.138
+	halo_mesh.inner_radius = 0.075
+	halo_mesh.outer_radius = 0.112
 	halo_mesh.rings = 24
 	halo_mesh.ring_segments = 8
 	halo.mesh = halo_mesh
-	halo.position = Vector3(0.0,0.91,0.0)
+	halo.position = Vector3(0.0,0.972,0.0)
 	halo.material_override = mat_neon_blue
 	lamp.add_child(halo)
 
 	var seam := MeshInstance3D.new()
 	seam.name = "BlueNeonSeam"
 	var seam_mesh := BoxMesh.new()
-	seam_mesh.size = Vector3(0.008,0.28,0.008)
+	seam_mesh.size = Vector3(0.004,0.27,0.006)
 	seam.mesh = seam_mesh
-	# Bury the emitter inside the lower cavity so only the model's real opening
-	# can reveal it; no emissive geometry may sit beside the pole silhouette.
-	seam.position = Vector3(-0.012,0.19,0.0)
+	# Sit flush within the narrow lower slit. The tiny width prevents the emitter
+	# from reading as a separate bar beside the pole at the 7.2 m final scale.
+	seam.position = Vector3(-0.010,0.19,-0.142)
 	seam.material_override = mat_neon_blue
 	lamp.add_child(seam)
 
@@ -1431,10 +1457,10 @@ func _add_lamp_lights(
 	# The upper halo softly illuminates the surrounding path and vegetation.
 	var halo_light := OmniLight3D.new()
 	halo_light.name = "BlueHaloArea_%02d" % (index + 1)
-	halo_light.position = position_value + Vector3(0.0,6.36,0.0)
+	halo_light.position = position_value + Vector3(0.0,6.94,0.0)
 	halo_light.light_color = Color("#75ddff")
-	halo_light.light_energy = 0.45
-	halo_light.omni_range = 8.5
+	halo_light.light_energy = 0.35
+	halo_light.omni_range = 7.0
 	halo_light.shadow_enabled = false
 	parent.add_child(halo_light)
 
@@ -1444,12 +1470,29 @@ func _add_lamp_lights(
 	slit_light.name = "BlueSlitPathLine_%02d" % (index + 1)
 	slit_light.position = position_value + Vector3(0.0,1.38,0.0) + path_direction * 0.08
 	slit_light.light_color = Color("#62dfff")
-	slit_light.light_energy = 1.10
-	slit_light.spot_range = 5.0
-	slit_light.spot_angle = 8.0
+	slit_light.light_energy = 1.80
+	slit_light.spot_range = 5.5
+	slit_light.spot_angle = 6.0
 	slit_light.shadow_enabled = false
 	parent.add_child(slit_light)
 	slit_light.look_at(position_value + path_direction * 3.4 + Vector3(0.0,0.05,0.0), Vector3.UP)
+
+func _add_lamp_path_streak(
+	parent: Node3D,
+	index: int,
+	position_value: Vector3,
+	path_direction: Vector3
+) -> void:
+	var streak := MeshInstance3D.new()
+	streak.name = "BlueSlitProjection_%02d" % (index + 1)
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(0.22,3.4)
+	streak.mesh = plane
+	streak.position = position_value + path_direction * 2.15 + Vector3(0.0,0.016,0.0)
+	if absf(path_direction.x) > 0.5:
+		streak.rotation_degrees.y = 90.0
+	streak.material_override = mat_path_light_streak
+	parent.add_child(streak)
 
 func _add_deadwood_box_collision(
 	parent: Node3D,
