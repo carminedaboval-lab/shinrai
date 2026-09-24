@@ -1,0 +1,42 @@
+name: Extraction gameplay regressions
+
+on:
+  push:
+    branches: [codex/extraction-route-validation]
+  pull_request:
+    paths:
+      - scripts/extraction_*.gd
+      - tests/test_extraction_regressions.gd
+      - .github/workflows/extraction_regressions.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lightweight-godot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/extraction_profile.gd
+            scripts/extraction_navigation.gd
+            scripts/extraction_hud.gd
+            tests/test_extraction_regressions.gd
+          sparse-checkout-cone-mode: false
+      - name: Download official Godot 4.7.1 Linux build
+        run: |
+          curl --fail --location --retry 3 --output godot.zip 'https://downloads.godotengine.org/?version=4.7.1&flavor=stable&platform=linux.64&slug=linux.x86_64.zip'
+          unzip -q godot.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+          ./godot --version
+      - name: Run save, navigation and map regressions
+        run: |
+          mkdir -p probe/scripts probe/tests
+          cp scripts/extraction_profile.gd scripts/extraction_navigation.gd scripts/extraction_hud.gd probe/scripts/
+          cp tests/test_extraction_regressions.gd probe/tests/
+          printf 'config_version=5\n[application]\nconfig/name="Extraction Gameplay Regressions"\n' > probe/project.godot
+          ./godot --headless --path probe --script res://tests/test_extraction_regressions.gd
