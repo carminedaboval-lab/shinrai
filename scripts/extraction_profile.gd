@@ -31,6 +31,8 @@ func load_profile() -> void:
 	for key: String in ["credits", "runs", "extracts", "pack_level"]:
 		if parsed.get(key) is float or parsed.get(key) is int:
 			data[key] = maxi(0, int(parsed[key]))
+	for key: String in data.stash:
+		data.stash[key] = int(data.stash[key])
 	data.pack_level = mini(data.pack_level, 2)
 	recovered_interrupted_run = data.active_run
 	if recovered_interrupted_run:
