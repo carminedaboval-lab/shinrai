@@ -180,7 +180,7 @@ var park_environment: Environment
 var park_directional_light: DirectionalLight3D
 var time_of_day_label: Label
 var is_night_mode := true
-var high_render_quality := true
+var high_render_quality := false
 var lake_reflection_probe: ReflectionProbe
 var reflection_refresh_queued := false
 var occupied_tree_positions: Array[Vector2] = []
@@ -433,7 +433,7 @@ func _apply_render_quality() -> void:
 		viewport.msaa_3d = Viewport.MSAA_DISABLED
 		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
 		viewport.scaling_3d_scale = 0.75 if high_render_quality else 0.70
-	park_environment.ssao_enabled = forward_plus
+	park_environment.ssao_enabled = forward_plus and high_render_quality
 	park_environment.ssao_radius = 0.8
 	park_environment.ssao_intensity = 0.6
 	park_environment.ssao_detail = 0.4
@@ -447,7 +447,7 @@ func _apply_render_quality() -> void:
 	park_environment.glow_bloom = 0.0
 	park_environment.glow_hdr_threshold = 1.4
 	park_environment.volumetric_fog_enabled = forward_plus and high_render_quality and is_night_mode
-	park_directional_light.directional_shadow_max_distance = 110.0
+	park_directional_light.directional_shadow_max_distance = 110.0 if high_render_quality else 90.0
 
 func _build_lake_reflection_probe() -> void:
 	if RenderingServer.get_current_rendering_method() != "forward_plus":
