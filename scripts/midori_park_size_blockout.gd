@@ -447,6 +447,7 @@ func _apply_render_quality() -> void:
 	park_environment.glow_bloom = 0.0
 	park_environment.glow_hdr_threshold = 1.4
 	park_environment.volumetric_fog_enabled = forward_plus and high_render_quality and is_night_mode
+	park_directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if high_render_quality else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	park_directional_light.directional_shadow_max_distance = 110.0 if high_render_quality else 90.0
 
 func _build_lake_reflection_probe() -> void:
