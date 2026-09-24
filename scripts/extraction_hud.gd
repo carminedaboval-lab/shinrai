@@ -138,7 +138,12 @@ func show_hq(raid: Node) -> void:
 		_label(panel_content, "Last run was interrupted. Unbanked cargo was lost; your stash is safe.", 18, GOLD)
 	if not raid.profile.last_error.is_empty():
 		_label(panel_content, raid.profile.last_error, 19, Color("#ef9b8c"))
-	_button("DEPLOY  →  " + ("NIGHT" if raid.night_deployment else "GOLDEN HOUR"), "deploy", not raid.navigation.ready or not raid.profile.last_error.is_empty()).grab_focus()
+		if not raid.profile.saving_disabled:
+			_button("RETRY SAVE", "retry_save").grab_focus()
+	var deploy_disabled: bool = not raid.navigation.ready or not raid.profile.last_error.is_empty()
+	var deploy_button := _button("DEPLOY  →  " + ("NIGHT" if raid.night_deployment else "GOLDEN HOUR"), "deploy", deploy_disabled)
+	if not deploy_disabled:
+		deploy_button.grab_focus()
 	var row := HBoxContainer.new()
 	panel_content.add_child(row)
 	for spec: Array in [["Change time of day", "time"], ["Sell stash", "sell"], ["Extra medkit · 120", "medkit"]]:
@@ -167,10 +172,10 @@ func show_pause(raid: Node, map_open: bool) -> void:
 		chart.custom_minimum_size = Vector2(780, 470)
 		panel_content.add_child(chart)
 		map_view = chart
-		_label(panel_content, "YOU  △   RELAYS  ●   SEARCH  ·   EXTRACTION  □   Click a site to track", 18, MINT)
+		_label(panel_content, "YOU  △   RELAYS  ●   SEARCH  ·   EXTRACTION  □ (ring = gate zone)   Click to track", 18, MINT)
 		var target: Dictionary = raid.tracked_objective()
 		if not target.is_empty():
-			_label(panel_content, "%s  ·  ~%dm suggested route" % [target.title, int(raid.guidance_distance)], 18, GOLD)
+			_label(panel_content, "%s  ·  %s" % [target.title, _route_text(raid)], 18, GOLD)
 		var names: Array[String] = []
 		for item: Dictionary in raid.bag:
 			names.append(item.title)
@@ -191,13 +196,20 @@ func show_abandon() -> void:
 
 func show_result(raid: Node, won: bool, reason: String, bonus: int) -> void:
 	_clear_panel()
-	_label(panel_content, "EXTRACTION CONFIRMED" if won else "SIGNAL LOST", 47, MINT if won else GOLD)
+	_label(panel_content, ("EXTRACTION CONFIRMED" if won else "SIGNAL LOST") if raid.result_saved else "RESULT NOT SAVED", 47, MINT if won and raid.result_saved else GOLD)
 	_label(panel_content, reason, 24, PAPER)
-	_label(panel_content, "%d RELAYS   /   %d HOSTILES   /   %d ITEMS %s" % [raid.relays, raid.player.kills, raid.bag.size(), "BANKED" if won else "LOST"], 23, PAPER)
-	_label(panel_content, "CONTRACT BONUS  +%d credits" % bonus if won else "Your banked stash and upgrades are safe.", 23, MINT)
-	if not raid.profile.last_error.is_empty():
+	var cargo_status := ("BANKED" if won else "LOST") if raid.result_saved else "PENDING"
+	_label(panel_content, "%d RELAYS   /   %d HOSTILES   /   %d ITEMS %s" % [raid.relays, raid.player.kills, raid.bag.size(), cargo_status], 23, PAPER)
+	if not raid.result_saved:
 		_label(panel_content, "SAVE FAILED: " + raid.profile.last_error, 20, GOLD)
+		_label(panel_content, "Keep this screen open and retry. Closing now loses this unsaved result.", 20, GOLD)
+		_button("RETRY SAVING RESULT", "retry_result").grab_focus()
+		return
+	_label(panel_content, "CONTRACT BONUS  +%d credits" % bonus if won else "Your banked stash and upgrades are safe.", 23, MINT)
 	_button("RETURN TO OPERATIONS", "hq").grab_focus()
+
+func _route_text(raid: Node) -> String:
+	return "~%dm suggested route" % int(raid.guidance_distance) if not raid.guidance_path.is_empty() else "NO ROUTE FOUND · choose another site"
 
 func update_raid(raid: Node) -> void:
 	var seconds := ceili(raid.remaining)
@@ -214,7 +226,7 @@ func update_raid(raid: Node) -> void:
 	marker.hide()
 	var objective: Dictionary = raid.tracked_objective()
 	if not objective.is_empty():
-		objectives.text += "\n%s · ~%dm via route   [T: change target]" % [objective.title, int(raid.guidance_distance)]
+		objectives.text += "\n%s · %s   [T: change target]" % [objective.title, _route_text(raid)]
 		var world: Vector3 = objective.position + Vector3.UP * 2.5
 		var camera: Camera3D = raid.player.camera
 		if not camera.is_position_behind(world):
@@ -245,9 +257,13 @@ class FieldMap extends Control:
 			accept_event()
 			destination_selected.emit(selected)
 	func project(p: Vector2) -> Vector2:
-		return Vector2(28, 20) + (p + Vector2(220, 180)) / Vector2(440, 360) * Vector2(size.x - 56, size.y - 40)
+		# One scale for both axes keeps route angles and distances undistorted.
+		return size * 0.5 + p * map_scale()
+	func map_scale() -> float:
+		return minf((size.x - 56.0) / 440.0, (size.y - 40.0) / 360.0)
 	func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, size), Color("#11232b"))
+		draw_string(get_theme_default_font(), Vector2(12, 22), "N ↑", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#e8eee7"))
 		var lake := PackedVector2Array()
 		for p: Vector2 in raid.navigation.shoreline:
 			lake.append(project(p))
@@ -255,7 +271,7 @@ class FieldMap extends Control:
 		for route: Array in raid.map_routes:
 			var line := PackedVector2Array()
 			for p: Vector2 in route:
-				line.append(project(p * 2.0))
+				line.append(project(p * raid.park.LAYOUT_SCALE))
 			draw_polyline(line, Color("#617577"), 2.0, true)
 		for site: Dictionary in raid.sites:
 			var p: Vector3 = site.position
@@ -276,7 +292,12 @@ class FieldMap extends Control:
 		draw_string(get_theme_default_font(), torii + Vector2(-32, 23), "TORII", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#e5bc7f"))
 		for exit_point: Dictionary in raid.exits:
 			var p: Vector3 = exit_point.position
-			draw_rect(Rect2(project(Vector2(p.x, p.z)) - Vector2(6, 6), Vector2(12, 12)), Color("#85dfc4"), false, 2.0)
+			var gate := project(Vector2(p.x, p.z))
+			var gate_color := Color("#85dfc4") if raid.relays > 0 else Color("#e5bc7f")
+			draw_rect(Rect2(gate - Vector2(6, 6), Vector2(12, 12)), gate_color, false, 2.0)
+			draw_arc(gate, 8.0 * map_scale(), 0.0, TAU, 32, gate_color, 1.0, true)
+			var label := String(exit_point.id).to_upper() + (" · OPEN" if raid.relays > 0 else " · LOCKED")
+			draw_string(get_theme_default_font(), gate + Vector2(12, -8), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, gate_color)
 		var p: Vector3 = raid.player.global_position
 		var center := project(Vector2(p.x, p.z))
 		var triangle := PackedVector2Array()

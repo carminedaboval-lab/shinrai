@@ -191,8 +191,34 @@ func run_tests() -> void:
 	reloaded.save_path = scene.profile_path
 	reloaded.load_profile()
 	check(reloaded.data.credits == 150 and reloaded.data.extracts == 1, "Save reload preserves progression")
+	# A failed settlement must remain retryable on the result screen.
 	raid._on_action("hq")
 	raid.start_run()
+	raid.bag.append(raid.ITEMS[0].duplicate())
+	var settlement_before: Dictionary = raid.profile.data.duplicate(true)
+	var valid_save_path: String = raid.profile.save_path
+	raid.profile.save_path = valid_save_path + "/unwritable.json"
+	# Reproduce a run ending while mantle collision is temporarily disabled.
+	var saved_layer: int = raid.player.collision_layer
+	var saved_mask: int = raid.player.collision_mask
+	raid.player.mantle_saved_layer = saved_layer
+	raid.player.mantle_saved_mask = saved_mask
+	raid.player.collision_layer = 0
+	raid.player.collision_mask = 0
+	raid.player.mantle_active = true
+	raid.finish_run(true, "Regression: failed save during extraction")
+	check(not raid.result_saved and raid.profile.data == settlement_before, "Failed result keeps settlement pending without granting rewards")
+	raid._on_action("hq")
+	check(raid.phase == raid.Phase.RESULT, "Unsaved result cannot return to HQ and be discarded")
+	raid.profile.save_path = valid_save_path
+	raid._on_action("retry_result")
+	check(raid.result_saved and not raid.profile.data.active_run, "Result-screen retry settles successfully")
+	var settled: Dictionary = raid.profile.data.duplicate(true)
+	raid._on_action("retry_result")
+	check(raid.profile.data == settled, "Result retry cannot settle twice")
+	raid._on_action("hq")
+	raid.start_run()
+	check(raid.player.collision_layer == saved_layer and raid.player.collision_mask == saved_mask and not raid.player.mantle_active, "Redeployment restores collision after interrupted mantle")
 	raid.bag.append(raid.ITEMS[0].duplicate())
 	var stash_before: Dictionary = raid.profile.data.stash.duplicate()
 	raid.player.take_damage(200)
