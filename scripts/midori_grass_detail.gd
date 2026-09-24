@@ -1,5 +1,7 @@
 extends Node
 
+const LakeGeometry = preload("res://scripts/midori_lake_geometry.gd")
+
 # Midori Park near-ground vegetation scatter using the uploaded Meshy clump.
 # The clumps are kept short and broad so they read as natural lawn/forest-floor
 # detail rather than isolated weeds. Distribution is slightly patchy instead of
@@ -13,7 +15,7 @@ const CLUMP_INSTANCE_COUNT := 18000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 15
+const DETAIL_VERSION := 18
 const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-98,70),Vector2(-72,77),Vector2(-38,82),Vector2(0,84),
@@ -24,51 +26,75 @@ const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-103,-66),Vector2(-106,-42),Vector2(-106,-10),Vector2(-105,22),
 	Vector2(-103,49),Vector2(-98,70),
 ]
-const SOUTH_ARRIVAL_ROUTE: Array[Vector2] = [Vector2(0,90),Vector2(-1,81),Vector2(-7,71),Vector2(-12,58),Vector2(-17,43)]
-const WEST_DESTINATION_ROUTE: Array[Vector2] = [Vector2(-110,20),Vector2(-98,20),Vector2(-88,17),Vector2(-77,12),Vector2(-64,6),Vector2(-51,1),Vector2(-39,-4),Vector2(-29,-7)]
-const NORTH_ENTRY_ROUTE: Array[Vector2] = [Vector2(-38,-90),Vector2(-38,-79),Vector2(-36,-68),Vector2(-34,-58),Vector2(-33,-50)]
-const EAST_DECK_ROUTE: Array[Vector2] = [Vector2(110,-20),Vector2(101,-21),Vector2(96,-27),Vector2(91,-35),Vector2(86,-45),Vector2(85,-43)]
-const SPORTS_LINK_ROUTE: Array[Vector2] = [Vector2(-105,-20),Vector2(-99,-20),Vector2(-90,-19),Vector2(-75,-18),Vector2(-58,-19),Vector2(-44,-20),Vector2(-38,-28),Vector2(-38,-42),Vector2(-39,-42)]
-const PLAYGROUND_LOOP: Array[Vector2] = [Vector2(-97,20),Vector2(-96,29),Vector2(-97,46),Vector2(-94,60),Vector2(-84,66),Vector2(-69,67),Vector2(-53,65),Vector2(-49,58),Vector2(-35,48),Vector2(-17,43),Vector2(-37,39),Vector2(-52,31),Vector2(-65,27),Vector2(-80,25),Vector2(-92,25),Vector2(-97,20)]
-const NORTH_WOODLAND_LOOP: Array[Vector2] = [Vector2(-39,-42),Vector2(-36,-48),Vector2(-35,-58),Vector2(-33,-68),Vector2(-24,-76),Vector2(-12,-78),Vector2(-4,-73),Vector2(-3,-66),Vector2(-12,-61),Vector2(-23,-57),Vector2(-33,-50),Vector2(-39,-42)]
+const SOUTH_ARRIVAL_ROUTE: Array[Vector2] = [
+	Vector2(0,90),Vector2(-4,80),Vector2(-12,68),Vector2(-18,54),
+	Vector2(-22,42),Vector2(-10,34),Vector2(8,30),Vector2(18,29),
+]
+const WEST_DESTINATION_ROUTE: Array[Vector2] = [
+	Vector2(-110,20),Vector2(-98,18),Vector2(-84,12),Vector2(-68,4),
+	Vector2(-52,-2),Vector2(-36,-8),Vector2(-18,-10),Vector2(-2,-10),
+	Vector2(9.5,-10.5),
+]
+const NORTH_ENTRY_ROUTE: Array[Vector2] = [
+	Vector2(-38,-90),Vector2(-24,-82),Vector2(-8,-74),Vector2(12,-70),
+	Vector2(30,-68),Vector2(47,-68.5),
+]
+const EAST_DECK_ROUTE: Array[Vector2] = [
+	Vector2(110,-20),Vector2(98,-16),Vector2(88,-10),Vector2(82,-4),
+	Vector2(80.5,-1),
+]
+const SPORTS_LINK_ROUTE: Array[Vector2] = [
+	Vector2(-105,-20),Vector2(-92,-22),Vector2(-76,-24),Vector2(-58,-26),
+	Vector2(-40,-28),Vector2(-22,-28),Vector2(15,-27),
+]
+const PLAYGROUND_LOOP: Array[Vector2] = [
+	Vector2(-97,20),Vector2(-96,29),Vector2(-97,46),Vector2(-94,60),
+	Vector2(-84,66),Vector2(-69,67),Vector2(-53,65),Vector2(-40,54),
+	Vector2(-28,44),Vector2(-12,36),Vector2(13,28),Vector2(18,20),
+	Vector2(10,21),Vector2(-5,25),Vector2(-18,28),Vector2(-34,34),
+	Vector2(-50,30),Vector2(-66,28),Vector2(-82,26),Vector2(-92,24),
+	Vector2(-97,20),
+]
+const NORTH_WOODLAND_LOOP: Array[Vector2] = [
+	Vector2(15,-27),Vector2(8,-38),Vector2(4,-50),Vector2(2,-63),
+	Vector2(10,-75),Vector2(20,-80),Vector2(28,-79),Vector2(30,-73),
+	Vector2(20,-70),Vector2(12,-60),Vector2(10,-45),Vector2(15,-27),
+]
 const LAKE_PROMENADE_LOOP: Array[Vector2] = [
-	Vector2(-33,-50),Vector2(-18,-63),Vector2(2,-70),Vector2(24,-72),
-	Vector2(46,-71),Vector2(64,-64),Vector2(79,-55),Vector2(86,-45),
-	Vector2(87,-35),Vector2(93,-28),Vector2(99,-17),Vector2(100,-5),
-	Vector2(94,5),Vector2(86,7),Vector2(94,13),Vector2(101,24),
-	Vector2(101,36),Vector2(96,47),Vector2(86,56),Vector2(73,62),
-	Vector2(58,62),Vector2(45,58),Vector2(36,51),Vector2(30,43),
-	Vector2(27,35),Vector2(21,29),Vector2(14,25),Vector2(8,31),
-	Vector2(-4,40),Vector2(-17,43),Vector2(-29,38),Vector2(-38,29),
-	Vector2(-43,18),Vector2(-44,7),Vector2(-39,-4),Vector2(-31,-11),
-	Vector2(-24,-13),Vector2(-32,-21),Vector2(-40,-30),Vector2(-39,-42),
-	Vector2(-33,-50),
+	Vector2(48,-75),Vector2(38,-73),Vector2(29,-68),Vector2(23,-60),
+	Vector2(20,-51),Vector2(17,-42),Vector2(13,-33),Vector2(10,-22),
+	Vector2(8,-9),Vector2(9,5),Vector2(13,18),Vector2(19,30),
+	Vector2(27,43),Vector2(38,52),Vector2(50,56),Vector2(62,54),
+	Vector2(72,48),Vector2(78,37),Vector2(80,25),Vector2(84,14),
+	Vector2(86,1),Vector2(83,-12),Vector2(85,-24),Vector2(83,-37),
+	Vector2(79,-48),Vector2(79,-57),Vector2(73,-67),Vector2(62,-73),
+	Vector2(48,-75),
 ]
-const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [Vector2(0,90),Vector2(18,84),Vector2(38,78),Vector2(58,75),Vector2(75,72),Vector2(77,74),Vector2(83,75),Vector2(88,72),Vector2(90,67),Vector2(92,61)]
-const SOUTH_BRIDGE_APPROACH: Array[Vector2] = [Vector2(77,74),Vector2(73,69),Vector2(69,63),Vector2(59,60),Vector2(52,60)]
-const PAVILION_LINK_ROUTE: Array[Vector2] = [Vector2(64,-64),Vector2(70,-69),Vector2(76,-73),Vector2(86,-75),Vector2(94,-70),Vector2(98,-68)]
-const VIEWING_DECK_APPROACH_ROUTE: Array[Vector2] = [Vector2(99,-17),Vector2(96,-18),Vector2(92,-18)]
-const LAKE_SHORELINE: Array[Vector2] = [
-	Vector2(-18,-48),Vector2(-8,-56),Vector2(5,-61),Vector2(20,-65),
-	Vector2(37,-64),Vector2(53,-60),Vector2(67,-53),Vector2(76,-44),
-	Vector2(79,-35),Vector2(75,-28),Vector2(82,-24),Vector2(89,-16),
-	Vector2(90,-7),Vector2(84,0),Vector2(75,2),Vector2(69,7),
-	Vector2(80,10),Vector2(88,18),Vector2(90,28),Vector2(86,38),
-	Vector2(77,46),Vector2(65,51),Vector2(52,52),Vector2(41,48),
-	Vector2(34,41),Vector2(31,33),Vector2(26,27),Vector2(21,21),
-	Vector2(15,17),Vector2(9,21),Vector2(2,30),Vector2(-8,35),
-	Vector2(-18,33),Vector2(-27,26),Vector2(-32,17),Vector2(-33,7),
-	Vector2(-29,-1),Vector2(-21,-6),Vector2(-13,-8),Vector2(-10,-13),
-	Vector2(-17,-17),Vector2(-25,-24),Vector2(-30,-33),Vector2(-28,-42),
+const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [
+	Vector2(0,90),Vector2(18,86),Vector2(40,82),Vector2(58,78),
+	Vector2(70,74),Vector2(76,72),Vector2(82,74),Vector2(88,72),
+	Vector2(91,66),Vector2(92,60),
 ]
+const SOUTH_BRIDGE_APPROACH: Array[Vector2] = [
+	Vector2(76,72),Vector2(68,64),Vector2(58,54),Vector2(52,50),
+	Vector2(48,49.5),
+]
+const PAVILION_LINK_ROUTE: Array[Vector2] = [
+	Vector2(73,-69),Vector2(80,-74),Vector2(88,-75),Vector2(98,-68),
+]
+const VIEWING_DECK_APPROACH_ROUTE: Array[Vector2] = [
+	Vector2(80.5,-1),Vector2(83,-6),Vector2(81,-13),
+]
+const LAKE_SHORELINE: Array[Vector2] = LakeGeometry.ANCHORS
+var lake_contour: Array[Vector2] = LakeGeometry.contour()
 const FUTURE_BRIDGE_WEST: Array[Vector2] = [
-	Vector2(-29,-7),Vector2(-13,-9),Vector2(7,-11),Vector2(12,-11),
+	Vector2(12,-19),Vector2(31,-19),Vector2(55,-19),Vector2(83,-19),
 ]
 const FUTURE_BRIDGE_NORTH_EAST: Array[Vector2] = [
-	Vector2(85,-43),Vector2(76,-43),Vector2(64,-40),Vector2(59,-39),
+	Vector2(31,-57),Vector2(42,-57),Vector2(59,-57),Vector2(73,-57),
 ]
 const FUTURE_BRIDGE_SOUTH: Array[Vector2] = [
-	Vector2(52,60),Vector2(52,52),Vector2(50,33),Vector2(49,28),
+	Vector2(22,24),Vector2(39,24),Vector2(60,24),Vector2(79,24),
 ]
 
 # Measured from the imported GLB rather than assuming a centered one-metre mesh.
@@ -285,9 +311,9 @@ func _is_lawn_position(x: float, z: float) -> bool:
 			return false
 
 	# One concept-matched shoreline replaces the three legacy ellipse masks.
-	if Geometry2D.is_point_in_polygon(point, PackedVector2Array(LAKE_SHORELINE)):
+	if Geometry2D.is_point_in_polygon(point, PackedVector2Array(lake_contour)):
 		return false
-	if _near_closed_polyline(point, LAKE_SHORELINE, LAKE_SHORE_GRASS_BUFFER_M):
+	if _near_closed_polyline(point, lake_contour, LAKE_SHORE_GRASS_BUFFER_M):
 		return false
 	if _near_polyline(point, FUTURE_BRIDGE_WEST, 2.6):
 		return false

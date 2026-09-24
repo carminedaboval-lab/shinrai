@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dtb8aypy3aioi"
-path="res://.godot/imported/futuristic_eco_bench_1.jpg-9fa23e6a8520071e0e21dbbfce7449da.ctex"
+path.s3tc="res://.godot/imported/futuristic_eco_bench_1.jpg-9fa23e6a8520071e0e21dbbfce7449da.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "be697c564057a9f1c3498329d6bf00c9"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/furniture/vendor/futuristic_eco_bench/futuristic_eco_bench_1.jpg"
-dest_files=["res://.godot/imported/futuristic_eco_bench_1.jpg-9fa23e6a8520071e0e21dbbfce7449da.ctex"]
+dest_files=["res://.godot/imported/futuristic_eco_bench_1.jpg-9fa23e6a8520071e0e21dbbfce7449da.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

@@ -1,5 +1,7 @@
 extends Node3D
 
+const LakeGeometry = preload("res://scripts/midori_lake_geometry.gd")
+
 @export var start_at_night := true
 @export var time_of_day_toggle_key: Key = KEY_N
 
@@ -9,6 +11,8 @@ const FountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/mido
 const MeadowGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_swaying_meadow_grass_v1.glb")
 const MossyBoulderScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_mossy_boulder_cluster_v1.glb")
 const ViewingDeckScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_lakeside_viewing_deck_v1.glb")
+const MainBridgeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_main_arched_bridge_v1.glb")
+const SecondaryBridgeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_secondary_footbridge_v1.glb")
 const NeonToriiPortalScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/vendor/neon_torii_portal/neon_torii_portal.glb")
 const BroadleafTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/realistic_trees_collection/scene.glb")
 const PineTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/scene.glb")
@@ -32,7 +36,7 @@ const LAYOUT_REFERENCE_SIZE_M := Vector2(220.0, 180.0)
 const PARK_SIZE_M := LAYOUT_REFERENCE_SIZE_M * LAYOUT_SCALE
 const PARK_HALF := Vector2(LAYOUT_REFERENCE_SIZE_M.x * 0.5, LAYOUT_REFERENCE_SIZE_M.y * 0.5)
 const WORLD_PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
-const LAKE_SIZE_M := Vector2(246.0, 234.0)
+const LAKE_SIZE_M := Vector2(128.0, 234.0)
 const SHOW_PLANNING_LABELS := false
 const MATURE_TREE_MIN_SPACING_M := 1.5
 const SKINNY_TREE_MIN_SPACING_M := 1.15
@@ -62,91 +66,80 @@ const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-103,49),Vector2(-98,70),
 ]
 const SOUTH_ARRIVAL_ROUTE: Array[Vector2] = [
-	Vector2(0,90),Vector2(-1,81),Vector2(-7,71),Vector2(-12,58),
-	Vector2(-17,43),
+	Vector2(0,90),Vector2(-4,80),Vector2(-12,68),Vector2(-18,54),
+	Vector2(-22,42),Vector2(-10,34),Vector2(8,30),Vector2(18,29),
 ]
 const WEST_DESTINATION_ROUTE: Array[Vector2] = [
-	Vector2(-110,20),Vector2(-98,20),Vector2(-88,17),Vector2(-77,12),
-	Vector2(-64,6),Vector2(-51,1),Vector2(-39,-4),Vector2(-29,-7),
+	Vector2(-110,20),Vector2(-98,18),Vector2(-84,12),Vector2(-68,4),
+	Vector2(-52,-2),Vector2(-36,-8),Vector2(-18,-10),Vector2(-2,-10),
+	Vector2(9.5,-10.5),
 ]
 const NORTH_ENTRY_ROUTE: Array[Vector2] = [
-	Vector2(-38,-90),Vector2(-38,-79),Vector2(-36,-68),Vector2(-34,-58),
-	Vector2(-33,-50),
+	Vector2(-38,-90),Vector2(-24,-82),Vector2(-8,-74),Vector2(12,-70),
+	Vector2(30,-68),Vector2(47,-68.5),
 ]
 const EAST_DECK_ROUTE: Array[Vector2] = [
-	Vector2(110,-20),Vector2(101,-21),Vector2(96,-27),Vector2(91,-35),
-	Vector2(86,-45),Vector2(85,-43),
+	Vector2(110,-20),Vector2(98,-16),Vector2(88,-10),Vector2(82,-4),
+	Vector2(80.5,-1),
 ]
 const SPORTS_LINK_ROUTE: Array[Vector2] = [
-	Vector2(-105,-20),Vector2(-99,-20),Vector2(-90,-19),Vector2(-75,-18),Vector2(-58,-19),
-	Vector2(-44,-20),Vector2(-38,-28),Vector2(-38,-42),Vector2(-39,-42),
+	Vector2(-105,-20),Vector2(-92,-22),Vector2(-76,-24),Vector2(-58,-26),
+	Vector2(-40,-28),Vector2(-22,-28),Vector2(15,-27),
 ]
 const PLAYGROUND_LOOP: Array[Vector2] = [
 	Vector2(-97,20),Vector2(-96,29),Vector2(-97,46),Vector2(-94,60),
-	Vector2(-84,66),Vector2(-69,67),Vector2(-53,65),Vector2(-49,58),
-	Vector2(-35,48),Vector2(-17,43),Vector2(-37,39),Vector2(-52,31),
-	Vector2(-65,27),Vector2(-80,25),Vector2(-92,25),Vector2(-97,20),
+	Vector2(-84,66),Vector2(-69,67),Vector2(-53,65),Vector2(-40,54),
+	Vector2(-28,44),Vector2(-12,36),Vector2(13,28),Vector2(18,20),
+	Vector2(10,21),Vector2(-5,25),Vector2(-18,28),Vector2(-34,34),
+	Vector2(-50,30),Vector2(-66,28),Vector2(-82,26),Vector2(-92,24),
+	Vector2(-97,20),
 ]
 const NORTH_WOODLAND_LOOP: Array[Vector2] = [
-	Vector2(-39,-42),Vector2(-36,-48),Vector2(-35,-58),Vector2(-33,-68),
-	Vector2(-24,-76),Vector2(-12,-78),Vector2(-4,-73),Vector2(-3,-66),
-	Vector2(-12,-61),Vector2(-23,-57),Vector2(-33,-50),Vector2(-39,-42),
+	Vector2(15,-27),Vector2(8,-38),Vector2(4,-50),Vector2(2,-63),
+	Vector2(10,-75),Vector2(20,-80),Vector2(28,-79),Vector2(30,-73),
+	Vector2(20,-70),Vector2(12,-60),Vector2(10,-45),Vector2(15,-27),
 ]
 const LAKE_PROMENADE_LOOP: Array[Vector2] = [
-	Vector2(-33,-50),Vector2(-18,-63),Vector2(2,-70),Vector2(24,-72),
-	Vector2(46,-71),Vector2(64,-64),Vector2(79,-55),Vector2(86,-45),
-	Vector2(87,-35),Vector2(93,-28),Vector2(99,-17),Vector2(100,-5),
-	Vector2(94,5),Vector2(86,7),Vector2(94,13),Vector2(101,24),
-	Vector2(101,36),Vector2(96,47),Vector2(86,56),Vector2(73,62),
-	Vector2(58,62),Vector2(45,58),Vector2(36,51),Vector2(30,43),
-	Vector2(27,35),Vector2(21,29),Vector2(14,25),Vector2(8,31),
-	Vector2(-4,40),Vector2(-17,43),Vector2(-29,38),Vector2(-38,29),
-	Vector2(-43,18),Vector2(-44,7),Vector2(-39,-4),Vector2(-31,-11),
-	Vector2(-24,-13),Vector2(-32,-21),Vector2(-40,-30),Vector2(-39,-42),
-	Vector2(-33,-50),
+	Vector2(48,-75),Vector2(38,-73),Vector2(29,-68),Vector2(23,-60),
+	Vector2(20,-51),Vector2(17,-42),Vector2(13,-33),Vector2(10,-22),
+	Vector2(8,-9),Vector2(9,5),Vector2(13,18),Vector2(19,30),
+	Vector2(27,43),Vector2(38,52),Vector2(50,56),Vector2(62,54),
+	Vector2(72,48),Vector2(78,37),Vector2(80,25),Vector2(84,14),
+	Vector2(86,1),Vector2(83,-12),Vector2(85,-24),Vector2(83,-37),
+	Vector2(79,-48),Vector2(79,-57),Vector2(73,-67),Vector2(62,-73),
+	Vector2(48,-75),
 ]
 const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [
-	Vector2(0,90),Vector2(18,84),Vector2(38,78),Vector2(58,75),
-	Vector2(75,72),Vector2(77,74),Vector2(83,75),Vector2(88,72),
-	Vector2(90,67),Vector2(92,61),
+	Vector2(0,90),Vector2(18,86),Vector2(40,82),Vector2(58,78),
+	Vector2(70,74),Vector2(76,72),Vector2(82,74),Vector2(88,72),
+	Vector2(91,66),Vector2(92,60),
 ]
 const SOUTH_BRIDGE_APPROACH: Array[Vector2] = [
-	Vector2(77,74),Vector2(73,69),Vector2(69,63),Vector2(59,60),
-	Vector2(52,60),
+	Vector2(76,72),Vector2(68,64),Vector2(58,54),Vector2(52,50),
+	Vector2(48,49.5),
 ]
 const PAVILION_LINK_ROUTE: Array[Vector2] = [
-	Vector2(64,-64),Vector2(70,-69),Vector2(76,-73),Vector2(86,-75),
-	Vector2(94,-70),Vector2(98,-68),
+	Vector2(73,-69),Vector2(80,-74),Vector2(88,-75),Vector2(98,-68),
 ]
 const VIEWING_DECK_APPROACH_ROUTE: Array[Vector2] = [
-	Vector2(99,-17),Vector2(96,-18),Vector2(92,-18),
+	Vector2(80.5,-1),Vector2(83,-6),Vector2(81,-13),
 ]
-const LAKE_SHORELINE: Array[Vector2] = [
-	Vector2(-18,-48),Vector2(-8,-56),Vector2(5,-61),Vector2(20,-65),
-	Vector2(37,-64),Vector2(53,-60),Vector2(67,-53),Vector2(76,-44),
-	Vector2(79,-35),Vector2(75,-28),Vector2(82,-24),Vector2(89,-16),
-	Vector2(90,-7),Vector2(84,0),Vector2(75,2),Vector2(69,7),
-	Vector2(80,10),Vector2(88,18),Vector2(90,28),Vector2(86,38),
-	Vector2(77,46),Vector2(65,51),Vector2(52,52),Vector2(41,48),
-	Vector2(34,41),Vector2(31,33),Vector2(26,27),Vector2(21,21),
-	Vector2(15,17),Vector2(9,21),Vector2(2,30),Vector2(-8,35),
-	Vector2(-18,33),Vector2(-27,26),Vector2(-32,17),Vector2(-33,7),
-	Vector2(-29,-1),Vector2(-21,-6),Vector2(-13,-8),Vector2(-10,-13),
-	Vector2(-17,-17),Vector2(-25,-24),Vector2(-30,-33),Vector2(-28,-42),
-]
+const LAKE_SHORELINE: Array[Vector2] = LakeGeometry.ANCHORS
+var lake_contour: Array[Vector2] = LakeGeometry.contour()
 const FUTURE_BRIDGE_WEST: Array[Vector2] = [
-	Vector2(-29,-7),Vector2(-13,-9),Vector2(7,-11),Vector2(12,-11),
+	Vector2(12,-19),Vector2(31,-19),Vector2(55,-19),Vector2(83,-19),
 ]
 const FUTURE_BRIDGE_NORTH_EAST: Array[Vector2] = [
-	Vector2(85,-43),Vector2(76,-43),Vector2(64,-40),Vector2(59,-39),
+	Vector2(31,-57),Vector2(42,-57),Vector2(59,-57),Vector2(73,-57),
 ]
 const FUTURE_BRIDGE_SOUTH: Array[Vector2] = [
-	Vector2(52,60),Vector2(52,52),Vector2(50,33),Vector2(49,28),
+	Vector2(22,24),Vector2(39,24),Vector2(60,24),Vector2(79,24),
 ]
 
 var mat_grass: StandardMaterial3D
 var mat_path: StandardMaterial3D
-var mat_water: StandardMaterial3D
+var mat_paved_surface: ShaderMaterial
+var mat_water: ShaderMaterial
 var mat_sports: StandardMaterial3D
 var mat_playground: StandardMaterial3D
 var mat_plaza: StandardMaterial3D
@@ -187,6 +180,9 @@ var park_environment: Environment
 var park_directional_light: DirectionalLight3D
 var time_of_day_label: Label
 var is_night_mode := true
+var high_render_quality := true
+var lake_reflection_probe: ReflectionProbe
+var reflection_refresh_queued := false
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
@@ -196,6 +192,8 @@ func _ready() -> void:
 	_create_environment()
 	_prepare_reference_vegetation()
 	_build_park_footprint()
+	_disable_imported_suns()
+	_build_lake_reflection_probe()
 	_validate_approved_lake_promenade()
 	_validate_plaza_centerpiece_clearance()
 	_spawn_scale_review_player()
@@ -205,6 +203,12 @@ func _ready() -> void:
 	])
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F7:
+		high_render_quality = not high_render_quality
+		_apply_render_quality()
+		_update_time_label()
+		get_viewport().set_input_as_handled()
+		return
 	if (
 		event is InputEventKey
 		and event.pressed
@@ -216,8 +220,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _create_materials() -> void:
 	mat_grass = _make_material(Color("#344f38"), 0.98)
-	mat_path = _make_material(Color("#545752"), 0.94)
-	mat_water = _make_material(Color("#315d70"), 0.30, 0.12)
+	mat_path = _make_material(Color("#77786f"), 0.94)
+	mat_water = _make_lake_water_material()
 	mat_sports = _make_material(Color("#536d61"), 0.88)
 	mat_playground = _make_material(Color("#8b6255"), 0.91)
 	mat_plaza = _make_material(Color("#777871"), 0.90)
@@ -229,14 +233,16 @@ func _create_materials() -> void:
 	plaza_emissive_materials.append(mat_plaza_inlay)
 	mat_pavilion = _make_material(Color("#8a755e"), 0.88)
 	mat_boundary = _make_material(Color("#d6d0bf"), 0.82)
-	mat_entry = _make_material(Color("#e3a14c"), 0.74)
+	mat_entry = _make_material(Color("#a99f8a"), 0.88)
 	mat_island = _make_material(Color("#405d3d"), 0.98)
-	mat_shore_bank = _make_material(Color("#4a503e"), 0.98)
+	mat_shore_bank = _make_material(Color("#596c54"), 0.98)
+	mat_shore_bank.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat_shore_promenade = _make_material(Color("#77776d"), 0.94)
 	mat_shore_landing = _make_material(Color("#aaa28d"), 0.88)
 	mat_plan_marker = _make_material(Color(0.20, 0.78, 0.92, 0.55), 0.76, 0.08)
 	mat_path_light_streak = _make_path_light_streak_material()
 	modular_path_shader = _make_modular_path_shader()
+	mat_paved_surface = _make_continuous_paving_material()
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -250,16 +256,17 @@ func _make_path_light_streak_material() -> ShaderMaterial:
 	shader.code = """
 shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never;
+uniform float night_strength = 1.0;
 
 void fragment() {
 	float across = abs(UV.x - 0.5) * 2.0;
 	float along = abs(UV.y - 0.5) * 2.0;
 	float side_fade = 1.0 - smoothstep(0.28, 1.0, across);
 	float end_fade = 1.0 - smoothstep(0.58, 1.0, along);
-	float alpha = side_fade * end_fade * 0.76;
+	float alpha = side_fade * end_fade * 0.76 * night_strength;
 	vec3 blue = vec3(0.20, 0.76, 1.0);
 	ALBEDO = blue;
-	EMISSION = blue * 2.0;
+	EMISSION = blue * 2.0 * night_strength;
 	ALPHA = alpha;
 }
 """
@@ -288,7 +295,7 @@ void fragment() {
 	float cyan_bias = min(base.g, base.b) - base.r;
 	float cyan_mask = smoothstep(0.08, 0.26, cyan_bias)
 		* smoothstep(0.16, 0.48, high_channel - low_channel);
-	ALBEDO = base;
+	ALBEDO = base * mix(vec3(0.62, 0.59, 0.53), vec3(0.55), cyan_mask);
 	NORMAL_MAP = texture(source_normal, UV).rgb;
 	NORMAL_MAP_DEPTH = 0.62;
 	AO = orm.r;
@@ -304,17 +311,24 @@ func _create_environment() -> void:
 	var world_environment := WorldEnvironment.new()
 	world_environment.name = "ParkReviewEnvironment"
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
+	environment.background_mode = Environment.BG_SKY
+	var sky := Sky.new()
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.sky_top_color = Color("#547b9e")
+	sky_material.sky_horizon_color = Color("#bacdd5")
+	sky.sky_material = sky_material
+	environment.sky = sky
+	environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.adjustment_enabled = true
 	environment.fog_enabled = true
-	environment.fog_density = 0.0105
-	environment.fog_sky_affect = 0.72
+	environment.fog_density = 0.00045
+	environment.fog_sky_affect = 0.25
 	if RenderingServer.get_current_rendering_method() == "forward_plus":
-		environment.volumetric_fog_enabled = true
-		environment.volumetric_fog_density = 0.012
-		environment.volumetric_fog_length = 100.0
+		environment.volumetric_fog_enabled = false
+		environment.volumetric_fog_density = 0.0015
+		environment.volumetric_fog_length = 90.0
 		environment.volumetric_fog_albedo = Color("#263b54")
 		environment.volumetric_fog_ambient_inject = 0.08
 		environment.volumetric_fog_sky_affect = 0.65
@@ -323,8 +337,18 @@ func _create_environment() -> void:
 	add_child(world_environment)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-48.0, -32.0, 0.0)
+	sun.rotation_degrees = Vector3(-34.0, -38.0, 0.0)
 	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_split_1 = 0.08
+	sun.directional_shadow_split_2 = 0.22
+	sun.directional_shadow_split_3 = 0.50
+	sun.directional_shadow_blend_splits = true
+	sun.directional_shadow_max_distance = 150.0
+	sun.directional_shadow_fade_start = 0.85
+	sun.shadow_bias = 0.05
+	sun.shadow_normal_bias = 1.0
+	sun.shadow_blur = 1.2
 	park_directional_light = sun
 	add_child(sun)
 	_apply_time_of_day()
@@ -332,41 +356,41 @@ func _create_environment() -> void:
 func _apply_time_of_day() -> void:
 	if park_environment == null or park_directional_light == null:
 		return
+	var sky_material := park_environment.sky.sky_material as ProceduralSkyMaterial
+	park_environment.background_energy_multiplier = 0.5 if is_night_mode else 0.75
+	park_environment.adjustment_brightness = 1.0
+	park_environment.adjustment_contrast = 1.04
+	park_environment.adjustment_saturation = 0.98
+	park_environment.fog_sky_affect = 0.25
 	if is_night_mode:
-		park_environment.background_color = Color("#050912")
-		park_environment.ambient_light_color = Color("#1b2d49")
-		park_environment.ambient_light_energy = 0.12
-		park_environment.adjustment_brightness = 0.46
-		park_environment.adjustment_contrast = 1.15
-		park_environment.adjustment_saturation = 0.86
-		park_environment.fog_light_color = Color("#101b2e")
-		park_environment.fog_light_energy = 0.06
-		park_environment.fog_density = 0.035
-		park_environment.fog_sky_affect = 1.0
-		if RenderingServer.get_current_rendering_method() == "forward_plus":
-			park_environment.volumetric_fog_density = 0.018
+		sky_material.sky_top_color = Color("#172845")
+		sky_material.sky_horizon_color = Color("#576b88")
+		sky_material.ground_bottom_color = Color("#111b25")
+		sky_material.ground_horizon_color = Color("#3e506a")
+		park_environment.ambient_light_color = Color("#61758f")
+		park_environment.ambient_light_energy = 0.75
+		park_environment.fog_light_color = Color("#344964")
+		park_environment.fog_light_energy = 0.25
+		park_environment.fog_density = 0.0012
 		park_directional_light.name = "ParkNightMoon"
-		park_directional_light.light_color = Color("#7899c8")
-		park_directional_light.light_energy = 0.12
+		park_directional_light.light_color = Color("#a0b8df")
+		park_directional_light.light_energy = 0.45
 		mat_path.albedo_color = Color("#171c22")
 		mat_boundary.albedo_color = Color("#202832")
 	else:
-		park_environment.background_color = Color("#65727a")
-		park_environment.ambient_light_color = Color("#a8b3b7")
-		park_environment.ambient_light_energy = 0.30
-		park_environment.adjustment_brightness = 0.72
-		park_environment.adjustment_contrast = 1.08
-		park_environment.adjustment_saturation = 0.96
-		park_environment.fog_light_color = Color("#778489")
+		sky_material.sky_top_color = Color("#426b96")
+		sky_material.sky_horizon_color = Color("#d1b9a1")
+		sky_material.ground_bottom_color = Color("#26392f")
+		sky_material.ground_horizon_color = Color("#979788")
+		park_environment.ambient_light_color = Color("#91a5bd")
+		park_environment.ambient_light_energy = 0.32
+		park_environment.fog_light_color = Color("#a6b4bb")
 		park_environment.fog_light_energy = 0.38
-		park_environment.fog_density = 0.0105
-		park_environment.fog_sky_affect = 0.72
-		if RenderingServer.get_current_rendering_method() == "forward_plus":
-			park_environment.volumetric_fog_density = 0.004
+		park_environment.fog_density = 0.00045
 		park_directional_light.name = "ParkReviewSun"
-		park_directional_light.light_color = Color("#fff0d1")
-		park_directional_light.light_energy = 0.68
-		mat_path.albedo_color = Color("#545752")
+		park_directional_light.light_color = Color("#ffe4bd")
+		park_directional_light.light_energy = 1.15
+		mat_path.albedo_color = Color("#77786f")
 		mat_boundary.albedo_color = Color("#d6d0bf")
 	for material: StandardMaterial3D in lamp_emissive_materials:
 		material.emission_energy_multiplier = 1.85 if is_night_mode else 0.0
@@ -374,14 +398,88 @@ func _apply_time_of_day() -> void:
 		material.emission_energy_multiplier = 0.72 if is_night_mode else 0.0
 	for material: ShaderMaterial in modular_path_emissive_materials:
 		material.set_shader_parameter("night_emission", 1.0 if is_night_mode else 0.0)
+	mat_path_light_streak.set_shader_parameter("night_strength", 1.0 if is_night_mode else 0.0)
 	var ground_service := get_node_or_null("/root/MidoriGroundTexture")
 	if ground_service != null and ground_service.has_method("set_night_mode"):
 		ground_service.call("set_night_mode", is_night_mode)
 	for node: Node in get_tree().get_nodes_in_group("midori_night_effect"):
 		if node is Node3D:
 			(node as Node3D).visible = is_night_mode
+	_apply_render_quality()
+	_update_time_label()
+	_queue_reflection_refresh()
+
+func _update_time_label() -> void:
 	if time_of_day_label != null:
-		time_of_day_label.text = "TIME: %s  |  N: toggle day/night" % ("NIGHT" if is_night_mode else "DAY")
+		time_of_day_label.text = "N: %s  |  F7: %s graphics  |  Target: 60 FPS" % [
+			"NIGHT" if is_night_mode else "DAY", "HIGH" if high_render_quality else "BALANCED"]
+
+func _disable_imported_suns() -> void:
+	# Some supplied models include authoring lights. Directional lights affect
+	# the entire park, not just their parent mesh; keep only our controlled sun.
+	for light: Node in find_children("*", "DirectionalLight3D", true, false):
+		if light != park_directional_light:
+			(light as DirectionalLight3D).hide()
+			(light as DirectionalLight3D).shadow_enabled = false
+
+func _apply_render_quality() -> void:
+	if park_environment == null:
+		return
+	var forward_plus := RenderingServer.get_current_rendering_method() == "forward_plus"
+	if forward_plus:
+		var viewport := get_viewport()
+		# Keep TAA, foliage shadows, and the lake reflection while reducing the
+		# expensive internal 3D pixel count. The UI stays at the window resolution.
+		viewport.msaa_3d = Viewport.MSAA_DISABLED
+		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+		viewport.scaling_3d_scale = 0.75 if high_render_quality else 0.70
+	park_environment.ssao_enabled = forward_plus
+	park_environment.ssao_radius = 0.8
+	park_environment.ssao_intensity = 0.6
+	park_environment.ssao_detail = 0.4
+	park_environment.ssao_light_affect = 0.0
+	park_environment.ssil_enabled = false
+	park_environment.ssr_enabled = forward_plus and high_render_quality
+	park_environment.ssr_max_steps = 48
+	park_environment.ssr_depth_tolerance = 0.2
+	park_environment.glow_enabled = forward_plus
+	park_environment.glow_intensity = 0.35
+	park_environment.glow_bloom = 0.0
+	park_environment.glow_hdr_threshold = 1.4
+	park_environment.volumetric_fog_enabled = forward_plus and high_render_quality and is_night_mode
+	park_directional_light.directional_shadow_max_distance = 150.0 if high_render_quality else 110.0
+
+func _build_lake_reflection_probe() -> void:
+	if RenderingServer.get_current_rendering_method() != "forward_plus":
+		return
+	# A separate render layer prevents the lake reflecting its own surface.
+	var water := find_child("LakeWaterSurface", true, false) as MeshInstance3D
+	if water != null:
+		water.layers = 2
+		water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lake_reflection_probe = ReflectionProbe.new()
+	lake_reflection_probe.name = "LakeCachedReflection"
+	lake_reflection_probe.position = Vector3(90.0, 8.0, -20.0)
+	lake_reflection_probe.size = Vector3(170.0, 40.0, 270.0)
+	lake_reflection_probe.max_distance = 320.0
+	lake_reflection_probe.cull_mask = 1
+	lake_reflection_probe.reflection_mask = 2
+	lake_reflection_probe.ambient_mode = ReflectionProbe.AMBIENT_DISABLED
+	lake_reflection_probe.mesh_lod_threshold = 3.0
+	lake_reflection_probe.enable_shadows = true
+	lake_reflection_probe.update_mode = ReflectionProbe.UPDATE_ONCE
+	add_child(lake_reflection_probe)
+
+func _queue_reflection_refresh() -> void:
+	if lake_reflection_probe == null or reflection_refresh_queued:
+		return
+	reflection_refresh_queued = true
+	# Let sky/light changes settle, then invalidate the cached capture once.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if is_instance_valid(lake_reflection_probe):
+		lake_reflection_probe.position.x = 90.001 if is_night_mode else 90.0
+	reflection_refresh_queued = false
 
 func _build_park_footprint() -> void:
 	var root := Node3D.new()
@@ -396,7 +494,7 @@ func _build_park_footprint() -> void:
 	_build_boundary(root)
 	_build_paths(root)
 	_build_curved_promenades(root)
-	_build_modular_final_path(root)
+	# Continuous paving replaces disconnected decorative modules.
 	_build_zone_placeholders(root)
 	_build_artwork_assets(root)
 	_build_prop_placement_plan(root)
@@ -442,6 +540,20 @@ func _build_paths(parent: Node3D) -> void:
 	_add_path_strip_2d(root, "PlazaToSouthBridgeLanding", SOUTH_BRIDGE_APPROACH, 3.2, 0.111)
 	_add_path_strip_2d(root, "PavilionGardenLink", PAVILION_LINK_ROUTE, 2.8, 0.110)
 	_add_path_strip_2d(root, "EastPromenadeToViewingDeck", VIEWING_DECK_APPROACH_ROUTE, 3.0, 0.112)
+	# Short paved branches join each supplied bridge to the dry promenade.
+	var bridge_links: Array[Dictionary] = [
+		{"name":"MainWestBridgeLink", "points":[Vector2(10,-22),Vector2(12,-19)]},
+		{"name":"MainEastBridgeLink", "points":[Vector2(83,-19),Vector2(85,-24)]},
+		{"name":"NorthWestBridgeLink", "points":[Vector2(23,-60),Vector2(31,-57)]},
+		{"name":"NorthEastBridgeLink", "points":[Vector2(73,-57),Vector2(79,-57)]},
+		{"name":"SouthWestBridgeLink", "points":[Vector2(19,30),Vector2(22,24)]},
+		{"name":"SouthEastBridgeLink", "points":[Vector2(79,24),Vector2(80,25)]},
+	]
+	for link: Dictionary in bridge_links:
+		var points: Array[Vector2] = []
+		for point: Vector2 in link["points"]:
+			points.append(point)
+		_add_path_strip_2d(root, String(link["name"]), points, 3.2, 0.116)
 
 func _add_path_strip_2d(
 	parent: Node3D,
@@ -450,10 +562,20 @@ func _add_path_strip_2d(
 	width: float,
 	y_value: float
 ) -> void:
+	# Render-only cleanup keeps vegetation placement/clearance inputs untouched.
+	var route: Array[Vector2] = points_2d.duplicate()
+	if node_name == "SouthEntranceToPlaza":
+		route[0] = Vector2(-1, 81)
+		route[1] = Vector2(12, 80)
+	# Remove tiny return segments at approach endpoints that form hooked joins.
+	if not route[0].is_equal_approx(route[-1]):
+		while route.size() > 2 and route[-2].distance_to(route[-1]) < 3.0:
+			route.remove_at(route.size() - 2)
 	var points_3d: Array[Vector3] = []
-	for point: Vector2 in points_2d:
+	var curved := _rounded_contour(route, route[0].is_equal_approx(route[-1]), 4.0)
+	for point: Vector2 in curved:
 		points_3d.append(Vector3(point.x, y_value, point.y))
-	_add_path_strip(parent, node_name, points_3d, width, mat_path)
+	_add_path_strip(parent, node_name, points_3d, width, mat_paved_surface)
 
 func _build_curved_promenades(parent: Node3D) -> void:
 	var root := Node3D.new()
@@ -466,22 +588,31 @@ func _add_path_strip(parent: Node3D, node_name: String, points: Array[Vector3], 
 		return
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Shared cross-sections keep adjacent segments watertight at every bend.
+	var sides: Array[Vector3] = []
+	var closed := points[0].is_equal_approx(points[-1])
+	for i: int in range(points.size()):
+		var before := points[maxi(i - 1, 0)]
+		var after := points[mini(i + 1, points.size() - 1)]
+		if closed and (i == 0 or i == points.size() - 1):
+			before = points[-2]
+			after = points[1]
+		var direction := (after - before).normalized()
+		sides.append(Vector3(-direction.z, 0.0, direction.x) * width * 0.5)
 	var travelled := 0.0
-	for index: int in range(points.size() - 1):
-		var p0 := points[index]
-		var p1 := points[index + 1]
-		var direction := (p1 - p0).normalized()
-		var side := Vector3(-direction.z, 0.0, direction.x) * width * 0.5
-		var segment_length := p0.distance_to(p1)
-		var u0 := travelled / 4.0
-		var u1 := (travelled + segment_length) / 4.0
-		_add_path_vertex(surface, p0 - side, Vector2(u0, 0.0))
-		_add_path_vertex(surface, p1 + side, Vector2(u1, 1.0))
-		_add_path_vertex(surface, p1 - side, Vector2(u1, 0.0))
-		_add_path_vertex(surface, p0 - side, Vector2(u0, 0.0))
-		_add_path_vertex(surface, p0 + side, Vector2(u0, 1.0))
-		_add_path_vertex(surface, p1 + side, Vector2(u1, 1.0))
-		travelled += segment_length
+	for i: int in range(points.size() - 1):
+		var length := points[i].distance_to(points[i + 1])
+		var a := points[i] - sides[i]
+		var b := points[i] + sides[i]
+		var c := points[i + 1] - sides[i + 1]
+		var d := points[i + 1] + sides[i + 1]
+		_add_path_vertex(surface, a, Vector2(travelled, 0))
+		_add_path_vertex(surface, c, Vector2(travelled + length, 0))
+		_add_path_vertex(surface, d, Vector2(travelled + length, 1))
+		_add_path_vertex(surface, a, Vector2(travelled, 0))
+		_add_path_vertex(surface, d, Vector2(travelled + length, 1))
+		_add_path_vertex(surface, b, Vector2(travelled, 1))
+		travelled += length
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = node_name
 	mesh_instance.mesh = surface.commit()
@@ -489,6 +620,8 @@ func _add_path_strip(parent: Node3D, node_name: String, points: Array[Vector3], 
 	parent.add_child(mesh_instance)
 
 func _add_path_vertex(surface: SurfaceTool, position_value: Vector3, uv_value: Vector2) -> void:
+	position_value.x = clampf(position_value.x, -PARK_HALF.x, PARK_HALF.x)
+	position_value.z = clampf(position_value.z, -PARK_HALF.y, PARK_HALF.y)
 	surface.set_normal(Vector3.UP)
 	surface.set_uv(uv_value)
 	surface.add_vertex(position_value)
@@ -605,67 +738,49 @@ func _add_modular_path_piece(
 	return piece
 
 func _build_zone_placeholders(parent: Node3D) -> void:
-	# The concept artwork has one connected lake with alternating coves, narrow
-	# necks and peninsulas. This single triangulated shoreline replaces the old
-	# three-circle blockout while retaining the same mainland scale.
+	# Artwork-led lake silhouette: one broad, continuous water body with a
+	# tapered north inlet, asymmetric coves and a softer southern shore.
 	var lake_root := Node3D.new()
-	lake_root.name = "ConceptMatchedIrregularLake_246x234m"
+	lake_root.name = "ArtworkContinuousLake_128x234m"
 	parent.add_child(lake_root)
-	_add_polygon_zone(lake_root, "LakeWaterSurface", LAKE_SHORELINE, 0.102, mat_water)
-	# The artwork does not use a uniform bright curb. Most of the edge is a soft,
-	# planted bank, with only a few deliberate promenade and bridge-landing runs.
-	var promenade_edges: Array[int] = [2,3,4,5,10,11,17,18,19,30,31,32]
-	var landing_edges: Array[int] = [7,22,38]
-	var natural_edges: Array[int] = []
-	for edge_index: int in range(LAKE_SHORELINE.size()):
-		if edge_index not in promenade_edges and edge_index not in landing_edges:
-			natural_edges.append(edge_index)
-	_add_shoreline_ribbon(
-		lake_root, "LakeSoftPlantedBank", LAKE_SHORELINE,
-		1.45, 0.116, mat_shore_bank, natural_edges
-	)
-	_add_shoreline_ribbon(
-		lake_root, "LakeStonePromenadeSections", LAKE_SHORELINE,
-		1.35, 0.118, mat_shore_promenade, promenade_edges
-	)
-	_add_shoreline_ribbon(
-		lake_root, "LakeFutureBridgeLandings", LAKE_SHORELINE,
-		1.80, 0.120, mat_shore_landing, landing_edges
-	)
+	_add_polygon_zone(lake_root, "LakeWaterSurface", lake_contour, 0.102, mat_water, 0.0)
+	var bank_contour := lake_contour
+	_add_shoreline_ribbon(lake_root, "ContinuousNaturalBank", bank_contour,
+		1.15, 0.116, mat_shore_bank)
 
 	# Irregular islands reproduce the layered silhouettes in the aerial artwork.
 	# They sit over the single water surface, so no artificial circular seams are
 	# visible between lake lobes.
 	_add_lake_island(lake_root, "LakeCentralIsland", [
-		Vector2(5,-13),Vector2(9,-18),Vector2(17,-20),Vector2(24,-17),
-		Vector2(27,-11),Vector2(24,-5),Vector2(17,-2),Vector2(10,-5),
+		Vector2(36,-6),Vector2(42,-10),Vector2(50,-8),Vector2(52,-2),
+		Vector2(48,3),Vector2(40,2),Vector2(34,-1),
 	], 0.148)
 	_add_lake_island(lake_root, "LakeNorthIsland", [
-		Vector2(49,-40),Vector2(52,-44),Vector2(58,-45),Vector2(62,-41),
-		Vector2(61,-36),Vector2(56,-33),Vector2(51,-35),
+		Vector2(46,-50),Vector2(50,-54),Vector2(56,-52),Vector2(57,-47),
+		Vector2(53,-44),Vector2(47,-45),
 	], 0.149)
 	_add_lake_island(lake_root, "LakeSouthIsland", [
-		Vector2(41,23),Vector2(44,19),Vector2(51,18),Vector2(56,22),
-		Vector2(55,27),Vector2(49,30),Vector2(43,28),
+		Vector2(48,30),Vector2(52,27),Vector2(57,28),Vector2(58,33),
+		Vector2(54,36),Vector2(49,35),
 	], 0.149)
 	_add_lake_island(lake_root, "LakeEastIslet", [
-		Vector2(69,11),Vector2(72,7),Vector2(77,8),Vector2(80,13),
-		Vector2(77,17),Vector2(72,17),
+		Vector2(60,-4),Vector2(64,-7),Vector2(68,-4),Vector2(67,1),
+		Vector2(63,2),Vector2(59,0),
 	], 0.150)
 	_add_lake_island(lake_root, "LakeWestIslet", [
-		Vector2(-10,8),Vector2(-7,4),Vector2(-2,5),Vector2(1,9),
-		Vector2(-2,13),Vector2(-7,13),
+		Vector2(22,-6),Vector2(26,-9),Vector2(30,-7),Vector2(30,-2),
+		Vector2(26,0),Vector2(22,-2),
 	], 0.150)
 	_add_lake_island(lake_root, "LakeNorthWestIslet", [
-		Vector2(5,-39),Vector2(9,-43),Vector2(15,-42),Vector2(18,-37),
-		Vector2(15,-33),Vector2(9,-34),
+		Vector2(36,-48),Vector2(40,-51),Vector2(44,-49),Vector2(43,-45),
+		Vector2(39,-44),
 	], 0.151)
 	_add_lake_island(lake_root, "LakeSouthEastIslet", [
-		Vector2(65,33),Vector2(69,29),Vector2(75,30),Vector2(78,35),
-		Vector2(74,39),Vector2(68,38),
+		Vector2(58,36),Vector2(61,34),Vector2(64,36),Vector2(63,39),
+		Vector2(60,40),
 	], 0.151)
 	_build_future_bridge_sockets(lake_root)
-	_add_zone_label(parent, "IRREGULAR TWO-BASIN LAKE | 7 ISLANDS", Vector3(28.0, 1.0, -10.0), Color("#d4eff7"))
+	_add_zone_label(parent, "ARTWORK LAKE | 7 ISLANDS", Vector3(47.4, 1.0, -7.8), Color("#d4eff7"))
 
 	_add_zone_box(parent, "SportsZone", Vector3(-70.0, 0.105, -43.0), Vector2(55.0, 36.0), mat_sports)
 	_add_zone_label(parent, "SPORTS 55 x 36 m", Vector3(-70.0, 1.0, -43.0), Color.WHITE)
@@ -684,13 +799,10 @@ func _build_landmark_plaza(parent: Node3D) -> void:
 	root.name = "SoutheastLandmarkPlaza_NeonToriiInstalled"
 	parent.add_child(root)
 
-	# The rectangular grounding court receives the three approach paths while
-	# concentric stone terraces create the strong circular landmark silhouette
-	# visible in the concept artwork. The innermost 12 m world-space cap remains
-	# empty so the supplied Torii can sit on a clean, correctly scaled foundation.
-	_add_zone_box(
+	# Rounded apron encloses the existing furniture and joins the curved approaches.
+	_add_cylinder_zone(
 		root, "PlazaGroundingCourt",
-		Vector3(PLAZA_CENTER.x, 0.107, PLAZA_CENTER.y), Vector2(34.0, 26.0),
+		Vector3(PLAZA_CENTER.x, 0.107, PLAZA_CENTER.y), Vector2(15.5, 15.5),
 		mat_plaza_border
 	)
 	_add_cylinder_zone(
@@ -849,7 +961,7 @@ func _build_mossy_shoreline_cover(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "MossyShorelineCover_9"
 	parent.add_child(root)
-	var shore_indices: Array[int] = [0,8,13,15,20,25,28,35,42]
+	var shore_indices: Array[int] = [0,3,6,9,12,15,18,22,26]
 	for index: int in range(shore_indices.size()):
 		var shore_index := shore_indices[index]
 		var shore_point := LAKE_SHORELINE[shore_index]
@@ -875,7 +987,7 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "WatersideVegetation_36Reed_9DenseGrass"
 	parent.add_child(root)
-	var natural_shore_indices: Array[int] = [0,6,8,9,12,13,14,15,20,21,24,25,26,27,28,33,35,42]
+	var natural_shore_indices: Array[int] = [0,1,3,4,6,7,9,10,12,13,15,16,18,19,21,22,24,26]
 	var edge_points: Array[Vector3] = []
 	var edge_tangents: Array[Vector2] = []
 	for shore_index: int in natural_shore_indices:
@@ -1027,13 +1139,13 @@ func _build_scale_ticks(parent: Node3D) -> void:
 
 func _prepare_reference_vegetation() -> void:
 	var broadleaf_specs: Array = [
-		["Tree EZTree0.Large", 7.8], ["Tree EZTree0.Medium010", 6.4],
-		["Tree EZTree0.Medium011", 6.1], ["Tree EZTree1.Large001", 7.4],
-		["Tree EZTree1.Medium002", 6.0],
+		["Tree EZTree0.Large", 10.1], ["Tree EZTree0.Medium010", 8.3],
+		["Tree EZTree0.Medium011", 7.9], ["Tree EZTree1.Large001", 9.6],
+		["Tree EZTree1.Medium002", 7.8],
 	]
 	var pine_specs: Array = [
-		["Pine_big_1_LOD1", 9.0], ["Pine_large_2_LOD1", 7.6],
-		["Pine_medium_3_LOD1", 6.2],
+		["Pine_big_1_LOD1", 11.7], ["Pine_large_2_LOD1", 9.9],
+		["Pine_medium_3_LOD1", 8.1],
 	]
 	var pine_sapling_specs: Array = [
 		["Pine_sapling_1_LOD1", 3.0], ["Pine_sapling_2_LOD1", 2.7],
@@ -1545,12 +1657,12 @@ func _is_near_destination_path(point: Vector2, padding: float) -> bool:
 	return false
 
 func _is_point_in_or_near_lake(point: Vector2, padding: float) -> bool:
-	if Geometry2D.is_point_in_polygon(point, PackedVector2Array(LAKE_SHORELINE)):
+	if Geometry2D.is_point_in_polygon(point, PackedVector2Array(lake_contour)):
 		return true
 	var shoreline_clearance := maxf(padding, LAKE_TREE_BUFFER_M)
-	for index: int in range(LAKE_SHORELINE.size()):
-		var following := (index + 1) % LAKE_SHORELINE.size()
-		if _distance_to_park_segment(point, LAKE_SHORELINE[index], LAKE_SHORELINE[following]) < shoreline_clearance:
+	for index: int in range(lake_contour.size()):
+		var following := (index + 1) % lake_contour.size()
+		if _distance_to_park_segment(point, lake_contour[index], lake_contour[following]) < shoreline_clearance:
 			return true
 	return false
 
@@ -1599,6 +1711,16 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		Vector4(-86,17,11,9),Vector4(-63,18,10,8),
 		Vector4(-28,61,11,9),Vector4(23,63,11,9),
 		Vector4(-18,-66,11,9),Vector4(4,-69,10,8),
+		Vector4(-82,-50,12,14),Vector4(-70,-35,12,14),
+		Vector4(-30,-51,13,16),Vector4(-28,-18,12,15),
+		Vector4(-27,13,12,15),Vector4(-15,37,12,14),
+		Vector4(0,-34,11,12),Vector4(3,36,11,12),
+		Vector4(91,-30,11,12),Vector4(91,45,11,12),
+		Vector4(-91,-3,13,15),Vector4(-78,47,13,15),
+		Vector4(-53,-47,12,14),Vector4(-43,40,13,15),
+		Vector4(-18,-5,15,19),Vector4(-8,18,13,16),
+		Vector4(1,-53,12,14),Vector4(5,53,12,14),
+		Vector4(94,2,13,15),Vector4(101,69,12,14),
 	]
 	for cluster_index: int in range(mainland_infill_clusters.size()):
 		var cluster := mainland_infill_clusters[cluster_index]
@@ -1642,9 +1764,10 @@ func _build_reference_canopy(parent: Node3D) -> void:
 
 	# Each green island has a small vertical silhouette in the screenshot.
 	var island_trees: Array[Vector4] = [
-		Vector4(21,-13,0.86,0),Vector4(26,-10,0.74,1),Vector4(57,-37,0.72,1),
-		Vector4(53,-35,0.68,0),Vector4(-10,19,0.72,0),Vector4(3,25,0.70,1),
-		Vector4(46,19,0.78,0),Vector4(68,-4,0.76,1),
+		Vector4(43,-3,1.14,0),Vector4(48,-2,0.96,1), # central island
+		Vector4(52,-49,1.02,1),Vector4(40,-48,0.94,0), # north pair
+		Vector4(53,32,1.05,0),Vector4(61,37,0.86,1), # south pair
+		Vector4(63,-2,0.88,1),Vector4(26,-4,0.94,0), # east and west islets
 	]
 	for index: int in range(island_trees.size()):
 		var item := island_trees[index]
@@ -1659,6 +1782,19 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		)
 		occupied_tree_positions.append(Vector2(island_position.x, island_position.z))
 		occupied_tree_is_skinny.append(is_skinny_tree)
+	var island_understory: Array[Vector2] = [
+		Vector2(38,-3),Vector2(46,-6),Vector2(48,0),
+		Vector2(49,-49),Vector2(54,-47),Vector2(39,-47),
+		Vector2(51,34),Vector2(55,31),Vector2(61,38),
+		Vector2(24,-5),Vector2(27,-3),Vector2(62,-3),Vector2(65,-1),
+	]
+	for index: int in range(island_understory.size()):
+		var point := island_understory[index]
+		_add_reference_plant(
+			canopy_root, forest_floor_bush_prototypes,
+			Vector3(point.x, 0.17, point.y), 0.8 + float(index % 3) * 0.1,
+			900 + index, "IslandUnderstory"
+		)
 
 	var understory_root := Node3D.new()
 	understory_root.name = "ArtworkLilacUnderstory"
@@ -1846,11 +1982,17 @@ func _add_authored_mainland_micro_grove(
 					continue
 				position_value = relocation["position"]
 			else:
-				push_warning("Midori micro-grove point entered a reserved route: %s" % position_value)
-				continue
+				var relocation := _find_clear_micro_grove_position(position_value, serial_offset + point_index)
+				if not relocation["found"]:
+					push_warning("Midori micro-grove point could not find clear ground: %s" % position_value)
+					continue
+				position_value = relocation["position"]
 		if not _is_tree_spaced(position_value, MATURE_TREE_MIN_SPACING_M):
-			push_warning("Midori micro-grove point is below 3 m trunk spacing: %s" % position_value)
-			continue
+			var relocation := _find_clear_micro_grove_position(position_value, serial_offset + point_index)
+			if not relocation["found"]:
+				push_warning("Midori micro-grove point is below 3 m trunk spacing: %s" % position_value)
+				continue
+			position_value = relocation["position"]
 		var is_skinny_tree := point_index == pine_index
 		var prototypes: Array[Node3D] = pine_prototypes if is_skinny_tree else broadleaf_prototypes
 		var serial := serial_offset * 100 + point_index
@@ -1861,6 +2003,16 @@ func _add_authored_mainland_micro_grove(
 		)
 		occupied_tree_positions.append(Vector2(position_value.x, position_value.z))
 		occupied_tree_is_skinny.append(is_skinny_tree)
+
+func _find_clear_micro_grove_position(original: Vector3, serial: int, clearance: float = 3.2) -> Dictionary:
+	# Keep authored groves near their planned zone while clearing paths and trunks.
+	for radius_value: float in [4.0, 7.0, 10.0, 13.0, 16.0, 20.0]:
+		for step: int in range(16):
+			var angle := TAU * float(posmod(step * 5 + serial, 16)) / 16.0
+			var candidate := original + Vector3(cos(angle) * radius_value, 0.0, sin(angle) * radius_value)
+			if _is_vegetation_clear(candidate, clearance) and _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M):
+				return {"found": true, "position": candidate}
+	return {"found": false, "position": original}
 
 func _find_lakeside_tree_position(original: Vector3, serial: int) -> Dictionary:
 	var point := Vector2(original.x, original.z)
@@ -2076,9 +2228,15 @@ func _build_japanese_maple_pass(parent: Node3D) -> void:
 	]
 	var maple_position := Vector3.ZERO
 	var found := false
-	for candidate: Vector3 in candidates:
+	for candidate_index: int in range(candidates.size()):
+		var candidate: Vector3 = candidates[candidate_index]
 		if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M):
 			maple_position = candidate
+			found = true
+			break
+		var relocation := _find_clear_micro_grove_position(candidate, 850 + candidate_index, 3.6)
+		if relocation["found"]:
+			maple_position = relocation["position"]
 			found = true
 			break
 	if not found:
@@ -2618,10 +2776,15 @@ func _add_polygon_zone(
 	node_name: String,
 	points: Array[Vector2],
 	y_value: float,
-	material: Material
+	material: Material,
+	corner_radius: float = 2.5,
+	corner_fraction: float = 0.25
 ) -> void:
 	if points.size() < 3:
 		return
+	if corner_radius > 0.0:
+		points = _rounded_contour(points, true, corner_radius, corner_fraction)
+		points.remove_at(points.size() - 1)
 	var packed_points := PackedVector2Array(points)
 	var triangle_indices := Geometry2D.triangulate_polygon(packed_points)
 	if triangle_indices.is_empty():
@@ -2647,43 +2810,74 @@ func _add_lake_island(
 	y_value: float
 ) -> void:
 	_add_polygon_zone(parent, node_name, points, y_value, mat_island)
+	points = _rounded_contour(points, true, 2.5)
+	points.remove_at(points.size() - 1)
 	_add_shoreline_ribbon(
 		parent, "%s_SoftBank" % node_name, points,
 		0.42, y_value + 0.004, mat_shore_bank
 	)
 
 func _build_future_bridge_sockets(parent: Node3D) -> void:
-	var socket_root := Node3D.new()
-	socket_root.name = "FutureBridgeSockets_3_Empty"
-	parent.add_child(socket_root)
-	var corridors: Array[Dictionary] = [
-		{"id":"WestToCentralIsland", "route":FUTURE_BRIDGE_WEST, "shore":Vector2(-13,-9), "island":Vector2(7,-11)},
-		{"id":"NorthEastToNorthIsland", "route":FUTURE_BRIDGE_NORTH_EAST, "shore":Vector2(76,-43), "island":Vector2(64,-40)},
-		{"id":"SouthToSouthIsland", "route":FUTURE_BRIDGE_SOUTH, "shore":Vector2(52,52), "island":Vector2(50,33)},
+	# These routes are kept as authored gameplay corridors and now use the
+	# supplied bridge meshes. The north and south crossings reuse WAT-02.
+	var bridge_root := Node3D.new()
+	bridge_root.name = "ArtworkLakeBridges"
+	parent.add_child(bridge_root)
+	var crossings: Array[Dictionary] = [
+		{"id":"Main", "route":FUTURE_BRIDGE_WEST, "scene":MainBridgeScene, "width":6.0, "height":8.0},
+		{"id":"North", "route":FUTURE_BRIDGE_NORTH_EAST, "scene":SecondaryBridgeScene, "width":5.6, "height":11.0},
+		{"id":"South", "route":FUTURE_BRIDGE_SOUTH, "scene":SecondaryBridgeScene, "width":5.6, "height":11.0},
 	]
-	for corridor: Dictionary in corridors:
-		var route: Array[Vector2] = corridor["route"]
-		var shore_point: Vector2 = corridor["shore"]
-		var island_point: Vector2 = corridor["island"]
-		var corridor_root := Node3D.new()
-		corridor_root.name = "BridgeSocket_%s" % corridor["id"]
-		corridor_root.set_meta("status", "reserved_empty_for_modular_bridge_kit")
-		corridor_root.set_meta("clear_width_world_m", 7.0)
-		corridor_root.set_meta(
-			"water_span_world_m",
-			shore_point.distance_to(island_point) * LAYOUT_SCALE
+	for crossing: Dictionary in crossings:
+		var route: Array[Vector2] = crossing["route"]
+		var a: Vector2 = route[0]
+		var b: Vector2 = route[route.size() - 1]
+		var delta := b - a
+		var centre := (a + b) * 0.5
+		var yaw := -rad_to_deg(atan2(delta.y, delta.x))
+		var span_world := delta.length() * LAYOUT_SCALE
+		# Source GLBs are normalized to one unit along X and about 0.265
+		# units across Z. _instance_park_asset preserves world dimensions.
+		var width_world: float = crossing["width"]
+		_instance_park_asset(
+			bridge_root, crossing["scene"], "Bridge_%s" % crossing["id"],
+			Vector3(centre.x, 0.55, centre.y), yaw,
+			Vector3(span_world + 2.0, crossing["height"], width_world / 0.265)
 		)
-		socket_root.add_child(corridor_root)
-		for point_index: int in range(route.size()):
-			var marker := Marker3D.new()
-			marker.name = "RoutePoint_%02d" % (point_index + 1)
-			marker.position = Vector3(route[point_index].x, 0.16, route[point_index].y)
-			corridor_root.add_child(marker)
-		if SHOW_PLANNING_LABELS:
-			_add_zone_label(
-				corridor_root, "FUTURE BRIDGE: %s" % corridor["id"],
-				Vector3(route[0].x, 0.8, route[0].y), Color("#92e8ff")
-			)
+		_add_bridge_walkway_collision(
+			bridge_root, "BridgeWalkway_%s" % crossing["id"],
+			Vector3(centre.x, 0.0, centre.y), yaw, span_world, width_world
+		)
+
+func _add_bridge_walkway_collision(parent: Node3D, node_name: String, centre: Vector3, yaw_degrees: float, span_world: float, width_world: float) -> void:
+	# A flat deck and two shallow ramps connect the ground plane without a
+	# ledge. The collision body's inverse X/Z scale compensates for the park.
+	var body := StaticBody3D.new()
+	body.name = node_name
+	body.position = centre
+	body.rotation_degrees.y = yaw_degrees
+	body.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
+	parent.add_child(body)
+	var deck := CollisionShape3D.new()
+	var deck_shape := BoxShape3D.new()
+	deck_shape.size = Vector3(span_world - 4.0, 0.24, width_world)
+	deck.position.y = 0.0
+	deck.shape = deck_shape
+	body.add_child(deck)
+	for side: int in [-1, 1]:
+		var ramp := CollisionShape3D.new()
+		var shape := ConvexPolygonShape3D.new()
+		var points := PackedVector3Array()
+		var inner_x := float(side) * (span_world * 0.5 - 2.0)
+		var outer_x := float(side) * (span_world * 0.5 + 0.5)
+		for z_value: float in [-width_world * 0.5, width_world * 0.5]:
+			points.append(Vector3(inner_x, 0.12, z_value))
+			points.append(Vector3(inner_x, -0.12, z_value))
+			points.append(Vector3(outer_x, 0.0, z_value))
+			points.append(Vector3(outer_x, -0.12, z_value))
+		shape.points = points
+		ramp.shape = shape
+		body.add_child(ramp)
 
 func _add_shoreline_ribbon(
 	parent: Node3D,
@@ -2696,18 +2890,17 @@ func _add_shoreline_ribbon(
 ) -> void:
 	if points.size() < 3:
 		return
-	var centroid := Vector2.ZERO
-	for point: Vector2 in points:
-		centroid += point
-	centroid /= float(points.size())
+	var signed_area := 0.0
+	for i: int in range(points.size()):
+		signed_area += points[i].cross(points[(i + 1) % points.size()])
 	var outer_points: Array[Vector2] = []
 	for index: int in range(points.size()):
-		var previous := points[(index - 1 + points.size()) % points.size()]
+		var previous := points[posmod(index - 1, points.size())]
 		var current := points[index]
 		var following := points[(index + 1) % points.size()]
 		var tangent := (following - previous).normalized()
-		var outward := Vector2(-tangent.y, tangent.x)
-		if (current + outward - centroid).length_squared() < (current - centroid).length_squared():
+		var outward := Vector2(tangent.y, -tangent.x)
+		if signed_area < 0.0:
 			outward = -outward
 		outer_points.append(current + outward * width)
 	var rendered_edges: Array[int] = []
@@ -2722,12 +2915,19 @@ func _add_shoreline_ribbon(
 		if index < 0 or index >= points.size():
 			continue
 		var next_index := (index + 1) % points.size()
-		_add_shoreline_vertex(surface, points[index], y_value, Vector2(0.0, float(index)))
-		_add_shoreline_vertex(surface, outer_points[next_index], y_value, Vector2(1.0, float(next_index)))
-		_add_shoreline_vertex(surface, outer_points[index], y_value, Vector2(1.0, float(index)))
-		_add_shoreline_vertex(surface, points[index], y_value, Vector2(0.0, float(index)))
-		_add_shoreline_vertex(surface, points[next_index], y_value, Vector2(0.0, float(next_index)))
-		_add_shoreline_vertex(surface, outer_points[next_index], y_value, Vector2(1.0, float(next_index)))
+		var inner_y := y_value
+		var outer_y := y_value
+		if node_name == "ContinuousNaturalBank":
+			inner_y = 0.104
+			outer_y = 0.22
+		elif node_name.ends_with("_SoftBank"):
+			outer_y = 0.104
+		_add_shoreline_vertex(surface, points[index], inner_y, Vector2(0.0, float(index)))
+		_add_shoreline_vertex(surface, outer_points[index], outer_y, Vector2(1.0, float(index)))
+		_add_shoreline_vertex(surface, outer_points[next_index], outer_y, Vector2(1.0, float(next_index)))
+		_add_shoreline_vertex(surface, points[index], inner_y, Vector2(0.0, float(index)))
+		_add_shoreline_vertex(surface, outer_points[next_index], outer_y, Vector2(1.0, float(next_index)))
+		_add_shoreline_vertex(surface, points[next_index], inner_y, Vector2(0.0, float(next_index)))
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = node_name
 	mesh_instance.mesh = surface.commit()
@@ -2795,7 +2995,7 @@ func _build_size_hud() -> void:
 	add_child(canvas)
 	var label := Label.new()
 	label.position = Vector2(22.0, 18.0)
-	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\n1 two-basin lake | 7 islands | 3 future bridge corridors\n24 sakura accents | regenerated mainland groves | shoreline relocation\nNEON TORII PLAZA | 7 m landmark | 3 seats | 4 lamps | F3 fly mode"
+	label.text = "MIDORI PARK — PROCEDURAL SCALE PASS\n440 m x 360 m | 2x concept recreation footprint\ncontinuous artwork lake | 7 islands | 3 installed bridges\n24 sakura accents | regenerated mainland groves | shoreline relocation\nNEON TORII PLAZA | 7 m landmark | 3 seats | 4 lamps | F3 fly mode"
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color("#f4f1e8"))
 	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
@@ -2803,7 +3003,7 @@ func _build_size_hud() -> void:
 	label.add_theme_constant_override("shadow_offset_y", 2)
 	canvas.add_child(label)
 	time_of_day_label = Label.new()
-	time_of_day_label.position = Vector2(22.0, 132.0)
+	time_of_day_label.position = Vector2(22.0, 156.0)
 	time_of_day_label.add_theme_font_size_override("font_size", 17)
 	time_of_day_label.add_theme_color_override("font_color", Color("#8fdfff"))
 	time_of_day_label.add_theme_color_override("font_shadow_color", Color(0.0,0.0,0.0,0.9))
@@ -2812,3 +3012,80 @@ func _build_size_hud() -> void:
 	canvas.add_child(time_of_day_label)
 	_apply_time_of_day()
 
+
+# Local corner rounding retains route anchors and limits shoreline displacement.
+func _rounded_contour(source: Array[Vector2], closed: bool, radius: float, corner_fraction: float = 0.25) -> Array[Vector2]:
+	var anchors: Array[Vector2] = source.duplicate()
+	if closed and anchors[0].is_equal_approx(anchors[-1]):
+		anchors.remove_at(anchors.size() - 1)
+	var result: Array[Vector2] = []
+	for i: int in range(anchors.size()):
+		var current := anchors[i]
+		if not closed and (i == 0 or i == anchors.size() - 1):
+			result.append(current)
+			continue
+		var previous := anchors[posmod(i - 1, anchors.size())]
+		var following := anchors[(i + 1) % anchors.size()]
+		var trim := minf(radius, minf(current.distance_to(previous), current.distance_to(following)) * corner_fraction)
+		var a := current.move_toward(previous, trim)
+		var b := current.move_toward(following, trim)
+		for step: int in range(7):
+			var t := float(step) / 6.0
+			result.append(a.lerp(current, t).lerp(current.lerp(b, t), t))
+	if closed:
+		result.append(result[0])
+	return result
+
+func _make_lake_water_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode cull_disabled;
+varying vec3 world_position;
+void vertex() {
+    world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+void fragment() {
+    vec2 p = world_position.xz;
+    float a = dot(p, vec2(0.81, 0.47)) + TIME * 0.52;
+    float b = dot(p, vec2(-1.13, 1.72)) - TIME * 0.38;
+    float c = dot(p, vec2(2.67, 0.91)) + sin(p.y * 0.17) + TIME * 0.71;
+    vec3 ripple = normalize(vec3(-0.016 * cos(a) + 0.010 * cos(b) - 0.006 * cos(c), 1.0,
+                                -0.009 * cos(a) - 0.016 * cos(b) - 0.003 * cos(c)));
+    NORMAL = normalize((VIEW_MATRIX * vec4(ripple, 0.0)).xyz);
+    float variation = 0.5 + 0.5 * sin(p.x * 0.025 + sin(p.y * 0.035));
+    ALBEDO = mix(vec3(0.012, 0.075, 0.110), vec3(0.025, 0.150, 0.200), variation);
+    ROUGHNESS = 0.24;
+    METALLIC = 0.0;
+    SPECULAR = 0.5;
+}
+"""
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	return material
+
+# Orthographic albedo bake of the supplied straight module preserves its atlas design.
+func _make_continuous_paving_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+uniform sampler2D paving : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform float night_emission = 0.0;
+void fragment() {
+    // Layout coordinates are scaled 2x: repeat the original tile every 12 world metres.
+    float along = 1.0 - abs(mod(UV.x / 6.0, 2.0) - 1.0);
+    vec2 tile_uv = vec2(UV.y, along);
+    vec3 base = texture(paving, tile_uv).rgb;
+    float cyan = smoothstep(0.08, 0.26, min(base.g, base.b) - base.r);
+    ALBEDO = base * mix(vec3(0.62, 0.59, 0.53), vec3(0.55), cyan);
+    ROUGHNESS = mix(0.84, 0.3, cyan);
+    METALLIC = cyan * 0.18;
+    EMISSION = vec3(0.28, 0.84, 1.0) * cyan * 2.2 * night_emission;
+}
+"""
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("paving", load("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_paving_albedo.png"))
+	material.set_shader_parameter("night_emission", 1.0 if is_night_mode else 0.0)
+	modular_path_emissive_materials.append(material)
+	return material

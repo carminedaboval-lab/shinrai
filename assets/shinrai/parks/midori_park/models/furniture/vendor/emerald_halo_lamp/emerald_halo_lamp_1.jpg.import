@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b6pt54h1dwmcu"
-path="res://.godot/imported/emerald_halo_lamp_1.jpg-f9cafcde8f8b40d8bcda450e4dfd5171.ctex"
+path.s3tc="res://.godot/imported/emerald_halo_lamp_1.jpg-f9cafcde8f8b40d8bcda450e4dfd5171.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "1e9a9814bf10e317646ba9580752ec75"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/furniture/vendor/emerald_halo_lamp/emerald_halo_lamp_1.jpg"
-dest_files=["res://.godot/imported/emerald_halo_lamp_1.jpg-f9cafcde8f8b40d8bcda450e4dfd5171.ctex"]
+dest_files=["res://.godot/imported/emerald_halo_lamp_1.jpg-f9cafcde8f8b40d8bcda450e4dfd5171.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

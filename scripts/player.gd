@@ -12,6 +12,9 @@ const FLY_SPEED: float = 20.0
 const FLY_BOOST_SPEED: float = 55.0
 
 signal died
+signal shot_fired
+signal damage_received(amount: float)
+var extraction_mode := false
 
 var mouse_sensitivity: float = 0.00215
 var ads_mouse_multiplier: float = 0.55
@@ -857,7 +860,7 @@ func _unhandled_input(event: InputEvent) -> void:
                 Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
             else:
                 Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-        elif event.keycode == KEY_F3:
+        elif event.keycode == KEY_F3 and not extraction_mode:
             _set_fly_mode(not fly_mode)
         elif event.keycode == KEY_R and not fly_mode:
             start_reload()
@@ -1281,6 +1284,7 @@ func shoot() -> void:
         return
 
     ammo -= 1
+    shot_fired.emit()
     fire_cooldown = AUTO_FIRE_INTERVAL
     muzzle_timer = 0.055
     weapon_kick = 1.0
@@ -1365,6 +1369,7 @@ func take_damage(amount: float) -> void:
     if not alive:
         return
     health -= amount
+    damage_received.emit(amount)
     damage_flash = 0.75
     if health <= 0.0:
         health = 0.0
@@ -1388,7 +1393,7 @@ func set_wave(value: int) -> void:
     _update_hud()
 
 func _process(_delta: float) -> void:
-    if not alive and Input.is_key_pressed(KEY_ENTER):
+    if not extraction_mode and not alive and Input.is_key_pressed(KEY_ENTER):
         get_tree().reload_current_scene()
 
 func _update_hud() -> void:

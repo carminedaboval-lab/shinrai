@@ -64,7 +64,7 @@ func set_night_mode(value: bool) -> void:
 
 func _apply_time_factor() -> void:
 	if _active_ground_material != null:
-		_active_ground_material.set_shader_parameter("scene_light_factor", 0.24 if _night_mode else 1.0)
+		_active_ground_material.set_shader_parameter("scene_light_factor", 0.60 if _night_mode else 1.0)
 
 
 func _build_ground_material() -> Material:
@@ -108,7 +108,7 @@ void fragment() {
 
 	// The source scan contains baked daylight. Darken its midtones and reduce
 	// specular response before the park's real-time sun and ambient are added.
-	ALBEDO = pow(ground_color, vec3(1.20)) * vec3(0.44, 0.48, 0.38) * scene_light_factor;
+	ALBEDO = pow(ground_color, vec3(1.20)) * vec3(0.44, 0.60, 0.35) * scene_light_factor;
 	ROUGHNESS = clamp(source_roughness * 0.96 + 0.035, 0.70, 1.0);
 	SPECULAR = 0.12;
 	NORMAL_MAP = source_normal;

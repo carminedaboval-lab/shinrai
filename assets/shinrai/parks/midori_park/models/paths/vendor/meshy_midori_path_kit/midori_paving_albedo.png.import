@@ -2,21 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7vdurjqfcufk"
-path.s3tc="res://.godot/imported/tree.trunk.002_diffuse.png-915078cd8709698b300dfaa6312a1097.s3tc.ctex"
+uid="uid://1rcrpiny7row"
+path="res://.godot/imported/midori_paving_albedo.png-eefa40ce4193ed83ebbb748242e0758f.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/shinrai/parks/midori_park/models/vegetation/vendor/mistrzjang1_tree_trunk/textures/tree.trunk.002_diffuse.png"
-dest_files=["res://.godot/imported/tree.trunk.002_diffuse.png-915078cd8709698b300dfaa6312a1097.s3tc.ctex"]
+source_file="res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_paving_albedo.png"
+dest_files=["res://.godot/imported/midori_paving_albedo.png-eefa40ce4193ed83ebbb748242e0758f.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -24,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -38,4 +37,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1

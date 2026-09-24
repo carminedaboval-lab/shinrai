@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Blacksite FPS Prototype"
-run/main_scene="res://scenes/midori_park_size_blockout.tscn"
+run/main_scene="res://scenes/shinrai_extraction.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [autoload]

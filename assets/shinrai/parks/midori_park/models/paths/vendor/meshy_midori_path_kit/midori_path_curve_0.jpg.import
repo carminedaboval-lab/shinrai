@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c0g3rmxokph35"
-path="res://.godot/imported/midori_path_curve_0.jpg-e3a96e4231c72d51937b636c4c87b4fa.ctex"
+path.s3tc="res://.godot/imported/midori_path_curve_0.jpg-e3a96e4231c72d51937b636c4c87b4fa.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "73682ac11a78506a2e3f116bbabb79e1"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_curve_0.jpg"
-dest_files=["res://.godot/imported/midori_path_curve_0.jpg-e3a96e4231c72d51937b636c4c87b4fa.ctex"]
+dest_files=["res://.godot/imported/midori_path_curve_0.jpg-e3a96e4231c72d51937b636c4c87b4fa.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
