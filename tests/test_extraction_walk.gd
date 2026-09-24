@@ -66,16 +66,18 @@ func walk(route: PackedVector3Array, label: String) -> bool:
 	if route.is_empty():
 		print("WALK_BLOCKED: no route for ", label)
 		return false
+	# Raid guidance is rebuilt every second; hold an independent waypoint copy.
+	var waypoints := route.duplicate()
 	print("WALK_START: ", label, " at ", raid.player.global_position)
 	# Walk, rather than sprint, so small waypoints can be reached without overshoot.
-	for index: int in range(route.size()):
-		var target := route[index]
+	for index: int in range(waypoints.size()):
+		var target := waypoints[index]
 		var checkpoint: Vector3 = raid.player.global_position
 		var reached := false
 		for frame: int in range(Engine.physics_ticks_per_second * 12):
 			var position: Vector3 = raid.player.global_position
 			var distance := Vector2(position.x, position.z).distance_to(Vector2(target.x, target.z))
-			if distance <= (0.12 if index == route.size() - 1 else 0.45):
+			if distance <= (0.12 if index == waypoints.size() - 1 else 0.45):
 				reached = true
 				break
 			if raid.phase != raid.Phase.RAID:

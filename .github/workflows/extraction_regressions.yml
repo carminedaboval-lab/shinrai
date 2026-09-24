@@ -60,3 +60,5 @@ jobs:
         run: timeout 600 ./godot --headless --path . --script res://tests/test_extraction.gd
       - name: Physical South relay and extraction walk
         run: timeout 600 ./godot --headless --path . --script res://tests/test_extraction_walk.gd
+      - name: Physical West relay and extraction walk
+        run: timeout 600 ./godot --headless --path . --script res://tests/test_extraction_walk.gd -- --west
