@@ -11,11 +11,11 @@ const GroundClumpScene: PackedScene = preload("res://assets/shinrai/parks/midori
 
 const LAYOUT_SCALE := 2.0
 const PARK_HALF := Vector2(220.0, 180.0)
-const CLUMP_INSTANCE_COUNT := 18000
+const CLUMP_INSTANCE_COUNT := 22000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 18
+const DETAIL_VERSION := 20
 const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-98,70),Vector2(-72,77),Vector2(-38,82),Vector2(0,84),
@@ -101,8 +101,8 @@ const FUTURE_BRIDGE_SOUTH: Array[Vector2] = [
 # Accurate bounds keep the leaves above the lawn as their scale changes.
 const SOURCE_HEIGHT_M := 0.796875
 const SOURCE_BOTTOM_Y := -0.378906
-const MIN_CLUMP_HEIGHT_M := 0.13
-const MAX_CLUMP_HEIGHT_M := 0.24
+const MIN_CLUMP_HEIGHT_M := 0.15
+const MAX_CLUMP_HEIGHT_M := 0.28
 const GROUND_SURFACE_Y := 0.010
 # A small fixed reveal prevents z-fighting without making the clumps float.
 const EXPOSED_BASE_OFFSET_M := 0.035
@@ -184,7 +184,7 @@ func _install_ground_clumps() -> void:
 
 		var target_height := rng.randf_range(MIN_CLUMP_HEIGHT_M, MAX_CLUMP_HEIGHT_M)
 		var uniform_scale := target_height / SOURCE_HEIGHT_M
-		var width_variation := rng.randf_range(1.55, 2.35)
+		var width_variation := rng.randf_range(2.0, 2.8)
 		var yaw := rng.randf_range(0.0, TAU)
 		var basis := Basis(Vector3.UP, yaw)
 		basis = basis.scaled(Vector3(

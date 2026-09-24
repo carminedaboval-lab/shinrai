@@ -235,7 +235,7 @@ func _create_materials() -> void:
 	mat_boundary = _make_material(Color("#d6d0bf"), 0.82)
 	mat_entry = _make_material(Color("#a99f8a"), 0.88)
 	mat_island = _make_material(Color("#405d3d"), 0.98)
-	mat_shore_bank = _make_material(Color("#596c54"), 0.98)
+	mat_shore_bank = _make_material(Color("#708360"), 0.98)
 	mat_shore_bank.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat_shore_promenade = _make_material(Color("#77776d"), 0.94)
 	mat_shore_landing = _make_material(Color("#aaa28d"), 0.88)
@@ -344,7 +344,7 @@ func _create_environment() -> void:
 	sun.directional_shadow_split_2 = 0.22
 	sun.directional_shadow_split_3 = 0.50
 	sun.directional_shadow_blend_splits = true
-	sun.directional_shadow_max_distance = 150.0
+	sun.directional_shadow_max_distance = 110.0
 	sun.directional_shadow_fade_start = 0.85
 	sun.shadow_bias = 0.05
 	sun.shadow_normal_bias = 1.0
@@ -447,7 +447,7 @@ func _apply_render_quality() -> void:
 	park_environment.glow_bloom = 0.0
 	park_environment.glow_hdr_threshold = 1.4
 	park_environment.volumetric_fog_enabled = forward_plus and high_render_quality and is_night_mode
-	park_directional_light.directional_shadow_max_distance = 150.0 if high_render_quality else 110.0
+	park_directional_light.directional_shadow_max_distance = 110.0
 
 func _build_lake_reflection_probe() -> void:
 	if RenderingServer.get_current_rendering_method() != "forward_plus":
@@ -504,6 +504,7 @@ func _build_park_footprint() -> void:
 	_build_reference_canopy(root)
 	_build_deadwood_pass(root)
 	_build_japanese_maple_pass(root)
+	_build_open_lawn_cover(root)
 	_build_park_benches(root)
 	_build_park_lamps(root)
 	_build_landmark_plaza_furniture(root)
@@ -1762,12 +1763,16 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		)
 	_build_mainland_pine_saplings(canopy_root)
 
-	# Each green island has a small vertical silhouette in the screenshot.
+	# Existing broadleaf and pine assets give the small islands a layered canopy.
 	var island_trees: Array[Vector4] = [
-		Vector4(43,-3,1.14,0),Vector4(48,-2,0.96,1), # central island
-		Vector4(52,-49,1.02,1),Vector4(40,-48,0.94,0), # north pair
-		Vector4(53,32,1.05,0),Vector4(61,37,0.86,1), # south pair
-		Vector4(63,-2,0.88,1),Vector4(26,-4,0.94,0), # east and west islets
+		Vector4(43,-3,1.14,0),Vector4(48,-2,0.96,1),
+		Vector4(38,-3,0.88,0),Vector4(46,-6,0.80,0),Vector4(49,0,0.76,1),
+		Vector4(52,-49,1.02,1),Vector4(40,-48,0.94,0),
+		Vector4(49,-49,0.88,0),Vector4(54,-47,0.82,0),Vector4(39,-46,0.76,1),
+		Vector4(53,32,1.05,0),Vector4(61,37,0.86,1),
+		Vector4(50,31,0.78,1),Vector4(56,32,0.80,1),
+		Vector4(63,-2,0.88,1),Vector4(65,-3,0.78,0),
+		Vector4(26,-4,0.94,0),Vector4(28,-5,0.72,1),
 	]
 	for index: int in range(island_trees.size()):
 		var item := island_trees[index]
@@ -1783,9 +1788,9 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		occupied_tree_positions.append(Vector2(island_position.x, island_position.z))
 		occupied_tree_is_skinny.append(is_skinny_tree)
 	var island_understory: Array[Vector2] = [
-		Vector2(38,-3),Vector2(46,-6),Vector2(48,0),
-		Vector2(49,-49),Vector2(54,-47),Vector2(39,-47),
-		Vector2(51,34),Vector2(55,31),Vector2(61,38),
+		Vector2(38,-3),Vector2(46,-6),Vector2(48,0),Vector2(42,-7),Vector2(50,-4),
+		Vector2(49,-49),Vector2(54,-47),Vector2(39,-47),Vector2(47,-48),Vector2(53,-51),
+		Vector2(51,34),Vector2(55,31),Vector2(61,38),Vector2(50,32),Vector2(56,34),
 		Vector2(24,-5),Vector2(27,-3),Vector2(62,-3),Vector2(65,-1),
 	]
 	for index: int in range(island_understory.size()):
@@ -2216,6 +2221,84 @@ func _build_deadwood_pass(parent: Node3D) -> void:
 			hollow_position + Vector3(0.0, 0.38, 0.0), Vector3(0.0,23.0,0.0),
 			Vector3(3.55,0.76,2.55)
 		)
+
+func _build_open_lawn_cover(parent: Node3D) -> void:
+	# Existing mossy rock art supplies waist-high cover in open lawn panels.
+	# Keep its exact mesh collision and leave the route shoulders clear.
+	var prototype := MossyBoulderScene.instantiate() as Node3D
+	if prototype == null:
+		return
+	var info := _vegetation_visual_bounds(prototype)
+	if not info["valid"]:
+		prototype.free()
+		return
+	var bounds: AABB = info["bounds"]
+	var factor := 4.4 / maxf(bounds.size.x, bounds.size.z)
+	var meshes: Array[Node] = prototype.find_children("*", "MeshInstance3D", true, false)
+	if prototype is MeshInstance3D:
+		meshes.append(prototype)
+	var collision_shapes: Array[Dictionary] = []
+	for mesh_node: MeshInstance3D in meshes:
+		if mesh_node.mesh != null:
+			collision_shapes.append({"transform": _vegetation_relative_transform(mesh_node, prototype), "shape": mesh_node.mesh.create_trimesh_shape()})
+	var anchors: Array[Vector2] = [
+		Vector2(-53,-2),Vector2(-38,13),Vector2(-17,5),Vector2(-43,50),
+		Vector2(-2,53),Vector2(32,61),Vector2(86,6),Vector2(-55,-58),
+		Vector2(62,61),
+	]
+	var root := Node3D.new()
+	root.name = "OpenLawnBoulderCover"
+	parent.add_child(root)
+	var accepted: Array[Vector2] = []
+	for anchor_index: int in range(anchors.size()):
+		var point := Vector2.ZERO
+		var found := false
+		for radius_value: float in [0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0]:
+			for step: int in range(12):
+				if radius_value == 0.0 and step > 0:
+					break
+				var angle := TAU * float(posmod(step * 5 + anchor_index * 3, 12)) / 12.0
+				var candidate := anchors[anchor_index] + Vector2(cos(angle), sin(angle)) * radius_value
+				var local_position := Vector3(candidate.x, 0.0, candidate.y)
+				if not _is_vegetation_clear(local_position, 3.0) or not _is_tree_spaced(local_position, 4.0):
+					continue
+				var too_close := false
+				for other: Vector2 in accepted:
+					if candidate.distance_to(other) < 12.0:
+						too_close = true
+						break
+				if too_close:
+					continue
+				point = candidate
+				found = true
+				break
+			if found:
+				break
+		if not found:
+			continue
+		var cluster := Node3D.new()
+		cluster.name = "OpenBoulder_%02d" % (anchor_index + 1)
+		cluster.position = Vector3(point.x, 0.0, point.y)
+		cluster.rotation_degrees.y = float((anchor_index * 137) % 360)
+		cluster.scale = Vector3(factor / LAYOUT_SCALE, factor, factor / LAYOUT_SCALE)
+		root.add_child(cluster)
+		var offset := Vector3(-bounds.get_center().x, -bounds.position.y - 0.04 / factor, -bounds.get_center().z)
+		var visual := prototype.duplicate() as Node3D
+		visual.position += offset
+		cluster.add_child(visual)
+		_configure_park_asset_visibility(visual)
+		for spec: Dictionary in collision_shapes:
+			var body := StaticBody3D.new()
+			body.collision_layer = 1
+			body.transform = spec["transform"]
+			body.position += offset
+			cluster.add_child(body)
+			var collision := CollisionShape3D.new()
+			collision.shape = spec["shape"]
+			body.add_child(collision)
+		accepted.append(point)
+	prototype.free()
+	print("Midori open lawn cover: %d supplied boulder clusters at %s" % [accepted.size(), accepted])
 
 func _build_japanese_maple_pass(parent: Node3D) -> void:
 	if japanese_maple_prototype == null:
