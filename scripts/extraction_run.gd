@@ -51,6 +51,10 @@ var guidance_path := PackedVector3Array()
 var guidance_distance := 0.0
 var guidance_elapsed := 0.0
 var selected_destination := ""
+var result_saved := false
+var result_extracted := false
+var result_reason := ""
+var result_bonus := 0
 
 func _ready() -> void:
 	process_physics_priority = 10 # Apply shoreline safety after player movement.
@@ -147,9 +151,18 @@ func _on_action(action: String) -> void:
 				bag.pop_back()
 			hud.show_pause(self, true)
 		"hq":
+			if phase != Phase.RESULT or not result_saved:
+				return
 			phase = Phase.HQ
 			menu_camera.make_current()
 			hud.show_hq(self)
+		"retry_result":
+			if phase == Phase.RESULT and not result_saved:
+				_settle_result()
+		"retry_save":
+			if phase == Phase.HQ:
+				profile.save_profile()
+				hud.show_hq(self)
 
 func start_run() -> void:
 	if phase != Phase.HQ or not navigation.ready:
@@ -169,6 +182,9 @@ func start_run() -> void:
 	run_time = 0.0
 	healing = 0.0
 	hold_progress = 0.0
+	prompt_text = "Hold H: medkit   ·   Tab: field map / cargo"
+	progress_ratio = 0.0
+	ui_elapsed = 0.0
 	extraction_progress = 0.0
 	extraction_id = ""
 	hold_id = ""
@@ -188,7 +204,12 @@ func start_run() -> void:
 	player.ads_blend = 0.0
 	player.fire_cooldown = 0.0
 	player.damage_flash = 0.0
+	# A run can end mid-mantle, while the controller temporarily has no collision.
+	if player.mantle_active:
+		player.collision_layer = player.mantle_saved_layer
+		player.collision_mask = player.mantle_saved_mask
 	player.mantle_active = false
+	player.jump_was_down = false
 	player.velocity = Vector3.ZERO
 	player.position = navigation.nearest(Vector3(0, 0.2, 160))
 	last_safe = player.position
@@ -207,6 +228,7 @@ func start_run() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	hud.show_raid()
 	announce("Recover a relay at a marked lamp. Hold E nearby. Tab opens your field map.", 9.0)
+	hud.update_raid(self)
 
 func _input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
@@ -241,6 +263,7 @@ func resume_run() -> void:
 	_set_actors_enabled(true)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	hud.show_raid()
+	hud.update_raid(self)
 
 func _set_actors_enabled(enabled: bool) -> void:
 	player.process_mode = Node.PROCESS_MODE_INHERIT if enabled else Node.PROCESS_MODE_DISABLED
@@ -269,6 +292,8 @@ func _physics_process(delta: float) -> void:
 	_update_interaction(delta)
 	_update_healing(delta)
 	_update_extraction(delta)
+	if phase != Phase.RAID:
+		return
 	guidance_elapsed += delta
 	if guidance_elapsed >= 1.0:
 		refresh_guidance()
@@ -342,7 +367,8 @@ func refresh_guidance() -> void:
 	var objective := tracked_objective()
 	if objective.is_empty():
 		return
-	guidance_path = navigation.path(player.position, objective.position)
+	var radius := 7.5 if not objective.has("kind") else 4.0
+	guidance_path = navigation.interaction_path(player.position, objective.position, radius)
 	for index: int in range(1, guidance_path.size()):
 		guidance_distance += guidance_path[index - 1].distance_to(guidance_path[index])
 
@@ -404,10 +430,16 @@ func finish_run(extracted: bool, reason: String) -> void:
 		return
 	phase = Phase.RESULT
 	_set_actors_enabled(false)
-	var bonus := (150 * relays + (300 if relays == 3 else 0)) if extracted else 0
-	profile.complete_run(extracted, bag, bonus)
+	result_extracted = extracted
+	result_reason = reason
+	result_bonus = (150 * relays + (300 if relays == 3 else 0)) if extracted else 0
+	result_saved = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	hud.show_result(self, extracted, reason, bonus)
+	_settle_result()
+
+func _settle_result() -> void:
+	result_saved = profile.complete_run(result_extracted, bag, result_bonus)
+	hud.show_result(self, result_extracted, result_reason, result_bonus)
 
 func announce(text: String, duration: float = 4.0) -> void:
 	notice = text

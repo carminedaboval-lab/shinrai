@@ -88,3 +88,38 @@ func path(from: Vector3, to: Vector3) -> PackedVector3Array:
 		var p := grid.get_point_position(cell)
 		output.append(Vector3(p.x, 0.2, p.y))
 	return output
+
+func interaction_path(from: Vector3, target: Vector3, radius: float) -> PackedVector3Array:
+	# Furniture centres can be solid. End within interaction range on a reachable
+	# cell, instead of snapping to an arbitrary cell outside the usable radius.
+	var best := PackedVector3Array()
+	if not ready:
+		return best
+	var target_2d := Vector2(target.x, target.z)
+	var centre := Vector2i(((target_2d - ORIGIN) / CELL).round())
+	var reach := ceili(radius / CELL) + 1
+	var start := nearest_cell(from)
+	var best_length := INF
+	for y: int in range(-reach, reach + 1):
+		for x: int in range(-reach, reach + 1):
+			var candidate := centre + Vector2i(x, y)
+			if not grid.region.has_point(candidate) or grid.is_point_solid(candidate):
+				continue
+			if grid.get_point_position(candidate).distance_to(target_2d) > radius:
+				continue
+			var cells := grid.get_id_path(start, candidate)
+			if cells.is_empty():
+				continue
+			var route := PackedVector3Array()
+			var length := 0.0
+			var previous := from
+			for cell: Vector2i in cells:
+				var p := grid.get_point_position(cell)
+				var point := Vector3(p.x, 0.2, p.y)
+				length += previous.distance_to(point)
+				previous = point
+				route.append(point)
+			if length < best_length:
+				best_length = length
+				best = route
+	return best

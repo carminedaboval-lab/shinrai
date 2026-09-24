@@ -1,0 +1,80 @@
+name: Extraction gameplay regressions
+
+on:
+  push:
+    branches: [codex/extraction-route-validation]
+  pull_request:
+    paths:
+      - scripts/extraction_*.gd
+      - tests/test_extraction_regressions.gd
+      - .github/workflows/extraction_regressions.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lightweight-godot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/extraction_profile.gd
+            scripts/extraction_navigation.gd
+            scripts/extraction_hud.gd
+            tests/test_extraction_regressions.gd
+          sparse-checkout-cone-mode: false
+      - name: Download official Godot 4.7.1 Linux build
+        run: |
+          curl --fail --location --retry 3 --output godot.zip 'https://downloads.godotengine.org/?version=4.7.1&flavor=stable&platform=linux.64&slug=linux.x86_64.zip'
+          unzip -q godot.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+          ./godot --version
+      - name: Run save, navigation and map regressions
+        run: |
+          mkdir -p probe/scripts probe/tests
+          cp scripts/extraction_profile.gd scripts/extraction_navigation.gd scripts/extraction_hud.gd probe/scripts/
+          cp tests/test_extraction_regressions.gd probe/tests/
+          printf 'config_version=5\n[application]\nconfig/name="Extraction Gameplay Regressions"\n' > probe/project.godot
+          ./godot --headless --path probe --script res://tests/test_extraction_regressions.gd
+
+  full-park-walk:
+    if: github.event_name == 'pull_request' && github.head_ref == 'codex/extraction-route-validation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Godot 4.7.1 Linux build
+        run: |
+          curl --fail --location --retry 3 --output godot.zip 'https://downloads.godotengine.org/?version=4.7.1&flavor=stable&platform=linux.64&slug=linux.x86_64.zip'
+          unzip -q godot.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+          ./godot --version
+      - name: Import project assets
+        run: timeout 900 ./godot --headless --path . --import
+      - name: Existing extraction integration test
+        run: timeout 600 ./godot --headless --path . --script res://tests/test_extraction.gd
+      - name: Physical South relay and extraction walk
+        run: timeout 600 ./godot --headless --path . --script res://tests/test_extraction_walk.gd
+      - name: Physical West relay and extraction walk
+        run: timeout 600 ./godot --headless --path . --script res://tests/test_extraction_walk.gd -- --west
+      - name: Capture rendered HUD and field map
+        continue-on-error: true
+        run: |
+          command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+          timeout 180 xvfb-run --auto-servernum ./godot --rendering-method gl_compatibility --path . --script res://tests/test_extraction_visual.gd
+      - name: Collect review frames
+        if: always()
+        run: |
+          mkdir -p screenshots
+          find "$HOME/.local/share/godot/app_userdata" -path '*/extraction_qa/review_*.png' -exec cp -v '{}' screenshots/ \;
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extraction-render-review
+          path: screenshots/*.png
+          if-no-files-found: ignore
