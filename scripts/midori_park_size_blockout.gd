@@ -30,6 +30,8 @@ const MidoriPathStraightScene: PackedScene = preload("res://assets/shinrai/parks
 const MidoriPathCurveScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_curve.glb")
 const MidoriPathJunctionScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_junction.glb")
 const MidoriPathRestingPocketScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_resting_pocket.glb")
+const FiveASidePitchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/activity/meshy_five_a_side_pitch_clean.glb")
+const PitchFenceScript = preload("res://scripts/midori_pitch_fence.gd")
 
 const LAYOUT_SCALE := 2.0
 const LAYOUT_REFERENCE_SIZE_M := Vector2(220.0, 180.0)
@@ -140,7 +142,6 @@ var mat_grass: StandardMaterial3D
 var mat_path: StandardMaterial3D
 var mat_paved_surface: ShaderMaterial
 var mat_water: ShaderMaterial
-var mat_sports: StandardMaterial3D
 var mat_playground: StandardMaterial3D
 var mat_plaza: StandardMaterial3D
 var mat_plaza_border: StandardMaterial3D
@@ -222,7 +223,6 @@ func _create_materials() -> void:
 	mat_grass = _make_material(Color("#344f38"), 0.98)
 	mat_path = _make_material(Color("#77786f"), 0.94)
 	mat_water = _make_lake_water_material()
-	mat_sports = _make_material(Color("#536d61"), 0.88)
 	mat_playground = _make_material(Color("#8b6255"), 0.91)
 	mat_plaza = _make_material(Color("#777871"), 0.90)
 	mat_plaza_border = _make_material(Color("#30383a"), 0.76, 0.16)
@@ -432,7 +432,10 @@ func _apply_render_quality() -> void:
 		# expensive internal 3D pixel count. The UI stays at the window resolution.
 		viewport.msaa_3d = Viewport.MSAA_DISABLED
 		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
-		viewport.scaling_3d_scale = 0.75 if high_render_quality else 0.70
+		viewport.scaling_3d_scale = 0.75
+		# Imported tree meshes already contain LODs. Earlier transitions in
+		# Balanced reduce distant canopy triangles without changing near trees.
+		viewport.mesh_lod_threshold = 1.0 if high_render_quality else 4.0
 	park_environment.ssao_enabled = forward_plus and high_render_quality
 	park_environment.ssao_radius = 0.8
 	park_environment.ssao_intensity = 0.6
@@ -784,7 +787,28 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 	_build_future_bridge_sockets(lake_root)
 	_add_zone_label(parent, "ARTWORK LAKE | 7 ISLANDS", Vector3(47.4, 1.0, -7.8), Color("#d4eff7"))
 
-	_add_zone_box(parent, "SportsZone", Vector3(-70.0, 0.105, -43.0), Vector2(55.0, 36.0), mat_sports)
+	# The supplied Meshy pitch is a compact 40 x 21 m landmark. The wider
+	# activity clearing stays open around it rather than stretching the model.
+	var pitch := _instance_park_asset(
+		parent, FiveASidePitchScene, "ACT03_FiveASideFootballPitch",
+		Vector3(-70.0, 0.15, -43.0), 90.0, Vector3.ONE * 38.0
+	)
+	if pitch != null:
+		_set_asset_shadow_casting(pitch, false)
+		_naturalize_pitch_material(pitch)
+		_add_pitch_contact_shadow(parent)
+		var fence := PitchFenceScript.new()
+		fence.name = "ACT03_FiveASideSteelFence"
+		fence.position = Vector3(-70.0, 0.15, -43.0)
+		fence.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
+		parent.add_child(fence)
+		fence.build()
+	# A simple floor keeps player feet above the raised turf. The supplied
+	# pitch mesh carries no usable collision; the new fence has a path-side gate.
+	_add_invisible_collision_box(
+		parent, "ACT03_PitchWalkableFloor",
+		Vector3(-70.0, 0.10, -43.0), Vector3(40.0, 0.10, 21.2), 0.0
+	)
 	_add_zone_label(parent, "SPORTS 55 x 36 m", Vector3(-70.0, 1.0, -43.0), Color.WHITE)
 
 	_add_zone_box(parent, "PlaygroundZone", Vector3(-72.0, 0.106, 45.0), Vector2(32.0, 26.0), mat_playground)
@@ -795,6 +819,46 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 
 	_add_zone_box(parent, "PavilionZone", Vector3(76.0, 0.108, -73.0), Vector2(20.0, 14.0), mat_pavilion)
 	_add_zone_label(parent, "PAVILION 20 x 14 m", Vector3(76.0, 1.0, -73.0), Color.WHITE)
+
+func _add_pitch_contact_shadow(parent: Node3D) -> void:
+	# A feathered, unlit footprint grounds the supplied mesh without rendering
+	# its nearly million-triangle fence and net into every shadow map.
+	var inner := [Vector2(-10.6, -5.7), Vector2(10.6, -5.7),
+		Vector2(10.6, 5.7), Vector2(-10.6, 5.7)]
+	var outer := [Vector2(-12.0, -7.1), Vector2(12.0, -7.1),
+		Vector2(12.0, 7.1), Vector2(-12.0, 7.1)]
+	var vertices := PackedVector3Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+	for side: int in range(4):
+		var following := (side + 1) % 4
+		var start := vertices.size()
+		for corner: Vector2 in [inner[side], outer[side], outer[following], inner[following]]:
+			vertices.append(Vector3(corner.x, 0.018, corner.y))
+		colors.append(Color(0.0, 0.0, 0.0, 0.23))
+		colors.append(Color(0.0, 0.0, 0.0, 0.0))
+		colors.append(Color(0.0, 0.0, 0.0, 0.0))
+		colors.append(Color(0.0, 0.0, 0.0, 0.23))
+		indices.append_array([start, start + 1, start + 2, start, start + 2, start + 3])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.vertex_color_use_as_albedo = true
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, material)
+	var shadow := MeshInstance3D.new()
+	shadow.name = "ACT03_PitchStaticContactShadow"
+	shadow.mesh = mesh
+	shadow.position = Vector3(-70.0, 0.0, -43.0)
+	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(shadow)
 
 func _build_landmark_plaza(parent: Node3D) -> void:
 	var root := Node3D.new()
@@ -1108,6 +1172,30 @@ func _instance_park_asset(parent: Node3D, source: PackedScene, node_name: String
 	parent.add_child(instance)
 	_configure_park_asset_visibility(instance)
 	return instance
+
+func _set_asset_shadow_casting(node: Node, enabled: bool) -> void:
+	if node is GeometryInstance3D:
+		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if enabled else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for child: Node in node.get_children():
+		_set_asset_shadow_casting(child, enabled)
+
+func _naturalize_pitch_material(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		for surface_index: int in range(mesh_instance.mesh.get_surface_count()):
+			var source_material := mesh_instance.mesh.surface_get_material(surface_index)
+			if source_material is StandardMaterial3D:
+				var material := source_material.duplicate() as StandardMaterial3D
+				# The supplied all-in-one atlas imports as fully metallic, causing
+				# artificial bright turf and dark, patchy-looking goal/fence pieces.
+				material.metallic = 0.0
+				material.metallic_texture = null
+				material.roughness = 0.90
+				material.roughness_texture = null
+				material.metallic_specular = 0.18
+				mesh_instance.set_surface_override_material(surface_index, material)
+	for child: Node in node.get_children():
+		_naturalize_pitch_material(child)
 
 func _configure_park_asset_visibility(node: Node) -> void:
 	if node is GeometryInstance3D:
