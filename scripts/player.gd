@@ -8,8 +8,13 @@ const AUTO_FIRE_INTERVAL: float = 0.095
 # correction just like a conventional FPS spray.
 const ADS_RECOIL_DEGREES_PER_SHOT: float = 0.18
 const HIP_RECOIL_DEGREES_PER_SHOT: float = 0.28
+const FLY_SPEED: float = 20.0
+const FLY_BOOST_SPEED: float = 55.0
 
 signal died
+signal shot_fired
+signal damage_received(amount: float)
+var extraction_mode := false
 
 var mouse_sensitivity: float = 0.00215
 var ads_mouse_multiplier: float = 0.55
@@ -19,6 +24,21 @@ var acceleration: float = 18.0
 var friction: float = 22.0
 var jump_velocity: float = 6.2
 var gravity: float = 18.0
+
+const MANTLE_MIN_HEIGHT: float = 0.55
+const MANTLE_MAX_HEIGHT: float = 1.70
+const MANTLE_REACH: float = 0.95
+var mantle_active: bool = false
+var mantle_start: Vector3 = Vector3.ZERO
+var mantle_target: Vector3 = Vector3.ZERO
+var mantle_elapsed: float = 0.0
+var mantle_duration: float = 0.28
+var mantle_saved_layer: int = 1
+var mantle_saved_mask: int = 3
+var jump_was_down: bool = false
+var fly_mode: bool = false
+var fly_saved_layer: int = 1
+var fly_saved_mask: int = 3
 
 var health: float = 100.0
 var ammo: int = 30
@@ -107,6 +127,8 @@ var ads_weapon_pos: Vector3 = Vector3(0.0, -0.245, -0.625)
 func _ready() -> void:
     collision_layer = 1
     collision_mask = 1 | 2
+    fly_saved_layer = collision_layer
+    fly_saved_mask = collision_mask
     _build_collision()
     _build_camera()
     _build_weapon()
@@ -753,7 +775,7 @@ func _build_hud() -> void:
     hud_status.offset_bottom = -30
     hud_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     hud_status.add_theme_font_size_override("font_size", 18)
-    hud_status.text = "LMB fire · RMB ADS · R reload · WASD move · Shift sprint · Space jump"
+    hud_status.text = "F3 fly mode · LMB fire · RMB ADS · R reload · WASD move"
     canvas.add_child(hud_status)
 
     crosshair = Label.new()
@@ -838,7 +860,9 @@ func _unhandled_input(event: InputEvent) -> void:
                 Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
             else:
                 Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-        elif event.keycode == KEY_R:
+        elif event.keycode == KEY_F3 and not extraction_mode:
+            _set_fly_mode(not fly_mode)
+        elif event.keycode == KEY_R and not fly_mode:
             start_reload()
 
     if not alive:
@@ -849,10 +873,13 @@ func _unhandled_input(event: InputEvent) -> void:
         rotate_y(-event.relative.x * sens)
         head.rotate_x(-event.relative.y * sens)
         var head_rot: Vector3 = head.rotation
-        head_rot.x = clampf(head_rot.x, deg_to_rad(-84.0), deg_to_rad(84.0))
+        var pitch_limit := 89.5 if fly_mode else 84.0
+        head_rot.x = clampf(head_rot.x, deg_to_rad(-pitch_limit), deg_to_rad(pitch_limit))
         head.rotation = head_rot
 
     if event is InputEventMouseButton:
+        if fly_mode:
+            return
         if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
             shoot()
         elif event.button_index == MOUSE_BUTTON_RIGHT:
@@ -862,6 +889,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
     if not alive:
+        return
+
+    if fly_mode:
+        _process_fly_mode(delta)
+        return
+
+    var jump_down: bool = Input.is_key_pressed(KEY_SPACE)
+    if mantle_active:
+        _process_mantle(delta)
+        jump_was_down = jump_down
         return
 
     fire_cooldown = maxf(0.0, fire_cooldown - delta)
@@ -907,10 +944,14 @@ func _physics_process(delta: float) -> void:
     velocity.x = move_toward(velocity.x, wish.x * speed, acceleration * delta if input_vec != Vector2.ZERO else friction * delta)
     velocity.z = move_toward(velocity.z, wish.z * speed, acceleration * delta if input_vec != Vector2.ZERO else friction * delta)
 
+    if jump_down and not jump_was_down and _try_start_mantle(wish):
+        jump_was_down = jump_down
+        return
+
     if not is_on_floor():
         velocity.y -= gravity * delta
     else:
-        if Input.is_key_pressed(KEY_SPACE):
+        if jump_down:
             velocity.y = jump_velocity
         else:
             velocity.y = 0.0
@@ -931,6 +972,127 @@ func _physics_process(delta: float) -> void:
         uzi_viewmodel.call("set_ads_blend", ads_blend)
         uzi_viewmodel.call("set_move_speed", horizontal_speed)
     _update_hud()
+    jump_was_down = jump_down
+
+func _set_fly_mode(enabled: bool) -> void:
+    fly_mode = enabled
+    velocity = Vector3.ZERO
+    mantle_active = false
+    ads = false
+    reloading = false
+    jump_was_down = false
+    if fly_mode:
+        fly_saved_layer = collision_layer
+        fly_saved_mask = collision_mask
+        collision_layer = 0
+        collision_mask = 0
+        motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
+    else:
+        collision_layer = fly_saved_layer
+        collision_mask = fly_saved_mask
+        motion_mode = CharacterBody3D.MOTION_MODE_GROUNDED
+    if is_instance_valid(weapon):
+        weapon.visible = not fly_mode
+    if is_instance_valid(uzi_viewmodel):
+        uzi_viewmodel.visible = not fly_mode
+    if is_instance_valid(crosshair):
+        crosshair.visible = not fly_mode
+    if is_instance_valid(ads_dot):
+        ads_dot.visible = false
+    if is_instance_valid(hud_status):
+        hud_status.text = (
+            "FLY MODE · WASD move · Space/E rise · Ctrl/Q descend · Shift boost · F3 exit"
+            if fly_mode
+            else "F3 fly mode · LMB fire · RMB ADS · R reload · WASD move"
+        )
+
+func _process_fly_mode(delta: float) -> void:
+    var input_vec := Vector2.ZERO
+    if Input.is_key_pressed(KEY_W): input_vec.y -= 1.0
+    if Input.is_key_pressed(KEY_S): input_vec.y += 1.0
+    if Input.is_key_pressed(KEY_A): input_vec.x -= 1.0
+    if Input.is_key_pressed(KEY_D): input_vec.x += 1.0
+    input_vec = input_vec.normalized()
+
+    var basis := global_transform.basis
+    var fly_direction := basis.x * input_vec.x + basis.z * input_vec.y
+    if Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_E):
+        fly_direction.y += 1.0
+    if Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_Q):
+        fly_direction.y -= 1.0
+    if fly_direction.length_squared() > 0.0001:
+        fly_direction = fly_direction.normalized()
+    var speed := FLY_BOOST_SPEED if Input.is_key_pressed(KEY_SHIFT) else FLY_SPEED
+    global_position += fly_direction * speed * delta
+    velocity = Vector3.ZERO
+
+func _try_start_mantle(wish: Vector3) -> bool:
+    var forward: Vector3 = wish
+    if forward.length_squared() < 0.01:
+        forward = -global_transform.basis.z
+    forward.y = 0.0
+    forward = forward.normalized()
+
+    var space_state: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+    var wall_from: Vector3 = global_position + Vector3.UP * 0.65
+    var wall_query := PhysicsRayQueryParameters3D.create(
+        wall_from, wall_from + forward * MANTLE_REACH
+    )
+    wall_query.exclude = [get_rid()]
+    wall_query.collision_mask = collision_mask
+    var wall_hit: Dictionary = space_state.intersect_ray(wall_query)
+    if wall_hit.is_empty():
+        return false
+
+    var clear_from: Vector3 = global_position + Vector3.UP * 1.82
+    var clear_query := PhysicsRayQueryParameters3D.create(
+        clear_from, clear_from + forward * (MANTLE_REACH + 0.20)
+    )
+    clear_query.exclude = [get_rid()]
+    clear_query.collision_mask = collision_mask
+    if not space_state.intersect_ray(clear_query).is_empty():
+        return false
+
+    var beyond_wall: Vector3 = global_position + forward * (MANTLE_REACH + 0.22)
+    var down_query := PhysicsRayQueryParameters3D.create(
+        beyond_wall + Vector3.UP * (MANTLE_MAX_HEIGHT + 0.35),
+        beyond_wall + Vector3.UP * 0.20
+    )
+    down_query.exclude = [get_rid()]
+    down_query.collision_mask = collision_mask
+    var top_hit: Dictionary = space_state.intersect_ray(down_query)
+    if top_hit.is_empty():
+        return false
+
+    var ledge_position: Vector3 = top_hit.position
+    var ledge_height: float = ledge_position.y - global_position.y
+    if ledge_height < MANTLE_MIN_HEIGHT or ledge_height > MANTLE_MAX_HEIGHT:
+        return false
+
+    mantle_start = global_position
+    mantle_target = ledge_position + forward * 0.32 + Vector3.UP * 0.06
+    mantle_elapsed = 0.0
+    mantle_duration = lerpf(0.22, 0.34, inverse_lerp(MANTLE_MIN_HEIGHT, MANTLE_MAX_HEIGHT, ledge_height))
+    mantle_saved_layer = collision_layer
+    mantle_saved_mask = collision_mask
+    collision_layer = 0
+    collision_mask = 0
+    velocity = Vector3.ZERO
+    mantle_active = true
+    return true
+
+func _process_mantle(delta: float) -> void:
+    mantle_elapsed += delta
+    var amount: float = clampf(mantle_elapsed / mantle_duration, 0.0, 1.0)
+    var smooth_amount: float = amount * amount * (3.0 - 2.0 * amount)
+    global_position = mantle_start.lerp(mantle_target, smooth_amount)
+    global_position.y += sin(amount * PI) * 0.14
+    if amount >= 1.0:
+        global_position = mantle_target
+        collision_layer = mantle_saved_layer
+        collision_mask = mantle_saved_mask
+        mantle_active = false
+        velocity = -global_transform.basis.z * 1.2
 
 func _smooth01(value: float) -> float:
     var x: float = clampf(value, 0.0, 1.0)
@@ -1122,6 +1284,7 @@ func shoot() -> void:
         return
 
     ammo -= 1
+    shot_fired.emit()
     fire_cooldown = AUTO_FIRE_INTERVAL
     muzzle_timer = 0.055
     weapon_kick = 1.0
@@ -1206,6 +1369,7 @@ func take_damage(amount: float) -> void:
     if not alive:
         return
     health -= amount
+    damage_received.emit(amount)
     damage_flash = 0.75
     if health <= 0.0:
         health = 0.0
@@ -1229,7 +1393,7 @@ func set_wave(value: int) -> void:
     _update_hud()
 
 func _process(_delta: float) -> void:
-    if not alive and Input.is_key_pressed(KEY_ENTER):
+    if not extraction_mode and not alive and Input.is_key_pressed(KEY_ENTER):
         get_tree().reload_current_scene()
 
 func _update_hud() -> void:

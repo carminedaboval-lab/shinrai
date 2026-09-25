@@ -15,8 +15,14 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Blacksite FPS Prototype"
-run/main_scene="res://scenes/main.tscn"
-config/features=PackedStringArray("4.7", "GL Compatibility")
+run/main_scene="res://scenes/shinrai_extraction.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[autoload]
+
+MidoriSakuraSwap="*res://scripts/midori_sakura_swap.gd"
+MidoriGrassDetail="*res://scripts/midori_grass_detail.gd"
+MidoriGroundTexture="*res://scripts/midori_ground_texture.gd"
 
 [autoload]
 
@@ -24,8 +30,8 @@ SakuraCleanup="*res://scripts/sakura_cleanup.gd"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=1920
+window/size/viewport_height=1080
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
@@ -36,7 +42,10 @@ window/stretch/mode="canvas_items"
 
 [rendering]
 
-renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+anti_aliasing/quality/msaa_3d=1
+anti_aliasing/screen_space_roughness_limiter/amount=0.35
+textures/default_filters/texture_mipmap_bias=0.5
 limits/opengl/max_renderable_lights=96
 limits/opengl/max_lights_per_object=16
+anti_aliasing/quality/use_taa=true

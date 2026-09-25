@@ -64,3 +64,13 @@ are explicitly named `PLACEHOLDER` so they can be replaced independently.
 - `SOCKET_Roof`
 
 The deterministic source builder is included in `source/`.
+
+## In-game reference calibration
+
+The scene root runs `reference_material_match.gd` when instantiated. This keeps
+the original embedded PBR maps and applies local exposure compensation to the
+plaster walls, stone entrance/floor, dark interior floor, roof surface, and
+architectural edge metal. It prevents the brighter town environment from washing
+those materials toward white and raises edge roughness to remove the unintended
+bright rim. No building geometry, collision, sockets, scale, or global town
+lighting is changed.

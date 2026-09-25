@@ -29,6 +29,35 @@ const DESTINATION_REACHED_DISTANCE: float = 0.72
 const PATH_REFRESH_INTERVAL: float = 0.34
 const PATH_RETARGET_DISTANCE: float = 0.90
 
+# K17 uses the real authored static scene/model. A .tscn is preferred because it
+# preserves the Stage 35 hierarchy, materials, sockets, collision proxies, and LODs.
+# The runtime loader never treats renders or image files as a model substitute.
+const K17_VISUAL_ROOTS: Array[String] = [
+    "res://assets/enemies/k17",
+    "res://assets/enemies/k17_drone",
+]
+const K17_VISUAL_SCENE_CANDIDATES: Array[String] = [
+    # The supplied Stage 35 test wrapper has stale absolute references. Its real
+    # hero mesh is present beside it, so load that authored mesh directly first.
+    "res://assets/enemies/k17_drone/godot_test/K17_Stage34_LOD0.glb",
+    "res://assets/enemies/k17/K17_Stage34_LOD0.glb",
+    "res://assets/enemies/k17_test/K17_Stage34_LOD0.glb",
+    "res://assets/enemies/k17/K17_Drone_Static.tscn",
+    "res://assets/enemies/k17/ProjectShinrai_K17_Stage36_BODY_CORRECTED_STATIC.tscn",
+    "res://assets/enemies/k17/ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.tscn",
+    "res://assets/enemies/k17/K17_Drone_Static.glb",
+    "res://assets/enemies/k17/ProjectShinrai_K17_Stage36_BODY_CORRECTED_STATIC.glb",
+    "res://assets/enemies/k17/ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.glb",
+    "res://assets/enemies/k17_drone/K17_Drone_Static.tscn",
+    "res://assets/enemies/k17_drone/ProjectShinrai_K17_Stage36_BODY_CORRECTED_STATIC.tscn",
+    "res://assets/enemies/k17_drone/ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.tscn",
+    "res://assets/enemies/k17_drone/K17_Drone_Static.glb",
+    "res://assets/enemies/k17_drone/ProjectShinrai_K17_Stage36_BODY_CORRECTED_STATIC.glb",
+    "res://assets/enemies/k17_drone/ProjectShinrai_K17_Stage35_INGAME_STATIC_TEST.glb",
+    "res://assets/enemies/K17_Drone_Static.tscn",
+    "res://assets/enemies/K17_Drone_Static.glb",
+]
+
 var target: Node3D
 var navigation_source: Node
 var health: float = 100.0
@@ -103,14 +132,7 @@ func _build_visual_socket() -> void:
     visual_root.name = "VisualRoot"
     add_child(visual_root)
 
-    # Production art is intentionally swappable. Drop one of these files into
-    # assets/enemies and the behaviour/collision code remains unchanged.
-    var candidate_paths: Array[String] = [
-        "res://assets/enemies/enemy.tscn",
-        "res://assets/enemies/enemy.glb",
-        "res://assets/enemies/enemy.gltf",
-    ]
-    for path: String in candidate_paths:
+    for path: String in _get_production_visual_paths():
         if not ResourceLoader.exists(path):
             continue
         var resource: Resource = load(path)
@@ -118,10 +140,78 @@ func _build_visual_socket() -> void:
             var production_visual: Node = (resource as PackedScene).instantiate()
             visual_root.add_child(production_visual)
             _setup_muzzle_light()
+            print("K17 production visual loaded: %s" % path)
             return
 
+    push_warning(
+        "K17 asset missing. Copy the real Stage 35 runtime folder to " +
+        "res://assets/enemies/k17; development proxy is active."
+    )
     _build_development_proxy()
     _setup_muzzle_light()
+
+func _get_production_visual_paths() -> Array[String]:
+    var candidate_paths: Array[String] = []
+    for path: String in K17_VISUAL_SCENE_CANDIDATES:
+        _append_unique_visual_path(candidate_paths, path)
+
+    # Accept the original package hierarchy when it is pasted intact. Scene
+    # files are collected before raw models so sockets and authored structure win.
+    var discovered_scenes: Array[String] = []
+    var discovered_models: Array[String] = []
+    for root_path: String in K17_VISUAL_ROOTS:
+        _collect_k17_visual_paths(root_path, discovered_scenes, discovered_models)
+    discovered_scenes.sort()
+    discovered_models.sort()
+
+    # The supplied wrapper currently has stale external paths. Prefer its real
+    # full-detail hero GLB wherever the package was copied, before trying scenes
+    # or lower-detail/collision models.
+    for path: String in discovered_models:
+        if path.get_file().to_lower() == "k17_stage34_lod0.glb":
+            _append_unique_visual_path(candidate_paths, path)
+    for path: String in discovered_scenes:
+        _append_unique_visual_path(candidate_paths, path)
+    for path: String in discovered_models:
+        _append_unique_visual_path(candidate_paths, path)
+
+    # Retain the original generic production-art socket as a final fallback.
+    for path: String in [
+        "res://assets/enemies/enemy.tscn",
+        "res://assets/enemies/enemy.glb",
+        "res://assets/enemies/enemy.gltf",
+    ]:
+        _append_unique_visual_path(candidate_paths, path)
+    return candidate_paths
+
+func _append_unique_visual_path(paths: Array[String], path: String) -> void:
+    if not paths.has(path):
+        paths.append(path)
+
+func _collect_k17_visual_paths(
+    directory_path: String,
+    scene_paths: Array[String],
+    model_paths: Array[String]
+) -> void:
+    var directory: DirAccess = DirAccess.open(directory_path)
+    if directory == null:
+        return
+
+    directory.list_dir_begin()
+    var entry_name: String = directory.get_next()
+    while not entry_name.is_empty():
+        if not entry_name.begins_with("."):
+            var entry_path: String = directory_path.path_join(entry_name)
+            if directory.current_is_dir():
+                _collect_k17_visual_paths(entry_path, scene_paths, model_paths)
+            else:
+                var lower_name: String = entry_name.to_lower()
+                if lower_name.ends_with(".tscn"):
+                    scene_paths.append(entry_path)
+                elif lower_name.ends_with(".glb") or lower_name.ends_with(".gltf"):
+                    model_paths.append(entry_path)
+        entry_name = directory.get_next()
+    directory.list_dir_end()
 
 func _build_development_proxy() -> void:
     proxy_material = StandardMaterial3D.new()

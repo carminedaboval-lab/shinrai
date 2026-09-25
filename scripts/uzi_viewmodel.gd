@@ -196,7 +196,9 @@ func _build_viewmodel_light() -> void:
     fill_light.name = "ViewmodelFillLight"
     fill_light.position = Vector3(0.35, 0.28, 0.18)
     fill_light.light_color = Color(0.72, 0.84, 1.0)
-    fill_light.light_energy = 3.2
+    # Keep the weapon readable without washing skin and gloves to white in the
+    # park's daylight environment.
+    fill_light.light_energy = 1.15
     fill_light.omni_range = 4.0
     fill_light.shadow_enabled = false
     fill_light.light_cull_mask = VIEWMODEL_LAYER
