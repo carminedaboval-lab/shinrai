@@ -44,7 +44,7 @@ const MATURE_TREE_MIN_SPACING_M := 1.5
 const SKINNY_TREE_MIN_SPACING_M := 1.15
 const SKINNY_TO_SKINNY_MIN_SPACING_M := 0.6
 const SHRUB_PATH_CLEARANCE_M := 0.65
-const SAKURA_TREE_COUNT := 24
+const SAKURA_TREE_COUNT := 36
 const LAKE_TREE_BUFFER_M := 2.0
 const LAKE_PROMENADE_WIDTH_M := 3.6
 const LAKE_PROMENADE_BANK_MARGIN_M := 1.0
@@ -141,6 +141,7 @@ const FUTURE_BRIDGE_SOUTH: Array[Vector2] = [
 var mat_grass: StandardMaterial3D
 var mat_path: StandardMaterial3D
 var mat_paved_surface: ShaderMaterial
+var mat_lake_paved_surface: ShaderMaterial
 var mat_water: ShaderMaterial
 var mat_playground: StandardMaterial3D
 var mat_plaza: StandardMaterial3D
@@ -243,6 +244,7 @@ func _create_materials() -> void:
 	mat_path_light_streak = _make_path_light_streak_material()
 	modular_path_shader = _make_modular_path_shader()
 	mat_paved_surface = _make_continuous_paving_material()
+	mat_lake_paved_surface = _make_continuous_paving_material(false)
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -506,6 +508,7 @@ func _build_park_footprint() -> void:
 		_build_scale_ticks(root)
 	_build_sakura_trees(root)
 	_build_reference_canopy(root)
+	_build_wildflower_groundcover(root)
 	_build_deadwood_pass(root)
 	_build_japanese_maple_pass(root)
 	_build_open_lawn_cover(root)
@@ -568,6 +571,9 @@ func _add_path_strip_2d(
 	y_value: float
 ) -> void:
 	# Render-only cleanup keeps vegetation placement/clearance inputs untouched.
+	# Keep the lake promenade as authored; mainland trails are narrower walks.
+	if node_name != "ContinuousLakePromenade":
+		width *= 0.80
 	var route: Array[Vector2] = points_2d.duplicate()
 	if node_name == "SouthEntranceToPlaza":
 		route[0] = Vector2(-1, 81)
@@ -580,7 +586,8 @@ func _add_path_strip_2d(
 	var curved := _rounded_contour(route, route[0].is_equal_approx(route[-1]), 4.0)
 	for point: Vector2 in curved:
 		points_3d.append(Vector3(point.x, y_value, point.y))
-	_add_path_strip(parent, node_name, points_3d, width, mat_paved_surface)
+	var paving_material := mat_lake_paved_surface if node_name == "ContinuousLakePromenade" else mat_paved_surface
+	_add_path_strip(parent, node_name, points_3d, width, paving_material)
 
 func _build_curved_promenades(parent: Node3D) -> void:
 	var root := Node3D.new()
@@ -1712,7 +1719,8 @@ func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
 
 	# Keep activity surfaces, plaza, pavilion, and all four entrances open.
 	var reserved_rects: Array[Vector4] = [
-		Vector4(-70,-43,30.7,21.2),Vector4(-72,45,20.0,17.0),
+		# Keep the actual five-a-side enclosure and a playable apron clear.
+		Vector4(-70,-43,14.0,10.5),Vector4(-72,45,20.0,17.0),
 		Vector4(82,68,19.0,15.0),Vector4(76,-73,14.0,11.0),
 		Vector4(0,86,11.0,7.0),Vector4(-38,-86,9.0,7.0),
 		Vector4(-106,20,7.0,9.0),Vector4(106,-20,7.0,9.0),
@@ -1970,6 +1978,7 @@ func _build_emerald_grass_clusters(parent: Node3D) -> void:
 		Vector4(-36,59,5.0,5),Vector4(13,65,5.4,6),
 		Vector4(-28,-66,4.7,4),Vector4(16,-70,5.2,5),
 		Vector4(-19,-39,4.5,4),Vector4(84,-27,4.8,5),
+		Vector4(-87,-38,4.6,5),Vector4(-52,-46,4.3,4),
 	]
 	var serial := 0
 	for cluster_index: int in range(clusters.size()):
@@ -2006,6 +2015,7 @@ func _build_forest_floor_bush_pockets(parent: Node3D) -> void:
 		Vector2(-86,-16),Vector2(-63,-14),Vector2(-86,17),Vector2(-63,18),
 		Vector2(-28,61),Vector2(23,63),Vector2(-18,-66),Vector2(4,-69),
 		Vector2(-26,-34),Vector2(-11,-44),Vector2(88,-15),Vector2(84,-49),
+		Vector2(-88,-43),Vector2(-52,-43),
 	]
 	var serial := 0
 	for center_index: int in range(centers.size()):
@@ -2160,7 +2170,7 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 	if dense_grass_prototypes.is_empty():
 		return
 	var root := Node3D.new()
-	root.name = "MainlandDenseGrassPatches_24"
+	root.name = "MainlandDenseGrassPatches"
 	parent.add_child(root)
 	# These are the mainland infill groves only. Three offset patches per grove
 	# create a readable knee-height layer without raising the 18k clump count or
@@ -2168,6 +2178,7 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 	var centers: Array[Vector2] = [
 		Vector2(-86,-16),Vector2(-63,-14),Vector2(-86,17),Vector2(-63,18),
 		Vector2(-28,61),Vector2(23,63),Vector2(-18,-66),Vector2(4,-69),
+		Vector2(-87,-42),Vector2(-53,-44),Vector2(-72,-29),
 	]
 	var heavy_patch_serials: Array[int] = [2,8,15,21]
 	var serial := 0
@@ -2197,7 +2208,7 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 
 func _build_mainland_meadow_transitions(parent: Node3D) -> void:
 	var root := Node3D.new()
-	root.name = "MainlandMeadowTransitions_25"
+	root.name = "MainlandMeadowTransitions"
 	parent.add_child(root)
 	# Light fountain and meadow grasses bridge the visual gap between the 18k
 	# near-ground clumps and the shrub/tree layer. Uneven groups avoid a tiled
@@ -2207,6 +2218,8 @@ func _build_mainland_meadow_transitions(parent: Node3D) -> void:
 		Vector4(-90,22,4.6,4),Vector4(-59,23,4.0,3),
 		Vector4(-31,66,4.8,4),Vector4(20,69,4.6,4),
 		Vector4(-22,-70,4.4,4),Vector4(8,-73,4.1,4),
+		Vector4(-87,-39,4.8,5),Vector4(-53,-47,4.5,5),
+		Vector4(-72,-29,3.8,4),
 	]
 	var serial := 0
 	for cluster_index: int in range(clusters.size()):
@@ -2338,6 +2351,9 @@ func _build_open_lawn_cover(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "OpenLawnBoulderCover"
 	parent.add_child(root)
+	var fringe := Node3D.new()
+	fringe.name = "OpenBoulderNativeFringe"
+	root.add_child(fringe)
 	var accepted: Array[Vector2] = []
 	for anchor_index: int in range(anchors.size()):
 		var point := Vector2.ZERO
@@ -2386,6 +2402,23 @@ func _build_open_lawn_cover(parent: Node3D) -> void:
 			collision.shape = spec["shape"]
 			body.add_child(collision)
 		accepted.append(point)
+		# Low native growth helps each supplied rock sit in the lawn without
+		# obscuring its silhouette or changing its walkable cover collision.
+		for fringe_index: int in range(3):
+			var angle := float(anchor_index) * 1.43 + float(fringe_index) * 2.15
+			var distance_value := 1.6 + float(fringe_index) * 0.35
+			var candidate := point + Vector2(cos(angle), sin(angle)) * distance_value
+			var plant_position := Vector3(candidate.x, -0.018, candidate.y)
+			if not _is_vegetation_clear(plant_position, 0.5):
+				continue
+			var sources := forest_floor_bush_prototypes if fringe_index == 1 else dense_grass_prototypes
+			if sources.is_empty():
+				continue
+			_add_reference_plant(
+				fringe, sources, plant_position,
+				0.68 if fringe_index == 1 else 0.56,
+				7000 + anchor_index * 3 + fringe_index, "OpenBoulderFringe"
+			)
 	prototype.free()
 	print("Midori open lawn cover: %d supplied boulder clusters at %s" % [accepted.size(), accepted])
 
@@ -2811,8 +2844,8 @@ func _build_wildflower_groundcover(parent: Node3D) -> void:
 	_add_flower_multimesh(root, "WildflowerStems", stem_mesh, stem_transforms, _make_material(Color("#496d3e"), 0.96))
 	for color_index: int in range(palettes.size()):
 		var head_mesh := SphereMesh.new()
-		head_mesh.radius = 0.095
-		head_mesh.height = 0.13
+		head_mesh.radius = 0.045
+		head_mesh.height = 0.065
 		head_mesh.radial_segments = 6
 		head_mesh.rings = 4
 		_add_flower_multimesh(
@@ -3237,21 +3270,24 @@ void fragment() {
 	return material
 
 # Orthographic albedo bake of the supplied straight module preserves its atlas design.
-func _make_continuous_paving_material() -> ShaderMaterial:
+func _make_continuous_paving_material(mainland_warm: bool = true) -> ShaderMaterial:
 	var shader := Shader.new()
 	shader.code = """
 shader_type spatial;
 uniform sampler2D paving : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 uniform float night_emission = 0.0;
+uniform float mainland_warmth = 1.0;
 void fragment() {
     // Layout coordinates are scaled 2x: repeat the original tile every 12 world metres.
     float along = 1.0 - abs(mod(UV.x / 6.0, 2.0) - 1.0);
     vec2 tile_uv = vec2(UV.y, along);
     vec3 base = texture(paving, tile_uv).rgb;
     float cyan = smoothstep(0.08, 0.26, min(base.g, base.b) - base.r);
-    ALBEDO = base * mix(vec3(0.62, 0.59, 0.53), vec3(0.55), cyan);
-    ROUGHNESS = mix(0.84, 0.3, cyan);
-    METALLIC = cyan * 0.18;
+    float stone_tone = dot(base, vec3(0.299, 0.587, 0.114));
+    vec3 warm_stone = mix(vec3(0.68, 0.63, 0.53), vec3(stone_tone) * vec3(1.02, 0.97, 0.86), 0.32);
+    ALBEDO = mix(base * mix(vec3(0.62, 0.59, 0.53), vec3(0.55), cyan), warm_stone, mainland_warmth);
+    ROUGHNESS = mix(mix(0.84, 0.3, cyan), 0.88, mainland_warmth);
+    METALLIC = mix(cyan * 0.18, 0.0, mainland_warmth);
     EMISSION = vec3(0.28, 0.84, 1.0) * cyan * 2.2 * night_emission;
 }
 """
@@ -3259,5 +3295,6 @@ void fragment() {
 	material.shader = shader
 	material.set_shader_parameter("paving", load("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_paving_albedo.png"))
 	material.set_shader_parameter("night_emission", 1.0 if is_night_mode else 0.0)
+	material.set_shader_parameter("mainland_warmth", 1.0 if mainland_warm else 0.0)
 	modular_path_emissive_materials.append(material)
 	return material

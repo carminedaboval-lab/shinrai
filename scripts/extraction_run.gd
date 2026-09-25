@@ -51,6 +51,7 @@ var guidance_path := PackedVector3Array()
 var guidance_distance := 0.0
 var guidance_elapsed := 0.0
 var selected_destination := ""
+var pending_cache_id := ""
 
 func _ready() -> void:
 	process_physics_priority = 10 # Apply shoreline safety after player movement.
@@ -109,7 +110,7 @@ func _register_sites() -> void:
 	for prop: Node in park.find_children("*Bench*", "Node3D", true, false):
 		if not (String(prop.name).begins_with("NeonParkBench_") or String(prop.name).begins_with("FuturisticEcoBench_") or String(prop.name).begins_with("PlazaBench_")):
 			continue
-		sites.append({"id": String(prop.name), "title": "Search bench compartment", "kind": "cache", "position": prop.global_position, "done": false})
+		sites.append({"id": String(prop.name), "title": "Search bench compartment", "kind": "cache", "position": prop.global_position, "done": false, "discovered": false})
 	exits = [
 		{"id": "south", "title": "South gate extraction", "position": Vector3(0, 0.2, 167)},
 		{"id": "west", "title": "West gate extraction", "position": Vector3(-205, 0.2, 40)}]
@@ -118,6 +119,16 @@ func capacity() -> int:
 	return 6 + int(profile.data.pack_level) * 2
 
 func _on_action(action: String) -> void:
+	if action.begins_with("cache_"):
+		if action == "cache_take":
+			resolve_cache_choice("take")
+		elif action == "cache_leave":
+			resolve_cache_choice("leave")
+		elif action.begins_with("cache_swap:"):
+			var slot_text := action.trim_prefix("cache_swap:")
+			if slot_text.is_valid_int():
+				resolve_cache_choice("swap", slot_text.to_int())
+		return
 	if action.begins_with("track:") and phase == Phase.PAUSED:
 		selected_destination = action.trim_prefix("track:")
 		refresh_guidance()
@@ -164,6 +175,7 @@ func start_run() -> void:
 	relays = 0
 	track_extraction = false
 	selected_destination = ""
+	pending_cache_id = ""
 	medkits = 2 if extra_medkit else 1
 	remaining = RAID_SECONDS
 	run_time = 0.0
@@ -177,6 +189,7 @@ func start_run() -> void:
 		site.done = false
 		if site.kind == "cache":
 			site.loot = ITEMS[rng.randi_range(0, ITEMS.size() - 1)].duplicate()
+			site.discovered = false
 	player.alive = true
 	player.health = 100.0
 	player.ammo = 30
@@ -215,7 +228,10 @@ func _input(event: InputEvent) -> void:
 		if phase == Phase.RAID:
 			pause_run(event.keycode == KEY_TAB)
 		elif phase == Phase.PAUSED:
-			resume_run()
+			if not pending_cache_id.is_empty():
+				resolve_cache_choice("leave")
+			else:
+				resume_run()
 		get_viewport().set_input_as_handled()
 	elif event.keycode == KEY_T and phase == Phase.RAID:
 		track_extraction = not track_extraction
@@ -237,6 +253,7 @@ func pause_run(with_map: bool) -> void:
 func resume_run() -> void:
 	if phase != Phase.PAUSED:
 		return
+	pending_cache_id = ""
 	phase = Phase.RAID
 	_set_actors_enabled(true)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -267,6 +284,8 @@ func _physics_process(delta: float) -> void:
 	prompt_text = "Hold H: medkit   ·   Tab: field map / cargo"
 	progress_ratio = 0.0
 	_update_interaction(delta)
+	if phase != Phase.RAID:
+		return
 	_update_healing(delta)
 	_update_extraction(delta)
 	guidance_elapsed += delta
@@ -301,23 +320,68 @@ func _update_interaction(delta: float) -> void:
 	if site.id != hold_id:
 		hold_progress = 0.0
 		hold_id = site.id
-	if site.kind == "cache" and bag.size() >= capacity():
-		prompt_text = "CARGO FULL  ·  Extract or drop an item from the field map"
-		return
-	prompt_text = "HOLD E  /  " + String(site.title)
+	prompt_text = "HOLD E  /  " + ("Inspect %s" % site.loot.title if site.kind == "cache" and site.discovered else String(site.title))
 	if Input.is_key_pressed(KEY_E) and run_time - last_damage_at > 0.8 and not player.reloading:
 		hold_progress += delta
-		var required := 4.0 if site.kind == "relay" else 2.0
+		var required := 4.0 if site.kind == "relay" else (0.3 if site.discovered else 2.0)
 		progress_ratio = hold_progress / required
 		if hold_progress >= required:
-			complete_site(site)
+			if site.kind == "cache":
+				open_cache_choice(site)
+			else:
+				complete_site(site)
 	else:
 		hold_progress = 0.0
 
-func complete_site(site: Dictionary) -> bool:
-	if phase != Phase.RAID or site.is_empty() or site.done or _distance(site.position) > 4.2:
+func open_cache_choice(site: Dictionary) -> bool:
+	if phase != Phase.RAID or site.is_empty() or site.kind != "cache" or site.done or _distance(site.position) > 4.2:
 		return false
-	if site.kind == "cache" and bag.size() >= capacity():
+	# Keep the same item in an inspected compartment when the player leaves it.
+	site.discovered = true
+	pending_cache_id = site.id
+	hold_progress = 0.0
+	hold_id = ""
+	progress_ratio = 0.0
+	phase = Phase.PAUSED
+	_set_actors_enabled(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	hud.show_cache_choice(self, site)
+	return true
+
+func pending_cache() -> Dictionary:
+	for site: Dictionary in sites:
+		if site.id == pending_cache_id and site.kind == "cache":
+			return site
+	return {}
+
+func resolve_cache_choice(choice: String, replace_index: int = -1) -> bool:
+	if phase != Phase.PAUSED or pending_cache_id.is_empty():
+		return false
+	var site := pending_cache()
+	if site.is_empty() or site.done:
+		return false
+	if choice == "leave":
+		resume_run()
+		announce("Left %s in the compartment." % site.loot.title, 3.0)
+		return true
+	if choice != "take" and choice != "swap":
+		return false
+	if choice == "take" and bag.size() >= capacity():
+		return false
+	if choice == "swap" and (replace_index < 0 or replace_index >= bag.size()):
+		return false
+	var accepted := complete_site(site, replace_index if choice == "swap" else -1)
+	if accepted:
+		resume_run()
+	return accepted
+
+func complete_site(site: Dictionary, replace_index: int = -1) -> bool:
+	var choosing_cache: bool = phase == Phase.PAUSED and site.get("kind", "") == "cache" and pending_cache_id == site.get("id", "")
+	if (phase != Phase.RAID and not choosing_cache) or site.is_empty() or site.done or _distance(site.position) > 4.2:
+		return false
+	if replace_index < -1 or (replace_index >= 0 and (site.kind != "cache" or replace_index >= bag.size())):
+		return false
+	if site.kind == "cache" and replace_index == -1 and bag.size() >= capacity():
 		return false
 	site.done = true
 	if selected_destination == site.id:
@@ -329,7 +393,10 @@ func complete_site(site: Dictionary) -> bool:
 		announce("Telemetry recovered %d/3. Extraction is available at South or West Gate." % relays, 7.0)
 		_alert_nearby(site.position, 85.0)
 	else:
-		bag.append(site.loot.duplicate())
+		if replace_index >= 0:
+			bag[replace_index] = site.loot.duplicate()
+		else:
+			bag.append(site.loot.duplicate())
 		player.reserve = mini(player.reserve + 15, 240)
 		announce("Recovered %s  ·  %d credits on sale  ·  +15 rounds" % [site.loot.title, site.loot.value])
 	refresh_guidance()
@@ -402,6 +469,7 @@ func tracked_objective() -> Dictionary:
 func finish_run(extracted: bool, reason: String) -> void:
 	if phase != Phase.RAID and phase != Phase.PAUSED:
 		return
+	pending_cache_id = ""
 	phase = Phase.RESULT
 	_set_actors_enabled(false)
 	var bonus := (150 * relays + (300 if relays == 3 else 0)) if extracted else 0

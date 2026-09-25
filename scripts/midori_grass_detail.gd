@@ -322,8 +322,9 @@ func _is_lawn_position(x: float, z: float) -> bool:
 	if _near_polyline(point, FUTURE_BRIDGE_SOUTH, 2.6):
 		return false
 
-	# Current colored zone placeholders.
-	if _inside_box(authored_x, authored_z, -70.0, -43.0, 59.0, 40.0):
+	# Keep clumps off the pitch and its immediate player approach, while letting
+	# the wider sports lawn read as meadow rather than a bare rectangle.
+	if _inside_box(authored_x, authored_z, -70.0, -43.0, 13.0, 9.5):
 		return false
 	if _inside_box(authored_x, authored_z, -72.0, 45.0, 36.0, 30.0):
 		return false

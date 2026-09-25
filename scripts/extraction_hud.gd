@@ -157,6 +157,47 @@ func show_raid() -> void:
 	for control: Control in game_controls:
 		control.show()
 
+func show_cache_choice(raid: Node, site: Dictionary) -> void:
+	_clear_panel()
+	_label(panel_content, "SHINRAI PARK  /  SALVAGE", 19, MINT)
+	_label(panel_content, "BENCH COMPARTMENT", 38, PAPER)
+	var loot: Dictionary = site.loot
+	_label(panel_content, "%s  ·  %d credits on sale" % [loot.title, loot.value], 27, GOLD)
+	_label(panel_content, "CARGO  %d / %d   ·   Search complete" % [raid.bag.size(), raid.capacity()], 19, MINT)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 14)
+	panel_content.add_child(actions)
+	var take := Button.new()
+	take.text = "TAKE ITEM" if raid.bag.size() < raid.capacity() else "CARGO FULL"
+	take.disabled = raid.bag.size() >= raid.capacity()
+	take.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	take.pressed.connect(func() -> void: action_requested.emit("cache_take"))
+	actions.add_child(take)
+	var leave := Button.new()
+	leave.text = "LEAVE IN COMPARTMENT"
+	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	leave.pressed.connect(func() -> void: action_requested.emit("cache_leave"))
+	actions.add_child(leave)
+	if not raid.bag.is_empty():
+		_label(panel_content, "SWAP WITH A CARGO SLOT  /  Replaced item is lost", 18, PAPER)
+		var slots := GridContainer.new()
+		slots.columns = 2
+		slots.add_theme_constant_override("h_separation", 12)
+		slots.add_theme_constant_override("v_separation", 10)
+		panel_content.add_child(slots)
+		for index: int in range(raid.bag.size()):
+			var current: Dictionary = raid.bag[index]
+			var swap := Button.new()
+			swap.text = "SLOT %d  ·  %s (%d)" % [index + 1, current.title, current.value]
+			swap.custom_minimum_size.x = 380
+			var action := "cache_swap:%d" % index
+			swap.pressed.connect(func() -> void: action_requested.emit(action))
+			slots.add_child(swap)
+	if take.disabled:
+		leave.grab_focus()
+	else:
+		take.grab_focus()
+
 func show_pause(raid: Node, map_open: bool) -> void:
 	_clear_panel()
 	_label(panel_content, "SHINRAI PARK  /  " + ("FIELD MAP" if map_open else "PAUSED"), 32, PAPER)
