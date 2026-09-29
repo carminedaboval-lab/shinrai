@@ -106,13 +106,17 @@ void fragment() {
 	float source_roughness = texture(roughness_tex, ground_uv).r;
 	vec3 source_normal = texture(normal_tex, ground_uv).rgb;
 
-	// The source scan contains baked daylight. Darken its midtones and reduce
-	// specular response before the park's real-time sun and ambient are added.
-	ALBEDO = pow(ground_color, vec3(1.20)) * vec3(0.42, 0.72, 0.31) * scene_light_factor;
+	// The supplied source is a forest floor scan with exposed soil and twigs.
+	// Keep its fine variation while shifting most bare-earth color toward lawn.
+	vec3 scan_rgb = pow(ground_color, vec3(1.20));
+	float source_luma = dot(scan_rgb, vec3(0.25, 0.50, 0.25));
+	vec3 forest_color = scan_rgb * vec3(0.42, 0.72, 0.31);
+	vec3 lawn_color = vec3(source_luma * 0.42, source_luma * 0.83, source_luma * 0.30);
+	ALBEDO = mix(forest_color, lawn_color, 0.65) * scene_light_factor;
 	ROUGHNESS = clamp(source_roughness * 0.96 + 0.035, 0.70, 1.0);
 	SPECULAR = 0.12;
 	NORMAL_MAP = source_normal;
-	NORMAL_MAP_DEPTH = 0.52;
+	NORMAL_MAP_DEPTH = 0.32;
 }
 """
 
