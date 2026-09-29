@@ -3,12 +3,14 @@ extends RefCounted
 const CELL := 4.0
 const ORIGIN := Vector2(-220, -180)
 var grid := AStarGrid2D.new()
+var walk_graph := AStar2D.new()
 var shoreline := PackedVector2Array()
 var bridge_corridors: Array[PackedVector2Array] = []
 var ready := false
 
 func build(park: Node3D) -> void:
 	ready = false
+	walk_graph.clear()
 	shoreline.clear()
 	bridge_corridors.clear()
 	for route: Array[Vector2] in [park.FUTURE_BRIDGE_WEST, park.FUTURE_BRIDGE_NORTH_EAST, park.FUTURE_BRIDGE_SOUTH]:
@@ -45,7 +47,40 @@ func build(park: Node3D) -> void:
 				# Prefer the authored park paths without forbidding grass flanks.
 				var on_path: bool = park._is_near_destination_path(p / park.LAYOUT_SCALE, 0.4)
 				grid.set_point_weight_scale(cell, 1.0 if on_path else 1.65)
+				walk_graph.add_point(_cell_id(cell), p, grid.get_point_weight_scale(cell))
+	# Clear endpoints do not imply a clear edge: sweep a player-sized capsule
+	# between cells so routes cannot cut through a lamp, tree or boulder.
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.42
+	capsule.height = 1.75
+	query.shape = capsule
+	for y: int in range(2, 89):
+		for x: int in range(2, 109):
+			var cell := Vector2i(x, y)
+			if grid.is_point_solid(cell):
+				continue
+			var a := grid.get_point_position(cell)
+			for direction: Vector2i in [Vector2i.RIGHT, Vector2i.DOWN, Vector2i(1, 1), Vector2i(-1, 1)]:
+				var next := cell + direction
+				if not grid.region.has_point(next) or grid.is_point_solid(next):
+					continue
+				if direction.x != 0 and direction.y != 0:
+					if grid.is_point_solid(cell + Vector2i(direction.x, 0)) or grid.is_point_solid(cell + Vector2i(0, direction.y)):
+						continue
+				var b := grid.get_point_position(next)
+				if is_water(a.lerp(b, 0.25)) or is_water(a.lerp(b, 0.5)) or is_water(a.lerp(b, 0.75)):
+					continue
+				query.transform = Transform3D(Basis.IDENTITY, Vector3(a.x, 1.1, a.y))
+				query.motion = Vector3(b.x - a.x, 0, b.y - a.y)
+				if not space.intersect_shape(query, 1).is_empty():
+					continue
+				var clearance := space.cast_motion(query)
+				if clearance[0] >= 0.9999:
+					walk_graph.connect_points(_cell_id(cell), _cell_id(next))
 	ready = true
+
+func _cell_id(cell: Vector2i) -> int:
+	return cell.y * 111 + cell.x
 
 func is_water(p: Vector2) -> bool:
 	if not Geometry2D.is_point_in_polygon(p, shoreline):
@@ -67,13 +102,20 @@ func nearest_cell(point: Vector3) -> Vector2i:
 	if not grid.is_point_solid(raw):
 		return raw
 	for radius: int in range(1, 112):
+		var best := Vector2i(-1, -1)
+		var distance := INF
 		for y: int in range(-radius, radius + 1):
 			for x: int in range(-radius, radius + 1):
 				if absi(x) != radius and absi(y) != radius:
 					continue
 				var candidate := raw + Vector2i(x, y)
 				if grid.region.has_point(candidate) and not grid.is_point_solid(candidate):
-					return candidate
+					var squared := grid.get_point_position(candidate).distance_squared_to(Vector2(point.x, point.z))
+					if squared < distance:
+						distance = squared
+						best = candidate
+		if best.x >= 0:
+			return best
 	return Vector2i(55, 85)
 
 func nearest(point: Vector3) -> Vector3:
@@ -84,7 +126,6 @@ func path(from: Vector3, to: Vector3) -> PackedVector3Array:
 	var output := PackedVector3Array()
 	if not ready:
 		return output
-	for cell: Vector2i in grid.get_id_path(nearest_cell(from), nearest_cell(to)):
-		var p := grid.get_point_position(cell)
+	for p: Vector2 in walk_graph.get_point_path(_cell_id(nearest_cell(from)), _cell_id(nearest_cell(to))):
 		output.append(Vector3(p.x, 0.2, p.y))
 	return output

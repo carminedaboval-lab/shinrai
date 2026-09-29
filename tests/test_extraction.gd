@@ -77,6 +77,8 @@ func run_tests() -> void:
 	check(outline_matches, "Water safety boundary matches the rendered shoreline")
 	for site: Dictionary in raid.sites:
 		check(not raid.navigation.path(Vector3(0, 0.2, 160), site.position).is_empty(), "Navigation reaches " + String(site.id))
+		var endpoint: Vector3 = raid.navigation.nearest(site.position)
+		check(Vector2(endpoint.x, endpoint.z).distance_to(Vector2(site.position.x, site.position.z)) <= 4.2, "Route endpoint allows interaction with " + String(site.id))
 	if render:
 		await capture("hq")
 	raid.start_run()

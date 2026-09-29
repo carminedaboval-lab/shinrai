@@ -60,9 +60,19 @@ Checkpoint saved on user stop: route and cover pass applied to the live game.
 - Guidance prefers existing paths, shows approximate walking distance, and draws the suggested route on the field map. Click a relay, salvage site or extraction gate on the map to select it; T returns to automatic relay/extraction guidance.
 - The map includes the additional park routes, cover points and torii landmark. Deployment faces the first route segment.
 - Automated gameplay, collision-ray and map-selection tests pass. Ground-level cover and the route-map layout were rendered and inspected. Editor F5/debugger review and full manual traversal remain pending.
-- An unfinished automated walking test was moved out of the live project to the review workspace on stop; it is not part of this checkpoint.
+- The actual-player walking test is now `tests/test_extraction_routes.gd`. It clears active patrols so it measures route connectivity and relay interaction; K17 combat is covered separately.
 
-Immediate next step: finish a real-player walk from insertion through the relays and extraction, correct any collision snags, and profile several gameplay views. Do not treat navigation-cell connectivity or one sampled view as proof of full traversal or stable 60 FPS.
+### Traversal follow-up
+
+The actual-player route test exposed a blocked connection through the east relay lamp and a route endpoint outside the south relay's interaction range. Navigation now checks the connections between cells with a player-sized collision sweep, retains the existing bridges and path preference, and chooses the closest clear neighboring cell instead of the first one in scan order. No scenery, assets or graphics settings were changed in this follow-up.
+
+A continuous headless run walked insertion → south relay → north relay → east relay → south extraction, held E at all three relays, and completed extraction. The isolated QA save recorded one extraction and 750 contract credits. This is automated controller traversal at a normal 1/60-second simulation step with accelerated wall time, not a manual editor playtest. The regression suite passed all 71 checks, including every interaction endpoint being in range. Existing shutdown resource warnings remain.
+
+Reproduce: `godot --headless --path . --script res://tests/test_extraction_routes.gd`.
+
+Post-fix isolated 1080p Balanced sweep (seven FPS samples per view): daylight west grove mean 51.3/min 51, open cover 60/60, south lawn 53.4/53, lake edge 60/60; night west grove 51.3/51 and open cover 60/60. No concurrent test instance was running during the sweep. These are sampled stationary recon views, not frame-time percentiles or a combat guarantee; stable 60 FPS across the map is still not achieved.
+
+Immediate next step: profile and optimize the dense grove/lawn views toward a stable 60 FPS without sacrificing nearby foliage and shadows. Then test alternate routes and both extraction gates; the full-run check covers the main relay circuit, not every possible walkable segment or active combat.
 
 1. Complete K17 materials, animation and readable attack cues when the user supplies those assets, then playtest combat pacing.
 2. Improve the park's encounter spaces and landmark visibility using existing high-quality assets. Validate at ground level, not just from the aerial artwork.
