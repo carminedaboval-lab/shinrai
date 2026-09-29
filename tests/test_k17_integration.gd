@@ -55,6 +55,17 @@ func _run() -> void:
 		patrol.set_physics_process(false)
 		_check(patrol.find_child("K17_Drone", true, false) is MeshInstance3D, "Patrol has supplied visible mesh")
 	var enemy := patrols[0] as Node3D
+	enemy.muzzle_timer = 0.0
+	scene.is_night_mode = true
+	enemy._update_timers(0.0)
+	_check(is_equal_approx(enemy.muzzle_light.light_energy, 0.55), "K17 remains readable under night lighting")
+	enemy.muzzle_timer = 0.08
+	enemy._update_timers(0.0)
+	_check(enemy.muzzle_light.light_energy >= 6.9 and enemy.muzzle_light.light_color.r > enemy.muzzle_light.light_color.b, "Warm muzzle flash overrides cool night light")
+	enemy.muzzle_timer = 0.0
+	scene.is_night_mode = false
+	enemy._update_timers(0.0)
+	_check(enemy.muzzle_light.light_energy < 0.01, "Idle K17 light switches off during daylight")
 	var visual := enemy.find_child("K17_Drone", true, false) as MeshInstance3D
 	var bounds := visual.mesh.get_aabb()
 	_check(bounds.size.y > 1.8 and bounds.size.y < 2.1 and absf(bounds.position.y) < 0.02, "K17 has correct upright scale and grounded pivot")

@@ -40,6 +40,20 @@ func _build_visual_socket() -> void:
 	visual_root.add_child(approved_visual.instantiate())
 	_setup_muzzle_light()
 
+func _update_timers(delta: float) -> void:
+	super._update_timers(delta)
+	if not is_instance_valid(muzzle_light):
+		return
+	if muzzle_timer > 0.0:
+		muzzle_light.light_color = Color(1.0, 0.58, 0.18)
+		muzzle_light.omni_range = 4.5
+		return
+	var park_node: Node = get_parent()
+	var night: bool = park_node != null and bool(park_node.get("is_night_mode"))
+	muzzle_light.light_color = Color("#79a9c4")
+	muzzle_light.omni_range = 3.2
+	muzzle_light.light_energy = 0.55 if night else 0.0
+
 func take_damage(amount: float, source: Node = null) -> void:
 	if defeat_reported:
 		return
