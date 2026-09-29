@@ -40,9 +40,11 @@ const PARK_HALF := Vector2(LAYOUT_REFERENCE_SIZE_M.x * 0.5, LAYOUT_REFERENCE_SIZ
 const WORLD_PARK_HALF := Vector2(PARK_SIZE_M.x * 0.5, PARK_SIZE_M.y * 0.5)
 const LAKE_SIZE_M := Vector2(128.0, 234.0)
 const SHOW_PLANNING_LABELS := false
-const MATURE_TREE_MIN_SPACING_M := 1.5
-const SKINNY_TREE_MIN_SPACING_M := 1.15
-const SKINNY_TO_SKINNY_MIN_SPACING_M := 0.6
+# The layout root doubles authored X/Z positions in world space. These trunk
+# clearances leave more daylight between crowns while keeping clumped groves.
+const MATURE_TREE_MIN_SPACING_M := 2.0
+const SKINNY_TREE_MIN_SPACING_M := 1.5
+const SKINNY_TO_SKINNY_MIN_SPACING_M := 1.0
 const SHRUB_PATH_CLEARANCE_M := 0.65
 const SAKURA_TREE_COUNT := 36
 const LAKE_TREE_BUFFER_M := 2.0
@@ -1596,7 +1598,7 @@ func _add_reference_tree_cluster(
 	radius_value: float,
 	count: int,
 	serial_offset: int,
-	strict_three_meter_spacing: bool = false,
+	uniform_mature_spacing: bool = false,
 	pine_stride: int = 9
 ) -> void:
 	count *= int(LAYOUT_SCALE * LAYOUT_SCALE)
@@ -1619,7 +1621,7 @@ func _add_reference_tree_cluster(
 		var is_skinny_tree := serial % safe_pine_stride == 2
 		var has_tree_spacing := (
 			_is_tree_spaced(position_value, MATURE_TREE_MIN_SPACING_M)
-			if strict_three_meter_spacing
+			if uniform_mature_spacing
 			else _is_tree_spaced_for_type(position_value, is_skinny_tree)
 		)
 		if not has_tree_spacing:
@@ -1802,7 +1804,7 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		)
 
 	# Mainland infill groves occupy the large empty lawn panels seen from ground
-	# level. These use a strict 3 m trunk spacing and a more frequent skinny pine
+	# level. These use a 4 m mature-trunk spacing and a more frequent skinny pine
 	# to break up the broadleaf rhythm without touching either lake island.
 	var mainland_infill_clusters: Array[Vector4] = [
 		Vector4(-86,-16,11,9),Vector4(-63,-14,10,8),
@@ -1833,7 +1835,7 @@ func _build_reference_canopy(parent: Node3D) -> void:
 
 	# Four small, hand-authored edge groves interrupt the remaining broad lawn
 	# gaps without filling their centres. Uneven points avoid circular procedural
-	# silhouettes; each group has exactly one skinny pine and strict 3 m spacing.
+	# silhouettes; each group has exactly one skinny pine and 4 m trunk spacing.
 	var mainland_micro_groves: Array = [
 		[
 			Vector3(-28.2,0.14,-37.0),Vector3(-20.4,0.14,-33.7),
@@ -1852,8 +1854,7 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		],
 		[
 			Vector3(88.5,0.14,-12.7),Vector3(88.6,0.14,-18.9),
-			Vector3(88.4,0.14,-9.2),Vector3(86.4,0.14,-16.1),
-			Vector3(90.8,0.14,-16.1),
+			Vector3(86.4,0.14,-16.1),
 		],
 	]
 	var micro_grove_pine_indices: Array[int] = [1,3,0,2]
@@ -2021,6 +2022,10 @@ func _build_forest_floor_bush_pockets(parent: Node3D) -> void:
 		Vector2(-28,61),Vector2(23,63),Vector2(-18,-66),Vector2(4,-69),
 		Vector2(-26,-34),Vector2(-11,-44),Vector2(88,-15),Vector2(84,-49),
 		Vector2(-88,-43),Vector2(-52,-43),
+		Vector2(-82,-50),Vector2(-70,-35),Vector2(-30,-51),Vector2(-27,13),
+		Vector2(-15,37),Vector2(0,-34),Vector2(3,36),Vector2(-78,47),
+		Vector2(-43,40),Vector2(-18,-5),Vector2(94,2),Vector2(-96,-43),
+		Vector2(-43,-46),Vector2(-72,-62),
 	]
 	var serial := 0
 	for center_index: int in range(centers.size()):
@@ -2035,12 +2040,25 @@ func _build_forest_floor_bush_pockets(parent: Node3D) -> void:
 			)
 			if not _is_vegetation_clear(position_value, 0.55):
 				continue
+			if not _is_bush_between_trees(position_value):
+				continue
 			_add_reference_plant(
 				root, forest_floor_bush_prototypes, position_value,
-				0.72 + float((serial * 5 + center_index) % 6) * 0.045,
+				0.86 + float((serial * 5 + center_index) % 6) * 0.05,
 				5200 + serial, "ForestFloorBush"
 			)
 			serial += 1
+
+func _is_bush_between_trees(position_value: Vector3) -> bool:
+	var point := Vector2(position_value.x, position_value.z)
+	var nearby := 0
+	for trunk: Vector2 in occupied_tree_positions:
+		var distance_squared := point.distance_squared_to(trunk)
+		if distance_squared < 0.75 * 0.75:
+			return false
+		if distance_squared < 6.0 * 6.0:
+			nearby += 1
+	return nearby >= 2
 
 func _build_mainland_pine_saplings(parent: Node3D) -> void:
 	if pine_sapling_prototypes.is_empty():
@@ -2099,7 +2117,7 @@ func _add_authored_mainland_micro_grove(
 		if not _is_tree_spaced(position_value, MATURE_TREE_MIN_SPACING_M):
 			var relocation := _find_clear_micro_grove_position(position_value, serial_offset + point_index)
 			if not relocation["found"]:
-				push_warning("Midori micro-grove point is below 3 m trunk spacing: %s" % position_value)
+				push_warning("Midori micro-grove point is below trunk spacing: %s" % position_value)
 				continue
 			position_value = relocation["position"]
 		var is_skinny_tree := point_index == pine_index
@@ -2178,8 +2196,8 @@ func _build_mainland_groundcover_patches(parent: Node3D) -> void:
 	root.name = "MainlandDenseGrassPatches"
 	parent.add_child(root)
 	# These are the mainland infill groves only. Three offset patches per grove
-	# create a readable knee-height layer without raising the 18k clump count or
-	# changing the lake islands.
+	# create a readable knee-height layer within groves while leaving the open
+	# upright-grass lawns and lake islands clear.
 	var centers: Array[Vector2] = [
 		Vector2(-86,-16),Vector2(-63,-14),Vector2(-86,17),Vector2(-63,18),
 		Vector2(-28,61),Vector2(23,63),Vector2(-18,-66),Vector2(4,-69),
@@ -2215,8 +2233,8 @@ func _build_mainland_meadow_transitions(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "MainlandMeadowTransitions"
 	parent.add_child(root)
-	# Light fountain and meadow grasses bridge the visual gap between the 18k
-	# near-ground clumps and the shrub/tree layer. Uneven groups avoid a tiled
+	# Light fountain and meadow grasses bridge the visual gap between the
+	# upright lawn grass and the shrub/tree layer. Uneven groups avoid a tiled
 	# field while leaving the important routes and open plaza readable.
 	var clusters: Array[Vector4] = [
 		Vector4(-89,-22,4.8,4),Vector4(-63,-8,4.2,3),

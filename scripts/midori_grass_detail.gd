@@ -10,14 +10,14 @@ const UprightGrassScene: PackedScene = preload("res://assets/shinrai/parks/midor
 
 const LAYOUT_SCALE := 2.0
 const PARK_HALF := Vector2(220.0, 180.0)
-const CLUMP_INSTANCE_COUNT := 3500
+const CLUMP_INSTANCE_COUNT := 1000
 const UPRIGHT_INSTANCE_COUNT := 44000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const UPRIGHT_CHUNKS_X := 16
 const UPRIGHT_CHUNKS_Z := 12
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 22
+const DETAIL_VERSION := 23
 const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-98,70),Vector2(-72,77),Vector2(-38,82),Vector2(0,84),
@@ -446,7 +446,7 @@ func _is_lawn_position(x: float, z: float) -> bool:
 
 	# Keep clumps off the pitch and its immediate player approach, while letting
 	# the wider sports lawn read as meadow rather than a bare rectangle.
-	if _inside_box(authored_x, authored_z, -70.0, -43.0, 13.0, 9.5):
+	if _inside_box(authored_x, authored_z, -70.0, -43.0, 28.0, 21.0):
 		return false
 	if _inside_box(authored_x, authored_z, -72.0, 45.0, 36.0, 30.0):
 		return false
