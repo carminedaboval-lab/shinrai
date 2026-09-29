@@ -84,7 +84,7 @@ func run_tests() -> void:
 	raid.start_run()
 	check(raid.phase == raid.Phase.RAID and raid.profile.data.active_run, "Deployment starts and persists active run")
 	var patrols := get_nodes_in_group("extraction_hostiles")
-	check(patrols.size() == 6, "Three relay pairs spawn real K17 patrols")
+	check(patrols.size() == 7, "Three relay pairs and one visible entry K17 spawn")
 	var all_patrols_visible := true
 	for patrol: Node in patrols:
 		all_patrols_visible = all_patrols_visible and patrol.find_child("K17_Drone", true, false) != null

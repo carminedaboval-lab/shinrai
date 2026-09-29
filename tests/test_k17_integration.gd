@@ -32,7 +32,7 @@ func _run() -> void:
 	for frame: int in range(4):
 		await physics_frame
 	var patrols := get_nodes_in_group("extraction_hostiles")
-	_check(patrols.size() == 6, "Three relay pairs spawn")
+	_check(patrols.size() == 7, "Three relay pairs and one entry patrol spawn")
 	if patrols.is_empty():
 		quit(1)
 		return

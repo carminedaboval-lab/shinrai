@@ -10,6 +10,8 @@ const ADS_RECOIL_DEGREES_PER_SHOT: float = 0.18
 const HIP_RECOIL_DEGREES_PER_SHOT: float = 0.28
 const FLY_SPEED: float = 20.0
 const FLY_BOOST_SPEED: float = 55.0
+const STUN_MOVE_MULTIPLIER: float = 0.36
+const STUN_RECOVERY_IMMUNITY: float = 3.0
 
 signal died
 signal shot_fired
@@ -60,6 +62,8 @@ var weapon_kick: float = 0.0
 var muzzle_timer: float = 0.0
 var hit_marker: float = 0.0
 var damage_flash: float = 0.0
+var stun_remaining: float = 0.0
+var stun_immunity_remaining: float = 0.0
 var bob_phase: float = 0.0
 var alive: bool = true
 
@@ -883,7 +887,7 @@ func _unhandled_input(event: InputEvent) -> void:
         if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
             shoot()
         elif event.button_index == MOUSE_BUTTON_RIGHT:
-            ads = event.pressed and not reloading
+            ads = event.pressed and not reloading and stun_remaining <= 0.0
             if is_instance_valid(crosshair) and ads:
                 crosshair.visible = false
 
@@ -891,11 +895,19 @@ func _physics_process(delta: float) -> void:
     if not alive:
         return
 
+    var was_stunned := stun_remaining > 0.0
+    stun_remaining = maxf(0.0, stun_remaining - delta)
+    stun_immunity_remaining = maxf(0.0, stun_immunity_remaining - delta)
+    if was_stunned and stun_remaining <= 0.0 and is_instance_valid(hud_status) and not reloading:
+        hud_status.text = "Ready"
+    if stun_remaining > 0.0:
+        ads = false
+
     if fly_mode:
         _process_fly_mode(delta)
         return
 
-    var jump_down: bool = Input.is_key_pressed(KEY_SPACE)
+    var jump_down: bool = Input.is_key_pressed(KEY_SPACE) and stun_remaining <= 0.0
     if mantle_active:
         _process_mantle(delta)
         jump_was_down = jump_down
@@ -912,8 +924,9 @@ func _physics_process(delta: float) -> void:
     var hit_mod: Color = hit_cross.modulate
     hit_mod.a = clampf(hit_marker * 9.0, 0.0, 1.0)
     hit_cross.modulate = hit_mod
-    var damage_color: Color = damage_rect.color
-    damage_color.a = clampf(damage_flash * 0.22, 0.0, 0.24)
+    var damage_color := Color(0.7, 0.0, 0.0, clampf(damage_flash * 0.22, 0.0, 0.24))
+    if stun_remaining > 0.0 and damage_flash < 0.25:
+        damage_color = Color(0.09, 0.31, 0.72, minf(0.13, stun_remaining * 0.12))
     damage_rect.color = damage_color
 
     if reloading:
@@ -936,10 +949,12 @@ func _physics_process(delta: float) -> void:
     wish.y = 0.0
     wish = wish.normalized()
 
-    var sprinting: bool = Input.is_key_pressed(KEY_SHIFT) and ads_blend < 0.25 and input_vec.y < 0.0
+    var sprinting: bool = Input.is_key_pressed(KEY_SHIFT) and ads_blend < 0.25 and input_vec.y < 0.0 and stun_remaining <= 0.0
     var speed: float = sprint_speed if sprinting else walk_speed
     if ads_blend > 0.5:
         speed *= 0.72
+    if stun_remaining > 0.0:
+        speed *= STUN_MOVE_MULTIPLIER
 
     velocity.x = move_toward(velocity.x, wish.x * speed, acceleration * delta if input_vec != Vector2.ZERO else friction * delta)
     velocity.z = move_toward(velocity.z, wish.z * speed, acceleration * delta if input_vec != Vector2.ZERO else friction * delta)
@@ -1277,7 +1292,7 @@ func _animate_weapon(horizontal_speed: float) -> void:
         ads_dot.visible = false
 
 func shoot() -> void:
-    if not alive or reloading or fire_cooldown > 0.0:
+    if not alive or reloading or fire_cooldown > 0.0 or stun_remaining > 0.0:
         return
     if ammo <= 0:
         hud_status.text = "EMPTY — press R"
@@ -1381,6 +1396,22 @@ func take_damage(amount: float) -> void:
         Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
         died.emit()
     _update_hud()
+
+func apply_stun(duration: float) -> bool:
+    if not alive or stun_immunity_remaining > 0.0:
+        return false
+    stun_remaining = clampf(duration, 0.25, 2.5)
+    stun_immunity_remaining = stun_remaining + STUN_RECOVERY_IMMUNITY
+    ads = false
+    if is_instance_valid(hud_status):
+        hud_status.text = "STUNNED — movement and weapon disrupted"
+    return true
+
+func clear_stun() -> void:
+    stun_remaining = 0.0
+    stun_immunity_remaining = 0.0
+    if is_instance_valid(hud_status) and alive and not reloading:
+        hud_status.text = "Ready"
 
 func notify_kill() -> void:
     kills += 1

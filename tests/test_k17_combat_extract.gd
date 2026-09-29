@@ -80,6 +80,23 @@ func _run() -> void:
 	interact.pressed = false
 	Input.parse_input_event(interact)
 	_check(relay.done and raid.relays == 1, "Player recovers the defended relay")
+	# The new entry K17 patrols the south extraction gate. Clear it with the
+	# player's weapon before testing the uninterrupted extraction hold.
+	var entry: Node3D = scene.find_child("K17_EntryGuard", true, false) as Node3D
+	_check(entry != null, "South gate has a K17 entry patrol")
+	if entry != null:
+		raid.player.global_position = entry.global_position - entry.global_transform.basis.z * 3.0 + Vector3.UP * 0.2
+		raid.player.velocity = Vector3.ZERO
+		raid.player.clear_stun()
+		await physics_frame
+		for shot: int in range(8):
+			if not is_instance_valid(entry):
+				break
+			raid.player.camera.look_at(entry.global_position + Vector3.UP * 1.1)
+			raid.player.shoot()
+			for frame: int in range(8):
+				await physics_frame
+		_check(not is_instance_valid(entry), "UZI fire clears the K17 guarding the south extraction gate")
 	var extracts_before: int = raid.profile.data.extracts
 	raid.player.global_position = raid.navigation.nearest(raid.exits[0].position)
 	raid.player.velocity = Vector3.ZERO

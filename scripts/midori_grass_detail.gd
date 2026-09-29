@@ -21,7 +21,7 @@ const GROVE_GRASS_RADIUS_M := 6.0
 const OPEN_THIN_GRASS_FRACTION := 0.75
 const GROVE_THIN_GRASS_FRACTION := 0.18
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 24
+const DETAIL_VERSION := 25
 const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-98,70),Vector2(-72,77),Vector2(-38,82),Vector2(0,84),
@@ -531,9 +531,17 @@ func _is_lawn_position(x: float, z: float) -> bool:
 	if _near_polyline(point, FUTURE_BRIDGE_SOUTH, 2.6):
 		return false
 
-	# Keep clumps off the pitch and its immediate player approach, while letting
-	# the wider sports lawn read as meadow rather than a bare rectangle.
+	# Keep the upright grass off the pitch, paved entrance pads and built zones.
+	# The path centerline masks above do not cover the wide arrival pads.
 	if _inside_box(authored_x, authored_z, -70.0, -43.0, 16.0, 12.0):
+		return false
+	if _inside_box(authored_x, authored_z, 0.0, 87.5, 20.0, 9.0):
+		return false
+	if _inside_box(authored_x, authored_z, -38.0, -87.5, 16.0, 9.0):
+		return false
+	if _inside_box(authored_x, authored_z, -107.5, 20.0, 9.0, 16.0):
+		return false
+	if _inside_box(authored_x, authored_z, 107.5, -20.0, 9.0, 16.0):
 		return false
 	if _inside_box(authored_x, authored_z, -72.0, 45.0, 36.0, 30.0):
 		return false

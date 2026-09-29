@@ -201,6 +201,7 @@ func start_run() -> void:
 	player.ads_blend = 0.0
 	player.fire_cooldown = 0.0
 	player.damage_flash = 0.0
+	player.clear_stun()
 	player.mantle_active = false
 	player.velocity = Vector3.ZERO
 	player.position = navigation.nearest(Vector3(0, 0.2, 160))
@@ -217,6 +218,9 @@ func start_run() -> void:
 	phase = Phase.RAID
 	_set_actors_enabled(true)
 	_spawn_patrols()
+	var entry_guard: Node3D = park.get_node_or_null("K17_EntryGuard") as Node3D
+	if entry_guard != null:
+		player.look_at(Vector3(entry_guard.global_position.x, player.global_position.y, entry_guard.global_position.z))
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	hud.show_raid()
 	announce("Recover a relay at a marked lamp. Hold E nearby. Tab opens your field map.", 9.0)
@@ -516,6 +520,81 @@ func _spawn_patrols() -> void:
 			enemy.configure(player, 1, self, route)
 			enemy.add_to_group("extraction_hostiles")
 			park.add_child(enemy)
+	_spawn_entry_guard()
+
+func _spawn_entry_guard() -> void:
+	# Put one of the supplied K17s in the first view down the south approach.
+	# Keep the two guards at each relay, and use the same combat controller.
+	var placement: Dictionary = _find_visible_entry_guard_position()
+	if placement.is_empty():
+		push_warning("K17 entry guard could not find a clear, visible park position")
+		return
+	var anchor: Vector3 = placement.position
+	var route: Array[Vector3] = [anchor]
+	var enemy := Enemy.new()
+	enemy.name = "K17_EntryGuard"
+	enemy.approved_visual = enemy_visual
+	enemy.position = Vector3(anchor.x, anchor.y - 0.24, anchor.z)
+	enemy.configure(player, 1, self, route)
+	enemy.add_to_group("extraction_hostiles")
+	park.add_child(enemy)
+	enemy.look_at(Vector3(player.global_position.x, enemy.global_position.y, player.global_position.z), Vector3.UP)
+	enemy.attack_cooldown = 1.5 # Give the player time to recognize the drone before its first shot.
+
+func _find_visible_entry_guard_position() -> Dictionary:
+	if guidance_path.size() < 2:
+		return {}
+	var camera_eye: Vector3 = player.camera.global_position
+	var camera_forward: Vector3 = -player.camera.global_transform.basis.z
+	var visible_dot: float = cos(deg_to_rad(player.camera.fov * 0.5 - 4.0))
+	var space: PhysicsDirectSpaceState3D = park.get_world_3d().direct_space_state
+	var clearance := PhysicsShapeQueryParameters3D.new()
+	var clearance_shape := SphereShape3D.new()
+	clearance_shape.radius = 0.95
+	clearance.shape = clearance_shape
+	clearance.collision_mask = 1
+	clearance.exclude = [player.get_rid()]
+	for path_distance: float in [22.0, 20.0, 24.0, 18.0]:
+		var traveled := 0.0
+		for index: int in range(1, guidance_path.size()):
+			var start: Vector3 = guidance_path[index - 1]
+			var finish: Vector3 = guidance_path[index]
+			var segment: Vector3 = finish - start
+			segment.y = 0.0
+			var segment_length: float = segment.length()
+			if segment_length < 0.01:
+				continue
+			if traveled + segment_length < path_distance:
+				traveled += segment_length
+				continue
+			var along: Vector3 = start.lerp(finish, (path_distance - traveled) / segment_length)
+			var lateral := Vector3(-segment.z, 0.0, segment.x).normalized()
+			# Try the lawn shoulders; keep the drone off the paved walking route.
+			for side: float in [1.0, -1.0, 1.4, -1.4]:
+				var candidate: Vector3 = navigation.nearest(along + lateral * (5.0 * side))
+				var horizontal_distance: float = Vector2(candidate.x, candidate.z).distance_to(Vector2(player.position.x, player.position.z))
+				if horizontal_distance < 18.0 or horizontal_distance > 23.0:
+					continue
+				if park._is_near_destination_path(Vector2(candidate.x, candidate.z) / park.LAYOUT_SCALE, 0.1):
+					continue
+				var eye_target: Vector3 = candidate + Vector3.UP * 1.25
+				if camera_forward.dot((eye_target - camera_eye).normalized()) < visible_dot:
+					continue
+				clearance.transform = Transform3D(Basis.IDENTITY, candidate + Vector3.UP * 1.1)
+				if not space.intersect_shape(clearance, 1).is_empty():
+					continue
+				var sight: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(camera_eye, eye_target, 1)
+				sight.exclude = [player.get_rid()]
+				if not space.intersect_ray(sight).is_empty():
+					continue
+				# A decorative object can clear the camera ray yet still block K17's higher eye.
+				var return_sight: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(candidate + Vector3.UP * 1.52, player.global_position + Vector3.UP * 1.25, 1)
+				var blocker: Dictionary = space.intersect_ray(return_sight)
+				if not blocker.is_empty() and blocker.get("collider") != player:
+					continue
+				return {"position": candidate}
+			break
+	return {}
 
 func get_path_world(from: Vector3, to: Vector3) -> PackedVector3Array:
 	return navigation.path(from, to)
