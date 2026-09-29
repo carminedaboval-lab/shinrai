@@ -2,22 +2,26 @@ extends Node
 
 const LakeGeometry = preload("res://scripts/midori_lake_geometry.gd")
 
-# Midori Park lawn scatter. Upright grass is the main near-ground silhouette;
-# the small Meshy clumps remain as occasional variation between the blades.
+# Midori Park lawn scatter. Upright grass is the near-ground silhouette;
+# Meshy ground clumps are disabled so they cannot spill onto the sidewalk.
 
 const GroundClumpScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_meshy_ground_clump_v1.glb")
 const UprightGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/cosmic_dust_grass/grass_1k.glb")
 
 const LAYOUT_SCALE := 2.0
 const PARK_HALF := Vector2(220.0, 180.0)
-const CLUMP_INSTANCE_COUNT := 1000
+const CLUMP_INSTANCE_COUNT := 0
 const UPRIGHT_INSTANCE_COUNT := 44000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const UPRIGHT_CHUNKS_X := 16
 const UPRIGHT_CHUNKS_Z := 12
+const TREE_INDEX_CELL_M := 8.0
+const GROVE_GRASS_RADIUS_M := 6.0
+const OPEN_THIN_GRASS_FRACTION := 0.75
+const GROVE_THIN_GRASS_FRACTION := 0.18
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 23
+const DETAIL_VERSION := 24
 const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-98,70),Vector2(-72,77),Vector2(-38,82),Vector2(0,84),
@@ -74,6 +78,14 @@ const LAKE_PROMENADE_LOOP: Array[Vector2] = [
 ]
 const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [
 	Vector2(0,90),Vector2(18,86),Vector2(40,82),Vector2(58,78),
+	Vector2(70,74),Vector2(76,72),Vector2(82,74),Vector2(88,72),
+	Vector2(91,66),Vector2(92,60),
+]
+# The visible south plaza sidewalk begins west of its original planning route.
+# Keep both corridors clear because the first is paved and the second remains
+# the authored arrival/landmark clearance.
+const PLAZA_PAVED_ROUTE: Array[Vector2] = [
+	Vector2(-1,81),Vector2(12,80),Vector2(40,82),Vector2(58,78),
 	Vector2(70,74),Vector2(76,72),Vector2(82,74),Vector2(88,72),
 	Vector2(91,66),Vector2(92,60),
 ]
@@ -149,6 +161,10 @@ func _install_ground_clumps() -> void:
 	if upright_mesh == null:
 		push_warning("Midori ground detail: upright grass mesh was not found")
 		return
+	var thin_upright_mesh := _extract_upright_mesh("Grass1_Grass2_Mat_0")
+	if thin_upright_mesh == null:
+		push_warning("Midori ground detail: thin upright grass mesh was not found")
+		return
 
 	var fallback_material: Material = null
 	if not _mesh_has_material(clump_mesh):
@@ -214,7 +230,7 @@ func _install_ground_clumps() -> void:
 	root.name = "MidoriGrassDetail"
 	root.set_meta("detail_version", DETAIL_VERSION)
 	scene.add_child(root)
-	var upright_count := _add_upright_grass(root, upright_mesh)
+	var upright_count := _add_upright_grass(root, upright_mesh, thin_upright_mesh, scene)
 
 	for chunk_z: int in range(CHUNKS_Z):
 		for chunk_x: int in range(CHUNKS_X):
@@ -258,24 +274,40 @@ func _install_ground_clumps() -> void:
 			chunk_root.add_child(clumps)
 
 	_installed_scene_id = scene_id
-	print("Midori lawn detail installed: %d upright grass, %d ground clumps" % [upright_count, placed])
+	print("Midori lawn detail installed: %d upright grass (%d thin, %d broad), %d ground clumps" % [
+		upright_count,
+		int(root.get_meta("thin_grass_count", 0)),
+		int(root.get_meta("broad_grass_count", 0)),
+		placed,
+	])
 
 
-func _add_upright_grass(root: Node3D, mesh: Mesh) -> int:
+func _add_upright_grass(root: Node3D, broad_mesh: Mesh, thin_mesh: Mesh, scene: Node) -> int:
 	var chunk_width := PARK_HALF.x * 2.0 / float(UPRIGHT_CHUNKS_X)
 	var chunk_depth := PARK_HALF.y * 2.0 / float(UPRIGHT_CHUNKS_Z)
-	var bounds := mesh.get_aabb()
-	var source_anchor := Vector3(
-		bounds.position.x + bounds.size.x * 0.5,
-		bounds.position.y,
-		bounds.position.z + bounds.size.z * 0.5
+	var broad_bounds := broad_mesh.get_aabb()
+	var thin_bounds := thin_mesh.get_aabb()
+	var broad_anchor := Vector3(
+		broad_bounds.position.x + broad_bounds.size.x * 0.5,
+		broad_bounds.position.y,
+		broad_bounds.position.z + broad_bounds.size.z * 0.5
 	)
+	var thin_anchor := Vector3(
+		thin_bounds.position.x + thin_bounds.size.x * 0.5,
+		thin_bounds.position.y,
+		thin_bounds.position.z + thin_bounds.size.z * 0.5
+	)
+	var tree_cells := _build_tree_spatial_index(scene)
+	if tree_cells.is_empty():
+		push_warning("Midori lawn detail: tree positions unavailable, keeping broad grass distribution")
+	var chunk_count := UPRIGHT_CHUNKS_X * UPRIGHT_CHUNKS_Z
 	var buckets: Array = []
-	for _bucket_index: int in range(UPRIGHT_CHUNKS_X * UPRIGHT_CHUNKS_Z):
+	for _bucket_index: int in range(chunk_count * 2):
 		buckets.append([])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = RNG_SEED + 101
 	var placed := 0
+	var thin_count := 0
 	var attempts := 0
 	while placed < UPRIGHT_INSTANCE_COUNT and attempts < UPRIGHT_INSTANCE_COUNT * 22:
 		attempts += 1
@@ -291,76 +323,130 @@ func _add_upright_grass(root: Node3D, mesh: Mesh) -> int:
 		var chunk_z := clampi(int(floor((z + PARK_HALF.y) / chunk_depth)), 0, UPRIGHT_CHUNKS_Z - 1)
 		var center_x := -PARK_HALF.x + (float(chunk_x) + 0.5) * chunk_width
 		var center_z := -PARK_HALF.y + (float(chunk_z) + 0.5) * chunk_depth
+		# Thin blades dominate open lawn. Broader blades remain under and between
+		# trees so the grove floor still looks full rather than uniformly wispy.
+		var near_tree := _is_near_tree(x, z, tree_cells)
+		var thin_fraction := GROVE_THIN_GRASS_FRACTION if near_tree else OPEN_THIN_GRASS_FRACTION
+		var use_thin := not tree_cells.is_empty() and rng.randf() < thin_fraction
+		var bounds := thin_bounds if use_thin else broad_bounds
+		var source_anchor := thin_anchor if use_thin else broad_anchor
 		var height := rng.randf_range(MIN_UPRIGHT_HEIGHT_M, MAX_UPRIGHT_HEIGHT_M)
 		var vertical_scale := height / bounds.size.y
-		var width_scale := vertical_scale * rng.randf_range(1.35, 1.85)
+		var width_scale := vertical_scale * rng.randf_range(0.95, 1.20) if use_thin else vertical_scale * rng.randf_range(1.35, 1.85)
 		var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(
 			Vector3(width_scale, vertical_scale, width_scale)
 		)
 		var ground_position := Vector3(x - center_x, GROUND_SURFACE_Y + 0.004, z - center_z)
-		buckets[chunk_z * UPRIGHT_CHUNKS_X + chunk_x].append(Transform3D(
+		var variant_index := 1 if use_thin else 0
+		buckets[variant_index * chunk_count + chunk_z * UPRIGHT_CHUNKS_X + chunk_x].append(Transform3D(
 			basis, ground_position - basis * source_anchor
 		))
+		if use_thin:
+			thin_count += 1
 		placed += 1
-	var grass_material := _build_upright_material(mesh)
-	for chunk_z: int in range(UPRIGHT_CHUNKS_Z):
-		for chunk_x: int in range(UPRIGHT_CHUNKS_X):
-			var transforms: Array = buckets[chunk_z * UPRIGHT_CHUNKS_X + chunk_x]
-			if transforms.is_empty():
-				continue
-			var center_x := -PARK_HALF.x + (float(chunk_x) + 0.5) * chunk_width
-			var center_z := -PARK_HALF.y + (float(chunk_z) + 0.5) * chunk_depth
-			var multimesh := MultiMesh.new()
-			multimesh.transform_format = MultiMesh.TRANSFORM_3D
-			multimesh.mesh = mesh
-			multimesh.instance_count = transforms.size()
-			multimesh.custom_aabb = AABB(
-				Vector3(-chunk_width * 0.5 - 1.0, -0.02, -chunk_depth * 0.5 - 1.0),
-				Vector3(chunk_width + 2.0, MAX_UPRIGHT_HEIGHT_M + 0.06, chunk_depth + 2.0)
-			)
-			for transform_index: int in range(transforms.size()):
-				multimesh.set_instance_transform(transform_index, transforms[transform_index])
-			var grass := MultiMeshInstance3D.new()
-			grass.name = "UprightGrass_%02d_%02d" % [chunk_x, chunk_z]
-			grass.position = Vector3(center_x, 0.0, center_z)
-			grass.multimesh = multimesh
-			grass.material_override = grass_material
-			grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			grass.visibility_range_end = 65.0
-			grass.visibility_range_end_margin = 12.0
-			grass.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-			root.add_child(grass)
+	var broad_material := _build_upright_material(broad_mesh, false)
+	var thin_material := _build_upright_material(thin_mesh, true)
+	for variant_index: int in range(2):
+		var mesh := thin_mesh if variant_index == 1 else broad_mesh
+		var grass_material := thin_material if variant_index == 1 else broad_material
+		var grass_name := "ThinUprightGrass" if variant_index == 1 else "UprightGrass"
+		for chunk_z: int in range(UPRIGHT_CHUNKS_Z):
+			for chunk_x: int in range(UPRIGHT_CHUNKS_X):
+				var transforms: Array = buckets[variant_index * chunk_count + chunk_z * UPRIGHT_CHUNKS_X + chunk_x]
+				if transforms.is_empty():
+					continue
+				var center_x := -PARK_HALF.x + (float(chunk_x) + 0.5) * chunk_width
+				var center_z := -PARK_HALF.y + (float(chunk_z) + 0.5) * chunk_depth
+				var multimesh := MultiMesh.new()
+				multimesh.transform_format = MultiMesh.TRANSFORM_3D
+				multimesh.mesh = mesh
+				multimesh.instance_count = transforms.size()
+				multimesh.custom_aabb = AABB(
+					Vector3(-chunk_width * 0.5 - 1.0, -0.02, -chunk_depth * 0.5 - 1.0),
+					Vector3(chunk_width + 2.0, MAX_UPRIGHT_HEIGHT_M + 0.06, chunk_depth + 2.0)
+				)
+				for transform_index: int in range(transforms.size()):
+					multimesh.set_instance_transform(transform_index, transforms[transform_index])
+				var grass := MultiMeshInstance3D.new()
+				grass.name = "%s_%02d_%02d" % [grass_name, chunk_x, chunk_z]
+				grass.position = Vector3(center_x, 0.0, center_z)
+				grass.multimesh = multimesh
+				grass.material_override = grass_material
+				grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				grass.visibility_range_end = 65.0
+				grass.visibility_range_end_margin = 12.0
+				grass.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+				root.add_child(grass)
+	root.set_meta("thin_grass_count", thin_count)
+	root.set_meta("broad_grass_count", placed - thin_count)
 	return placed
 
 
-func _extract_upright_mesh() -> Mesh:
+func _build_tree_spatial_index(scene: Node) -> Dictionary:
+	var cells: Dictionary = {}
+	var tree_positions: Variant = scene.get("occupied_tree_positions")
+	if not tree_positions is Array:
+		return cells
+	for authored_tree_position: Vector2 in tree_positions:
+		# The park root scales authored tree coordinates by two. Grass scatter
+		# points are already world-space, so the index must use world positions.
+		var tree_position := authored_tree_position * LAYOUT_SCALE
+		var cell := Vector2i(
+			floori(tree_position.x / TREE_INDEX_CELL_M),
+			floori(tree_position.y / TREE_INDEX_CELL_M)
+		)
+		var positions: Array = cells.get(cell, [])
+		positions.append(tree_position)
+		cells[cell] = positions
+	return cells
+
+
+func _is_near_tree(x: float, z: float, tree_cells: Dictionary) -> bool:
+	var cell_x := floori(x / TREE_INDEX_CELL_M)
+	var cell_z := floori(z / TREE_INDEX_CELL_M)
+	var radius_squared := GROVE_GRASS_RADIUS_M * GROVE_GRASS_RADIUS_M
+	for offset_z: int in range(-1, 2):
+		for offset_x: int in range(-1, 2):
+			var positions: Array = tree_cells.get(Vector2i(cell_x + offset_x, cell_z + offset_z), [])
+			for tree_position: Vector2 in positions:
+				if Vector2(x, z).distance_squared_to(tree_position) <= radius_squared:
+					return true
+	return false
+
+
+func _extract_upright_mesh(mesh_name: String = "Grass1_Grass_Mat_0") -> Mesh:
 	var source_root := UprightGrassScene.instantiate()
 	if source_root == null:
 		return null
-	var mesh_instance := source_root.find_child("Grass1_Grass_Mat_0", true, false) as MeshInstance3D
+	var mesh_instance := source_root.find_child(mesh_name, true, false) as MeshInstance3D
 	var mesh: Mesh = mesh_instance.mesh if mesh_instance != null else null
 	source_root.free()
 	return mesh
 
 
-func _build_upright_material(mesh: Mesh) -> StandardMaterial3D:
+func _build_upright_material(mesh: Mesh, use_thin_source_texture: bool) -> StandardMaterial3D:
 	var source := mesh.surface_get_material(0)
 	var material: StandardMaterial3D
 	if source is StandardMaterial3D:
 		material = (source as StandardMaterial3D).duplicate() as StandardMaterial3D
 	else:
 		material = StandardMaterial3D.new()
-	# Use the supplied lawn variant's greener texture on the narrower upright
-	# blades. The lawn variant's own mesh is much bulkier and reads as clumps.
-	var source_root := UprightGrassScene.instantiate()
-	var lawn_mesh_instance := source_root.find_child("Grass1_Grass1_Mat_0", true, false) as MeshInstance3D
-	if lawn_mesh_instance != null:
-		var lawn_material := lawn_mesh_instance.mesh.surface_get_material(0)
-		if lawn_material is StandardMaterial3D:
-			material.albedo_texture = (lawn_material as StandardMaterial3D).albedo_texture
-	source_root.free()
-	material.resource_name = "SHINRAI_UprightLawnGrass"
-	material.albedo_color = Color(0.72, 0.92, 0.63, 1.0)
+	if use_thin_source_texture:
+		# This blade uses its own cutout texture. Reusing the broad blade texture
+		# here changes the alpha silhouette and makes it look like a leafy tuft.
+		material.resource_name = "SHINRAI_ThinUprightLawnGrass"
+		material.albedo_color = Color(0.64, 0.88, 0.54, 1.0)
+	else:
+		# Preserve the established broad grass material and its greener variant.
+		var source_root := UprightGrassScene.instantiate()
+		var lawn_mesh_instance := source_root.find_child("Grass1_Grass1_Mat_0", true, false) as MeshInstance3D
+		if lawn_mesh_instance != null:
+			var lawn_material := lawn_mesh_instance.mesh.surface_get_material(0)
+			if lawn_material is StandardMaterial3D:
+				material.albedo_texture = (lawn_material as StandardMaterial3D).albedo_texture
+		source_root.free()
+		material.resource_name = "SHINRAI_UprightLawnGrass"
+		material.albedo_color = Color(0.72, 0.92, 0.63, 1.0)
 	material.ao_texture = null
 	material.disable_receive_shadows = false
 	material.metallic = 0.0
@@ -424,6 +510,7 @@ func _is_lawn_position(x: float, z: float) -> bool:
 		{"points":NORTH_WOODLAND_LOOP, "half_width":1.80},
 		{"points":LAKE_PROMENADE_LOOP, "half_width":2.45},
 		{"points":PLAZA_ARRIVAL_ROUTE, "half_width":2.65},
+		{"points":PLAZA_PAVED_ROUTE, "half_width":2.65},
 		{"points":SOUTH_BRIDGE_APPROACH, "half_width":2.15},
 		{"points":PAVILION_LINK_ROUTE, "half_width":2.00},
 		{"points":VIEWING_DECK_APPROACH_ROUTE, "half_width":2.05},
@@ -446,7 +533,7 @@ func _is_lawn_position(x: float, z: float) -> bool:
 
 	# Keep clumps off the pitch and its immediate player approach, while letting
 	# the wider sports lawn read as meadow rather than a bare rectangle.
-	if _inside_box(authored_x, authored_z, -70.0, -43.0, 28.0, 21.0):
+	if _inside_box(authored_x, authored_z, -70.0, -43.0, 16.0, 12.0):
 		return false
 	if _inside_box(authored_x, authored_z, -72.0, 45.0, 36.0, 30.0):
 		return false

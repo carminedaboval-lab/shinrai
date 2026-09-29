@@ -118,6 +118,11 @@ const PLAZA_ARRIVAL_ROUTE: Array[Vector2] = [
 	Vector2(70,74),Vector2(76,72),Vector2(82,74),Vector2(88,72),
 	Vector2(91,66),Vector2(92,60),
 ]
+const PLAZA_PAVED_ROUTE: Array[Vector2] = [
+	Vector2(-1,81),Vector2(12,80),Vector2(40,82),Vector2(58,78),
+	Vector2(70,74),Vector2(76,72),Vector2(82,74),Vector2(88,72),
+	Vector2(91,66),Vector2(92,60),
+]
 const SOUTH_BRIDGE_APPROACH: Array[Vector2] = [
 	Vector2(76,72),Vector2(68,64),Vector2(58,54),Vector2(52,50),
 	Vector2(48,49.5),
@@ -540,7 +545,7 @@ func _build_paths(parent: Node3D) -> void:
 	parent.add_child(root)
 	_add_path_strip_2d(root, "OuterWalkingCircuit", OUTER_CIRCUIT, 3.8, 0.108)
 	_add_path_strip_2d(root, "SouthEntranceToLake", SOUTH_ARRIVAL_ROUTE, 4.0, 0.111)
-	_add_path_strip_2d(root, "SouthEntranceToPlaza", PLAZA_ARRIVAL_ROUTE, 4.0, 0.112)
+	_add_path_strip_2d(root, "SouthEntranceToPlaza", PLAZA_PAVED_ROUTE, 4.0, 0.112)
 	_add_path_strip_2d(root, "WestEntranceToBridgeLanding", WEST_DESTINATION_ROUTE, 4.0, 0.112)
 	_add_path_strip_2d(root, "NorthEntranceToLake", NORTH_ENTRY_ROUTE, 3.8, 0.110)
 	_add_path_strip_2d(root, "EastEntranceToBridgeLanding", EAST_DECK_ROUTE, 3.8, 0.110)
@@ -577,9 +582,6 @@ func _add_path_strip_2d(
 	if node_name != "ContinuousLakePromenade":
 		width *= 0.80
 	var route: Array[Vector2] = points_2d.duplicate()
-	if node_name == "SouthEntranceToPlaza":
-		route[0] = Vector2(-1, 81)
-		route[1] = Vector2(12, 80)
 	# Remove tiny return segments at approach endpoints that form hooked joins.
 	if not route[0].is_equal_approx(route[-1]):
 		while route.size() > 2 and route[-2].distance_to(route[-1]) < 3.0:
@@ -1744,6 +1746,7 @@ func _is_near_destination_path(point: Vector2, padding: float) -> bool:
 		{"points":NORTH_WOODLAND_LOOP, "half_width":1.25},
 		{"points":LAKE_PROMENADE_LOOP, "half_width":1.8},
 		{"points":PLAZA_ARRIVAL_ROUTE, "half_width":2.0},
+		{"points":PLAZA_PAVED_ROUTE, "half_width":2.0},
 		{"points":SOUTH_BRIDGE_APPROACH, "half_width":1.6},
 		{"points":PAVILION_LINK_ROUTE, "half_width":1.4},
 		{"points":VIEWING_DECK_APPROACH_ROUTE, "half_width":1.5},
