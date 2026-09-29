@@ -14,8 +14,10 @@ const CLUMP_INSTANCE_COUNT := 3500
 const UPRIGHT_INSTANCE_COUNT := 44000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
+const UPRIGHT_CHUNKS_X := 16
+const UPRIGHT_CHUNKS_Z := 12
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 21
+const DETAIL_VERSION := 22
 const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const OUTER_CIRCUIT: Array[Vector2] = [
 	Vector2(-98,70),Vector2(-72,77),Vector2(-38,82),Vector2(0,84),
@@ -212,7 +214,7 @@ func _install_ground_clumps() -> void:
 	root.name = "MidoriGrassDetail"
 	root.set_meta("detail_version", DETAIL_VERSION)
 	scene.add_child(root)
-	var upright_count := _add_upright_grass(root, upright_mesh, chunk_width, chunk_depth)
+	var upright_count := _add_upright_grass(root, upright_mesh)
 
 	for chunk_z: int in range(CHUNKS_Z):
 		for chunk_x: int in range(CHUNKS_X):
@@ -259,7 +261,9 @@ func _install_ground_clumps() -> void:
 	print("Midori lawn detail installed: %d upright grass, %d ground clumps" % [upright_count, placed])
 
 
-func _add_upright_grass(root: Node3D, mesh: Mesh, chunk_width: float, chunk_depth: float) -> int:
+func _add_upright_grass(root: Node3D, mesh: Mesh) -> int:
+	var chunk_width := PARK_HALF.x * 2.0 / float(UPRIGHT_CHUNKS_X)
+	var chunk_depth := PARK_HALF.y * 2.0 / float(UPRIGHT_CHUNKS_Z)
 	var bounds := mesh.get_aabb()
 	var source_anchor := Vector3(
 		bounds.position.x + bounds.size.x * 0.5,
@@ -267,7 +271,7 @@ func _add_upright_grass(root: Node3D, mesh: Mesh, chunk_width: float, chunk_dept
 		bounds.position.z + bounds.size.z * 0.5
 	)
 	var buckets: Array = []
-	for _bucket_index: int in range(CHUNKS_X * CHUNKS_Z):
+	for _bucket_index: int in range(UPRIGHT_CHUNKS_X * UPRIGHT_CHUNKS_Z):
 		buckets.append([])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = RNG_SEED + 101
@@ -283,8 +287,8 @@ func _add_upright_grass(root: Node3D, mesh: Mesh, chunk_width: float, chunk_dept
 		patchiness += sin((x - z) * 0.041) * 0.10
 		if rng.randf() > clampf(0.81 + patchiness, 0.55, 0.98):
 			continue
-		var chunk_x := clampi(int(floor((x + PARK_HALF.x) / chunk_width)), 0, CHUNKS_X - 1)
-		var chunk_z := clampi(int(floor((z + PARK_HALF.y) / chunk_depth)), 0, CHUNKS_Z - 1)
+		var chunk_x := clampi(int(floor((x + PARK_HALF.x) / chunk_width)), 0, UPRIGHT_CHUNKS_X - 1)
+		var chunk_z := clampi(int(floor((z + PARK_HALF.y) / chunk_depth)), 0, UPRIGHT_CHUNKS_Z - 1)
 		var center_x := -PARK_HALF.x + (float(chunk_x) + 0.5) * chunk_width
 		var center_z := -PARK_HALF.y + (float(chunk_z) + 0.5) * chunk_depth
 		var height := rng.randf_range(MIN_UPRIGHT_HEIGHT_M, MAX_UPRIGHT_HEIGHT_M)
@@ -294,14 +298,14 @@ func _add_upright_grass(root: Node3D, mesh: Mesh, chunk_width: float, chunk_dept
 			Vector3(width_scale, vertical_scale, width_scale)
 		)
 		var ground_position := Vector3(x - center_x, GROUND_SURFACE_Y + 0.004, z - center_z)
-		buckets[chunk_z * CHUNKS_X + chunk_x].append(Transform3D(
+		buckets[chunk_z * UPRIGHT_CHUNKS_X + chunk_x].append(Transform3D(
 			basis, ground_position - basis * source_anchor
 		))
 		placed += 1
 	var grass_material := _build_upright_material(mesh)
-	for chunk_z: int in range(CHUNKS_Z):
-		for chunk_x: int in range(CHUNKS_X):
-			var transforms: Array = buckets[chunk_z * CHUNKS_X + chunk_x]
+	for chunk_z: int in range(UPRIGHT_CHUNKS_Z):
+		for chunk_x: int in range(UPRIGHT_CHUNKS_X):
+			var transforms: Array = buckets[chunk_z * UPRIGHT_CHUNKS_X + chunk_x]
 			if transforms.is_empty():
 				continue
 			var center_x := -PARK_HALF.x + (float(chunk_x) + 0.5) * chunk_width
@@ -322,7 +326,7 @@ func _add_upright_grass(root: Node3D, mesh: Mesh, chunk_width: float, chunk_dept
 			grass.multimesh = multimesh
 			grass.material_override = grass_material
 			grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			grass.visibility_range_end = 50.0
+			grass.visibility_range_end = 65.0
 			grass.visibility_range_end_margin = 12.0
 			grass.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			root.add_child(grass)
