@@ -32,7 +32,7 @@ func run_tests() -> void:
 	check(raid.phase == raid.Phase.HQ, "Park prepares and reaches HQ")
 	check(raid.sites.filter(func(s: Dictionary) -> bool: return s.kind == "relay").size() == 3, "Three real lamp relays registered")
 	check(raid.sites.size() >= 9, "Existing benches provide searchable sites")
-	check(raid.enemy_visual == null, "No placeholder or invisible enemy is spawned")
+	check(raid.enemy_visual != null and raid.enemy_visual.resource_path.ends_with("K17_Drone_Static.glb"), "Supplied K17 visual loads")
 	check(raid.approach_cover.placements.size() >= 6 and raid.approach_cover.placements.size() <= 12, "Bounded supplied-asset cover pass installed")
 	var cover_clear := true
 	for point: Vector3 in raid.approach_cover.placements:
@@ -81,6 +81,15 @@ func run_tests() -> void:
 		await capture("hq")
 	raid.start_run()
 	check(raid.phase == raid.Phase.RAID and raid.profile.data.active_run, "Deployment starts and persists active run")
+	var patrols := get_nodes_in_group("extraction_hostiles")
+	check(patrols.size() == 6, "Three relay pairs spawn real K17 patrols")
+	var all_patrols_visible := true
+	for patrol: Node in patrols:
+		all_patrols_visible = all_patrols_visible and patrol.find_child("K17_Drone", true, false) != null
+	check(all_patrols_visible, "Every patrol uses the supplied K17 mesh")
+	# The remaining economy and route checks run without active attacks.
+	raid._clear_enemies()
+	await process_frame
 	check(raid.player.ammo == 30 and raid.player.reserve == 90 and raid.medkits == 1, "Free starter kit allocated")
 	check(raid.player.extraction_mode, "Review fly/restart cheats disabled in game mode")
 	check(raid.guidance_path.size() > 1 and raid.guidance_distance > 0, "Deployment computes walking guidance")

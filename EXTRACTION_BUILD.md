@@ -50,7 +50,7 @@ The live Godot project uses `scenes/shinrai_extraction.tscn` as its main scene. 
 
 Automated extraction and render checks report `EXTRACTION_TEST_RESULT: 0 failures`. A scripted bridge-walking test physically crossed the main bridge. An earlier, narrower dense-cover sample averaged 54.5 FPS on High and 59.5 FPS on Balanced with SSAO enabled; use the newer multi-view results above for the current performance assessment. All samples omit active enemies and are not a whole-game FPS guarantee. Earlier Eco-mode readings were lower and are not the current performance baseline. The map has not yet been manually traversed end to end from insertion through all relays to extraction.
 
-The pale arched bridges in the artwork need a user-supplied GLB; the user has been asked for one after this park pass. The K17 enemy visual is also still pending, so no enemies spawn. Three deadwood stumps, two logs and one micro-grove tree remain skipped because their authored positions intersect reserved routes; those skipped objects do not create collision. The park still has broad open areas compared with the artwork.
+The pale arched bridges in the artwork need a user-supplied GLB; the user has been asked for one after this park pass. The supplied K17 mesh is now integrated; see the K17 checkpoint below for its current art and combat limits. Three deadwood stumps, two logs and one micro-grove tree remain skipped because their authored positions intersect reserved routes; those skipped objects do not create collision. The park still has broad open areas compared with the artwork.
 
 ## Route and cover checkpoint details
 
@@ -64,9 +64,15 @@ Checkpoint saved on user stop: route and cover pass applied to the live game.
 
 Immediate next step: finish a real-player walk from insertion through the relays and extraction, correct any collision snags, and profile several gameplay views. Do not treat navigation-cell connectivity or one sampled view as proof of full traversal or stable 60 FPS.
 
-1. Add the user-supplied K17 package, verify its scale, materials, collision and readable attack cues, then playtest patrols and combat pacing.
+1. Complete K17 materials, animation and readable attack cues when the user supplies those assets, then playtest combat pacing.
 2. Improve the park's encounter spaces and landmark visibility using existing high-quality assets. Validate at ground level, not just from the aerial artwork.
 3. Add user-supplied search-container / maintenance-terminal assets and authored audio (UZI, impacts, footsteps, park ambience, extraction radio). Do not generate replacements without asking.
 4. Expand the contract set and loot decisions after this first loop has been playtested. Profile real combat at 1080p/60 FPS; recon performance alone is not a combat guarantee.
 
 Stop protocol: save the current work, apply the latest working verified state to the live project, and report completed work plus the next planned step. Keep unfinished experiments separate.
+
+## K17 enemy checkpoint (2026-09-29)
+
+The user supplied `K-17.bin`, which is a Blender 4.04 project containing one detailed static drone mesh. The runtime model at `assets/enemies/k17/K17_Drone_Static.glb` is a 400,000-face optimized export of that supplied mesh. It is upright at about 1.9 m tall with a grounded pivot, a neutral graphite PBR material, and Godot-generated mesh LODs. The source has no textures, UVs, color attributes, rig or animation, so this is a functional first art pass rather than a fully authored combat model.
+
+The live extraction run loads that model and spawns six K17 patrols, two near each relay. Lightweight body, weapon-arm and upper-fin hitboxes make the visible drone hittable without render-mesh physics. The K17 patrol route skips a nearby first cell when the path refreshes, avoiding an observed back-and-forth loop. A live headless probe confirmed patrol movement, player detection and damage. `tests/test_k17_integration.gd` checks model scale, six spawns, patrol movement, hitboxes, UZI damage and a recorded kill; the core extraction test also passes. Ground-level renders were inspected for silhouette and shadows. The model is dark when backlit, so the eventual authored material and attack-cue pass remains useful. Manual editor playtesting and combat frame-time profiling remain pending.

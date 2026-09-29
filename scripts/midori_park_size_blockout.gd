@@ -1917,6 +1917,7 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		Vector4(-86,17,12,7),Vector4(-63,18,11,7),
 		Vector4(-28,61,12,7),Vector4(23,63,12,7),
 		Vector4(-18,-66,12,7),Vector4(4,-69,11,7),
+		Vector4(-91,-48,7,8),Vector4(-47,-44,7,8),
 	]
 	for cluster_index: int in range(shrub_clusters.size()):
 		var cluster := shrub_clusters[cluster_index]
