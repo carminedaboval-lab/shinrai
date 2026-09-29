@@ -1,0 +1,107 @@
+name: Fetch Midori Forest Ground PBR
+
+on:
+  push:
+    branches:
+      - codex/k17-drone-integration
+    paths:
+      - .github/workflows/fetch_midori_ground.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-ground-textures:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Midori branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/k17-drone-integration
+          fetch-depth: 0
+
+      - name: Download official Poly Haven 2K PBR maps
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="assets/shinrai/parks/midori_park/materials/forrest_ground_01"
+          mkdir -p "$TARGET"
+          curl -fsSL -H 'User-Agent: SHINRAI-Godot/1.0' \
+            https://api.polyhaven.com/files/forrest_ground_01 \
+            -o /tmp/forrest_ground_01_files.json
+
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+          target = "assets/shinrai/parks/midori_park/materials/forrest_ground_01"
+          with open("/tmp/forrest_ground_01_files.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          urls = []
+          def walk(value):
+              if isinstance(value, dict):
+                  url = value.get("url")
+                  if isinstance(url, str):
+                      urls.append(url)
+                  for child in value.values():
+                      walk(child)
+              elif isinstance(value, list):
+                  for child in value:
+                      walk(child)
+          walk(data)
+
+          def pick_jpg(map_name):
+              needle = f"forrest_ground_01_{map_name}_2k"
+              candidates = []
+              for url in urls:
+                  decoded = urllib.parse.unquote(url).lower()
+                  if needle in decoded and decoded.split("?", 1)[0].endswith(".jpg"):
+                      candidates.append(url)
+              if not candidates:
+                  raise RuntimeError(f"No Poly Haven 2K JPG found for {map_name}")
+              return sorted(candidates)[0]
+
+          maps = {
+              "diff": "forrest_ground_01_diff_2k.jpg",
+              "nor_gl": "forrest_ground_01_nor_gl_2k.jpg",
+              "rough": "forrest_ground_01_rough_2k.jpg",
+          }
+
+          for map_name, filename in maps.items():
+              url = pick_jpg(map_name)
+              request = urllib.request.Request(url, headers={"User-Agent": "SHINRAI-Godot/1.0"})
+              output = os.path.join(target, filename)
+              with urllib.request.urlopen(request, timeout=120) as response, open(output, "wb") as f:
+                  f.write(response.read())
+              print(f"Downloaded {map_name}: {url} -> {output}")
+          PY
+
+          cat > "$TARGET/ATTRIBUTION.md" <<'EOF'
+          # Forest Ground 01 — Poly Haven
+
+          - Asset: **Forest Ground 01** (`forrest_ground_01`)
+          - Author: **Rob Tuytel**
+          - Source: https://polyhaven.com/a/forrest_ground_01
+          - License: **CC0 1.0 / Public Domain**
+          - SHINRAI use: Midori Park ground surface
+          - Runtime maps: 2K diffuse, OpenGL normal, and roughness
+
+          Poly Haven assets are CC0. This file is retained for provenance.
+          EOF
+
+      - name: Commit ground textures to the Midori branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/shinrai/parks/midori_park/materials/forrest_ground_01
+          if git diff --cached --quiet; then
+            echo "Ground textures already present; nothing to commit."
+            exit 0
+          fi
+          git commit -m "Add Poly Haven Forest Ground 01 PBR textures"
+          git push origin HEAD:codex/k17-drone-integration

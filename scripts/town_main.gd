@@ -21,7 +21,11 @@ const ManholeCutMaterial: Material = preload("res://assets/environment/roads/shi
 const CurbEdgeRepairMaterial: Material = preload("res://assets/environment/roads/shinrai_road/repairs/M_SHINRAI_CurbEdgeRepair.tres")
 const CurbDrainScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady.tscn")
 const CurbDrainEndCapScene: PackedScene = preload("res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_EndCap_GameReady.tscn")
-const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/ProjectShinrai_YakitoriShop_ArtworkReplica_v5.tscn")
+const YakitoriShopBuildingScene: PackedScene = preload("res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v6/ProjectShinrai_YakitoriShop_ArtworkReplica_v6.tscn")
+const ApartmentConcreteShader: Shader = preload("res://assets/shinrai/buildings/apartment/materials/apartment_exposed_concrete.gdshader")
+const ApartmentConcreteAlbedoTexture: Texture2D = preload("res://assets/environment/roads/shinrai_road/curb_drain/SHINRAI_CurbConcrete_Albedo_1K.png")
+const ApartmentConcreteNormalTexture: Texture2D = preload("res://assets/environment/roads/shinrai_road/curb_drain/SHINRAI_CurbConcrete_NormalGL_1K.png")
+const ApartmentConcreteOrmTexture: Texture2D = preload("res://assets/environment/roads/shinrai_road/curb_drain/SHINRAI_CurbConcrete_ORM_1K.png")
 
 const GRID_WIDTH: int = 53
 const GRID_HEIGHT: int = 53
@@ -82,6 +86,11 @@ const SECONDARY_ROAD_HALF_WIDTH: int = 0
 const MAIN_ROAD_HALF_WIDTH: int = 1
 const MIN_BLOCK_CELLS: int = 4
 const MIN_ENEMY_PATH_CELLS: int = 14
+# Guarantee one first-wave K17 test encounter near the player while keeping a
+# safe buffer and using only generated walkable, unblocked navigation cells.
+const NEARBY_K17_TARGET_DISTANCE_M: float = 10.0
+const NEARBY_K17_MIN_DISTANCE_M: float = 7.0
+const NEARBY_K17_MAX_DISTANCE_M: float = 13.0
 const VAN_COUNT: int = 2
 const MAX_STREET_LIGHTS: int = 18
 const MAX_INTERIOR_LIGHTS: int = 8
@@ -202,6 +211,22 @@ const BUILDING_SHOP: int = 2
 const BUILDING_APARTMENT: int = 3
 const BUILDING_TOWER: int = 4
 
+# The supplied apartment and balcony sheets define one fixed real-world module.
+# Two 3.00 m balcony bays plus their concrete piers require an 8.64 m frontage.
+# The body is five 3.00 m storeys; rooftop service cores extend above that body.
+const APARTMENT_REFERENCE_WIDTH_M: float = 8.64
+const APARTMENT_REFERENCE_DEPTH_M: float = 6.60
+const APARTMENT_REFERENCE_FLOOR_HEIGHT_M: float = 3.00
+const APARTMENT_REFERENCE_FLOOR_COUNT: int = 5
+const APARTMENT_REFERENCE_BODY_HEIGHT_M: float = 15.00
+# Keep adjoining procedural boxes from sharing the same exterior depth plane.
+# The tiny return is construction-scale, while the hidden overlap prevents
+# camera-dependent seams and washed/flickering bands at the concrete junctions.
+const APARTMENT_WALL_JOIN_OVERLAP_M: float = 0.10
+const APARTMENT_SIDE_RETURN_INSET_M: float = 0.012
+const APARTMENT_STRUCTURE_FACE_INSET_M: float = 0.026
+const APARTMENT_FRONT_GRID_FACE_INSET_M: float = 0.014
+
 # Street-facing commercial archetypes. These share one procedural building
 # system but get recognisable storefront/interior layouts instead of a generic
 # shop room. Keep the kit lightweight so the v10.17 performance gains survive.
@@ -253,6 +278,10 @@ var van_vertical: Array[bool] = []
 var path_grid: AStarGrid2D = AStarGrid2D.new()
 var player_spawn_cell: Vector2i = Vector2i(MAIN_ROAD_CENTER, 43)
 var featured_park_block_index: int = -1
+var featured_mall_block_index: int = -1
+var featured_pyramid_block_index: int = -1
+var featured_town_square_block_index: int = -1
+var landmark_layout_variant: int = 0
 
 var geometry_root: Node3D
 var static_root: Node3D
@@ -278,6 +307,12 @@ var shinrai_road_material: Material
 var mat_sidewalk: StandardMaterial3D
 var mat_concrete: StandardMaterial3D
 var mat_dark_concrete: StandardMaterial3D
+# Apartment-only concrete calibration. It reuses the existing town concrete
+# detail maps with a warmer exposed-formwork tint, keeping it distinct from
+# the Yakitori plaster while matching the apartment reference sheet.
+var mat_apartment_concrete: ShaderMaterial
+var mat_apartment_concrete_recess: ShaderMaterial
+var mat_apartment_balcony_deck: ShaderMaterial
 var mat_wood: StandardMaterial3D
 var mat_dark_wood: StandardMaterial3D
 var mat_roof: StandardMaterial3D
@@ -382,17 +417,25 @@ func _ready() -> void:
 	_choose_van_cells()
 	_configure_path_grid()
 	_build_town_geometry()
+	var atmosphere := Node.new()
+	atmosphere.name = "StreetAtmosphere"
+	atmosphere.set_script(preload("res://scripts/street_atmosphere.gd"))
+	add_child(atmosphere)
 	_apply_ground_comparison_mode(dry_ground_comparison)
 	_spawn_player()
 	_spawn_wave()
 	_print_light_budget_audit()
 
 	print(
-		"Blacksite procedural Japanese town seed: %d | blocks: %d | vans: %d | featured park block: %d" % [
+		"Blacksite procedural Japanese town seed: %d | blocks: %d | vans: %d | landmark layout: %d | park/mall/pyramid/square: %d/%d/%d/%d" % [
 			level_seed,
 			town_blocks.size(),
 			van_cells.size(),
+			landmark_layout_variant,
 			featured_park_block_index,
+			featured_mall_block_index,
+			featured_pyramid_block_index,
+			featured_town_square_block_index,
 		]
 	)
 	if commercial_test_corridor_mode:
@@ -433,6 +476,11 @@ func _build_environment() -> void:
 	sun.light_color = Color(0.70, 0.78, 0.94)
 	sun.light_energy = 0.80
 	sun.shadow_enabled = true
+	# The reference uses broad, readable architectural shadows. Keep balcony
+	# occlusion, but soften its edge and let a controlled amount of ambient
+	# light remain so concrete detail does not collapse into a black polygon.
+	sun.shadow_blur = 3.40
+	sun.shadow_opacity = 0.70
 	# Keep the mood but avoid rendering the full 190 m town into the
 	# directional shadow map every frame on the GL Compatibility renderer.
 	sun.directional_shadow_max_distance = 72.0
@@ -462,6 +510,97 @@ func _build_materials() -> void:
 		Color(0.070, 0.080, 0.096), 0.035)
 	mat_dark_concrete = _material(Color(0.160, 0.175, 0.198), 0.01, 0.88,
 		Color(0.070, 0.084, 0.108), 0.070)
+	# Apartment walls use one dedicated world-space material so texture scale
+	# stays constant across every primitive. The shader adds the formwork grid,
+	# tie holes, subtle runoff and ground grime present in the supplied sheet.
+	var apartment_concrete_texture: Texture2D = load(
+		"res://assets/procedural_textures/concrete_detail.png"
+	) as Texture2D
+	mat_apartment_concrete = ShaderMaterial.new()
+	mat_apartment_concrete.shader = ApartmentConcreteShader
+	mat_apartment_concrete.set_shader_parameter("concrete_texture", apartment_concrete_texture)
+	mat_apartment_concrete.set_shader_parameter("concrete_albedo_texture", ApartmentConcreteAlbedoTexture)
+	mat_apartment_concrete.set_shader_parameter("concrete_normal_texture", ApartmentConcreteNormalTexture)
+	mat_apartment_concrete.set_shader_parameter("concrete_orm_texture", ApartmentConcreteOrmTexture)
+	mat_apartment_concrete.set_shader_parameter("pbr_texture_scale", 0.92)
+	# Keep the real PBR maps subordinate to the authored formwork response.
+	# This prevents broad curb-albedo values and grazing normals from washing out
+	# isolated wall boxes as the camera crosses a junction.
+	mat_apartment_concrete.set_shader_parameter("pbr_detail_mix", 0.62)
+	mat_apartment_concrete.set_shader_parameter("pbr_normal_strength", 0.18)
+	mat_apartment_concrete.set_shader_parameter("concrete_tint", Color(0.305, 0.270, 0.225, 1.0))
+	mat_apartment_concrete.set_shader_parameter("grime_tint", Color(0.055, 0.047, 0.035, 1.0))
+	mat_apartment_concrete.set_shader_parameter("efflorescence_tint", Color(0.43, 0.40, 0.34, 1.0))
+	mat_apartment_concrete.set_shader_parameter("algae_tint", Color(0.070, 0.073, 0.045, 1.0))
+	mat_apartment_concrete.set_shader_parameter("texture_scale", 0.58)
+	mat_apartment_concrete.set_shader_parameter("panel_width_m", 1.80)
+	mat_apartment_concrete.set_shader_parameter("panel_height_m", 0.90)
+	mat_apartment_concrete.set_shader_parameter("panel_strength", 0.085)
+	mat_apartment_concrete.set_shader_parameter("tie_strength", 0.0)
+	mat_apartment_concrete.set_shader_parameter("pore_strength", 0.14)
+	mat_apartment_concrete.set_shader_parameter("crack_strength", 0.050)
+	mat_apartment_concrete.set_shader_parameter("rain_strength", 0.060)
+	mat_apartment_concrete.set_shader_parameter("efflorescence_strength", 0.075)
+	mat_apartment_concrete.set_shader_parameter("grime_strength", 0.42)
+	mat_apartment_concrete.set_shader_parameter("algae_strength", 0.10)
+	mat_apartment_concrete.set_shader_parameter("grime_height_m", 1.18)
+	mat_apartment_concrete.set_shader_parameter("detail_normal_strength", 0.34)
+	mat_apartment_concrete.set_shader_parameter("joint_relief_strength", 0.64)
+	mat_apartment_concrete.set_shader_parameter("panel_depth_variation", 0.008)
+	mat_apartment_concrete.set_shader_parameter("ambient_lift", 0.010)
+
+	mat_apartment_concrete_recess = ShaderMaterial.new()
+	mat_apartment_concrete_recess.shader = ApartmentConcreteShader
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_texture", apartment_concrete_texture)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_albedo_texture", ApartmentConcreteAlbedoTexture)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_normal_texture", ApartmentConcreteNormalTexture)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_orm_texture", ApartmentConcreteOrmTexture)
+	mat_apartment_concrete_recess.set_shader_parameter("pbr_texture_scale", 0.92)
+	mat_apartment_concrete_recess.set_shader_parameter("pbr_detail_mix", 0.60)
+	mat_apartment_concrete_recess.set_shader_parameter("pbr_normal_strength", 0.20)
+	mat_apartment_concrete_recess.set_shader_parameter("concrete_tint", Color(0.175, 0.150, 0.120, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("grime_tint", Color(0.040, 0.034, 0.026, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("efflorescence_tint", Color(0.32, 0.29, 0.24, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("algae_tint", Color(0.055, 0.058, 0.035, 1.0))
+	mat_apartment_concrete_recess.set_shader_parameter("texture_scale", 0.62)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_width_m", 1.80)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_height_m", 0.90)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_strength", 0.055)
+	mat_apartment_concrete_recess.set_shader_parameter("tie_strength", 0.0)
+	mat_apartment_concrete_recess.set_shader_parameter("pore_strength", 0.11)
+	mat_apartment_concrete_recess.set_shader_parameter("crack_strength", 0.025)
+	mat_apartment_concrete_recess.set_shader_parameter("rain_strength", 0.025)
+	mat_apartment_concrete_recess.set_shader_parameter("efflorescence_strength", 0.045)
+	mat_apartment_concrete_recess.set_shader_parameter("grime_strength", 0.34)
+	mat_apartment_concrete_recess.set_shader_parameter("algae_strength", 0.060)
+	mat_apartment_concrete_recess.set_shader_parameter("grime_height_m", 1.12)
+	mat_apartment_concrete_recess.set_shader_parameter("detail_normal_strength", 0.34)
+	mat_apartment_concrete_recess.set_shader_parameter("joint_relief_strength", 0.48)
+	mat_apartment_concrete_recess.set_shader_parameter("panel_depth_variation", 0.006)
+	mat_apartment_concrete_recess.set_shader_parameter("ambient_lift", 0.006)
+
+	# Japanese RC balconies normally separate the weather-exposed walking finish
+	# from the structural slab. Reuse the real concrete PBR maps with a calmer,
+	# darker waterproof-deck calibration rather than adding a flat color plate.
+	mat_apartment_balcony_deck = mat_apartment_concrete.duplicate() as ShaderMaterial
+	mat_apartment_balcony_deck.set_shader_parameter(
+		"concrete_tint", Color(0.225, 0.212, 0.192, 1.0)
+	)
+	mat_apartment_balcony_deck.set_shader_parameter("pbr_detail_mix", 0.62)
+	mat_apartment_balcony_deck.set_shader_parameter("pbr_normal_strength", 0.14)
+	mat_apartment_balcony_deck.set_shader_parameter("texture_scale", 0.70)
+	mat_apartment_balcony_deck.set_shader_parameter("panel_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("tie_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("pore_strength", 0.08)
+	mat_apartment_balcony_deck.set_shader_parameter("crack_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("rain_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("efflorescence_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("grime_strength", 0.18)
+	mat_apartment_balcony_deck.set_shader_parameter("algae_strength", 0.02)
+	mat_apartment_balcony_deck.set_shader_parameter("detail_normal_strength", 0.18)
+	mat_apartment_balcony_deck.set_shader_parameter("joint_relief_strength", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("panel_depth_variation", 0.0)
+	mat_apartment_balcony_deck.set_shader_parameter("ambient_lift", 0.006)
 	mat_plaster = _material(Color(0.278, 0.263, 0.238), 0.0, 0.96,
 		Color(0.092, 0.086, 0.076), 0.035)
 	mat_dirty_plaster = _material(Color(0.230, 0.225, 0.216), 0.0, 0.98,
@@ -1405,54 +1544,71 @@ func _build_road_markings() -> void:
 			mat_asphalt_marking
 		)
 
-func _choose_featured_park_block_index() -> int:
-	# v10.15 chose the *first* overgrown block in iteration order. That put the
-	# showcase park in a far map corner, which made it almost impossible to
-	# discover once the street walls became dense. Choose an authored central
-	# block instead: one intersection north of the spawn and immediately west
-	# of the main avenue. The player still has to explore, but the park can be
-	# found from a deliberate sightline rather than by wandering randomly.
-	var target_center: Vector2 = Vector2(
-		float(MAIN_ROAD_CENTER) - 5.0,
-		float(MAIN_ROAD_CENTER) + 5.5
-	)
+func _choose_landmark_block_index(
+	target_center: Vector2,
+	excluded_indices: Array[int],
+	minimum_size: Vector2i = Vector2i(7, 7)
+) -> int:
 	var best_index: int = -1
 	var best_score: float = 1.0e9
-	var main_left_edge: int = MAIN_ROAD_CENTER - MAIN_ROAD_HALF_WIDTH
-
 	for block_index: int in range(town_blocks.size()):
-		var block: Rect2i = town_blocks[block_index]
-		if block.size.x < 7 or block.size.y < 7:
+		if excluded_indices.has(block_index):
 			continue
-		var center: Vector2 = Vector2(
+		var block: Rect2i = town_blocks[block_index]
+		if block.size.x < minimum_size.x or block.size.y < minimum_size.y:
+			continue
+		var center := Vector2(
 			float(block.position.x) + float(block.size.x) * 0.5,
 			float(block.position.y) + float(block.size.y) * 0.5
 		)
-		var score: float = center.distance_to(target_center)
-
-		# Strongly prefer a block that directly touches the west side of the
-		# main road, so the torii / cherry canopy can be seen from the avenue.
-		if block.position.x + block.size.x == main_left_edge:
-			score -= 24.0
-		else:
-			score += 60.0
-
-		# Keep the landmark away from the outermost map edge.
-		if block.position.y <= 4 or block.position.y + block.size.y >= GRID_HEIGHT - 4:
-			score += 30.0
-
+		var score: float = center.distance_squared_to(target_center)
 		if score < best_score:
 			best_score = score
 			best_index = block_index
-
-	# Defensive fallback: there should always be a suitable block in this
-	# layout, but never silently lose the featured park if the road grid changes.
-	if best_index < 0 and not town_blocks.is_empty():
-		best_index = int(town_blocks.size() / 2)
 	return best_index
 
+func _assign_major_landmark_blocks() -> void:
+	# Four authored layouts rotate the recognizable destinations through known,
+	# readable blocks. The streets and district identities remain familiar while
+	# a new seed changes where the player must travel. The locked art-review scene
+	# always uses variant zero so screenshots remain directly comparable.
+	landmark_layout_variant = 0 if commercial_test_corridor_mode else ((level_seed % 4) + 4) % 4
+	var park_anchors: Array[Vector2] = [
+		Vector2(21.0, 31.5), Vector2(31.5, 31.5),
+		Vector2(31.5, 21.0), Vector2(21.0, 21.0),
+	]
+	var square_anchors: Array[Vector2] = [
+		Vector2(31.5, 21.0), Vector2(21.0, 21.0),
+		Vector2(21.0, 31.5), Vector2(31.5, 31.5),
+	]
+	var mall_anchors: Array[Vector2] = [
+		Vector2(42.5, 31.5), Vector2(42.5, 21.0),
+		Vector2(10.5, 21.0), Vector2(10.5, 31.5),
+	]
+	var pyramid_anchors: Array[Vector2] = [
+		Vector2(42.5, 10.5), Vector2(10.5, 10.5),
+		Vector2(10.5, 42.5), Vector2(42.5, 42.5),
+	]
+
+	var reserved: Array[int] = []
+	featured_park_block_index = _choose_landmark_block_index(
+		park_anchors[landmark_layout_variant], reserved
+	)
+	reserved.append(featured_park_block_index)
+	featured_town_square_block_index = _choose_landmark_block_index(
+		square_anchors[landmark_layout_variant], reserved
+	)
+	reserved.append(featured_town_square_block_index)
+	featured_mall_block_index = _choose_landmark_block_index(
+		mall_anchors[landmark_layout_variant], reserved, Vector2i(8, 7)
+	)
+	reserved.append(featured_mall_block_index)
+	featured_pyramid_block_index = _choose_landmark_block_index(
+		pyramid_anchors[landmark_layout_variant], reserved, Vector2i(8, 8)
+	)
+
 func _build_city_blocks() -> void:
-	featured_park_block_index = _choose_featured_park_block_index()
+	_assign_major_landmark_blocks()
 	for block_index: int in range(town_blocks.size()):
 		var block: Rect2i = town_blocks[block_index]
 		var district: int = _district_for_block(block)
@@ -1466,51 +1622,117 @@ func _build_city_blocks() -> void:
 			park_chance = 0.055
 		elif district == DISTRICT_LUXURY:
 			park_chance = 0.020
+		# Preserve the old one-roll-per-non-featured-block sequence. That keeps the
+		# surrounding authored comparison street stable when a landmark replaces a block.
+		var park_roll: float = -1.0 if featured_park else town_rng.randf()
 
-		if featured_park or town_rng.randf() < park_chance:
+		if featured_park:
 			_build_green_block(block, block_index, district, featured_park)
+			continue
+		if block_index == featured_town_square_block_index:
+			_build_town_square_landmark(block, block_index)
+			continue
+		if block_index == featured_mall_block_index:
+			_build_mall_landmark(block, block_index)
+			continue
+		if block_index == featured_pyramid_block_index:
+			_build_pyramid_landmark(block, block_index)
+			continue
+		if park_roll < park_chance:
+			_build_green_block(block, block_index, district, false)
 			continue
 
 		_build_perimeter_block(block, district, block_index)
 
 func _build_perimeter_block(block: Rect2i, district: int, block_index: int) -> void:
-	# Buildings now line the four street edges instead of filling a block as a
-	# 3x3 field of detached boxes. This creates the continuous narrow Japanese
-	# street walls visible in the reference art while leaving a hidden rear
-	# service court inside each block.
+	# Buildings line the four street edges around a rear service court. Each
+	# edge is built independently so a reference apartment can reserve the next
+	# frontage lot for its future side balconies.
 	var strip_depth: int = 2 if mini(block.size.x, block.size.y) >= 7 else 1
 	var serial: int = 0
 	var x_segments: Array[Vector2i] = _subdivide_frontage(block.position.x, block.size.x)
-
+	var north_lots: Array[Rect2i] = []
+	var south_lots: Array[Rect2i] = []
 	for segment: Vector2i in x_segments:
-		_build_lot(
-			Rect2i(segment.x, block.position.y, segment.y, strip_depth),
-			district, block_index, serial
+		north_lots.append(
+			Rect2i(segment.x, block.position.y, segment.y, strip_depth)
 		)
-		serial += 1
 		if block.size.y > strip_depth:
-			_build_lot(
-				Rect2i(segment.x, block.position.y + block.size.y - strip_depth, segment.y, strip_depth),
-				district, block_index, serial
+			south_lots.append(
+				Rect2i(
+					segment.x,
+					block.position.y + block.size.y - strip_depth,
+					segment.y,
+					strip_depth
+				)
 			)
-			serial += 1
+
+	serial = _build_perimeter_lot_run(
+		north_lots, district, block_index, serial, Vector3.RIGHT
+	)
+	serial = _build_perimeter_lot_run(
+		south_lots, district, block_index, serial, Vector3.RIGHT
+	)
 
 	var inner_start_y: int = block.position.y + strip_depth
 	var inner_length_y: int = block.size.y - strip_depth * 2
 	if inner_length_y >= 2:
 		var y_segments: Array[Vector2i] = _subdivide_frontage(inner_start_y, inner_length_y)
+		var west_lots: Array[Rect2i] = []
+		var east_lots: Array[Rect2i] = []
 		for segment: Vector2i in y_segments:
-			_build_lot(
-				Rect2i(block.position.x, segment.x, strip_depth, segment.y),
-				district, block_index, serial
+			west_lots.append(
+				Rect2i(block.position.x, segment.x, strip_depth, segment.y)
 			)
-			serial += 1
 			if block.size.x > strip_depth:
-				_build_lot(
-					Rect2i(block.position.x + block.size.x - strip_depth, segment.x, strip_depth, segment.y),
-					district, block_index, serial
+				east_lots.append(
+					Rect2i(
+						block.position.x + block.size.x - strip_depth,
+						segment.x,
+						strip_depth,
+						segment.y
+					)
 				)
-				serial += 1
+
+		serial = _build_perimeter_lot_run(
+			west_lots, district, block_index, serial, Vector3.BACK
+		)
+		_build_perimeter_lot_run(
+			east_lots, district, block_index, serial, Vector3.BACK
+		)
+
+
+func _build_perimeter_lot_run(
+	lots: Array[Rect2i],
+	district: int,
+	block_index: int,
+	serial_start: int,
+	clearance_world_direction: Vector3
+) -> int:
+	var lot_index: int = 0
+	var serial: int = serial_start
+	while lot_index < lots.size():
+		# An apartment is allowed only when a complete neighboring frontage lot
+		# exists to reserve. This prevents a building or random prop from ever
+		# occupying the side selected for the wraparound balcony modules.
+		var can_reserve_next: bool = lot_index + 1 < lots.size()
+		var building_type: int = _build_lot(
+			lots[lot_index],
+			district,
+			block_index,
+			serial,
+			can_reserve_next,
+			clearance_world_direction
+		)
+		serial += 1
+		lot_index += 1
+		if building_type == BUILDING_APARTMENT:
+			# Consume the serial as well as the physical lot so later names remain
+			# unique and the empty clearance is explicit in the generated layout.
+			serial += 1
+			lot_index += 1
+	return serial
+
 
 func _subdivide_frontage(start_cell: int, length_cells: int) -> Array[Vector2i]:
 	var segments: Array[Vector2i] = []
@@ -1550,8 +1772,10 @@ func _build_lot(
 	lot: Rect2i,
 	district: int,
 	block_index: int,
-	lot_serial: int
-) -> void:
+	lot_serial: int,
+	allow_apartment: bool = true,
+	apartment_clearance_world_direction: Vector3 = Vector3.RIGHT
+) -> int:
 	var cell_center: Vector2 = Vector2(
 		float(lot.position.x) + float(lot.size.x - 1) * 0.5,
 		float(lot.position.y) + float(lot.size.y - 1) * 0.5
@@ -1579,6 +1803,16 @@ func _build_lot(
 	world_center += front_direction * front_shift
 
 	var building_type: int = _choose_building_type(district, lot)
+	if (
+		building_type == BUILDING_APARTMENT
+		and (
+			not allow_apartment
+			or lot_depth_m < APARTMENT_REFERENCE_DEPTH_M
+		)
+	):
+		# Do not squeeze the reference apartment into a one-cell-deep strip.
+		# It would distort the 6.60 m footprint or collide with the rear lot run.
+		building_type = BUILDING_MODERN
 	var building_name: String = "Block%dLot%d" % [block_index, lot_serial]
 	var enterable: bool = false
 	if building_type == BUILDING_SHOP:
@@ -1594,11 +1828,39 @@ func _build_lot(
 		BUILDING_SHOP:
 			_build_shop(building_name, world_center, width_m, depth_m, district, front_yaw, enterable)
 		BUILDING_APARTMENT:
-			_build_apartment(building_name, world_center, width_m, depth_m, district, front_yaw)
+			var local_right_world: Vector3 = Vector3(cos(front_yaw), 0.0, -sin(front_yaw))
+			var balcony_side_sign: float = 1.0
+			if local_right_world.dot(apartment_clearance_world_direction) < 0.0:
+				balcony_side_sign = -1.0
+
+			# Grow toward the frontage lot already reserved for the side balconies,
+			# keeping the opposite party-wall edge fixed. Grow depth only toward
+			# the rear, keeping the street-facing façade on its original line.
+			var apartment_width_delta: float = APARTMENT_REFERENCE_WIDTH_M - width_m
+			var apartment_depth_delta: float = APARTMENT_REFERENCE_DEPTH_M - depth_m
+			var apartment_center: Vector3 = (
+				world_center
+				+ local_right_world
+					* (apartment_width_delta * 0.5 * balcony_side_sign)
+				- front_direction * (apartment_depth_delta * 0.5)
+			)
+			_build_apartment(
+				building_name,
+				apartment_center,
+				APARTMENT_REFERENCE_WIDTH_M,
+				APARTMENT_REFERENCE_DEPTH_M,
+				district,
+				front_yaw,
+				balcony_side_sign
+			)
 		BUILDING_TOWER:
 			_build_tower(building_name, world_center, width_m, depth_m, front_yaw)
 
-	if district == DISTRICT_OVERGROWN and town_rng.randf() < 0.45:
+	if (
+		district == DISTRICT_OVERGROWN
+		and building_type != BUILDING_APARTMENT
+		and town_rng.randf() < 0.45
+	):
 		var plant_count: int = town_rng.randi_range(1, 3)
 		for plant_index: int in range(plant_count):
 			var plant_pos: Vector3 = world_center + Vector3(
@@ -1607,6 +1869,7 @@ func _build_lot(
 				town_rng.randf_range(-depth_m * 0.46, depth_m * 0.46)
 			)
 			_add_shrub(plant_pos, town_rng.randf_range(0.45, 0.88))
+	return building_type
 
 func _choose_building_type(district: int, lot: Rect2i) -> int:
 	var roll: float = town_rng.randf()
@@ -2660,77 +2923,1054 @@ func _build_apartment(
 	position_value: Vector3,
 	width_m: float,
 	depth_m: float,
-	district: int,
-	front_yaw: float
+	_district: int,
+	front_yaw: float,
+	balcony_side_sign: float = 1.0
 ) -> void:
+	# Reference pass 2 adds the authored balcony system to the approved shell.
+	# Loose props, signs, AC units, pipes, plants and furniture remain excluded.
 	var root: Node3D = _new_building_root(building_name, position_value, front_yaw)
-	var floors: int = town_rng.randi_range(3, 5)
-	if district == DISTRICT_COMMERCIAL:
-		floors += town_rng.randi_range(0, 1)
-	var floor_height: float = 2.78
-	var height: float = floor_height * float(floors)
-	var body_mat: Material = _choose_apartment_body_material(district)
+	root.add_to_group("shinrai_reference_apartment")
+	root.set_meta("reference_stage", "reference_balcony_construction_pass")
+	root.set_meta("reference_width_m", width_m)
+	root.set_meta("reference_depth_m", depth_m)
+	root.set_meta("reference_body_height_m", APARTMENT_REFERENCE_BODY_HEIGHT_M)
+	root.set_meta("reference_total_height_m", APARTMENT_REFERENCE_BODY_HEIGHT_M + 2.90)
+	root.set_meta("balcony_clear_side", balcony_side_sign)
+	root.set_meta("balcony_clearance_reserved", true)
+	root.set_meta("balcony_module_width_m", 3.0)
+	root.set_meta("balcony_module_depth_m", 1.2)
+	root.set_meta("balcony_railing_height_m", 1.0)
+	var floor_height: float = APARTMENT_REFERENCE_FLOOR_HEIGHT_M
+	var floors: int = APARTMENT_REFERENCE_FLOOR_COUNT
+	var height: float = APARTMENT_REFERENCE_BODY_HEIGHT_M
+	var upper_height: float = height - floor_height
+	var wall_t: float = 0.22
+	var front_z: float = -depth_m * 0.5
+	var rear_z: float = depth_m * 0.5
+	# Deepen the façade reveal so the balcony/window bays read as part of the
+	# concrete structure instead of modules pasted onto a flat wall.
+	var frame_depth: float = clampf(depth_m * 0.15, 0.58, 0.72)
+	var recess_z: float = front_z + frame_depth - 0.05
+	# Seat the balcony slab slightly farther into that reveal while retaining
+	# the authored 1.20 m module depth.
+	var front_balcony_anchor_z: float = recess_z + 0.10
+	var door_width: float = clampf(width_m * 0.19, 1.28, 1.64)
+	# Use the same pier width at ground level and above so the façade corner is
+	# one continuous structural line rather than two offset boxes.
+	var edge_pier_w: float = clampf(width_m * 0.095, 0.54, 0.78)
 
-	# Apartment blocks now have a real accessible lobby. Upper residential
-	# floors stay closed for this pass so we do not pretend there are stairs
-	# and rooms that do not exist yet.
-	_add_enterable_ground_shell(root, width_m, depth_m, floor_height, body_mat, 1.48)
-	_add_interior_details(root, width_m, depth_m, BUILDING_APARTMENT, floor_height)
-	_add_open_door(root, depth_m, 1.30, mat_black_metal)
-	var upper_h: float = height - floor_height
-	_add_local_box(root, "ApartmentUpperBody", Vector3(0.0, floor_height + upper_h * 0.5, 0.0),
-		Vector3(width_m, upper_h, depth_m), body_mat)
-	_add_building_collision(root, Vector3(width_m, upper_h, depth_m),
-		Vector3(0.0, floor_height + upper_h * 0.5, 0.0))
+	# Preserve a genuinely usable ground-floor entrance. Apartment mode aligns
+	# every shell face inside the footprint and extends the ground-level front
+	# frame to the same depth as the upper concrete piers.
+	_add_enterable_ground_shell(
+		root,
+		width_m,
+		depth_m,
+		floor_height,
+		mat_apartment_concrete,
+		door_width,
+		frame_depth,
+		edge_pier_w,
+		true
+	)
+	_add_open_door(root, depth_m, door_width, mat_black_metal)
+	_add_building_collision(
+		root,
+		Vector3(width_m, upper_height, depth_m),
+		Vector3(0.0, floor_height + upper_height * 0.5, 0.0)
+	)
 
-	_add_front_window(root, "LobbyGlassL", -width_m * 0.27, 1.35, -depth_m * 0.525,
-		width_m * 0.24, 1.65, mat_glass, mat_black_metal)
-	_add_front_window(root, "LobbyGlassR", width_m * 0.27, 1.35, -depth_m * 0.525,
-		width_m * 0.24, 1.65, mat_glass, mat_black_metal)
-	_add_local_box(root, "EntranceCanopy", Vector3(0.0, 2.55, -depth_m * 0.5 - 0.68),
-		Vector3(2.95, 0.15, 1.28), mat_black_metal)
-	for lobby_side: float in [-1.0, 1.0]:
-		_add_facade_detail_box(root, "LobbyPier",
-			Vector3(width_m * 0.43 * lobby_side, 1.45, -depth_m * 0.545),
-			Vector3(0.16, 2.55, 0.16), mat_dark_concrete)
+	# Five continuous slabs lock the 3.0 m floor rhythm. Their plan faces sit
+	# inside the enclosing walls so a slab side never competes with a wall face
+	# for the same depth pixel while the player moves.
+	for slab_level: int in range(1, floors + 1):
+		var slab_y: float = float(slab_level) * floor_height
+		_add_local_box(
+			root,
+			"ApartmentFloorSlab_%02d" % slab_level,
+			Vector3(0.0, slab_y, 0.0),
+			Vector3(
+				width_m - APARTMENT_STRUCTURE_FACE_INSET_M * 2.0,
+				0.22,
+				depth_m - APARTMENT_STRUCTURE_FACE_INSET_M * 2.0
+			),
+			mat_apartment_concrete
+		)
 
-	var columns: int = clampi(int(width_m / 2.7), 2, 4)
-	for floor_index: int in range(1, floors):
-		var y_value: float = 1.45 + float(floor_index) * floor_height
-		for column: int in range(columns):
-			var t: float = (float(column) + 0.5) / float(columns) - 0.5
-			var row_shift: float = width_m * (0.022 if floor_index % 2 == 0 else -0.022)
-			var x_value: float = t * width_m * 0.82 + row_shift
-			var glass_mat: Material = _choose_window_material(0.12 if (floor_index + column) % 3 == 0 else 0.05)
-			_add_front_window(root, "ApartmentWindow", x_value, y_value, -depth_m * 0.515,
-				minf(1.35, width_m * 0.16), 1.05, glass_mat, mat_black_metal)
+	# Broad, almost blank shear walls define the narrow Japanese urban block.
+	# Recess their exterior face by 12 mm and bury the front end 100 mm inside
+	# the corner pier. The pier now owns the visible junction, so there is no
+	# edge-to-edge crack and no pair of coplanar faces fighting at that seam.
+	var side_wall_depth: float = maxf(
+		0.40,
+		depth_m - frame_depth + APARTMENT_WALL_JOIN_OVERLAP_M
+	)
+	var side_wall_center_z: float = (
+		front_z
+		+ frame_depth
+		- APARTMENT_WALL_JOIN_OVERLAP_M
+		+ side_wall_depth * 0.5
+	)
+	var upper_side_wall_x: float = (
+		width_m * 0.5 - wall_t * 0.5 - APARTMENT_SIDE_RETURN_INSET_M
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			"ApartmentSideShearWall",
+			Vector3(upper_side_wall_x * side,
+				floor_height + upper_height * 0.5, side_wall_center_z),
+			Vector3(wall_t, upper_height, side_wall_depth),
+			mat_apartment_concrete
+		)
 
-		if floor_index % 2 == 1:
-			_add_facade_detail_box(root, "ApartmentFloorBand",
-				Vector3(0.0, float(floor_index) * floor_height + 0.04, -depth_m * 0.537),
-				Vector3(width_m * 0.90, 0.09, 0.12), mat_dark_concrete)
+	# The reference is carried by substantial full-height outer concrete piers.
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			"ApartmentFrontEdgePier",
+			Vector3((width_m * 0.5 - edge_pier_w * 0.5) * side,
+				floor_height + upper_height * 0.5, front_z + frame_depth * 0.5),
+			Vector3(edge_pier_w, upper_height, frame_depth),
+			mat_apartment_concrete
+		)
 
-		if floor_index > 1 and floor_index % 2 == 0:
-			var balcony_y: float = float(floor_index) * floor_height + 0.12
-			_add_local_box(root, "ApartmentBalcony", Vector3(0.0, balcony_y, -depth_m * 0.5 - 0.50),
-				Vector3(width_m * 0.82, 0.13, 0.95), mat_dark_concrete)
-			_add_balcony_rail(root, width_m * 0.80, balcony_y + 0.66, -depth_m * 0.5 - 0.94)
+	# Floor beams remain continuous behind the piers, but their front and side
+	# faces are recessed 14 mm. The vertical piers therefore own the facade plane
+	# instead of overlapping another identically placed concrete surface.
+	for level: int in range(1, floors + 1):
+		_add_local_box(
+			root,
+			"ApartmentFrontFloorBeam_%02d" % level,
+			Vector3(0.0, float(level) * floor_height, front_z + frame_depth * 0.5),
+			Vector3(
+				width_m - APARTMENT_FRONT_GRID_FACE_INSET_M * 2.0,
+				0.28,
+				frame_depth - APARTMENT_FRONT_GRID_FACE_INSET_M * 2.0
+			),
+			mat_apartment_concrete
+		)
 
-	_add_facade_detail_box(root, "FrontServiceSpine",
-		Vector3(-width_m * 0.425, floor_height + upper_h * 0.50, -depth_m * 0.535),
-		Vector3(width_m * 0.11, maxf(0.8, upper_h * 0.88), 0.11), mat_weathered_metal)
-	_add_local_box(root, "StairTower", Vector3(width_m * 0.38, height * 0.52, depth_m * 0.43),
-		Vector3(width_m * 0.20, height * 0.90, depth_m * 0.16), mat_dark_concrete)
-	_add_local_box(root, "RoofPlantA", Vector3(-width_m * 0.20, height + 0.48, 0.0),
-		Vector3(width_m * 0.24, 0.78, depth_m * 0.22), mat_black_metal)
-	_add_local_box(root, "RoofPlantB", Vector3(width_m * 0.18, height + 0.34, depth_m * 0.12),
-		Vector3(width_m * 0.18, 0.50, depth_m * 0.18), mat_soft_white)
-	_add_wall_ac_unit(root, width_m * 0.40, 2.0, -depth_m * 0.515)
-	_add_exposed_service_pipe(root, -width_m * 0.44, height * 0.48, -depth_m * 0.54, height * 0.84)
-	_add_rooftop_parapet(root, width_m, depth_m, height)
-	if district == DISTRICT_LUXURY:
-		_add_local_box(root, "LuxuryCrown", Vector3(0.0, height + 1.02, 0.0),
-			Vector3(width_m * 0.70, 0.12, depth_m * 0.70), mat_neon_pink)
+	var paired_bays: bool = width_m >= 5.80
+	var center_spine_w: float = clampf(width_m * 0.080, 0.46, 0.68) if paired_bays else 0.0
+	if paired_bays:
+		_add_local_box(
+			root,
+			"ApartmentFrontCentralSpine",
+			Vector3(0.0, floor_height + upper_height * 0.5, front_z + frame_depth * 0.5),
+			Vector3(center_spine_w, upper_height, frame_depth),
+			mat_apartment_concrete
+		)
+
+	var bay_count: int = 2 if paired_bays else 1
+	var bay_width: float = (
+		(width_m - edge_pier_w * 2.0 - center_spine_w) / float(bay_count)
+	)
+	var balcony_root: Node3D = Node3D.new()
+	balcony_root.name = "ApartmentBalconies"
+	balcony_root.add_to_group("shinrai_apartment_balconies")
+	root.add_child(balcony_root)
+	for residential_level: int in range(1, floors):
+		var slab_y: float = float(residential_level) * floor_height
+		var opening_y: float = slab_y + 1.42
+		for bay_index: int in range(bay_count):
+			var bay_x: float = 0.0
+			if paired_bays:
+				var bay_side: float = -1.0 if bay_index == 0 else 1.0
+				bay_x = bay_side * (center_spine_w * 0.5 + bay_width * 0.5)
+			var balcony_width: float = clampf(minf(3.0, bay_width * 0.94), 1.55, 3.0)
+			var opening_w: float = clampf(
+				minf(bay_width * 0.76, balcony_width - 0.42), 0.96, 2.20
+			)
+			var module_prefix: String = (
+				"ApartmentFrontBalcony_%02d_%02d" % [residential_level, bay_index]
+			)
+			_add_apartment_recessed_window(
+				root,
+				"ApartmentFrontBay_%02d_%02d" % [residential_level, bay_index],
+				bay_x,
+				opening_y,
+				recess_z,
+				opening_w,
+				2.42,
+				-1.0
+			)
+			_add_apartment_balcony_timber(
+				balcony_root,
+				module_prefix,
+				Vector3(bay_x, opening_y, recess_z - 0.045),
+				Vector3.RIGHT,
+				Vector3.FORWARD,
+				balcony_width,
+				opening_w
+			)
+			_add_apartment_balcony_module(
+				balcony_root,
+				module_prefix,
+				Vector3(bay_x, 0.0, front_balcony_anchor_z),
+				Vector3.RIGHT,
+				Vector3.FORWARD,
+				balcony_width,
+				slab_y,
+				true
+			)
+
+	# The roof extension completes the timber ceiling above
+	# the fourth-floor balcony without adding a fifth railing.
+	for roof_bay_index: int in range(bay_count):
+		var roof_bay_x: float = 0.0
+		if paired_bays:
+			var roof_bay_side: float = -1.0 if roof_bay_index == 0 else 1.0
+			roof_bay_x = roof_bay_side * (center_spine_w * 0.5 + bay_width * 0.5)
+		var roof_balcony_width: float = clampf(minf(3.0, bay_width * 0.94), 1.55, 3.0)
+		_add_apartment_balcony_module(
+			balcony_root,
+			"ApartmentFrontBalconyRoof_%02d" % roof_bay_index,
+			Vector3(roof_bay_x, 0.0, front_balcony_anchor_z),
+			Vector3.RIGHT,
+			Vector3.FORWARD,
+			roof_balcony_width,
+			height,
+			false
+		)
+
+	# Reuse the established town façade glazing at ground level because its
+	# frame/reveal proportions already match the reference entrance.
+	var entrance_side_w: float = maxf(0.52, (width_m - door_width) * 0.5)
+	var lobby_window_w: float = maxf(0.58, entrance_side_w * 0.70)
+	var lobby_window_x: float = door_width * 0.5 + entrance_side_w * 0.5
+	for side: float in [-1.0, 1.0]:
+		_add_front_window(
+			root,
+			"ApartmentLobbyGlass",
+			lobby_window_x * side,
+			1.44,
+			front_z - 0.018,
+			lobby_window_w,
+			1.78,
+			mat_window_warm_dim,
+			mat_black_metal
+		)
+
+	# The rear keeps broad blank concrete fields around one narrow vertical
+	# window stack, matching the rear elevation while leaving balcony work out.
+	var rear_bay_w: float = clampf(width_m * 0.38, 1.62, 2.90)
+	var rear_field_w: float = maxf(0.42, (width_m - rear_bay_w) * 0.5)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			"ApartmentRearConcreteField",
+			Vector3((rear_bay_w * 0.5 + rear_field_w * 0.5) * side,
+				floor_height + upper_height * 0.5, rear_z - wall_t * 0.5),
+			Vector3(rear_field_w, upper_height, wall_t),
+			mat_apartment_concrete
+		)
+	for rear_level: int in range(1, floors):
+		var rear_y: float = float(rear_level) * floor_height + 1.50
+		_add_apartment_recessed_window(
+			root,
+			"ApartmentRearBay_%02d" % rear_level,
+			0.0,
+			rear_y,
+			rear_z - 0.34,
+			rear_bay_w * 0.72,
+			1.86,
+			1.0
+		)
+		_add_local_box(
+			root,
+			"ApartmentRearFloorBeam_%02d" % rear_level,
+			Vector3(0.0, float(rear_level) * floor_height, rear_z - frame_depth * 0.5),
+			Vector3(rear_bay_w, 0.24, frame_depth),
+			mat_apartment_concrete
+		)
+
+	# A second stack wraps onto the deliberately reserved clear side. It uses
+	# the same 1.20 m projection and floor rhythm as the front modules.
+	var side_outward: Vector3 = Vector3(balcony_side_sign, 0.0, 0.0)
+	var side_tangent: Vector3 = Vector3.BACK
+	var side_wall_x: float = (
+		(width_m * 0.5 - APARTMENT_SIDE_RETURN_INSET_M) * balcony_side_sign
+	)
+	var side_balcony_anchor_x: float = (
+		side_wall_x - side_outward.x * 0.035
+	)
+	var side_center_z: float = -depth_m * 0.10
+	var side_balcony_width: float = clampf(minf(3.0, depth_m * 0.58), 1.70, 3.0)
+	var side_opening_w: float = clampf(
+		minf(side_balcony_width * 0.64, side_balcony_width - 0.44), 1.02, 1.92
+	)
+	for side_level: int in range(1, floors):
+		var side_slab_y: float = float(side_level) * floor_height
+		var side_opening_y: float = side_slab_y + 1.42
+		var side_prefix: String = "ApartmentSideBalcony_%02d" % side_level
+		_add_apartment_oriented_window(
+			balcony_root,
+			side_prefix + "Door",
+			Vector3(side_wall_x, side_opening_y, side_center_z),
+			side_tangent,
+			side_outward,
+			side_opening_w,
+			2.42
+		)
+		_add_apartment_balcony_timber(
+			balcony_root,
+			side_prefix,
+			Vector3(side_wall_x, side_opening_y, side_center_z),
+			side_tangent,
+			side_outward,
+			side_balcony_width,
+			side_opening_w
+		)
+		_add_apartment_balcony_module(
+			balcony_root,
+			side_prefix,
+			Vector3(side_balcony_anchor_x, 0.0, side_center_z),
+			side_tangent,
+			side_outward,
+			side_balcony_width,
+			side_slab_y,
+			true
+		)
+	_add_apartment_balcony_module(
+		balcony_root,
+		"ApartmentSideBalconyRoof",
+		Vector3(side_wall_x, 0.0, side_center_z),
+		side_tangent,
+		side_outward,
+		side_balcony_width,
+		height,
+		false
+	)
+
+	_add_apartment_reference_roof(root, width_m, depth_m, height)
+
+
+func _add_apartment_recessed_window(
+	root: Node3D,
+	prefix: String,
+	x_value: float,
+	y_value: float,
+	z_value: float,
+	width_value: float,
+	height_value: float,
+	outward_sign: float
+) -> void:
+	# A dark concrete backing gives the bay real depth even before interiors and
+	# balcony soffits are introduced. The glazing is reused from the town kit.
+	var backing_z: float = z_value - outward_sign * 0.105
+	var frame_z: float = z_value + outward_sign * 0.035
+	_add_local_box(
+		root,
+		prefix + "Backing",
+		Vector3(x_value, y_value, backing_z),
+		Vector3(width_value + 0.28, height_value + 0.24, 0.08),
+		mat_apartment_concrete_recess
+	)
+	_add_local_box(
+		root,
+		prefix + "Glass",
+		Vector3(x_value, y_value, z_value),
+		Vector3(width_value, height_value, 0.042),
+		mat_window_warm_dim
+	)
+	var frame_t: float = 0.075
+	_add_local_box(
+		root,
+		prefix + "FrameTop",
+		Vector3(x_value, y_value + height_value * 0.5, frame_z),
+		Vector3(width_value + 0.10, frame_t, 0.10),
+		mat_black_metal
+	)
+	_add_local_box(
+		root,
+		prefix + "FrameBottom",
+		Vector3(x_value, y_value - height_value * 0.5, frame_z),
+		Vector3(width_value + 0.10, frame_t, 0.10),
+		mat_black_metal
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			prefix + "FrameSide",
+			Vector3(x_value + width_value * 0.5 * side, y_value, frame_z),
+			Vector3(frame_t, height_value, 0.10),
+			mat_black_metal
+		)
+	_add_local_box(
+		root,
+		prefix + "CenterMullion",
+		Vector3(x_value, y_value, frame_z),
+		Vector3(0.065, height_value, 0.105),
+		mat_black_metal
+	)
+
+
+func _add_apartment_oriented_window(
+	root: Node3D,
+	prefix: String,
+	center_value: Vector3,
+	tangent: Vector3,
+	outward: Vector3,
+	width_value: float,
+	height_value: float
+) -> void:
+	var glass_center: Vector3 = center_value + outward * 0.024
+	var frame_center: Vector3 = center_value + outward * 0.060
+	var tangent_is_x: bool = absf(tangent.x) > 0.5
+	var glass_size: Vector3 = (
+		Vector3(width_value, height_value, 0.042)
+		if tangent_is_x
+		else Vector3(0.042, height_value, width_value)
+	)
+	var horizontal_frame_size: Vector3 = (
+		Vector3(width_value + 0.10, 0.075, 0.10)
+		if tangent_is_x
+		else Vector3(0.10, 0.075, width_value + 0.10)
+	)
+	var vertical_frame_size: Vector3 = (
+		Vector3(0.075, height_value, 0.10)
+		if tangent_is_x
+		else Vector3(0.10, height_value, 0.075)
+	)
+	_add_local_box(root, prefix + "Glass", glass_center, glass_size, mat_window_warm_dim)
+	_add_local_box(
+		root, prefix + "FrameTop",
+		frame_center + Vector3.UP * (height_value * 0.5),
+		horizontal_frame_size, mat_black_metal
+	)
+	_add_local_box(
+		root, prefix + "FrameBottom",
+		frame_center - Vector3.UP * (height_value * 0.5),
+		horizontal_frame_size, mat_black_metal
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root, prefix + "FrameSide",
+			frame_center + tangent * (width_value * 0.5 * side),
+			vertical_frame_size, mat_black_metal
+		)
+	var mullion_size: Vector3 = (
+		Vector3(0.065, height_value, 0.105)
+		if tangent_is_x
+		else Vector3(0.105, height_value, 0.065)
+	)
+	_add_local_box(root, prefix + "CenterMullion", frame_center, mullion_size, mat_black_metal)
+
+
+func _add_apartment_balcony_timber(
+	root: Node3D,
+	prefix: String,
+	window_center: Vector3,
+	tangent: Vector3,
+	outward: Vector3,
+	module_width: float,
+	opening_width: float
+) -> void:
+	var tangent_is_x: bool = absf(tangent.x) > 0.5
+	var side_zone: float = maxf(0.12, (module_width - opening_width) * 0.5)
+	var slats_per_side: int = clampi(roundi(side_zone / 0.105), 2, 4)
+	var slat_size: Vector3 = (
+		Vector3(0.045, 2.42, 0.075)
+		if tangent_is_x
+		else Vector3(0.075, 2.42, 0.045)
+	)
+	# A recessed timber backing stops the battens reading as loose bars against
+	# the concrete. The slats remain proud, preserving the reference shadow gaps.
+	var backer_size: Vector3 = (
+		Vector3(maxf(0.08, side_zone - 0.07), 2.42, 0.028)
+		if tangent_is_x
+		else Vector3(0.028, 2.42, maxf(0.08, side_zone - 0.07))
+	)
+	for side: float in [-1.0, 1.0]:
+		var backer_offset: float = opening_width * 0.5 + side_zone * 0.5
+		_add_facade_detail_box(
+			root,
+			prefix + "TimberCladdingBacker",
+			window_center + tangent * (backer_offset * side) + outward * 0.018,
+			backer_size,
+			mat_dark_wood
+		)
+	for side: float in [-1.0, 1.0]:
+		for slat_index: int in range(slats_per_side):
+			var slat_offset: float = (
+				opening_width * 0.5
+				+ side_zone * (float(slat_index) + 0.52) / float(slats_per_side)
+			)
+			_add_facade_detail_box(
+				root,
+				prefix + "TimberSlat",
+				window_center + tangent * (slat_offset * side) + outward * 0.055,
+				slat_size,
+				mat_dark_wood
+			)
+	var lintel_size: Vector3 = (
+		Vector3(module_width - 0.10, 0.12, 0.10)
+		if tangent_is_x
+		else Vector3(0.10, 0.12, module_width - 0.10)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "TimberLintel",
+		window_center + Vector3.UP * 1.18 + outward * 0.050,
+		lintel_size,
+		mat_dark_wood
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "TimberThreshold",
+		window_center - Vector3.UP * 1.18 + outward * 0.050,
+		lintel_size,
+		mat_dark_wood
+	)
+
+
+func _add_apartment_balcony_module(
+	root: Node3D,
+	prefix: String,
+	wall_anchor: Vector3,
+	tangent: Vector3,
+	outward: Vector3,
+	width_value: float,
+	slab_y: float,
+	include_railing: bool
+) -> void:
+	const BALCONY_DEPTH_M: float = 1.20
+	const SLAB_THICKNESS_M: float = 0.22
+	const FASCIA_EDGE_WIDTH_M: float = 0.085
+	const DRIP_EDGE_WIDTH_M: float = 0.040
+	const COPING_EDGE_WIDTH_M: float = 0.065
+	var tangent_is_x: bool = absf(tangent.x) > 0.5
+	var outward_is_x: bool = absf(outward.x) > 0.5
+	var slab_center: Vector3 = (
+		Vector3(wall_anchor.x, slab_y, wall_anchor.z)
+		+ outward * (BALCONY_DEPTH_M * 0.5)
+	)
+	var slab_size: Vector3 = (
+		Vector3(width_value, SLAB_THICKNESS_M, BALCONY_DEPTH_M)
+		if tangent_is_x
+		else Vector3(BALCONY_DEPTH_M, SLAB_THICKNESS_M, width_value)
+	)
+	# The metal wrap owns the exterior faces. Recess the concrete core so
+	# two differently shaded surfaces never occupy the same depth plane.
+	if tangent_is_x:
+		slab_size.x -= FASCIA_EDGE_WIDTH_M * 2.0
+		slab_size.z -= FASCIA_EDGE_WIDTH_M
+	else:
+		slab_size.z -= FASCIA_EDGE_WIDTH_M * 2.0
+		slab_size.x -= FASCIA_EDGE_WIDTH_M
+	_add_local_box(
+		root, prefix + "ConcreteSlab",
+		slab_center - outward * (FASCIA_EDGE_WIDTH_M * 0.5),
+		slab_size, mat_apartment_concrete
+	)
+
+	# A thin inset weathering surface represents the waterproof walking finish
+	# over the RC slab. Its exposed concrete PBR remains subtle and non-glossy.
+	var deck_center_y: float = slab_y + SLAB_THICKNESS_M * 0.5 + 0.009
+	var deck_top_y: float = deck_center_y + 0.009
+	var deck_size: Vector3 = (
+		Vector3(width_value - 0.16, 0.018, BALCONY_DEPTH_M - 0.12)
+		if tangent_is_x
+		else Vector3(BALCONY_DEPTH_M - 0.12, 0.018, width_value - 0.16)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "WaterproofDeck",
+		Vector3(slab_center.x, deck_center_y, slab_center.z),
+		deck_size,
+		mat_apartment_balcony_deck
+	)
+
+	# The waterproof layer turns up at the wall and drains into a narrow channel
+	# before the outer rail. Both are fixed construction details, not loose props.
+	var upstand_size: Vector3 = (
+		Vector3(width_value - 0.20, 0.070, 0.026)
+		if tangent_is_x
+		else Vector3(0.026, 0.070, width_value - 0.20)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "WaterproofUpstand",
+		Vector3(wall_anchor.x, deck_top_y + 0.035, wall_anchor.z)
+			+ outward * 0.013,
+		upstand_size,
+		mat_apartment_balcony_deck
+	)
+	var drain_size: Vector3 = (
+		Vector3(width_value - 0.22, 0.012, 0.045)
+		if tangent_is_x
+		else Vector3(0.045, 0.012, width_value - 0.22)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "DeckDrainChannel",
+		Vector3(wall_anchor.x, deck_top_y + 0.006, wall_anchor.z)
+			+ outward * (BALCONY_DEPTH_M - 0.115),
+		drain_size,
+		mat_weathered_metal
+	)
+
+	# The steel fascia owns the exposed slab edges. Front pieces terminate inside
+	# the side returns, eliminating coplanar corner faces while keeping the exact
+	# 220 mm structural slab specified by the balcony sheet.
+	var fascia_height: float = SLAB_THICKNESS_M + 0.006
+	var front_fascia_size: Vector3 = (
+		Vector3(
+			width_value - FASCIA_EDGE_WIDTH_M * 2.0,
+			fascia_height,
+			FASCIA_EDGE_WIDTH_M
+		)
+		if tangent_is_x
+		else Vector3(
+			FASCIA_EDGE_WIDTH_M,
+			fascia_height,
+			width_value - FASCIA_EDGE_WIDTH_M * 2.0
+		)
+	)
+	_add_local_box(
+		root,
+		prefix + "FrontFascia",
+		Vector3(wall_anchor.x, slab_y, wall_anchor.z)
+			+ outward * (BALCONY_DEPTH_M - FASCIA_EDGE_WIDTH_M * 0.5),
+		front_fascia_size,
+		mat_weathered_metal
+	)
+	var side_fascia_size: Vector3 = (
+		Vector3(FASCIA_EDGE_WIDTH_M, fascia_height, BALCONY_DEPTH_M)
+		if tangent_is_x
+		else Vector3(BALCONY_DEPTH_M, fascia_height, FASCIA_EDGE_WIDTH_M)
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root,
+			prefix + "SideFascia",
+			slab_center
+				+ tangent * ((width_value * 0.5 - FASCIA_EDGE_WIDTH_M * 0.5) * side),
+			side_fascia_size,
+			mat_weathered_metal
+		)
+
+	# Folded lower lips and a wall-side shadow joint give the steel wrap a real
+	# manufactured section and keep the soffit from appearing fused to the wall.
+	var drip_height: float = 0.028
+	var drip_y: float = slab_y - fascia_height * 0.5 - drip_height * 0.5
+	var front_drip_size: Vector3 = (
+		Vector3(
+			width_value - DRIP_EDGE_WIDTH_M * 2.0,
+			drip_height,
+			DRIP_EDGE_WIDTH_M
+		)
+		if tangent_is_x
+		else Vector3(
+			DRIP_EDGE_WIDTH_M,
+			drip_height,
+			width_value - DRIP_EDGE_WIDTH_M * 2.0
+		)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "FrontFasciaDrip",
+		Vector3(wall_anchor.x, drip_y, wall_anchor.z)
+			+ outward * (BALCONY_DEPTH_M - DRIP_EDGE_WIDTH_M * 0.5),
+		front_drip_size,
+		mat_weathered_metal
+	)
+	var side_drip_size: Vector3 = (
+		Vector3(DRIP_EDGE_WIDTH_M, drip_height, BALCONY_DEPTH_M)
+		if tangent_is_x
+		else Vector3(BALCONY_DEPTH_M, drip_height, DRIP_EDGE_WIDTH_M)
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_facade_detail_box(
+			root,
+			prefix + "SideFasciaDrip",
+			Vector3(wall_anchor.x, drip_y, wall_anchor.z)
+				+ outward * (BALCONY_DEPTH_M * 0.5)
+				+ tangent * (
+					(width_value * 0.5 - DRIP_EDGE_WIDTH_M * 0.5) * side
+				),
+			side_drip_size,
+			mat_weathered_metal
+		)
+	var wall_joint_size: Vector3 = (
+		Vector3(width_value - 0.12, 0.026, 0.032)
+		if tangent_is_x
+		else Vector3(0.032, 0.026, width_value - 0.12)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "SoffitWallShadowJoint",
+		Vector3(wall_anchor.x, slab_y - 0.132, wall_anchor.z)
+			+ outward * 0.020,
+		wall_joint_size,
+		mat_black_metal
+	)
+
+	# Three non-overlapping coping pieces complete the manufactured slab frame.
+	var coping_height: float = 0.050
+	var coping_y: float = slab_y + fascia_height * 0.5 + coping_height * 0.5
+	var tangent_coping_size: Vector3 = (
+		Vector3(
+			width_value - COPING_EDGE_WIDTH_M * 2.0,
+			coping_height,
+			COPING_EDGE_WIDTH_M
+		)
+		if tangent_is_x
+		else Vector3(
+			COPING_EDGE_WIDTH_M,
+			coping_height,
+			width_value - COPING_EDGE_WIDTH_M * 2.0
+		)
+	)
+	_add_facade_detail_box(
+		root,
+		prefix + "FrontCoping",
+		Vector3(wall_anchor.x, coping_y, wall_anchor.z)
+			+ outward * (BALCONY_DEPTH_M - COPING_EDGE_WIDTH_M * 0.5),
+		tangent_coping_size,
+		mat_black_metal
+	)
+	var outward_coping_size: Vector3 = (
+		Vector3(BALCONY_DEPTH_M, coping_height, COPING_EDGE_WIDTH_M)
+		if outward_is_x
+		else Vector3(COPING_EDGE_WIDTH_M, coping_height, BALCONY_DEPTH_M)
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_facade_detail_box(
+			root,
+			prefix + "SideCoping",
+			Vector3(wall_anchor.x, coping_y, wall_anchor.z)
+				+ outward * (BALCONY_DEPTH_M * 0.5)
+				+ tangent * (
+					(width_value * 0.5 - COPING_EDGE_WIDTH_M * 0.5) * side
+				),
+			outward_coping_size,
+			mat_black_metal
+		)
+
+	# Reference soffit planks run from the wall to the outer fascia and repeat
+	# across the three-metre bay. Batch them so the corrected direction does not
+	# increase balcony draw calls.
+	var usable_width: float = maxf(0.40, width_value - 0.12)
+	var usable_depth: float = BALCONY_DEPTH_M - 0.10
+	var soffit_board_count: int = clampi(roundi(usable_width / 0.16), 8, 20)
+	var board_width: float = usable_width / float(soffit_board_count)
+	var board_size: Vector3 = (
+		Vector3(board_width - 0.008, 0.035, usable_depth)
+		if tangent_is_x
+		else Vector3(usable_depth, 0.035, board_width - 0.008)
+	)
+	var soffit_positions: PackedVector3Array = PackedVector3Array()
+	for board_index: int in range(soffit_board_count):
+		var tangent_offset: float = (
+			-usable_width * 0.5
+			+ board_width * (float(board_index) + 0.5)
+		)
+		soffit_positions.append(
+			Vector3(wall_anchor.x, slab_y - 0.132, wall_anchor.z)
+				+ outward * (0.05 + usable_depth * 0.5)
+				+ tangent * tangent_offset
+		)
+	_add_apartment_soffit_multimesh(
+		root, prefix + "SoffitBoards", soffit_positions, board_size
+	)
+
+	if include_railing:
+		_add_apartment_balcony_railing(
+			root, prefix, wall_anchor, tangent, outward, width_value, slab_y
+		)
+
+
+func _add_apartment_soffit_multimesh(
+	root: Node3D,
+	part_name: String,
+	positions: PackedVector3Array,
+	board_size: Vector3
+) -> void:
+	if positions.is_empty():
+		return
+	var board_mesh: BoxMesh = BoxMesh.new()
+	board_mesh.size = board_size
+	var boards: MultiMesh = MultiMesh.new()
+	boards.transform_format = MultiMesh.TRANSFORM_3D
+	boards.mesh = board_mesh
+	boards.instance_count = positions.size()
+	for index: int in range(positions.size()):
+		boards.set_instance_transform(
+			index, Transform3D(Basis.IDENTITY, positions[index])
+		)
+	var instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	instance.name = part_name
+	instance.multimesh = boards
+	instance.material_override = mat_wood
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.visibility_range_end = FACADE_DETAIL_VISIBILITY_RANGE
+	instance.visibility_range_end_margin = 6.0
+	root.add_child(instance)
+
+
+func _add_apartment_balcony_railing(
+	root: Node3D,
+	prefix: String,
+	wall_anchor: Vector3,
+	tangent: Vector3,
+	outward: Vector3,
+	width_value: float,
+	slab_y: float
+) -> void:
+	const BALCONY_DEPTH_M: float = 1.20
+	const RAILING_HEIGHT_M: float = 1.00
+	const TOP_RAIL_HEIGHT_M: float = 0.052
+	const TOP_RAIL_WIDTH_M: float = 0.055
+	const LOW_RAIL_HEIGHT_M: float = 0.042
+	const LOW_RAIL_WIDTH_M: float = 0.045
+	const BALUSTER_WIDTH_M: float = 0.030
+	const TARGET_BAR_CENTRE_M: float = 0.135
+	var tangent_is_x: bool = absf(tangent.x) > 0.5
+	var outward_is_x: bool = absf(outward.x) > 0.5
+	# Include the 18 mm waterproof finish when measuring the one-metre guard.
+	var deck_top_y: float = slab_y + 0.128
+	var rail_top_y: float = (
+		deck_top_y + RAILING_HEIGHT_M - TOP_RAIL_HEIGHT_M * 0.5
+	)
+	var rail_low_y: float = deck_top_y + 0.150
+	var front_line: Vector3 = (
+		Vector3(wall_anchor.x, 0.0, wall_anchor.z)
+		+ outward * (BALCONY_DEPTH_M - 0.060)
+	)
+	var tangent_top_size: Vector3 = (
+		Vector3(width_value + 0.02, TOP_RAIL_HEIGHT_M, TOP_RAIL_WIDTH_M)
+		if tangent_is_x
+		else Vector3(TOP_RAIL_WIDTH_M, TOP_RAIL_HEIGHT_M, width_value + 0.02)
+	)
+	var tangent_low_size: Vector3 = (
+		Vector3(width_value + 0.02, LOW_RAIL_HEIGHT_M, LOW_RAIL_WIDTH_M)
+		if tangent_is_x
+		else Vector3(LOW_RAIL_WIDTH_M, LOW_RAIL_HEIGHT_M, width_value + 0.02)
+	)
+	var outward_top_size: Vector3 = (
+		Vector3(BALCONY_DEPTH_M, TOP_RAIL_HEIGHT_M, TOP_RAIL_WIDTH_M)
+		if outward_is_x
+		else Vector3(TOP_RAIL_WIDTH_M, TOP_RAIL_HEIGHT_M, BALCONY_DEPTH_M)
+	)
+	var outward_low_size: Vector3 = (
+		Vector3(BALCONY_DEPTH_M, LOW_RAIL_HEIGHT_M, LOW_RAIL_WIDTH_M)
+		if outward_is_x
+		else Vector3(LOW_RAIL_WIDTH_M, LOW_RAIL_HEIGHT_M, BALCONY_DEPTH_M)
+	)
+	_add_facade_detail_box(
+		root, prefix + "RailTopFront",
+		Vector3(front_line.x, rail_top_y, front_line.z),
+		tangent_top_size, mat_weathered_metal
+	)
+	_add_facade_detail_box(
+		root, prefix + "RailLowFront",
+		Vector3(front_line.x, rail_low_y, front_line.z),
+		tangent_low_size, mat_weathered_metal
+	)
+	for side: float in [-1.0, 1.0]:
+		var side_center: Vector3 = (
+			Vector3(wall_anchor.x, 0.0, wall_anchor.z)
+			+ outward * (BALCONY_DEPTH_M * 0.5)
+			+ tangent * ((width_value * 0.5 - 0.040) * side)
+		)
+		_add_facade_detail_box(
+			root, prefix + "RailTopSide",
+			Vector3(side_center.x, rail_top_y, side_center.z),
+			outward_top_size, mat_weathered_metal
+		)
+		_add_facade_detail_box(
+			root, prefix + "RailLowSide",
+			Vector3(side_center.x, rail_low_y, side_center.z),
+			outward_low_size, mat_weathered_metal
+		)
+
+	# Four 80 mm structural posts match the supplied railing connection detail.
+	# Their plates sit directly on the waterproof finish rather than floating.
+	var post_height: float = RAILING_HEIGHT_M - TOP_RAIL_HEIGHT_M * 0.5
+	var post_center_y: float = deck_top_y + post_height * 0.5
+	var front_post_distance: float = BALCONY_DEPTH_M - 0.060
+	var wall_post_distance: float = 0.075
+	var post_half_span: float = width_value * 0.5 - 0.040
+	var baseplate_positions: PackedVector3Array = PackedVector3Array()
+	for side: float in [-1.0, 1.0]:
+		for distance_value: float in [wall_post_distance, front_post_distance]:
+			var post_position: Vector3 = (
+				Vector3(wall_anchor.x, post_center_y, wall_anchor.z)
+				+ tangent * (post_half_span * side)
+				+ outward * distance_value
+			)
+			_add_facade_detail_box(
+				root, prefix + "RailingPost", post_position,
+				Vector3(0.080, post_height, 0.080), mat_weathered_metal
+			)
+			baseplate_positions.append(
+				Vector3(post_position.x, deck_top_y + 0.009, post_position.z)
+			)
+	_add_apartment_baseplate_multimesh(
+		root, prefix + "RailingBaseplates", baseplate_positions
+	)
+
+	# Thirty-millimetre balusters keep a roughly 100 mm clear opening. Positions
+	# are measured between the structural posts so no bar intersects a post.
+	var baluster_positions: PackedVector3Array = PackedVector3Array()
+	var baluster_bottom_y: float = deck_top_y + 0.105
+	var baluster_top_y: float = rail_top_y - TOP_RAIL_HEIGHT_M * 0.45
+	var baluster_height: float = baluster_top_y - baluster_bottom_y
+	var baluster_y: float = (baluster_bottom_y + baluster_top_y) * 0.5
+	var front_span: float = post_half_span * 2.0
+	var front_intervals: int = clampi(
+		ceili(front_span / TARGET_BAR_CENTRE_M), 12, 24
+	)
+	for bar_index: int in range(1, front_intervals):
+		var front_offset: float = (
+			-post_half_span
+			+ front_span * float(bar_index) / float(front_intervals)
+		)
+		baluster_positions.append(
+			Vector3(front_line.x, baluster_y, front_line.z)
+				+ tangent * front_offset
+		)
+	var side_span: float = front_post_distance - wall_post_distance
+	var side_intervals: int = clampi(
+		ceili(side_span / TARGET_BAR_CENTRE_M), 7, 10
+	)
+	for side: float in [-1.0, 1.0]:
+		for bar_index: int in range(1, side_intervals):
+			var side_distance: float = (
+				wall_post_distance
+				+ side_span * float(bar_index) / float(side_intervals)
+			)
+			baluster_positions.append(
+				Vector3(wall_anchor.x, baluster_y, wall_anchor.z)
+					+ tangent * (post_half_span * side)
+					+ outward * side_distance
+			)
+	_add_apartment_baluster_multimesh(
+		root,
+		prefix + "Balusters",
+		baluster_positions,
+		baluster_height,
+		BALUSTER_WIDTH_M
+	)
+
+
+func _add_apartment_baseplate_multimesh(
+	root: Node3D,
+	part_name: String,
+	positions: PackedVector3Array
+) -> void:
+	if positions.is_empty():
+		return
+	var plate_mesh: BoxMesh = BoxMesh.new()
+	plate_mesh.size = Vector3(0.140, 0.018, 0.140)
+	var plates: MultiMesh = MultiMesh.new()
+	plates.transform_format = MultiMesh.TRANSFORM_3D
+	plates.mesh = plate_mesh
+	plates.instance_count = positions.size()
+	for index: int in range(positions.size()):
+		plates.set_instance_transform(index, Transform3D(Basis.IDENTITY, positions[index]))
+	var instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	instance.name = part_name
+	instance.multimesh = plates
+	instance.material_override = mat_weathered_metal
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.visibility_range_end = FACADE_DETAIL_VISIBILITY_RANGE
+	instance.visibility_range_end_margin = 6.0
+	root.add_child(instance)
+
+
+func _add_apartment_baluster_multimesh(
+	root: Node3D,
+	part_name: String,
+	positions: PackedVector3Array,
+	bar_height: float,
+	bar_width: float
+) -> void:
+	if positions.is_empty():
+		return
+	var bar_mesh: BoxMesh = BoxMesh.new()
+	bar_mesh.size = Vector3(bar_width, bar_height, bar_width)
+	var bars: MultiMesh = MultiMesh.new()
+	bars.transform_format = MultiMesh.TRANSFORM_3D
+	bars.mesh = bar_mesh
+	bars.instance_count = positions.size()
+	for index: int in range(positions.size()):
+		bars.set_instance_transform(index, Transform3D(Basis.IDENTITY, positions[index]))
+	var instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	instance.name = part_name
+	instance.multimesh = bars
+	instance.material_override = mat_weathered_metal
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.visibility_range_end = FACADE_DETAIL_VISIBILITY_RANGE
+	instance.visibility_range_end_margin = 6.0
+	root.add_child(instance)
+
+
+func _add_apartment_reference_roof(
+	root: Node3D,
+	width_m: float,
+	depth_m: float,
+	top_y: float
+) -> void:
+	var parapet_h: float = 0.62
+	var parapet_t: float = 0.20
+	var parapet_y: float = top_y + parapet_h * 0.5
+	_add_local_box(
+		root, "ApartmentRoofParapetFront",
+		Vector3(0.0, parapet_y, -depth_m * 0.5 + parapet_t * 0.5),
+		Vector3(width_m, parapet_h, parapet_t), mat_apartment_concrete
+	)
+	_add_local_box(
+		root, "ApartmentRoofParapetRear",
+		Vector3(0.0, parapet_y, depth_m * 0.5 - parapet_t * 0.5),
+		Vector3(width_m, parapet_h, parapet_t), mat_apartment_concrete
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root, "ApartmentRoofParapetSide",
+			Vector3((width_m * 0.5 - parapet_t * 0.5) * side, parapet_y, 0.0),
+			Vector3(parapet_t, parapet_h, depth_m), mat_apartment_concrete
+		)
+
+	# Thin dark coping is fixed building fabric. Roof rails and equipment remain
+	# intentionally absent during this architecture-only pass.
+	var cap_y: float = top_y + parapet_h + 0.035
+	_add_local_box(
+		root, "ApartmentRoofCopingFront",
+		Vector3(0.0, cap_y, -depth_m * 0.5),
+		Vector3(width_m + 0.04, 0.07, 0.24), mat_black_metal
+	)
+	_add_local_box(
+		root, "ApartmentRoofCopingRear",
+		Vector3(0.0, cap_y, depth_m * 0.5),
+		Vector3(width_m + 0.04, 0.07, 0.24), mat_black_metal
+	)
+	for side: float in [-1.0, 1.0]:
+		_add_local_box(
+			root, "ApartmentRoofCopingSide",
+			Vector3(width_m * 0.5 * side, cap_y, 0.0),
+			Vector3(0.24, 0.07, depth_m), mat_black_metal
+		)
+
+	# The two unequal concrete service cores are the distinctive roof silhouette
+	# in the supplied front, side and three-quarter references.
+	var core_w: float = clampf(width_m * 0.18, 0.72, 1.28)
+	var core_d: float = clampf(depth_m * 0.24, 1.00, 1.65)
+	var core_x: float = width_m * 0.28
+	_add_local_box(
+		root, "ApartmentRoofCoreLeft",
+		Vector3(-core_x, top_y + 1.22, depth_m * 0.12),
+		Vector3(core_w, 2.44, core_d), mat_apartment_concrete
+	)
+	_add_local_box(
+		root, "ApartmentRoofCoreRight",
+		Vector3(core_x, top_y + 1.45, depth_m * 0.16),
+		Vector3(core_w * 0.88, 2.90, core_d * 0.90), mat_apartment_concrete
+	)
+
 
 func _build_tower(
 	building_name: String,
@@ -2785,6 +4025,112 @@ func _build_tower(
 		Vector3(tower_width * 0.45, 1.20, tower_depth * 0.38), mat_black_metal)
 	_add_local_box(root, "TowerCrown", Vector3(0.0, podium_h + height + 1.42, 0.0),
 		Vector3(tower_width + 0.45, 0.12, tower_depth + 0.45), mat_neon_blue)
+
+func _landmark_block_metrics(block: Rect2i) -> Dictionary:
+	var center_cell := Vector2(
+		float(block.position.x) + float(block.size.x - 1) * 0.5,
+		float(block.position.y) + float(block.size.y - 1) * 0.5
+	)
+	return {
+		"center": _grid_float_to_world(center_cell, 0.0),
+		"width": float(block.size.x) * TILE_SIZE - 1.25,
+		"depth": float(block.size.y) * TILE_SIZE - 1.25,
+	}
+
+func _build_mall_landmark(block: Rect2i, block_index: int) -> void:
+	var metrics: Dictionary = _landmark_block_metrics(block)
+	var center: Vector3 = metrics["center"]
+	var block_width: float = metrics["width"]
+	var block_depth: float = metrics["depth"]
+	var width_m: float = minf(block_width * 0.88, 31.0)
+	var depth_m: float = minf(block_depth * 0.74, 23.0)
+	var body_height: float = 9.4
+	var body_center := center + Vector3(0.0, body_height * 0.5, -block_depth * 0.08)
+
+	_add_collidable_world_box(geometry_root, "MallBody%d" % block_index,
+		body_center, Vector3(width_m, body_height, depth_m), mat_dark_concrete)
+	_add_visual_box(decoration_root, "MallUpperGlass%d" % block_index,
+		center + Vector3(0.0, 6.9, depth_m * 0.50 - block_depth * 0.08 + 0.035),
+		Vector3(width_m * 0.82, 2.55, 0.08), mat_window_blue)
+	_add_visual_box(decoration_root, "MallEntranceGlass%d" % block_index,
+		center + Vector3(0.0, 2.05, depth_m * 0.50 - block_depth * 0.08 + 0.045),
+		Vector3(width_m * 0.36, 3.75, 0.09), mat_storefront_glass_cool)
+	_add_visual_box(decoration_root, "MallCanopy%d" % block_index,
+		center + Vector3(0.0, 4.15, depth_m * 0.50 - block_depth * 0.08 + 1.25),
+		Vector3(width_m * 0.54, 0.20, 2.65), mat_black_metal)
+	_add_visual_box(decoration_root, "MallRoofFrame%d" % block_index,
+		center + Vector3(0.0, body_height + 0.18, -block_depth * 0.08),
+		Vector3(width_m + 0.55, 0.30, depth_m + 0.55), mat_weathered_metal)
+	_add_visual_box(decoration_root, "MallNamePlate%d" % block_index,
+		center + Vector3(0.0, 7.85, depth_m * 0.50 - block_depth * 0.08 + 0.10),
+		Vector3(width_m * 0.32, 0.85, 0.14), mat_neon_yellow)
+	for stripe_index: int in range(5):
+		var stripe_x: float = (float(stripe_index) - 2.0) * width_m * 0.17
+		_add_visual_box(decoration_root, "MallMullion%d_%d" % [block_index, stripe_index],
+			center + Vector3(stripe_x, 2.05, depth_m * 0.50 - block_depth * 0.08 + 0.10),
+			Vector3(0.10, 3.75, 0.14), mat_black_metal)
+
+func _build_pyramid_landmark(block: Rect2i, block_index: int) -> void:
+	var metrics: Dictionary = _landmark_block_metrics(block)
+	var center: Vector3 = metrics["center"]
+	var block_width: float = metrics["width"]
+	var block_depth: float = metrics["depth"]
+	var base_width: float = minf(minf(block_width, block_depth) * 0.86, 29.0)
+	var tier_height: float = 3.0
+	var tier_count: int = 6
+
+	# A stepped silhouette gives the landmark a reliable collision shape now;
+	# the final sloped shell can replace these tiers without changing its footprint.
+	for tier_index: int in range(tier_count):
+		var scale_ratio: float = 1.0 - float(tier_index) * 0.135
+		var tier_size: float = base_width * scale_ratio
+		var tier_center_y: float = float(tier_index) * tier_height + tier_height * 0.5
+		var tier_material: Material = mat_dark_concrete if tier_index % 2 == 0 else mat_weathered_metal
+		_add_collidable_world_box(geometry_root, "PyramidTier%d_%d" % [block_index, tier_index],
+			center + Vector3(0.0, tier_center_y, 0.0),
+			Vector3(tier_size, tier_height, tier_size), tier_material)
+		_add_visual_box(decoration_root, "PyramidLightBand%d_%d" % [block_index, tier_index],
+			center + Vector3(0.0, float(tier_index + 1) * tier_height - 0.12, tier_size * 0.505),
+			Vector3(tier_size * 0.78, 0.14, 0.10),
+			mat_neon_blue if tier_index % 2 == 0 else mat_neon_pink)
+
+	var pyramid_height: float = float(tier_count) * tier_height
+	var pyramid_beacon := _add_local_cylinder(decoration_root, "PyramidBeacon%d" % block_index,
+		center + Vector3(0.0, pyramid_height + 3.1, 0.0), 0.12, 6.0, mat_neon_red)
+	pyramid_beacon.visibility_range_end = 0.0
+	_add_visual_box(decoration_root, "PyramidCrown%d" % block_index,
+		center + Vector3(0.0, pyramid_height + 0.18, 0.0),
+		Vector3(base_width * 0.24, 0.34, base_width * 0.24), mat_neon_red)
+
+func _build_town_square_landmark(block: Rect2i, block_index: int) -> void:
+	var metrics: Dictionary = _landmark_block_metrics(block)
+	var center: Vector3 = metrics["center"]
+	var width_m: float = metrics["width"]
+	var depth_m: float = metrics["depth"]
+
+	_add_visual_box(geometry_root, "TownSquarePaving%d" % block_index,
+		center + Vector3(0.0, 0.045, 0.0), Vector3(width_m, 0.09, depth_m), mat_stone)
+	_add_collidable_world_box(geometry_root, "TownSquarePlinth%d" % block_index,
+		center + Vector3(0.0, 0.34, 0.0), Vector3(5.4, 0.68, 5.4), mat_stone_dark)
+	_add_local_cylinder(decoration_root, "TownSquareMonument%d" % block_index,
+		center + Vector3(0.0, 3.15, 0.0), 0.62, 5.65, mat_weathered_metal)
+	_add_visual_box(decoration_root, "TownSquareBeacon%d" % block_index,
+		center + Vector3(0.0, 6.05, 0.0), Vector3(0.90, 0.18, 0.90), mat_neon_red)
+
+	# Four open corners create cover and market-like framing without filling the
+	# combat space. They also make the square readable from every approach road.
+	for corner_index: int in range(4):
+		var side_x: float = -1.0 if corner_index % 2 == 0 else 1.0
+		var side_z: float = -1.0 if corner_index < 2 else 1.0
+		var corner := center + Vector3(side_x * width_m * 0.34, 0.0, side_z * depth_m * 0.34)
+		_add_visual_box(decoration_root, "SquareCanopy%d_%d" % [block_index, corner_index],
+			corner + Vector3(0.0, 2.65, 0.0), Vector3(4.4, 0.18, 3.2),
+			mat_roof if corner_index % 2 == 0 else mat_weathered_metal)
+		for post_index: int in range(4):
+			var post_x: float = -1.85 if post_index % 2 == 0 else 1.85
+			var post_z: float = -1.25 if post_index < 2 else 1.25
+			_add_local_box(decoration_root, "SquarePost%d_%d_%d" % [block_index, corner_index, post_index],
+				corner + Vector3(post_x, 1.30, post_z), Vector3(0.12, 2.60, 0.12), mat_black_metal)
 
 func _build_green_block(
 	block: Rect2i,
@@ -3183,13 +4529,52 @@ func _add_enterable_ground_shell(
 	depth_m: float,
 	wall_h: float,
 	material: Material,
-	door_width: float
+	door_width: float,
+	front_frame_depth: float = -1.0,
+	front_edge_post_width: float = 0.18,
+	align_inside_footprint: bool = false
 ) -> void:
 	var wall_t: float = 0.16
 	var door_h: float = 2.18
-	var segment_w: float = maxf(0.45, (width_m - door_width) * 0.5)
-	var left_x: float = -(door_width * 0.5 + segment_w * 0.5)
+	var side_span_w: float = maxf(0.45, (width_m - door_width) * 0.5)
+	var effective_front_depth: float = (
+		maxf(wall_t, front_frame_depth)
+		if front_frame_depth > 0.0
+		else wall_t
+	)
+	var effective_edge_post_w: float = maxf(0.18, front_edge_post_width)
+	var visual_segment_w: float = side_span_w
+	if align_inside_footprint:
+		visual_segment_w = maxf(0.28, side_span_w - effective_edge_post_w)
+	var left_x: float = -(door_width * 0.5 + visual_segment_w * 0.5)
 	var right_x: float = -left_x
+	var collision_left_x: float = -(door_width * 0.5 + side_span_w * 0.5)
+	var collision_right_x: float = -collision_left_x
+	var front_center_z: float = -depth_m * 0.5
+	var back_center_z: float = depth_m * 0.5
+	var side_wall_x: float = width_m * 0.5
+	var collision_side_wall_x: float = side_wall_x
+	var side_wall_depth: float = depth_m
+	var side_wall_center_z: float = 0.0
+	if align_inside_footprint:
+		front_center_z += effective_front_depth * 0.5
+		back_center_z -= wall_t * 0.5
+		collision_side_wall_x -= wall_t * 0.5
+		side_wall_x = collision_side_wall_x - APARTMENT_SIDE_RETURN_INSET_M
+		# Match the upper-wall return: the visual wall is slightly recessed and
+		# its front end is hidden inside the deep concrete corner post.
+		side_wall_depth = maxf(
+			0.40,
+			depth_m - effective_front_depth + APARTMENT_WALL_JOIN_OVERLAP_M
+		)
+		side_wall_center_z = (
+			-depth_m * 0.5
+			+ effective_front_depth
+			- APARTMENT_WALL_JOIN_OVERLAP_M
+			+ side_wall_depth * 0.5
+		)
+	else:
+		collision_side_wall_x = side_wall_x
 
 	var body: StaticBody3D = StaticBody3D.new()
 	body.name = "ShellCollision"
@@ -3197,41 +4582,106 @@ func _add_enterable_ground_shell(
 	body.collision_mask = 0
 	root.add_child(body)
 
-	_add_local_box(root, "BackWall", Vector3(0.0, wall_h * 0.5, depth_m * 0.5),
-		Vector3(width_m, wall_h, wall_t), material)
-	_add_collision_box(body, Vector3(0.0, wall_h * 0.5, depth_m * 0.5),
-		Vector3(width_m, wall_h, wall_t))
+	_add_local_box(
+		root,
+		"BackWall",
+		Vector3(0.0, wall_h * 0.5, back_center_z),
+		Vector3(width_m, wall_h, wall_t),
+		material
+	)
+	_add_collision_box(
+		body,
+		Vector3(0.0, wall_h * 0.5, back_center_z),
+		Vector3(width_m, wall_h, wall_t)
+	)
 	for side: float in [-1.0, 1.0]:
-		_add_local_box(root, "SideWall", Vector3(width_m * 0.5 * side, wall_h * 0.5, 0.0),
-			Vector3(wall_t, wall_h, depth_m), material)
-		_add_collision_box(body, Vector3(width_m * 0.5 * side, wall_h * 0.5, 0.0),
-			Vector3(wall_t, wall_h, depth_m))
+		_add_local_box(
+			root,
+			"SideWall",
+			Vector3(side_wall_x * side, wall_h * 0.5, side_wall_center_z),
+			Vector3(wall_t, wall_h, side_wall_depth),
+			material
+		)
+		_add_collision_box(
+			body,
+			Vector3(collision_side_wall_x * side, wall_h * 0.5, side_wall_center_z),
+			Vector3(wall_t, wall_h, side_wall_depth)
+		)
 
 	# Front facade is not a solid box. It has real glazed bays around the door,
 	# so the player can see furniture and warm lighting before walking inside.
 	var sill_h: float = 0.46
-	for x_value: float in [left_x, right_x]:
-		_add_local_box(root, "FrontSill", Vector3(x_value, sill_h * 0.5, -depth_m * 0.5),
-			Vector3(segment_w, sill_h, wall_t), material)
+	for segment_index: int in range(2):
+		var x_value: float = left_x if segment_index == 0 else right_x
+		var collision_x: float = (
+			collision_left_x if segment_index == 0 else collision_right_x
+		)
+		_add_local_box(
+			root,
+			"FrontSill",
+			Vector3(x_value, sill_h * 0.5, front_center_z),
+			Vector3(visual_segment_w, sill_h, effective_front_depth),
+			material
+		)
 		# Invisible collision keeps the glass bay physically solid without
 		# putting an opaque wall behind the transparent window material.
-		_add_collision_box(body, Vector3(x_value, 1.15, -depth_m * 0.5),
-			Vector3(segment_w, 2.30, wall_t))
+		_add_collision_box(
+			body,
+			Vector3(collision_x, 1.15, front_center_z),
+			Vector3(side_span_w, 2.30, effective_front_depth)
+		)
 
 	for side: float in [-1.0, 1.0]:
-		_add_local_box(root, "FrontEdgePost", Vector3((width_m * 0.5 - 0.09) * side, wall_h * 0.5,
-			-depth_m * 0.5), Vector3(0.18, wall_h, wall_t), material)
+		var edge_post_x: float = (
+			(width_m * 0.5 - effective_edge_post_w * 0.5) * side
+			if align_inside_footprint
+			else (width_m * 0.5 - 0.09) * side
+		)
+		_add_local_box(
+			root,
+			"FrontEdgePost",
+			Vector3(edge_post_x, wall_h * 0.5, front_center_z),
+			Vector3(
+				effective_edge_post_w if align_inside_footprint else 0.18,
+				wall_h,
+				effective_front_depth
+			),
+			material
+		)
 
 	var lintel_h: float = maxf(0.18, wall_h - door_h)
-	_add_local_box(root, "FrontHeader", Vector3(0.0, door_h + lintel_h * 0.5, -depth_m * 0.5),
-		Vector3(width_m, lintel_h, wall_t), material)
-	_add_collision_box(body, Vector3(0.0, door_h + lintel_h * 0.5, -depth_m * 0.5),
-		Vector3(width_m, lintel_h, wall_t))
+	var header_w: float = (
+		maxf(door_width + 0.24, width_m - effective_edge_post_w * 2.0)
+		if align_inside_footprint
+		else width_m
+	)
+	_add_local_box(
+		root,
+		"FrontHeader",
+		Vector3(0.0, door_h + lintel_h * 0.5, front_center_z),
+		Vector3(header_w, lintel_h, effective_front_depth),
+		material
+	)
+	_add_collision_box(
+		body,
+		Vector3(0.0, door_h + lintel_h * 0.5, front_center_z),
+		Vector3(width_m, lintel_h, effective_front_depth)
+	)
 
-	_add_local_box(root, "InteriorFloor", Vector3(0.0, 0.055, 0.0),
-		Vector3(width_m - 0.22, 0.10, depth_m - 0.22), mat_interior_wood)
-	_add_local_box(root, "GroundCeiling", Vector3(0.0, wall_h - 0.055, 0.0),
-		Vector3(width_m - 0.18, 0.10, depth_m - 0.18), mat_soft_white)
+	_add_local_box(
+		root,
+		"InteriorFloor",
+		Vector3(0.0, 0.055, 0.0),
+		Vector3(width_m - 0.22, 0.10, depth_m - 0.22),
+		mat_interior_wood
+	)
+	_add_local_box(
+		root,
+		"GroundCeiling",
+		Vector3(0.0, wall_h - 0.055, 0.0),
+		Vector3(width_m - 0.18, 0.10, depth_m - 0.18),
+		mat_soft_white
+	)
 
 func _add_shop_open_door_leaf(root: Node3D, depth_m: float, door_width: float, material: Material) -> void:
 	# Shopfront already supplies its own jambs/lintel. Only add the leaf here so
@@ -6197,6 +7647,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_F6:
 			dry_ground_comparison = not dry_ground_comparison
 			_apply_ground_comparison_mode(dry_ground_comparison)
+		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_F7:
+			get_tree().change_scene_to_file("res://scenes/traversal_test.tscn")
+		elif key_event.pressed and not key_event.echo and key_event.keycode == KEY_F8:
+			get_tree().change_scene_to_file("res://scenes/city_layout_test.tscn")
 
 func _apply_ground_comparison_mode(dry_mode: bool) -> void:
 	# The production SHINRAI road is always dry and is not altered by this old
@@ -6408,10 +7862,31 @@ func _get_player_spawn_yaw() -> float:
 func _get_enemy_spawn_positions(count: int) -> Array[Vector3]:
 	var preferred: Array[Vector2i] = []
 	var fallback: Array[Vector2i] = []
+	var nearby_cell: Vector2i = Vector2i(-1, -1)
+	var nearby_score: float = INF
+	var player_spawn_world: Vector3 = _cell_to_world(player_spawn_cell, 0.0)
+
 	for cell: Vector2i in walkable_cells:
 		if cell == player_spawn_cell or blocked_lookup.has(cell):
 			continue
 		var path_to_cell: Array[Vector2i] = path_grid.get_id_path(player_spawn_cell, cell, true)
+		if path_to_cell.size() < 3:
+			continue
+
+		var candidate_world: Vector3 = _cell_to_world(cell, 0.0)
+		var horizontal_distance: float = Vector2(
+			candidate_world.x - player_spawn_world.x,
+			candidate_world.z - player_spawn_world.z
+		).length()
+		if (
+			horizontal_distance >= NEARBY_K17_MIN_DISTANCE_M
+			and horizontal_distance <= NEARBY_K17_MAX_DISTANCE_M
+		):
+			var score: float = absf(horizontal_distance - NEARBY_K17_TARGET_DISTANCE_M)
+			if score < nearby_score:
+				nearby_score = score
+				nearby_cell = cell
+
 		if path_to_cell.size() < 5:
 			continue
 		fallback.append(cell)
@@ -6422,6 +7897,9 @@ func _get_enemy_spawn_positions(count: int) -> Array[Vector3]:
 	_shuffle_cells(fallback)
 
 	var chosen_cells: Array[Vector2i] = []
+	if count > 0 and nearby_score < INF:
+		chosen_cells.append(nearby_cell)
+
 	for cell: Vector2i in preferred:
 		if chosen_cells.size() >= count:
 			break
@@ -6628,6 +8106,7 @@ func _add_gable_end_infill(
 		_surface_add_double_sided_triangle(surface_tool, p0, p3, p4)
 
 	surface_tool.generate_normals()
+	surface_tool.generate_tangents()
 	var generated_mesh: ArrayMesh = surface_tool.commit()
 	var gable: MeshInstance3D = MeshInstance3D.new()
 	gable.name = "GableEndInfill"
