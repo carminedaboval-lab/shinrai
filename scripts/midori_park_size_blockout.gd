@@ -1819,6 +1819,10 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		Vector4(-18,-5,15,19),Vector4(-8,18,13,16),
 		Vector4(1,-53,12,14),Vector4(5,53,12,14),
 		Vector4(94,2,13,15),Vector4(101,69,12,14),
+		# Enclose the pitch clearing with layered edge woodland while its fence,
+		# access paths and playable apron remain protected by the clearance mask.
+		Vector4(-96,-43,11,12),Vector4(-43,-46,10,11),
+		Vector4(-72,-62,9,10),
 	]
 	for cluster_index: int in range(mainland_infill_clusters.size()):
 		var cluster := mainland_infill_clusters[cluster_index]
