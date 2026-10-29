@@ -47,6 +47,7 @@ func _ready() -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	_add_vignette()
 	var theme := Theme.new()
 	theme.default_font_size = 23
 	theme.set_color("font_color", "Label", PAPER)
@@ -1126,3 +1127,31 @@ func _graphics_button(raid: Node) -> void:
 		if park.has_method("_update_time_label"):park.call("_update_time_label")
 		button.text="GRAPHICS: "+("HIGH" if bool(park.get("high_render_quality")) else "BALANCED"))
 	panel_content.add_child(button)
+
+## A soft, dark edge frames the view and pulls the eye to the centre. Drawn
+## beneath every HUD element; never blocks input.
+func _add_vignette() -> void:
+	var vignette := ColorRect.new()
+	vignette.name = "Vignette"
+	vignette.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+uniform float strength : hint_range(0.0, 1.0) = 0.42;
+uniform float softness : hint_range(0.1, 2.0) = 1.15;
+void fragment() {
+	vec2 p = UV * 2.0 - 1.0;
+	p.x *= 1.15;
+	float d = length(p);
+	float v = smoothstep(0.55, 1.75 * softness, d) * strength;
+	// A touch of fine grain so flat gradients never band.
+	float grain = fract(sin(dot(UV * 1920.0 + TIME, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+	COLOR = vec4(vec3(0.0), clamp(v + grain * 0.012, 0.0, 1.0));
+}
+"""
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	vignette.material = material
+	root.add_child(vignette)
+	root.move_child(vignette, 0)

@@ -568,7 +568,7 @@ func _apply_time_of_day() -> void:
 		sky_material.sky_energy_multiplier = 1.0
 		park_environment.background_energy_multiplier = 0.85
 		park_environment.ambient_light_sky_contribution = 1.0
-		park_environment.ambient_light_energy = 0.8
+		park_environment.ambient_light_energy = 0.95
 		park_environment.fog_light_color = Color("#cfc3b4")
 		park_environment.fog_light_energy = 0.9
 		park_environment.fog_density = 0.0011

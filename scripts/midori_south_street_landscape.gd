@@ -95,6 +95,29 @@ static func _materials(street: Node3D) -> void:
 		["land_tactile",Color("#b8aa7b"),.88,"concrete_detail.png",2.0],
 		["land_iron",Color("#35403a"),.72,"",1.0]]:
 		street.call("_material",row[0],row[1],row[2],row[3],row[4])
+	_scanned_earth(street)
+
+## The wide foundation and courtyard soil beds were flat tinted boxes. Dress
+## them in the park's scanned compacted earth (world triplanar) so the ground
+## between the park paving and the shops reads as soil, not an untextured plane.
+static func _scanned_earth(street: Node3D) -> void:
+	var root := "res://assets/shinrai/parks/midori_park/materials/vostok_environment_20261028/dirt/"
+	if not ResourceLoader.exists(root+"dirt_diff_2k.jpg"): return
+	var mats: Dictionary = street.get("materials")
+	for key: String in ["land_joint","land_soil"]:
+		var mat := mats.get(key) as StandardMaterial3D
+		if mat == null: continue
+		mat.albedo_texture = load(root+"dirt_diff_2k.jpg")
+		mat.albedo_color = Color("#8d8676") if key=="land_joint" else Color("#6f6a55")
+		mat.normal_enabled = true
+		mat.normal_texture = load(root+"dirt_nor_gl_1k.jpg")
+		mat.normal_scale = 0.8
+		mat.roughness_texture = load(root+"dirt_rough_1k.jpg")
+		mat.roughness = 1.0
+		mat.uv1_triplanar = true
+		mat.uv1_world_triplanar = true
+		mat.uv1_scale = Vector3.ONE * 0.45
+		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 
 static func _asphalt_materials(street: Node3D) -> void:
 	var material := ShaderMaterial.new()
