@@ -14,7 +14,7 @@ const UprightGrassScene: PackedScene = preload("res://assets/shinrai/parks/midor
 const LAYOUT_SCALE := 2.0
 const PARK_HALF := Vector2(220.0, 180.0)
 const CLUMP_INSTANCE_COUNT := 0
-const UPRIGHT_INSTANCE_COUNT := 44000
+const UPRIGHT_INSTANCE_COUNT := 150000
 const CHUNKS_X := 8
 const CHUNKS_Z := 6
 const UPRIGHT_CHUNKS_X := 16
@@ -24,7 +24,7 @@ const GROVE_GRASS_RADIUS_M := 6.0
 const OPEN_THIN_GRASS_FRACTION := 0.98
 const GROVE_THIN_GRASS_FRACTION := 0.35
 const RNG_SEED := 20260916
-const DETAIL_VERSION := 28
+const DETAIL_VERSION := 29
 var _forest_cells: Dictionary = {}
 const LAKE_SHORE_GRASS_BUFFER_M := 1.75
 const OUTER_CIRCUIT: Array[Vector2] = [
@@ -345,8 +345,8 @@ func _add_upright_grass(root: Node3D, broad_mesh: Mesh, thin_mesh: Mesh, scene: 
 		var use_thin := rng.randf() < 1.0-broad_fraction
 		var bounds := thin_bounds if use_thin else broad_bounds
 		var source_anchor := thin_anchor if use_thin else broad_anchor
-		var min_height := lerpf(0.075,0.16,grove_weight) if use_thin else 0.20
-		var max_height := lerpf(0.145,0.27,grove_weight) if use_thin else 0.32
+		var min_height := lerpf(0.11,0.19,grove_weight) if use_thin else 0.22
+		var max_height := lerpf(0.21,0.31,grove_weight) if use_thin else 0.36
 		var height := rng.randf_range(min_height,max_height)
 		var vertical_scale := height / bounds.size.y
 		var width_scale := vertical_scale * rng.randf_range(0.95, 1.20) if use_thin else vertical_scale * rng.randf_range(1.10, 1.45)
@@ -394,8 +394,8 @@ func _add_upright_grass(root: Node3D, broad_mesh: Mesh, thin_mesh: Mesh, scene: 
 				grass.multimesh = multimesh
 				grass.material_override = grass_material
 				grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				grass.visibility_range_end = 65.0
-				grass.visibility_range_end_margin = 12.0
+				grass.visibility_range_end = 85.0
+				grass.visibility_range_end_margin = 16.0
 				grass.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 				root.add_child(grass)
 	root.set_meta("thin_grass_count", thin_count)
@@ -574,10 +574,23 @@ uniform vec4 source_backlight : source_color;
 uniform float tip_direction;
 varying vec2 tuft_variation;
 varying float tuft_view_distance;
+varying float lawn_field;
+float lawn_hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float lawn_noise(vec2 p) {
+    vec2 c = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(lawn_hash(c), lawn_hash(c + vec2(1.0, 0.0)), u.x), mix(lawn_hash(c + vec2(0.0, 1.0)), lawn_hash(c + vec2(1.0, 1.0)), u.x), u.y);
+}
 void vertex() {
-    // Per-root variation stays attached to each plant through distance batching.
-    // Only varyings are written: no vertex, normal, UV or silhouette changes.
     vec2 root = (MODEL_MATRIX * vec4(blade_root_anchor, 1.0)).xz;
+    // Broad lawn colour field (shared scale with the ground shader) so the
+    // blades and the turf beneath them yellow and green together.
+    lawn_field = lawn_noise(root * 0.045 + vec2(7.3, 2.8)) * 0.6 + lawn_noise(root * 0.16 + vec2(31.2, 17.6)) * 0.4;
+    // Gentle wind: bend the blade tip, never the root, so the plant stays rooted.
+    float tip = tip_direction > 0.0 ? UV.y : 1.0 - UV.y;
+    float phase = root.x * 0.35 + root.y * 0.21;
+    float gust = sin(TIME * 1.3 + phase) * 0.6 + sin(TIME * 2.9 + phase * 1.7) * 0.4;
+    vec3 sway_world = vec3(0.9, 0.0, 0.45) * gust * 0.045 * tip * tip;
+    VERTEX += (inverse(MODEL_MATRIX) * vec4(sway_world, 0.0)).xyz;
     vec3 seed = fract(vec3(root.x, root.y, root.x) * vec3(.1031, .11369, .13787));
     seed += dot(seed, seed.yzx + 19.19);
     tuft_variation = fract((seed.xx + seed.yz) * seed.zy);
@@ -606,6 +619,9 @@ void fragment() {
     // tawny distal ends. Retain the photographed variation within every blade.
     leaf *= mix(vec3(.92, .98, .93), vec3(1.08, .98, .80), tuft_variation.x);
     leaf *= mix(.90, 1.04, tuft_variation.y);
+    // Lush low pockets and sun-dried rises across the lawn.
+    leaf *= mix(vec3(.86, 1.02, .88), vec3(1.10, 1.02, .78), smoothstep(.30, .75, lawn_field));
+    leaf *= 1.12;
     float blade_height = tip_direction > 0.0 ? UV.y : 1.0 - UV.y;
     leaf *= mix(.88, 1.0, smoothstep(.01, .20, blade_height));
     float older_tip = smoothstep(.74, .98, blade_height) * smoothstep(.55, .95, tuft_variation.x);
@@ -704,7 +720,7 @@ func _is_lawn_position(x: float, z: float) -> bool:
 	# The path centerline masks above do not cover the wide arrival pads.
 	if _inside_box(authored_x, authored_z, -70.0, -43.0, 16.0, 12.0):
 		return false
-	if _inside_box(authored_x, authored_z, 0.0, 87.5, 20.0, 9.0):
+	if _inside_box(authored_x, authored_z, 0.0, 87.5, 11.0, 5.0):
 		return false
 	if _inside_box(authored_x, authored_z, -38.0, -87.5, 16.0, 9.0):
 		return false

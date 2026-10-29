@@ -1168,8 +1168,10 @@ func _on_damage(_amount: float) -> void:
 	hold_progress = 0.0
 
 func _on_shot() -> void:
-	for crew: Node in get_tree().get_nodes_in_group("scav_squad_directors"):
-		crew.player_fired()
+	# Scavs only react to gunfire once the insertion grace has passed.
+	if not insertion_grace():
+		for crew: Node in get_tree().get_nodes_in_group("scav_squad_directors"):
+			crew.player_fired()
 	metabolism.stress()
 	_capture_weapon_ammunition()
 	_cancel_healing()

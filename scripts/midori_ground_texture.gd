@@ -185,7 +185,7 @@ void fragment() {
 	float luma = dot(ground_color,vec3(.2126,.7152,.0722));
 	float scanned_growth = smoothstep(.004,.055,ground_color.g-max(ground_color.r*.94,ground_color.b*1.35));
 	vec3 turf = mix(luma*vec3(.43,.62,.29),ground_color*vec3(.65,.83,.56),.45+scanned_growth*.40);
-	turf *= mix(.62,.80,patch);
+	turf *= mix(.72,.92,patch);
 	vec3 litter = mix(earth,ground_color*vec3(.68,.61,.47),.40);
  // Shaded woodland retains warm scanned litter; exposed soil gently varies
  // with moisture instead of making a repeated uniform band at paved edges.
@@ -214,8 +214,23 @@ void fragment() {
         vec3 soil_normal = textureGrad(soil_normal_tex, soil_uv, ground_uv_dx, ground_uv_dy).rgb * 2.0 - 1.0;
         float turf_roughness = textureGrad(turf_roughness_tex, turf_uv, ground_uv_dx, ground_uv_dy).r;
         float soil_roughness = textureGrad(soil_roughness_tex, soil_uv, ground_uv_dx, ground_uv_dy).r;
-        vec3 scanned_turf = turf_scan * vec3(0.72, 0.78, 0.66) * mix(0.86, 1.04, patch);
-        vec3 scanned_soil = soil_scan * vec3(0.76, 0.78, 0.75) * mix(0.90, 1.02, broad);
+        // Anti-tiling: blend a rotated, rescaled second read of the same scan.
+        // The 2 m repeat no longer lines up into a visible grid across open lawn.
+        mat2 rot = mat2(vec2(0.819, 0.574), vec2(-0.574, 0.819));
+        vec2 turf_uv2 = rot * ground_uv * 0.61 + vec2(3.17, 1.42);
+        vec2 soil_uv2 = rot * ground_uv * 0.73 + vec2(1.93, 4.21);
+        float tile_mix = smoothstep(0.35, 0.65, midori_floor_noise(world_pos.xz * 0.21 + vec2(13.0, 9.0)));
+        turf_scan = mix(turf_scan, textureGrad(turf_albedo_tex, turf_uv2, ground_uv_dx * 0.61, ground_uv_dy * 0.61).rgb, tile_mix);
+        soil_scan = mix(soil_scan, textureGrad(soil_albedo_tex, soil_uv2, ground_uv_dx * 0.73, ground_uv_dy * 0.73).rgb, tile_mix);
+        // Lawn colour field shared with the upright grass blades: lush low
+        // pockets and sun-dried rises instead of one uniform green.
+        float lawn_field = broad * 0.6 + midori_floor_noise(world_pos.xz * 0.16 + vec2(31.2, 17.6)) * 0.4;
+        vec3 lawn_tint = mix(vec3(0.80, 0.98, 0.82), vec3(1.08, 1.00, 0.72), smoothstep(0.30, 0.75, lawn_field));
+        vec3 scanned_turf = turf_scan * vec3(0.80, 0.88, 0.72) * lawn_tint * mix(0.90, 1.08, patch);
+        vec3 scanned_soil = soil_scan * vec3(0.82, 0.82, 0.78) * mix(0.90, 1.04, broad);
+        // Thin moss creeping into the turf/soil join and under canopy.
+        float moss = smoothstep(0.55, 0.85, midori_floor_noise(world_pos.xz * 0.38 + vec2(41.0, 5.0))) * zones.g * 0.55;
+        scanned_soil = mix(scanned_soil, scanned_soil * vec3(0.72, 0.98, 0.62), moss);
         // Canopy selects litter, open cover selects turf, and worn shoulders
         // select soil. The protected shoreline/apron band keeps its accepted material.
         float supported = 1.0 - zones.b;
