@@ -225,6 +225,7 @@ func _ready() -> void:
 	for anchor: Node in get_children():
 		if anchor is Node3D: _batch_tree(anchor)
 	_st = StartupTrace.finish("south_street.batch_tree", _st)
+	StartupTrace.finish("south_street.batch_stats sources=%d verts=%d" % [_batch_stats[0],_batch_stats[1]], StartupTrace.begin())
 	interiors["rendered_batches"] = Layouts.audit_after_batching(self)
 	_build_local_day_bounce()
 	_st = StartupTrace.finish("south_street._build_local_day_bounce", _st)
@@ -332,6 +333,7 @@ func _root(label: String, pos: Vector3, display_name: String, kind: String) -> N
 	add_child(anchor)
 	return anchor
 
+var _batch_stats := [0,0,0]
 func _batch_direct_geometry(anchor: Node3D) -> void:
 	var layers: Dictionary = {}
 	var sources: Array[MeshInstance3D] = []
@@ -351,8 +353,10 @@ func _batch_direct_geometry(anchor: Node3D) -> void:
 		var tool: SurfaceTool = groups[key]
 		for surface: int in range(visual.mesh.get_surface_count()):
 			tool.append_from(visual.mesh,surface,visual.transform)
+			_batch_stats[1]+=visual.mesh.surface_get_array_len(surface)
 		sources.append(visual)
 	if sources.is_empty(): return
+	_batch_stats[0]+=sources.size()
 	for mask: Variant in layers:
 		var combined := ArrayMesh.new()
 		for key: Variant in layers[mask]:
