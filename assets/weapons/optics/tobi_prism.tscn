@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/weapons/optics/tobi_prism_geometry.glb" id="1"]
+
+[node name="TobiPrism" type="Node3D"]
+
+[node name="Geometry" parent="." instance=ExtResource("1")]
+
+[node name="RearSight" type="Marker3D" parent="."]
+position = Vector3(0, 0.02454168, -0.052)
+
+[node name="FrontSight" type="Marker3D" parent="."]
+position = Vector3(0, 0.02454168, 0.052)

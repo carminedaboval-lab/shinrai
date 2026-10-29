@@ -1,0 +1,32 @@
+[
+  {
+    "file": "YujiBoku-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/yujiboku/YujiBoku-Regular.ttf",
+    "sha256": "94fda16384f3bdac24376a000c57e99abfa314961bd89ef27badfb7410322003"
+  },
+  {
+    "file": "yujiboku-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/yujiboku/OFL.txt",
+    "sha256": "ef7c85c72ae94381c8bc4832ae4e6fbabdeafa2bb8a31313cd75dce95a690256"
+  },
+  {
+    "file": "yujiboku-DESCRIPTION.en_us.html",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/yujiboku/DESCRIPTION.en_us.html",
+    "sha256": "b40c9b647de9d3aebf8792c52436f2ed32b5ac350516fc05d05374dc4024923a"
+  },
+  {
+    "file": "YuseiMagic-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/yuseimagic/YuseiMagic-Regular.ttf",
+    "sha256": "82098615f39ed9da6a8ccc674b9006e49c70dd5b775a7a1697f6bedd22ce25a2"
+  },
+  {
+    "file": "yuseimagic-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/yuseimagic/OFL.txt",
+    "sha256": "c74e8c47951ddd9c902f07097761cfa0457993e28d8e1e946e273c0250be77c9"
+  },
+  {
+    "file": "yuseimagic-DESCRIPTION.en_us.html",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/yuseimagic/DESCRIPTION.en_us.html",
+    "sha256": "32a4ff5683594f549422efb21ba1368114427cdaef963bad3e206bec2597dcd9"
+  }
+]

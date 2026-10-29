@@ -2,6 +2,11 @@ extends Node3D
 
 signal status_changed(text: String)
 
+const WeaponHandling = preload("./extraction_weapon_handling.gd")
+var _handling := WeaponHandling.new()
+var _handling_position := Vector3.ZERO
+var _handling_rotation := Quaternion.IDENTITY
+
 # The complete authored asset is bundled with the project. Loading is local and
 # synchronous from Godot's imported resource cache; gameplay never depends on a
 # network request or a user:// download.
@@ -23,6 +28,8 @@ const SHOT_RECOIL_PITCH_RADIANS: float = 0.018
 const ADS_VISUAL_RECOIL_SCALE: float = 0.12
 const ADS_FIRE_ANIMATION_CUTOFF: float = 0.70
 
+var _uzi_magazine_exchange=preload("./extraction_magazine_exchange.gd").new()
+var _uzi_magazine_inserted := true
 var imported_root: Node3D
 var animation_player: AnimationPlayer
 var loaded: bool = false
@@ -31,6 +38,7 @@ var ads_blend: float = 0.0
 var shot_kick: float = 0.0
 var move_speed: float = 0.0
 var bob_phase: float = 0.0
+var _ads_idle_held: bool = false
 
 var equip_anim_name: String = ""
 var idle_anim_name: String = ""
@@ -41,24 +49,15 @@ var reload_anim_name: String = ""
 var empty_reload_anim_name: String = ""
 var aim_anim_name: String = ""
 
-# ADS v10.3: reference-matched real peep-sight eye relief.
-#
-# The v10.1 capture showed that the transform was centering a point just below
-# the visible rear peep hole. That left the solid rear leaf sitting across the
-# firing ray even though the sight assembly looked nearly centered. The rear
-# marker below is the aperture center reconstructed from the supplied gameplay
-# frame at full ADS. Keeping the front marker from v10.1 while correcting the
-# rear point reduces the excessive pitch and makes the real rear->front sight
-# line pass through the visible peep instead of the leaf beneath it.
-#
-# The supplied comparison reference shows a noticeably larger rear-sight frame
-# than v10.1. v10.3 keeps the corrected real peep center and moves the eye only
-# 5.5 cm closer than v10.2. This is a conservative reference-matched step: large
-# enough for the physical aperture to frame the view, but deliberately short of
-# another blind v8-style close-up.
-const REAR_SIGHT_LOCAL: Vector3 = Vector3(0.06969, 0.01023, -0.74390)
+# Rear aperture reconstructed by intersecting view rays from two native
+# captures at known ADS transforms. The old point was 10.3 cm ahead of the
+# visible aperture and aimed above it; marker-only tests could not detect this.
+const REAR_SIGHT_LOCAL: Vector3 = Vector3(0.074406, -0.000397, -0.640542)
 const FRONT_SIGHT_LOCAL: Vector3 = Vector3(0.05452, 0.02204, -1.18766)
-const ADS_REAR_DEPTH: float = 0.205
+const ADS_REAR_DEPTH: float = 0.16
+# Conservative barrel endpoint in the same viewmodel frame as the sight markers.
+# This is used for short-range obstruction, never as an extra aiming offset.
+const MUZZLE_LOCAL: Vector3 = Vector3(0.051, -0.038, -1.255)
 
 var rear_sight_point: Node3D
 var front_sight_point: Node3D
@@ -107,13 +106,64 @@ func _derive_ads_transform_from_sights() -> void:
     ads_rot = Vector3(pitch, yaw, 0.0)
 
     var ads_basis: Basis = Basis.from_euler(ads_rot)
-    var rear_target: Vector3 = Vector3(0.0, 0.0, -ADS_REAR_DEPTH)
+    var rear_target: Vector3 = Vector3(0.0, 0.0, -get_ads_eye_relief())
     ads_pos = rear_target - ads_basis * rear_sight_point.position
 
+func get_ads_eye_relief() -> float:
+    return ADS_REAR_DEPTH
+
+func get_muzzle_world_position() -> Vector3:
+    return to_global(MUZZLE_LOCAL)
+
+func get_sight_world_points() -> PackedVector3Array:
+    if not is_instance_valid(rear_sight_point) or not is_instance_valid(front_sight_point):
+        return PackedVector3Array()
+    return PackedVector3Array([rear_sight_point.global_position, front_sight_point.global_position])
+
+func is_sight_aligned() -> bool:
+    if ads_blend < 0.95 or not loaded or failed or _is_action_animation_playing():
+        return false
+    var ancestor := get_parent()
+    while ancestor != null and not ancestor is Camera3D:
+        ancestor = ancestor.get_parent()
+    if not ancestor is Camera3D:
+        return false
+    var aim_camera := ancestor as Camera3D
+    var points := get_sight_world_points()
+    if points.size() != 2:
+        return false
+    var rear := aim_camera.to_local(points[0])
+    var axis := (points[1] - points[0]).normalized()
+    return rear.z < 0.0 and Vector2(rear.x,rear.y).length() < 0.001 and axis.angle_to(-aim_camera.global_basis.z) < deg_to_rad(0.15)
+
+func _hold_settled_ads_pose() -> void:
+    if animation_player == null or not loaded:
+        return
+    var hold_idle: bool = ads_blend >= 0.95 and not _is_action_animation_playing()
+    if hold_idle and not _ads_idle_held and not idle_anim_name.is_empty():
+        # The sight calibration is measured at idle 0.2 s. Authored idle drift
+        # previously moved the physical reticle away from the camera shot ray.
+        animation_player.play(idle_anim_name, 0.0)
+        animation_player.seek(0.2, true)
+        animation_player.pause()
+        _ads_idle_held = true
+    elif not hold_idle and _ads_idle_held:
+        _ads_idle_held = false
+        _play_locomotion_or_idle()
+
 func _process(delta: float) -> void:
+    # Keep the calibrated base transform separate so neither settling nor ADS
+    # can accumulate the previous frame's visual handling offset.
+    _clear_handling_transform()
+    _hold_settled_ads_pose()
+    if _uzi_magazine_exchange.holder!=null and animation_player!=null:
+        var clip := str(animation_player.assigned_animation).to_lower()
+        var is_reload := clip.contains("reload")
+        var ratio := animation_player.current_animation_position/maxf(.001,animation_player.current_animation_length)
+        _uzi_magazine_exchange.update(ratio,is_reload,_uzi_magazine_inserted,clip.contains("empty"))
     shot_kick = move_toward(shot_kick, 0.0, delta * 8.0)
     bob_phase += move_speed * delta * 1.65
-    var bob_weight: float = clampf(move_speed / 8.0, 0.0, 1.0) * (1.0 - ads_blend * 0.92)
+    var bob_weight: float = clampf(move_speed / 8.0, 0.0, 1.0) * (1.0 - ads_blend)
     var bob: Vector3 = Vector3(
         sin(bob_phase * 5.2) * 0.008,
         abs(cos(bob_phase * 5.2)) * 0.006,
@@ -122,11 +172,45 @@ func _process(delta: float) -> void:
     var target_pos: Vector3 = hip_pos.lerp(ads_pos, ads_blend) + bob
     var visual_recoil_scale: float = lerpf(1.0, ADS_VISUAL_RECOIL_SCALE, ads_blend)
     target_pos.z += shot_kick * SHOT_RECOIL_BACK_OFFSET * visual_recoil_scale
-    target_pos.y += shot_kick * SHOT_RECOIL_UP_OFFSET * visual_recoil_scale
+    target_pos.y += shot_kick * SHOT_RECOIL_UP_OFFSET * (1.0 - ads_blend)
     var target_rot: Vector3 = hip_rot.lerp(ads_rot, ads_blend)
-    target_rot.x += shot_kick * SHOT_RECOIL_PITCH_RADIANS * visual_recoil_scale
-    position = position.lerp(target_pos, 0.28)
-    rotation = rotation.lerp(target_rot, 0.25)
+    target_rot.x += shot_kick * SHOT_RECOIL_PITCH_RADIANS * (1.0 - ads_blend)
+    # Time-based settling keeps sight readiness identical at 30, 60 and 144 Hz.
+    position = position.lerp(target_pos, 1.0 - exp(-24.0 * delta))
+    quaternion = quaternion.slerp(Quaternion.from_euler(target_rot), 1.0 - exp(-24.0 * delta))
+    _handling.advance(delta, ads_blend, _handling_allowed())
+    _handling_position = _handling.position_offset
+    _handling_rotation = Quaternion.from_euler(_handling.rotation_offset)
+    position += _handling_position
+    quaternion = quaternion * _handling_rotation
+
+func configure_handling(spec: Dictionary) -> void:
+    reset_handling()
+    _handling.configure(spec)
+
+func add_handling_look_delta(radians: Vector2) -> void:
+    _handling.add_look_delta(radians)
+
+func reset_handling() -> void:
+    _clear_handling_transform()
+    _handling.reset()
+
+func _clear_handling_transform() -> void:
+    position -= _handling_position
+    quaternion = quaternion * _handling_rotation.inverse()
+    _handling_position = Vector3.ZERO
+    _handling_rotation = Quaternion.IDENTITY
+
+func _handling_allowed() -> bool:
+    if not loaded or failed or not is_visible_in_tree():
+        return false
+    if has_method("is_cycle_active") and bool(call("is_cycle_active")):
+        return false
+    if animation_player != null:
+        var current := str(animation_player.current_animation).to_lower()
+        if current.contains("equip") or current.contains("reload") or current.contains("inspect"):
+            return false
+    return true
 
 func _load_bundled_model() -> void:
     if loaded or failed:
@@ -154,6 +238,7 @@ func _load_bundled_model() -> void:
     add_child(imported_root)
 
     _prepare_imported_nodes(imported_root)
+    preload("res://scripts/urban_explorer_sleeves.gd").apply_to(imported_root)
     _build_viewmodel_light()
     animation_player = _find_first_animation_player(imported_root)
     if animation_player != null:
@@ -161,6 +246,9 @@ func _load_bundled_model() -> void:
         animation_player.animation_finished.connect(_on_animation_finished)
         _configure_looping_clips()
 
+    if get_script().resource_path.get_file()=="uzi_viewmodel.gd":
+        var source := imported_root.find_child("Object_1085",true,false) as Node3D
+        if source!=null:_uzi_magazine_exchange.wrap(source)
     loaded = true
     visible = true
     if animation_player != null and equip_anim_name != "":
@@ -263,6 +351,8 @@ func _set_animation_loop(animation_name: String) -> void:
 func _play_locomotion_or_idle() -> void:
     if animation_player == null or not loaded:
         return
+    if _ads_idle_held:
+        return
     if _is_action_animation_playing():
         return
 
@@ -320,6 +410,8 @@ func play_fire() -> void:
         animation_player.play(fire_anim_name, 0.035)
 
 func play_reload(empty: bool) -> void:
+    _ads_idle_held = false
+    _uzi_magazine_exchange.begin(_uzi_magazine_inserted)
     if animation_player == null:
         return
     var chosen: String = empty_reload_anim_name if empty and empty_reload_anim_name != "" else reload_anim_name
@@ -341,3 +433,6 @@ func _fail(message: String) -> void:
     failed = true
     visible = false
     status_changed.emit(message)
+
+func set_magazine_inserted(value: bool) -> void:
+    _uzi_magazine_inserted=value

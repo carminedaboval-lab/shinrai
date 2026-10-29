@@ -1,0 +1,32 @@
+{
+  "generator": "OpenAI built-in image_gen",
+  "images": [
+    {
+      "id": "mori_morning",
+      "prompt": "An original landscape-format painting for a quiet Japanese neighbourhood coffee shop in the year 2050. A warm handmade ceramic coffee cup and a small dripper beside a window, leaves and a park pond seen softly beyond. Contemplative morning light, moss green, warm ochre and cream. Restrained contemporary Japanese gouache on subtly fibrous paper, visibly painterly brushwork, sophisticated believable art a small cafe owner would choose. Full bleed FLAT FRONT-ON ART TEXTURE, landscape 3:2. No frame, wall, mockup, perspective distortion, lettering, signature, watermarks or branding.",
+      "source": "C:\\Users\\hp\\.codex\\generated_images\\01a17086-c031-7f23-a1fa-0b39612fa291\\exec-7c1b7599-44be-412c-be06-c1f2d5be6948.png"
+    },
+    {
+      "id": "ueda_reading_rain",
+      "prompt": "An original landscape-format painting to hang in a small Japanese neighbourhood bookshop in 2050. A quiet corner with an open book, a few clothbound books and a blue ceramic vase on a desk by a rain-streaked window; distant modest urban roofs under a pale rainy sky. Poetic literary mood, indigo, pale blue-grey and warm parchment. Hand-painted ink wash and gouache, fine natural brush textures, visually thoughtful, not a photo. Full bleed FLAT FRONT-ON ART TEXTURE, landscape 3:2. No frame, wall mockup, perspective distortion, readable words, lettering, signature or watermark.",
+      "source": "C:\\Users\\hp\\.codex\\generated_images\\01a17086-c031-7f23-a1fa-0b39612fa291\\exec-c1d56065-4d43-48d2-810e-3419d3bef091.png"
+    },
+    {
+      "id": "hinata_seasonal",
+      "prompt": "An original landscape-format still-life painting chosen by a Japanese neighbourhood greengrocer. A shallow woven basket holding two ripe persimmons, daikon with green leaves, a Japanese pear and a sprig of seasonal foliage on a linen cloth. Warm natural daylight, ochre, terracotta, muted leaf green, pale cream. Rich yet restrained hand-painted gouache and oil-pastel textures with painterly edges, grounded everyday charm suitable for a realistic Japanese city set in 2050. Full bleed FLAT FRONT-ON ART TEXTURE, landscape 3:2. No frame, mockup, lettering, signature, watermark or futuristic gadgetry.",
+      "source": "C:\\Users\\hp\\.codex\\generated_images\\01a17086-c031-7f23-a1fa-0b39612fa291\\exec-5a47da09-f9e8-426a-89c4-57aedcc5a39e.png"
+    },
+    {
+      "id": "yakitori_evening",
+      "prompt": "An original landscape-format painting for a small Japanese yakitori restaurant in 2050. An intimate charcoal-grill still life: two bamboo skewers of grilled chicken and scallion on a dark handmade rectangular ceramic plate, one tiny condiment dish, a folded cloth, soft warm lantern glow against deep indigo evening. Tasteful handmade dining-room artwork, Japanese woodblock-inspired gouache with irregular painterly texture, warm amber, deep red-brown, indigo. Full bleed FLAT FRONT-ON ART TEXTURE, landscape 3:2. No frame, wall, mockup, typography, text, signature or watermark.",
+      "source": "C:\\Users\\hp\\.codex\\generated_images\\01a17086-c031-7f23-a1fa-0b39612fa291\\exec-86ef187f-cb17-4a96-8060-39dc17fb1b7f.png"
+    }
+  ],
+  "purpose": "Original framed interior paintings for Shinrai",
+  "image_hashes": {
+    "hinata_seasonal.png": "334807E85926E23D80A8CF8D4AFE822137CA23359390F9CD465C20A91967A485",
+    "mori_morning.png": "7B3799EE829BE2DCFC7B2AF2AD8AE38C16CDC0D59FEA3503B237DCD135416ECA",
+    "ueda_reading_rain.png": "5EBC50A051C8879BF437FD6CDD6AAA890B0248DCC12E0AC4D4F7C369EE0B4761",
+    "yakitori_evening.png": "7178892BA5FDF5E9018A0B80738CC46E82C07B4B5EEA740F8D2220A15C430C6A"
+  }
+}

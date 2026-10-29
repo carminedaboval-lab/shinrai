@@ -1,0 +1,42 @@
+{
+  "authoring": "Original metric Blender geometry authored for Shinrai park street; no Meshy generation or external textures",
+  "tool": "5.2.1 LTS",
+  "assets": {
+    "ac_condenser": {
+      "triangles_source": 928,
+      "godot_min": [
+        -0.4180000126361847,
+        0.0,
+        -0.3799999952316284
+      ],
+      "godot_max": [
+        0.4099999964237213,
+        0.6399999856948853,
+        -0.0
+      ],
+      "sha256": "0466cb95781292d72bd29960990e2f1b56ae0a1fd807d36cbdc02f11dd73711d",
+      "front": "-Z",
+      "up": "+Y",
+      "origin": "wall bottom back",
+      "collision": "none; mount above walkable clearance"
+    },
+    "shop_lantern": {
+      "triangles_source": 768,
+      "godot_min": [
+        -0.11959999799728394,
+        -0.5659999847412109,
+        -0.11959999799728394
+      ],
+      "godot_max": [
+        0.11959999799728394,
+        -0.001999999862164259,
+        0.11959999799728394
+      ],
+      "sha256": "105c37d3571ec6b51a693836d36f75df3a4ea1a3791c8bd2db941bf68b416e59",
+      "front": "-Z",
+      "up": "+Y",
+      "origin": "top hanging loop",
+      "collision": "none; mount above walkable clearance"
+    }
+  }
+}

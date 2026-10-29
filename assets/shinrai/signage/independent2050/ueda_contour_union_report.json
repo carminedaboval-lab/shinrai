@@ -1,0 +1,16 @@
+[
+  {
+    "asset": "ueda_fascia.svg",
+    "before_sha256": "17acca5f4667ffdb2afeed614eaa7d5ed1a2dcc0867d6dfbddbbbb504c87d2d9",
+    "after_sha256": "a9d9acce8ef0c7895c79b6186c9a2ef4d2d28e84a402af543149fbcc0307ecd8",
+    "glyph_paths_union_cleaned": 4,
+    "method": "Skia PathOps simplify nonzero contour union with winding correction; per-glyph transforms preserved"
+  },
+  {
+    "asset": "ueda_vertical.svg",
+    "before_sha256": "c5b303935166b88f7d9ea94566c1dc7f767879bd7c6a7c08a777c2555f5bfed3",
+    "after_sha256": "4d046dcbc5a9ff5541974ea387f581bf3dba525b0c8009b35290e4ec1cdbcbfb",
+    "glyph_paths_union_cleaned": 4,
+    "method": "Skia PathOps simplify nonzero contour union with winding correction; per-glyph transforms preserved"
+  }
+]

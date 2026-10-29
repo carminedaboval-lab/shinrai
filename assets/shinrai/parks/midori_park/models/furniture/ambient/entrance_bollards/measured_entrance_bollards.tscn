@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/midori_entrance_bollards.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/shinrai/parks/midori_park/models/furniture/ambient/entrance_bollards/sunpole_pa114sk_installed.glb" id="2"]
+
+[node name="MeasuredEntranceBollards" type="Node3D"]
+script = ExtResource("1")
+bollard_scene = ExtResource("2")

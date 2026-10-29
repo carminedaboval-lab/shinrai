@@ -1,4 +1,22 @@
 extends Node3D
+const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const StartupTrace = preload("res://scripts/startup_trace.gd")
+
+const WoodlandLayout = preload("res://scripts/midori_woodland_layout.gd")
+
+const TreeBranchContactPlacement = preload("res://scripts/midori_tree_branch_contacts.gd")
+
+const FoliageMaterials = preload("res://scripts/midori_foliage_materials.gd")
+const WalkMaterials = preload("res://scripts/midori_walk_materials.gd")
+const CourtMaterials = preload("res://scripts/midori_court_materials.gd")
+const BridgeWalks = preload("res://scripts/midori_bridge_walks.gd")
+const BridgeLandings = preload("res://scripts/midori_bridge_landings.gd")
+const MeasuredBridges = preload("res://scripts/midori_measured_bridges.gd")
+const MeasuredBridgeDisplay = preload("res://scripts/midori_bridge_display.gd")
+const MeasuredBridgeArtwork = preload("res://assets/shinrai/parks/midori_park/models/structures/measured/bridge_artwork_v4.res")
+
+var _bridge_walk_surfaces: Array[Dictionary] = []
+var _bridge_join_walks: Array[Dictionary] = []
 
 const LakeGeometry = preload("res://scripts/midori_lake_geometry.gd")
 
@@ -11,8 +29,6 @@ const FountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/mido
 const MeadowGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_swaying_meadow_grass_v1.glb")
 const MossyBoulderScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_mossy_boulder_cluster_v1.glb")
 const ViewingDeckScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_lakeside_viewing_deck_v1.glb")
-const MainBridgeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_main_arched_bridge_v1.glb")
-const SecondaryBridgeScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/midori_secondary_footbridge_v1.glb")
 const NeonToriiPortalScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/structures/vendor/neon_torii_portal/neon_torii_portal.glb")
 const BroadleafTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/realistic_trees_collection/scene.glb")
 const PineTreePack: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/scene.glb")
@@ -22,7 +38,7 @@ const DeadwoodTrunkScene: PackedScene = preload("res://assets/shinrai/parks/mido
 const HollowBarkScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/michaeldebbarma_hollow_bark/hollow_bark.fbx")
 const MidnightFernScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/midnight_fern/midnight_fern.glb")
 const EmeraldFountainGrassScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/emerald_fountain_grass/emerald_fountain_grass.glb")
-const JapaneseMapleMesh: Mesh = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/free3d_japanese_maple_n030123/Tree Japanese maple N030123.obj")
+const JapaneseMapleMesh: Mesh = preload("res://assets/shinrai/parks/midori_park/models/vegetation/vendor/free3d_japanese_maple_n030123/midori_japanese_maple_complete.res")
 const NeonParkBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/neon_park_bench/neon_park_bench.glb")
 const FuturisticEcoBenchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/futuristic_eco_bench/futuristic_eco_bench.glb")
 const EmeraldHaloLampScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/furniture/vendor/emerald_halo_lamp/emerald_halo_lamp.glb")
@@ -31,6 +47,7 @@ const MidoriPathCurveScene: PackedScene = preload("res://assets/shinrai/parks/mi
 const MidoriPathJunctionScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_junction.glb")
 const MidoriPathRestingPocketScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_path_resting_pocket.glb")
 const FiveASidePitchScene: PackedScene = preload("res://assets/shinrai/parks/midori_park/models/activity/meshy_five_a_side_pitch_clean.glb")
+const PitchRemasterScript = preload("res://scripts/midori_pitch_remaster.gd")
 const PitchFenceScript = preload("res://scripts/midori_pitch_fence.gd")
 
 const LAYOUT_SCALE := 2.0
@@ -87,7 +104,7 @@ const EAST_DECK_ROUTE: Array[Vector2] = [
 	Vector2(80.5,-1),
 ]
 const SPORTS_LINK_ROUTE: Array[Vector2] = [
-	Vector2(-105,-20),Vector2(-92,-22),Vector2(-76,-24),Vector2(-58,-26),
+	Vector2(-105,-20),Vector2(-92,-22),Vector2(-76,-24),Vector2(-58,-19.5),
 	Vector2(-40,-28),Vector2(-22,-28),Vector2(15,-27),
 ]
 const PLAYGROUND_LOOP: Array[Vector2] = [
@@ -101,7 +118,7 @@ const PLAYGROUND_LOOP: Array[Vector2] = [
 const NORTH_WOODLAND_LOOP: Array[Vector2] = [
 	Vector2(15,-27),Vector2(8,-38),Vector2(4,-50),Vector2(2,-63),
 	Vector2(10,-75),Vector2(20,-80),Vector2(28,-79),Vector2(30,-73),
-	Vector2(20,-70),Vector2(12,-60),Vector2(10,-45),Vector2(15,-27),
+	Vector2(20,-70),Vector2(12,-60),Vector2(10,-45),Vector2(5.666667,-45),
 ]
 const LAKE_PROMENADE_LOOP: Array[Vector2] = [
 	Vector2(48,-75),Vector2(38,-73),Vector2(29,-68),Vector2(23,-60),
@@ -134,6 +151,15 @@ const VIEWING_DECK_APPROACH_ROUTE: Array[Vector2] = [
 	Vector2(80.5,-1),Vector2(83,-6),Vector2(81,-13),
 ]
 const LAKE_SHORELINE: Array[Vector2] = LakeGeometry.ANCHORS
+const VegetationClearanceCache = preload("res://scripts/vegetation_clearance_cache.gd")
+var _vegetation_clearance_cache: RefCounted
+const _VEGETATION_RESERVED_RECTS: Array[Vector4] = [
+	# Keep the actual five-a-side enclosure and a playable apron clear.
+	Vector4(-70,-43,14.0,10.5),Vector4(-72,45,20.0,17.0),
+	Vector4(82,68,19.0,15.0),Vector4(76,-73,14.0,11.0),
+	Vector4(0,86,11.0,7.0),Vector4(-38,-86,9.0,7.0),
+	Vector4(-106,20,7.0,9.0),Vector4(106,-20,7.0,9.0),
+]
 var lake_contour: Array[Vector2] = LakeGeometry.contour()
 const FUTURE_BRIDGE_WEST: Array[Vector2] = [
 	Vector2(12,-19),Vector2(31,-19),Vector2(55,-19),Vector2(83,-19),
@@ -151,14 +177,15 @@ var mat_paved_surface: ShaderMaterial
 var mat_lake_paved_surface: ShaderMaterial
 var mat_water: ShaderMaterial
 var mat_playground: StandardMaterial3D
-var mat_plaza: StandardMaterial3D
-var mat_plaza_border: StandardMaterial3D
+var mat_plaza: ShaderMaterial
+var mat_plaza_border: ShaderMaterial
 var mat_plaza_inlay: StandardMaterial3D
 var mat_pavilion: StandardMaterial3D
 var mat_boundary: StandardMaterial3D
 var mat_entry: StandardMaterial3D
-var mat_island: StandardMaterial3D
-var mat_shore_bank: StandardMaterial3D
+var mat_island: ShaderMaterial
+var mat_shore_bank: ShaderMaterial
+var mat_island_bank: ShaderMaterial
 var mat_shore_promenade: StandardMaterial3D
 var mat_shore_landing: StandardMaterial3D
 var mat_plan_marker: StandardMaterial3D
@@ -192,24 +219,84 @@ var is_night_mode := true
 var high_render_quality := false
 var lake_reflection_probe: ReflectionProbe
 var reflection_refresh_queued := false
+const TREE_COVER_CLEARINGS: Array[Vector2] = [
+	Vector2(-49,-8.928204),Vector2(-42,13),Vector2(-5,5),
+	Vector2(-43,74),Vector2(-8,63.3923),Vector2(26,50.6077),
+	Vector2(79.0718,10),Vector2(-55,-62),Vector2(58.5359,63),
+]
+var _occupied_tree_crowns: Dictionary = {}
+var _tree_crown_radius_cache: Dictionary = {}
 var occupied_tree_positions: Array[Vector2] = []
 var occupied_tree_is_skinny: Array[bool] = []
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		_free_owned_park_prototypes()
+
+func _free_owned_park_prototypes() -> void:
+	# These templates are owned outside the tree; placed nodes are duplicates.
+	# Keep them through remove/re-add. Only deletion ends the owner's lifetime.
+	var owned: Array = []
+	for bucket: Array in [broadleaf_prototypes, pine_prototypes, pine_sapling_prototypes,
+			forest_floor_bush_prototypes, lilac_prototypes, dense_grass_prototypes]:
+		owned.append_array(bucket)
+		bucket.clear()
+	for field: StringName in [&"deadwood_trunk_prototype", &"hollow_bark_prototype",
+			&"midnight_fern_prototype", &"emerald_fountain_grass_prototype",
+			&"japanese_maple_prototype", &"neon_park_bench_prototype",
+			&"futuristic_eco_bench_prototype", &"emerald_halo_lamp_prototype",
+			&"midori_path_straight_prototype", &"midori_path_curve_prototype",
+			&"midori_path_junction_prototype", &"midori_path_resting_pocket_prototype"]:
+		owned.append(get(field))
+		set(field, null)
+	var freed: Dictionary = {}
+	for prototype: Variant in owned:
+		if not is_instance_valid(prototype) or prototype == self:
+			continue
+		var id: int = prototype.get_instance_id()
+		if freed.has(id) or prototype.get_parent() != null or prototype.is_inside_tree():
+			continue
+		freed[id] = true
+		prototype.free()
+
+
 func _ready() -> void:
+	var _boot_tick := StartupTrace.begin()
 	is_night_mode = start_at_night
 	_create_materials()
+	_boot_tick = StartupTrace.finish("park._create_materials",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_create_environment()
+	_boot_tick = StartupTrace.finish("park._create_environment",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_prepare_reference_vegetation()
-	_build_park_footprint()
+	_boot_tick = StartupTrace.finish("park._prepare_reference_vegetation",_boot_tick)
+	await LoadingBudget.checkpoint(self)
+	await _build_park_footprint()
+	_boot_tick = StartupTrace.finish("park._build_park_footprint",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_disable_imported_suns()
+	_boot_tick = StartupTrace.finish("park._disable_imported_suns",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_lake_reflection_probe()
+	_boot_tick = StartupTrace.finish("park._build_lake_reflection_probe",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_validate_approved_lake_promenade()
+	_boot_tick = StartupTrace.finish("park._validate_approved_lake_promenade",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_validate_plaza_centerpiece_clearance()
+	_boot_tick = StartupTrace.finish("park._validate_plaza_centerpiece_clearance",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_spawn_scale_review_player()
+	_boot_tick = StartupTrace.finish("park._spawn_scale_review_player",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_size_hud()
+	_boot_tick = StartupTrace.finish("park._build_size_hud",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	print("Midori Park size blockout: %.0f m x %.0f m | diagonal %.1f m" % [
 		PARK_SIZE_M.x, PARK_SIZE_M.y, PARK_SIZE_M.length()
 	])
+	set_meta("shinrai_structure_pending",false)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F7:
@@ -232,8 +319,8 @@ func _create_materials() -> void:
 	mat_path = _make_material(Color("#77786f"), 0.94)
 	mat_water = _make_lake_water_material()
 	mat_playground = _make_material(Color("#8b6255"), 0.91)
-	mat_plaza = _make_material(Color("#777871"), 0.90)
-	mat_plaza_border = _make_material(Color("#30383a"), 0.76, 0.16)
+	mat_plaza = CourtMaterials.build(false)
+	mat_plaza_border = CourtMaterials.build(true)
 	mat_plaza_inlay = _make_material(Color("#356f7c"), 0.34, 0.34)
 	mat_plaza_inlay.emission_enabled = true
 	mat_plaza_inlay.emission = Color("#42b9d4")
@@ -242,9 +329,9 @@ func _create_materials() -> void:
 	mat_pavilion = _make_material(Color("#8a755e"), 0.88)
 	mat_boundary = _make_material(Color("#d6d0bf"), 0.82)
 	mat_entry = _make_material(Color("#a99f8a"), 0.88)
-	mat_island = _make_material(Color("#405d3d"), 0.98)
-	mat_shore_bank = _make_material(Color("#708360"), 0.98)
-	mat_shore_bank.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat_island = _make_lake_ground_material(false, false)
+	mat_shore_bank = _make_lake_ground_material(true, false)
+	mat_island_bank = _make_lake_ground_material(true, true)
 	mat_shore_promenade = _make_material(Color("#77776d"), 0.94)
 	mat_shore_landing = _make_material(Color("#aaa28d"), 0.88)
 	mat_plan_marker = _make_material(Color(0.20, 0.78, 0.92, 0.55), 0.76, 0.08)
@@ -252,6 +339,64 @@ func _create_materials() -> void:
 	modular_path_shader = _make_modular_path_shader()
 	mat_paved_surface = _make_continuous_paving_material()
 	mat_lake_paved_surface = _make_continuous_paving_material(false)
+
+func _make_lake_ground_material(is_bank: bool, water_at_outer_edge: bool) -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode depth_draw_opaque, cull_disabled;
+
+uniform sampler2D albedo_tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D normal_tex : hint_normal, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D roughness_tex : repeat_enable, filter_linear_mipmap_anisotropic;
+uniform bool is_bank = false;
+uniform bool water_at_outer_edge = false;
+uniform float scene_light_factor = 1.0;
+varying vec3 world_position;
+
+void vertex() {
+    world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
+void fragment() {
+    // Match the mainland scan's two-metre scale, tint and exposure at dry edges.
+    vec2 ground_uv = world_position.xz / 2.0;
+    vec3 scan_rgb = texture(albedo_tex, ground_uv).rgb;
+    float source_luma = dot(scan_rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 dry_ground = midori_forest_floor(scan_rgb, world_position.xz);
+    float wetness = 0.0;
+    vec3 ground_color = dry_ground;
+    if (is_bank) {
+        float landward = water_at_outer_edge ? 1.0 - UV.x : UV.x;
+        // Texture variation breaks up the damp band without changing the shore.
+        float breakup = (source_luma - 0.22) * 0.24;
+        float grass_blend = smoothstep(0.12, 0.88, landward + breakup);
+        wetness = 1.0 - smoothstep(0.02, 0.44, landward + breakup);
+        vec3 soil_color = dry_ground * vec3(0.68, 0.65, 0.60);
+        ground_color = mix(soil_color, dry_ground, grass_blend);
+        ground_color *= mix(1.0, 0.62, wetness);
+    }
+    ALBEDO = ground_color * scene_light_factor;
+    float roughness_scan = texture(roughness_tex, ground_uv).r;
+    ROUGHNESS = mix(clamp(roughness_scan * 0.94 + 0.06, 0.78, 1.0), 0.66, wetness);
+    SPECULAR = mix(0.08, 0.20, wetness);
+    // These generated ribbons have no tangent stream. Derive the detail normal
+    // from world XZ, avoiding back-face flipping on their two-sided triangles.
+    vec3 scan_normal = texture(normal_tex, ground_uv).rgb * 2.0 - 1.0;
+    vec3 ground_normal = normalize(vec3(scan_normal.x * 0.26, max(scan_normal.z, 0.5), scan_normal.y * 0.26));
+    NORMAL = normalize((VIEW_MATRIX * vec4(ground_normal, 0.0)).xyz);
+}
+"""
+	shader.code = shader.code.replace("void vertex()", preload("res://scripts/midori_ground_texture.gd").EARTH_PALETTE_GLSL + "\nvoid vertex()")
+	var material := ShaderMaterial.new()
+	material.resource_name = "Midori_IslandDampBank" if water_at_outer_edge else ("Midori_MainlandDampBank" if is_bank else "Midori_IslandForestGround")
+	material.shader = shader
+	material.set_shader_parameter("albedo_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_diff_2k.jpg"))
+	material.set_shader_parameter("normal_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_nor_gl_2k.jpg"))
+	material.set_shader_parameter("roughness_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_rough_2k.jpg"))
+	material.set_shader_parameter("is_bank", is_bank)
+	material.set_shader_parameter("water_at_outer_edge", water_at_outer_edge)
+	return material
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -357,7 +502,7 @@ func _create_environment() -> void:
 	sun.directional_shadow_fade_start = 0.85
 	sun.shadow_bias = 0.05
 	sun.shadow_normal_bias = 1.0
-	sun.shadow_blur = 1.2
+	sun.shadow_blur = 1.8
 	park_directional_light = sun
 	add_child(sun)
 	_apply_time_of_day()
@@ -366,7 +511,7 @@ func _apply_time_of_day() -> void:
 	if park_environment == null or park_directional_light == null:
 		return
 	var sky_material := park_environment.sky.sky_material as ProceduralSkyMaterial
-	park_environment.background_energy_multiplier = 0.5 if is_night_mode else 0.75
+	park_environment.background_energy_multiplier = 0.5 if is_night_mode else 0.64
 	park_environment.adjustment_brightness = 1.0
 	park_environment.adjustment_contrast = 1.04
 	park_environment.adjustment_saturation = 0.98
@@ -376,13 +521,13 @@ func _apply_time_of_day() -> void:
 		sky_material.sky_horizon_color = Color("#576b88")
 		sky_material.ground_bottom_color = Color("#111b25")
 		sky_material.ground_horizon_color = Color("#3e506a")
-		park_environment.ambient_light_color = Color("#61758f")
+		park_environment.ambient_light_color = Color("#6b7482")
 		park_environment.ambient_light_energy = 0.75
-		park_environment.fog_light_color = Color("#344964")
+		park_environment.fog_light_color = Color("#3f4857")
 		park_environment.fog_light_energy = 0.25
 		park_environment.fog_density = 0.0012
 		park_directional_light.name = "ParkNightMoon"
-		park_directional_light.light_color = Color("#a0b8df")
+		park_directional_light.light_color = Color("#acb7cc")
 		park_directional_light.light_energy = 0.45
 		mat_path.albedo_color = Color("#171c22")
 		mat_boundary.albedo_color = Color("#202832")
@@ -392,22 +537,24 @@ func _apply_time_of_day() -> void:
 		sky_material.ground_bottom_color = Color("#26392f")
 		sky_material.ground_horizon_color = Color("#979788")
 		park_environment.ambient_light_color = Color("#91a5bd")
-		park_environment.ambient_light_energy = 0.32
+		park_environment.ambient_light_energy = 0.28
 		park_environment.fog_light_color = Color("#a6b4bb")
 		park_environment.fog_light_energy = 0.38
 		park_environment.fog_density = 0.00045
 		park_directional_light.name = "ParkReviewSun"
-		park_directional_light.light_color = Color("#ffe4bd")
-		park_directional_light.light_energy = 1.15
+		park_directional_light.light_color = Color("#f4ead9")
+		park_directional_light.light_energy = 0.78
 		mat_path.albedo_color = Color("#77786f")
 		mat_boundary.albedo_color = Color("#d6d0bf")
 	for material: StandardMaterial3D in lamp_emissive_materials:
-		material.emission_energy_multiplier = 1.85 if is_night_mode else 0.0
+		material.emission_energy_multiplier = 1.2 if is_night_mode else 0.0
 	for material: StandardMaterial3D in plaza_emissive_materials:
 		material.emission_energy_multiplier = 0.72 if is_night_mode else 0.0
 	for material: ShaderMaterial in modular_path_emissive_materials:
 		material.set_shader_parameter("night_emission", 1.0 if is_night_mode else 0.0)
 	mat_path_light_streak.set_shader_parameter("night_strength", 1.0 if is_night_mode else 0.0)
+	for material: ShaderMaterial in [mat_island, mat_shore_bank, mat_island_bank]:
+		material.set_shader_parameter("scene_light_factor", 1.0)
 	var ground_service := get_node_or_null("/root/MidoriGroundTexture")
 	if ground_service != null and ground_service.has_method("set_night_mode"):
 		ground_service.call("set_night_mode", is_night_mode)
@@ -437,11 +584,11 @@ func _apply_render_quality() -> void:
 	var forward_plus := RenderingServer.get_current_rendering_method() == "forward_plus"
 	if forward_plus:
 		var viewport := get_viewport()
-		# Keep TAA, foliage shadows, and the lake reflection while reducing the
-		# expensive internal 3D pixel count. The UI stays at the window resolution.
+		# Keep TAA, foliage shadows, and the lake reflection at native resolution.
+		# Resizing the window also increases the actual 3D pixel count.
 		viewport.msaa_3d = Viewport.MSAA_DISABLED
-		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
-		viewport.scaling_3d_scale = 0.75
+		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		viewport.scaling_3d_scale = 1.0
 		# Imported tree meshes already contain LODs. Earlier transitions in
 		# Balanced reduce distant canopy triangles without changing near trees.
 		viewport.mesh_lod_threshold = 1.0 if high_render_quality else 4.0
@@ -461,6 +608,9 @@ func _apply_render_quality() -> void:
 	park_environment.volumetric_fog_enabled = forward_plus and high_render_quality and is_night_mode
 	park_directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if high_render_quality else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	park_directional_light.directional_shadow_max_distance = 110.0 if high_render_quality else 90.0
+	# Two-map Balanced shadows need less normal offset to retain thin fence/goal casts.
+	# Keep the original High offset and all atlas/split/distance settings.
+	park_directional_light.shadow_normal_bias = 1.0 if high_render_quality else 0.5
 
 func _build_lake_reflection_probe() -> void:
 	if RenderingServer.get_current_rendering_method() != "forward_plus":
@@ -495,6 +645,8 @@ func _queue_reflection_refresh() -> void:
 	reflection_refresh_queued = false
 
 func _build_park_footprint() -> void:
+	_vegetation_clearance_cache=null
+	var _boot_tick := StartupTrace.begin()
 	var root := Node3D.new()
 	root.name = "MidoriPark_440x360m_ProceduralLayout"
 	root.scale = Vector3(LAYOUT_SCALE, 1.0, LAYOUT_SCALE)
@@ -504,24 +656,75 @@ func _build_park_footprint() -> void:
 	# expanded uniformly here. Placed assets compensate locally so only their
 	# positions spread out; trees, furniture and props keep real-world scale.
 	_add_collidable_box(root, "ParkGround_220x180m", Vector3(0.0, -0.12, 0.0), Vector3(LAYOUT_REFERENCE_SIZE_M.x, 0.24, LAYOUT_REFERENCE_SIZE_M.y), mat_grass)
+	_boot_tick = StartupTrace.finish("park._add_collidable_box",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_boundary(root)
+	_boot_tick = StartupTrace.finish("park._build_boundary",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_paths(root)
+	_boot_tick = StartupTrace.finish("park._build_paths",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_curved_promenades(root)
+	_boot_tick = StartupTrace.finish("park._build_curved_promenades",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	# Continuous paving replaces disconnected decorative modules.
-	_build_zone_placeholders(root)
+	await _build_zone_placeholders(root)
+	_boot_tick = StartupTrace.finish("park._build_zone_placeholders",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_artwork_assets(root)
+	_boot_tick = StartupTrace.finish("park._build_artwork_assets",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_prop_placement_plan(root)
+	_boot_tick = StartupTrace.finish("park._build_prop_placement_plan",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	if SHOW_PLANNING_LABELS:
 		_build_scale_ticks(root)
 	_build_sakura_trees(root)
+	_boot_tick = StartupTrace.finish("park._build_sakura_trees",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_reference_canopy(root)
-	_build_wildflower_groundcover(root)
+	_boot_tick = StartupTrace.finish("park._build_reference_canopy",_boot_tick)
+	await LoadingBudget.checkpoint(self)
+	# Primitive mushroom-like flower placeholders removed; botanical models are supplied separately.
 	_build_deadwood_pass(root)
+	_boot_tick = StartupTrace.finish("park._build_deadwood_pass",_boot_tick)
+	await LoadingBudget.checkpoint(self)
+	_build_woodland_fallen_fragments(root)
+	_boot_tick = StartupTrace.finish("park._build_woodland_fallen_fragments",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_japanese_maple_pass(root)
+	_boot_tick = StartupTrace.finish("park._build_japanese_maple_pass",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_open_lawn_cover(root)
+	_boot_tick = StartupTrace.finish("park._build_open_lawn_cover",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_park_benches(root)
+	_boot_tick = StartupTrace.finish("park._build_park_benches",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_park_lamps(root)
+	_boot_tick = StartupTrace.finish("park._build_park_lamps",_boot_tick)
+	await LoadingBudget.checkpoint(self)
 	_build_landmark_plaza_furniture(root)
+	_boot_tick = StartupTrace.finish("park._build_landmark_plaza_furniture",_boot_tick)
+	await LoadingBudget.checkpoint(self)
+	TreeBranchContactPlacement.apply(self)
+	WoodlandLayout.apply(self)
+	var understory := Node.new()
+	understory.name = "MidoriUnderstoryPlacement"
+	understory.set_script(preload("res://scripts/midori_understory_placement.gd"))
+	add_child(understory)
+	var barrier := Node3D.new()
+	barrier.name = "MidoriLakeBarrier"
+	barrier.set_script(preload("res://scripts/midori_lake_barrier.gd"))
+	add_child(barrier)
+	var sparse := Node3D.new()
+	sparse.name = "MidoriSparseVegetation"
+	sparse.set_script(preload("res://scripts/midori_sparse_vegetation.gd"))
+	add_child(sparse)
+	var floor_detail := Node3D.new()
+	floor_detail.name = "MidoriParkFloor"
+	floor_detail.set_script(preload("res://scripts/midori_park_floor.gd"))
+	add_child(floor_detail)
 
 func _build_boundary(parent: Node3D) -> void:
 	var edge_t := 0.32
@@ -539,6 +742,50 @@ func _build_boundary(parent: Node3D) -> void:
 	]:
 		_add_visual_box(parent, entry["name"], entry["position"], entry["size"], mat_entry)
 
+var _path_edge_cells: Dictionary = {}
+const MAIN_PATH_WIDTHS_M := {
+	"OuterWalkingCircuit":4.8, "SouthEntranceToLake":5.6,
+	"SouthEntranceToPlaza":5.2, "WestEntranceToBridgeLanding":5.0,
+	"NorthEntranceToLake":4.8, "EastEntranceToBridgeLanding":4.8,
+	"SportsConnector":3.4,
+}
+
+func _path_width_world(label: String, authored: float) -> float:
+	if MAIN_PATH_WIDTHS_M.has(label): return float(MAIN_PATH_WIDTHS_M[label])
+	if label == "ContinuousLakePromenade": return authored * 0.55 * LAYOUT_SCALE
+	if label.ends_with("BridgeLink"): return authored * 0.50 * LAYOUT_SCALE
+	return authored * 0.46 * LAYOUT_SCALE
+
+func _path_curve_radius(label: String) -> float:
+	if label in ["PlaygroundWoodlandLoop","NorthWoodlandLoop"]:return 8.0
+	return 6.0 if MAIN_PATH_WIDTHS_M.has(label) else 4.0
+
+func _path_corner_fraction(label: String) -> float:
+	return .49 if label=="PlaygroundWoodlandLoop" else (.45 if label=="NorthWoodlandLoop" else .25)
+
+func path_edge_distance_world(point: Vector2) -> float:
+	var result := INF
+	var cell := Vector2i(floori(point.x/8.0),floori(point.y/8.0))
+	for segment:Dictionary in _path_edge_cells.get(cell,[]):
+		var nearest := Geometry2D.get_closest_point_to_segment(point,segment.a,segment.b)
+		var t := clampf((nearest-segment.a).length()/maxf(.001,segment.a.distance_to(segment.b)),0.0,1.0)
+		result=minf(result,point.distance_to(nearest)-lerpf(segment.wa,segment.wb,t)*.5)
+	return result
+
+func _index_path_edges(centres: PackedVector3Array,widths: PackedFloat32Array) -> void:
+	for i:int in range(centres.size()-1):
+		var a:=Vector2(centres[i].x,centres[i].z)
+		var b:=Vector2(centres[i+1].x,centres[i+1].z)
+		var reach:=maxf(widths[i],widths[i+1])*.5+9.0
+		var low:=a.min(b)-Vector2.ONE*reach
+		var high:=a.max(b)+Vector2.ONE*reach
+		var segment:={"a":a,"b":b,"wa":widths[i],"wb":widths[i+1]}
+		for z:int in range(floori(low.y/8.0),floori(high.y/8.0)+1):
+			for x:int in range(floori(low.x/8.0),floori(high.x/8.0)+1):
+				var key:=Vector2i(x,z)
+				if not _path_edge_cells.has(key):_path_edge_cells[key]=[]
+				_path_edge_cells[key].append(segment)
+
 func _build_paths(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "FinalDestinationLedPathHierarchy"
@@ -555,20 +802,7 @@ func _build_paths(parent: Node3D) -> void:
 	_add_path_strip_2d(root, "PlazaToSouthBridgeLanding", SOUTH_BRIDGE_APPROACH, 3.2, 0.111)
 	_add_path_strip_2d(root, "PavilionGardenLink", PAVILION_LINK_ROUTE, 2.8, 0.110)
 	_add_path_strip_2d(root, "EastPromenadeToViewingDeck", VIEWING_DECK_APPROACH_ROUTE, 3.0, 0.112)
-	# Short paved branches join each supplied bridge to the dry promenade.
-	var bridge_links: Array[Dictionary] = [
-		{"name":"MainWestBridgeLink", "points":[Vector2(10,-22),Vector2(12,-19)]},
-		{"name":"MainEastBridgeLink", "points":[Vector2(83,-19),Vector2(85,-24)]},
-		{"name":"NorthWestBridgeLink", "points":[Vector2(23,-60),Vector2(31,-57)]},
-		{"name":"NorthEastBridgeLink", "points":[Vector2(73,-57),Vector2(79,-57)]},
-		{"name":"SouthWestBridgeLink", "points":[Vector2(19,30),Vector2(22,24)]},
-		{"name":"SouthEastBridgeLink", "points":[Vector2(79,24),Vector2(80,25)]},
-	]
-	for link: Dictionary in bridge_links:
-		var points: Array[Vector2] = []
-		for point: Vector2 in link["points"]:
-			points.append(point)
-		_add_path_strip_2d(root, String(link["name"]), points, 3.2, 0.116)
+	# Bridge branches are fitted to the supplied front treads in the lake pass.
 
 func _add_path_strip_2d(
 	parent: Node3D,
@@ -577,20 +811,24 @@ func _add_path_strip_2d(
 	width: float,
 	y_value: float
 ) -> void:
-	# Render-only cleanup keeps vegetation placement/clearance inputs untouched.
-	# Keep the lake promenade as authored; mainland trails are narrower walks.
-	if node_name != "ContinuousLakePromenade":
-		width *= 0.80
+	# Widths are explicit world metres; scene layout scale affects positions only.
+	width = _path_width_world(node_name,width) / LAYOUT_SCALE
 	var route: Array[Vector2] = points_2d.duplicate()
 	# Remove tiny return segments at approach endpoints that form hooked joins.
 	if not route[0].is_equal_approx(route[-1]):
 		while route.size() > 2 and route[-2].distance_to(route[-1]) < 3.0:
 			route.remove_at(route.size() - 2)
 	var points_3d: Array[Vector3] = []
-	var curved := _rounded_contour(route, route[0].is_equal_approx(route[-1]), 4.0)
+	var curved := _rounded_contour(route, route[0].is_equal_approx(route[-1]), _path_curve_radius(node_name), _path_corner_fraction(node_name))
 	for point: Vector2 in curved:
 		points_3d.append(Vector3(point.x, y_value, point.y))
-	var paving_material := mat_lake_paved_surface if node_name == "ContinuousLakePromenade" else mat_paved_surface
+	var world_length := 0.0
+	for i: int in range(points_3d.size()-1):
+		world_length += points_3d[i].distance_to(points_3d[i+1]) * LAYOUT_SCALE
+	var paving_material := WalkMaterials.build(width * LAYOUT_SCALE,world_length,route[0].is_equal_approx(route[-1]))
+	paving_material.set_shader_parameter("night_emission",1.0 if is_night_mode else 0.0)
+	if not modular_path_emissive_materials.has(paving_material):
+		modular_path_emissive_materials.append(paving_material)
 	_add_path_strip(parent, node_name, points_3d, width, paving_material)
 
 func _build_curved_promenades(parent: Node3D) -> void:
@@ -600,40 +838,82 @@ func _build_curved_promenades(parent: Node3D) -> void:
 	_add_path_strip_2d(root, "ContinuousLakePromenade", LAKE_PROMENADE_LOOP, LAKE_PROMENADE_WIDTH_M, 0.114)
 
 func _add_path_strip(parent: Node3D, node_name: String, points: Array[Vector3], width: float, material: Material) -> void:
-	if points.size() < 2:
-		return
+	if points.size() < 2: return
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# Shared cross-sections keep adjacent segments watertight at every bend.
 	var sides: Array[Vector3] = []
 	var closed := points[0].is_equal_approx(points[-1])
 	for i: int in range(points.size()):
-		var before := points[maxi(i - 1, 0)]
-		var after := points[mini(i + 1, points.size() - 1)]
-		if closed and (i == 0 or i == points.size() - 1):
-			before = points[-2]
-			after = points[1]
-		var direction := (after - before).normalized()
-		sides.append(Vector3(-direction.z, 0.0, direction.x) * width * 0.5)
+		var before := points[maxi(i-1,0)]
+		var after := points[mini(i+1,points.size()-1)]
+		if closed and (i==0 or i==points.size()-1):
+			before=points[-2];after=points[1]
+		var direction := (after-before).normalized()
+		sides.append(Vector3(-direction.z,0,direction.x))
+	# A 20 cm mineral shoulder grades the 11 cm walk down to 15 mm above soil.
+	# It is part of both the mesh and terrain-generated collision, not an overlay.
+	var inset := minf(0.20 / LAYOUT_SCALE,width*0.10)
+	var half := width*0.5
+	var across: Array[float] = [-half,-half+inset,half-inset,half]
+	var widths:=PackedFloat32Array()
+	var remaining:=0.0
+	for i:int in range(points.size()-1):remaining+=points[i].distance_to(points[i+1])*LAYOUT_SCALE
+	for i:int in range(points.size()):
+		if i>0:remaining-=points[i-1].distance_to(points[i])*LAYOUT_SCALE
+		# The north terminus already sits 11 cm from the smoothed shoreline.
+		# Ease its last 24 m into the original bank-safe mouth width.
+		var fraction:=smoothstep(0.0,24.0,remaining) if node_name=="NorthEntranceToLake" else 1.0
+		widths.append(lerpf(3.496,width*LAYOUT_SCALE,fraction))
 	var travelled := 0.0
-	for i: int in range(points.size() - 1):
-		var length := points[i].distance_to(points[i + 1])
-		var a := points[i] - sides[i]
-		var b := points[i] + sides[i]
-		var c := points[i + 1] - sides[i + 1]
-		var d := points[i + 1] + sides[i + 1]
-		_add_path_vertex(surface, a, Vector2(travelled, 0))
-		_add_path_vertex(surface, c, Vector2(travelled + length, 0))
-		_add_path_vertex(surface, d, Vector2(travelled + length, 1))
-		_add_path_vertex(surface, a, Vector2(travelled, 0))
-		_add_path_vertex(surface, d, Vector2(travelled + length, 1))
-		_add_path_vertex(surface, b, Vector2(travelled, 1))
-		travelled += length
+	for i: int in range(points.size()-1):
+		var length := points[i].distance_to(points[i+1])
+		for band: int in range(3):
+			var pairs:=[Vector2i(i,band),Vector2i(i+1,band),Vector2i(i+1,band+1),Vector2i(i,band),Vector2i(i+1,band+1),Vector2i(i,band+1)]
+			for tri:int in [0,3]:
+				var vertices:Array[Vector3]=[]
+				var uvs:Array[Vector2]=[]
+				for k:int in range(3):
+					var pair:Vector2i=pairs[tri+k]
+					var actual_half:=widths[pair.x]/LAYOUT_SCALE*.5
+					var offset:float=[-actual_half,-actual_half+inset,actual_half-inset,actual_half][pair.y]
+					var point := points[pair.x]+sides[pair.x]*offset
+					if pair.y==0 or pair.y==3: point.y=0.015
+					point.x=clampf(point.x,-PARK_HALF.x,PARK_HALF.x)
+					point.z=clampf(point.z,-PARK_HALF.y,PARK_HALF.y)
+					vertices.append(point)
+					var u := travelled+(length if pair.x==i+1 else 0.0)
+					uvs.append(Vector2(u,(across[pair.y]+half)/width))
+				var normal:=(vertices[1]-vertices[0]).cross(vertices[2]-vertices[0])
+				if normal.length_squared()<.000000001:continue
+				# Tight return bends can invert the inside shoulder's local fan.
+				# Keep its visible and collidable surface consistently upward.
+				for k:int in ([0,2,1] if normal.y>0.0 else [0,1,2]):
+					_add_path_vertex(surface,vertices[k],uvs[k])
+		travelled+=length
 	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.name = node_name
-	mesh_instance.mesh = surface.commit()
-	mesh_instance.material_override = material
+	mesh_instance.name=node_name
+	surface.generate_normals()
+	mesh_instance.mesh=surface.commit()
+	mesh_instance.material_override=material
 	parent.add_child(mesh_instance)
+	var centres := PackedVector3Array()
+	for point:Vector3 in points: centres.append(mesh_instance.to_global(point))
+	mesh_instance.set_meta("midori_path_centres_world",centres)
+	mesh_instance.set_meta("midori_path_width_m",width*LAYOUT_SCALE)
+	mesh_instance.set_meta("midori_path_widths_world",widths)
+	mesh_instance.set_meta("midori_path_role","main" if MAIN_PATH_WIDTHS_M.has(node_name) else ("promenade" if node_name=="ContinuousLakePromenade" else "secondary"))
+	_index_path_edges(centres,widths)
+
+func _add_walk_edge(surface: SurfaceTool, a: Vector3, b: Vector3, uv_a: Vector2, uv_b: Vector2, normal: Vector3) -> void:
+	var ground_a := Vector3(a.x,0.0,a.z)
+	var ground_b := Vector3(b.x,0.0,b.z)
+	for item: Array in [[a,uv_a],[ground_a,uv_a],[ground_b,uv_b],[a,uv_a],[ground_b,uv_b],[b,uv_b]]:
+		var point: Vector3 = item[0]
+		point.x = clampf(point.x,-PARK_HALF.x,PARK_HALF.x)
+		point.z = clampf(point.z,-PARK_HALF.y,PARK_HALF.y)
+		surface.set_normal(normal)
+		surface.set_uv(item[1])
+		surface.add_vertex(point)
 
 func _add_path_vertex(surface: SurfaceTool, position_value: Vector3, uv_value: Vector2) -> void:
 	position_value.x = clampf(position_value.x, -PARK_HALF.x, PARK_HALF.x)
@@ -795,27 +1075,20 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 		Vector2(58,36),Vector2(61,34),Vector2(64,36),Vector2(63,39),
 		Vector2(60,40),
 	], 0.151)
-	_build_future_bridge_sockets(lake_root)
+	await _build_future_bridge_sockets(lake_root)
+	await _fit_bank_below_bridge_floors(lake_root)
 	_add_zone_label(parent, "ARTWORK LAKE | 7 ISLANDS", Vector3(47.4, 1.0, -7.8), Color("#d4eff7"))
 
-	# The supplied Meshy pitch is a compact 40 x 21 m landmark. The wider
-	# activity clearing stays open around it rather than stretching the model.
-	var pitch := _instance_park_asset(
-		parent, FiveASidePitchScene, "ACT03_FiveASideFootballPitch",
-		Vector3(-70.0, 0.15, -43.0), 90.0, Vector3.ONE * 38.0
-	)
-	if pitch != null:
-		_set_asset_shadow_casting(pitch, false)
-		_naturalize_pitch_material(pitch)
-		_add_pitch_contact_shadow(parent)
-		var fence := PitchFenceScript.new()
-		fence.name = "ACT03_FiveASideSteelFence"
-		fence.position = Vector3(-70.0, 0.15, -43.0)
-		fence.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
-		parent.add_child(fence)
-		fence.build()
-	# A simple floor keeps player feet above the raised turf. The supplied
-	# pitch mesh carries no usable collision; the new fence has a path-side gate.
+	# Modular metric turf/goals replace the warped render instance only.
+	# Keep the supplied source files and the established gate/floor contracts.
+	PitchRemasterScript.build_visuals(parent)
+	var fence := PitchFenceScript.new()
+	fence.name = "ACT03_FiveASideSteelFence"
+	fence.position = Vector3(-70.0, 0.15, -43.0)
+	fence.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
+	parent.add_child(fence)
+	fence.build()
+	# The existing floor datum is shared by the level turf and cafe landing.
 	_add_invisible_collision_box(
 		parent, "ACT03_PitchWalkableFloor",
 		Vector3(-70.0, 0.10, -43.0), Vector3(40.0, 0.10, 21.2), 0.0
@@ -963,11 +1236,12 @@ func _configure_neon_torii_materials(node: Node) -> void:
 				if source_material is StandardMaterial3D:
 					var material := source_material.duplicate() as StandardMaterial3D
 					material.resource_local_to_scene = true
-					material.metallic = 0.58
-					material.roughness = 0.30
+					material.metallic = 0.34
+					material.roughness = 0.45
 					material.emission_enabled = true
 					material.emission = Color("#54cfea")
 					material.emission_texture = material.albedo_texture
+					material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
 					material.emission_energy_multiplier = 0.0
 					mesh_instance.set_surface_override_material(surface_index, material)
 					plaza_emissive_materials.append(material)
@@ -977,9 +1251,9 @@ func _configure_neon_torii_materials(node: Node) -> void:
 func _add_torii_night_lighting(parent: Node3D) -> void:
 	var portal_light := OmniLight3D.new()
 	portal_light.name = "NeonToriiPortalGlow"
-	portal_light.position = Vector3(PLAZA_CENTER.x,3.8,PLAZA_CENTER.y)
+	portal_light.position = Vector3(PLAZA_CENTER.x-1.65,4.0,PLAZA_CENTER.y+1.5)
 	portal_light.light_color = Color("#5bdcff")
-	portal_light.light_energy = 0.72
+	portal_light.light_energy = 1.20
 	portal_light.omni_range = 8.5
 	portal_light.shadow_enabled = false
 	portal_light.light_volumetric_fog_energy = 1.15
@@ -990,7 +1264,7 @@ func _add_torii_night_lighting(parent: Node3D) -> void:
 	threshold_light.name = "NeonToriiThresholdGlow"
 	threshold_light.position = Vector3(PLAZA_CENTER.x,0.55,PLAZA_CENTER.y)
 	threshold_light.light_color = Color("#42b9d4")
-	threshold_light.light_energy = 0.38
+	threshold_light.light_energy = 0.54
 	threshold_light.omni_range = 5.0
 	threshold_light.shadow_enabled = false
 	threshold_light.light_volumetric_fog_energy = 0.72
@@ -1085,9 +1359,10 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 			var offset := Vector3(offset_2d.x, 0.0, offset_2d.y)
 			var source := FountainGrassScene if (index + variant) % 2 == 0 else MeadowGrassScene
 			var scale_value := 1.00 + float((index + variant) % 5) * 0.10
+			var plant_position := _clear_waterside_bridge_position(edge_points[index]+offset,outward,tangent)
 			_instance_park_asset(
 				root, source, "VEG06_WatersideGrass_%02d_%d" % [index + 1, variant + 1],
-				edge_points[index] + offset, fmod(float(index * 97 + variant * 43), 360.0), Vector3.ONE * scale_value
+				plant_position, fmod(float(index * 97 + variant * 43), 360.0), Vector3.ONE * scale_value
 			)
 
 	if dense_grass_prototypes.is_empty():
@@ -1103,6 +1378,7 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 		var landward := Vector3(shore_outward.x, 0.0, shore_outward.y)
 		var dense_position := edge_position + landward * (1.15 + float(patch_index % 3) * 0.35)
 		dense_position.y = 0.12
+		dense_position = _clear_waterside_bridge_position(dense_position,shore_outward,edge_tangents[edge_index])
 		var prototype_index: int = dense_variant_sequence[patch_index] % dense_grass_prototypes.size()
 		var prototype: Node3D = dense_grass_prototypes[prototype_index]
 		var patch := prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
@@ -1113,6 +1389,25 @@ func _build_waterside_grasses(parent: Node3D) -> void:
 		_preserve_asset_world_scale(patch)
 		root.add_child(patch)
 		_configure_vegetation_visibility(patch)
+
+func _clear_waterside_bridge_position(position_value: Vector3, outward: Vector2, tangent: Vector2) -> Vector3:
+	var original := Vector2(position_value.x,position_value.z)
+	if _waterside_bridge_clear(original):
+		return position_value
+	for step: int in range(1,25):
+		for direction: float in [1.0,-1.0]:
+			var candidate := original+tangent*float(step)*0.65*direction+outward*float(step)*0.12
+			if _waterside_bridge_clear(candidate) and not Geometry2D.is_point_in_polygon(candidate,PackedVector2Array(lake_contour)):
+				return Vector3(candidate.x,position_value.y,candidate.y)
+	push_warning("Midori waterside plant has no clear bridge flank")
+	return position_value
+
+func _waterside_bridge_clear(point: Vector2) -> bool:
+	var world := point*LAYOUT_SCALE
+	for offset: Vector2 in [Vector2.ZERO,Vector2(1.4,0),Vector2(-1.4,0),Vector2(0,1.4),Vector2(0,-1.4),Vector2(1,1),Vector2(-1,1),Vector2(1,-1),Vector2(-1,-1)]:
+		if is_finite(bridge_surface_height(world+offset)):
+			return false
+	return true
 
 func _build_prop_placement_plan(parent: Node3D) -> void:
 	var root := Node3D.new()
@@ -1486,7 +1781,7 @@ func _naturalize_dense_grass_prototype(node: Node) -> void:
 		# occlusion while preserving ordinary light response.
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		for surface_index: int in range(mesh_instance.mesh.get_surface_count()):
-			var source_material := mesh_instance.mesh.surface_get_material(surface_index)
+			var source_material := mesh_instance.get_active_material(surface_index)
 			if source_material is StandardMaterial3D:
 				var material := source_material.duplicate() as StandardMaterial3D
 				material.ao_texture = null
@@ -1513,7 +1808,8 @@ func _make_lamp_reflective(node: Node) -> void:
 				material.emission_enabled = true
 				material.emission = Color("#6be5ff")
 				material.emission_texture = material.albedo_texture
-				material.emission_energy_multiplier = 1.85 if is_night_mode else 0.0
+				material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+				material.emission_energy_multiplier = 1.2 if is_night_mode else 0.0
 				mesh_instance.set_surface_override_material(surface_index, material)
 				lamp_emissive_materials.append(material)
 	for child: Node in node.get_children():
@@ -1589,10 +1885,66 @@ func _add_reference_plant(
 		# Extracted prototypes already have their visual base at local Y=0. Settle
 		# mainland trunks slightly into the lawn instead of floating 8–14 cm.
 		instance.position.y = -0.035
+	if node_prefix.begins_with("ReferenceLilacMass") or node_prefix.begins_with("MixedTreeGapBush"):
+		# These mainland prototypes have a normalized base at Y=0.
+		instance.position.y = -0.015
 	instance.rotation_degrees.y = fmod(float(serial) * 137.507, 360.0)
 	instance.scale = Vector3.ONE * scale_value
 	_preserve_asset_world_scale(instance)
 	parent.add_child(instance)
+	if node_prefix.begins_with("ReferenceBroadleaf") or node_prefix.begins_with("ReferencePine") or node_prefix.begins_with("MicroGrove") or node_prefix.begins_with("MainlandPineSapling") or node_prefix == "IslandTree":
+		_occupied_tree_crowns[Vector2(position_value.x, position_value.z)] = _tree_crown_radius(prototypes[posmod(serial, prototypes.size())], scale_value)
+
+func _tree_crown_radius(prototype: Node3D, size_multiplier: float = 1.0) -> float:
+	var key := prototype.get_instance_id()
+	if not _tree_crown_radius_cache.has(key):
+		var radius_squared := 0.0
+		# Measure supplied vertices, not empty corners of a rectangular bound.
+		# Cache once per prototype; the resulting radius is valid at every yaw.
+		var pending: Array[Dictionary] = [{"node": prototype, "transform": Transform3D.IDENTITY}]
+		while not pending.is_empty():
+			var entry: Dictionary = pending.pop_back()
+			var node: Node = entry["node"]
+			var transform_value: Transform3D = entry["transform"]
+			if node is MeshInstance3D and node.mesh != null:
+				for surface: int in range(node.mesh.get_surface_count()):
+					var vertices: PackedVector3Array = node.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+					for vertex: Vector3 in vertices:
+						var point := transform_value * vertex
+						radius_squared = maxf(radius_squared, Vector2(point.x, point.z).length_squared())
+			for child: Node in node.get_children():
+				var child_transform := transform_value
+				if child is Node3D:
+					child_transform *= child.transform
+				pending.append({"node": child, "transform": child_transform})
+		_tree_crown_radius_cache[key] = sqrt(radius_squared)
+	return float(_tree_crown_radius_cache[key]) * size_multiplier
+
+func _is_tree_canopy_spaced(position_value: Vector3, radius: float) -> bool:
+	var point := Vector2(position_value.x, position_value.z)
+	# Keep the nine existing gameplay cover clearings available while groves
+	# spread locally. These are the accepted positions before this foliage pass.
+	for cover_point: Vector2 in TREE_COVER_CLEARINGS:
+		if point.distance_to(cover_point) < 4.05:
+			return false
+	for occupied: Vector2 in _occupied_tree_crowns:
+		var distance_m := point.distance_to(occupied) * LAYOUT_SCALE
+		# Leaf tips may mingle in a thick tree line; protect the inner crowns
+		# against deep interpenetration rather than isolating every whole canopy.
+		if distance_m < (radius + float(_occupied_tree_crowns[occupied])) * 0.72 + 0.20:
+			return false
+	return true
+
+func _find_canopy_position(original: Vector3, radius: float, serial: int) -> Dictionary:
+	# Retain authored grove neighbourhoods and all existing land/path masks.
+	for offset: float in [0.0, 2.0, 4.0, 6.0, 9.0, 12.0]:
+		for step: int in range(1 if offset == 0.0 else 20):
+			var angle := TAU * float(posmod(step * 7 + serial, 20)) / 20.0
+			var candidate := original + Vector3(cos(angle), 0.0, sin(angle)) * offset
+			if _is_vegetation_clear(candidate, 3.2) and _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M) and _is_tree_canopy_spaced(candidate, radius):
+				return {"found": true, "position": candidate}
+	return {"found": false, "position": original}
+
 
 func _add_reference_tree_cluster(
 	parent: Node3D,
@@ -1609,10 +1961,13 @@ func _add_reference_tree_cluster(
 	while placed < count and attempt < count * 8:
 		var radial_t := sqrt((float(attempt % count) + 0.42) / float(count))
 		var angle := float(attempt) * 2.399963 + float(serial_offset) * 0.31
+		# Spread crowded grove candidates locally before leaving out trees that
+		# cannot fit; never extend a grove more than twelve world metres.
+		var search_radius := radius_value + minf(float(attempt) / float(count) * 0.9, 6.0)
 		var position_value := Vector3(
-			center.x + cos(angle) * radius_value * radial_t,
+			center.x + cos(angle) * search_radius * radial_t,
 			0.14,
-			center.y + sin(angle) * radius_value * radial_t * 0.72
+			center.y + sin(angle) * search_radius * radial_t * 0.72
 		)
 		attempt += 1
 		if not _is_vegetation_clear(position_value, 3.2):
@@ -1621,6 +1976,10 @@ func _add_reference_tree_cluster(
 		var scale_value := 0.82 + 0.055 * float(serial % 6)
 		var safe_pine_stride := maxi(pine_stride, 3)
 		var is_skinny_tree := serial % safe_pine_stride == 2
+		var crown_prototypes: Array[Node3D] = pine_prototypes if is_skinny_tree else broadleaf_prototypes
+		var crown_radius := _tree_crown_radius(crown_prototypes[posmod(serial, crown_prototypes.size())], scale_value)
+		if not _is_tree_canopy_spaced(position_value, crown_radius):
+			continue
 		var has_tree_spacing := (
 			_is_tree_spaced(position_value, MATURE_TREE_MIN_SPACING_M)
 			if uniform_mature_spacing
@@ -1711,28 +2070,54 @@ func _lake_shore_outward(index: int) -> Vector2:
 	return outward
 
 func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
+	# Clubhouse apron and its connector: reserve in world metres.
+	if Rect2(-133,-66,14,18).grow(padding*LAYOUT_SCALE).has_point(Vector2(position_value.x,position_value.z)*LAYOUT_SCALE):
+		return false
 	var point := Vector2(position_value.x, position_value.z)
 	if absf(point.x) > PARK_HALF.x - padding or absf(point.y) > PARK_HALF.y - padding:
 		return false
-	if _is_point_in_or_near_lake(point, padding):
-		return false
-	if _is_near_future_bridge_corridor(point, padding):
-		return false
-	if _is_near_destination_path(point, padding):
+	if _vegetation_clearance_blocked(point, padding):
 		return false
 
 	# Keep activity surfaces, plaza, pavilion, and all four entrances open.
-	var reserved_rects: Array[Vector4] = [
-		# Keep the actual five-a-side enclosure and a playable apron clear.
-		Vector4(-70,-43,14.0,10.5),Vector4(-72,45,20.0,17.0),
-		Vector4(82,68,19.0,15.0),Vector4(76,-73,14.0,11.0),
-		Vector4(0,86,11.0,7.0),Vector4(-38,-86,9.0,7.0),
-		Vector4(-106,20,7.0,9.0),Vector4(106,-20,7.0,9.0),
-	]
+	var reserved_rects: Array[Vector4] = _VEGETATION_RESERVED_RECTS
 	for rect: Vector4 in reserved_rects:
 		if absf(point.x - rect.x) < rect.z + padding and absf(point.y - rect.y) < rect.w + padding:
 			return false
 	return true
+
+func _vegetation_clearance_blocked(point: Vector2, padding: float) -> bool:
+	# Preserve uncommon/invalid inputs through the unmodified original predicates.
+	if not point.is_finite() or not is_finite(padding) or padding<0.0 or padding>4.0:
+		return _is_point_in_or_near_lake(point,padding) or _is_near_future_bridge_corridor(point,padding) or _is_near_destination_path(point,padding)
+	if _vegetation_clearance_cache==null or not _vegetation_clearance_cache.matches_contour(lake_contour):
+		_build_vegetation_clearance_cache()
+	return _vegetation_clearance_cache.blocked(point,padding)
+
+func _build_vegetation_clearance_cache() -> void:
+	var route_specs: Array[Dictionary] = [
+		{"points":OUTER_CIRCUIT, "half_width":2.1},
+		{"points":SOUTH_ARRIVAL_ROUTE, "half_width":2.2},
+		{"points":WEST_DESTINATION_ROUTE, "half_width":2.2},
+		{"points":NORTH_ENTRY_ROUTE, "half_width":2.0},
+		{"points":EAST_DECK_ROUTE, "half_width":2.0},
+		{"points":SPORTS_LINK_ROUTE, "half_width":1.5},
+		{"points":PLAYGROUND_LOOP, "half_width":1.35},
+		{"points":NORTH_WOODLAND_LOOP, "half_width":1.25},
+		{"points":LAKE_PROMENADE_LOOP, "half_width":1.8},
+		{"points":PLAZA_ARRIVAL_ROUTE, "half_width":2.0},
+		{"points":PLAZA_PAVED_ROUTE, "half_width":2.0},
+		{"points":SOUTH_BRIDGE_APPROACH, "half_width":1.6},
+		{"points":PAVILION_LINK_ROUTE, "half_width":1.4},
+		{"points":VIEWING_DECK_APPROACH_ROUTE, "half_width":1.5},
+	]
+	var corridors: Array = [
+		FUTURE_BRIDGE_WEST,
+		FUTURE_BRIDGE_NORTH_EAST,
+		FUTURE_BRIDGE_SOUTH,
+	]
+	_vegetation_clearance_cache=VegetationClearanceCache.new()
+	_vegetation_clearance_cache.configure(lake_contour,LAKE_TREE_BUFFER_M,route_specs,corridors)
 
 func _is_near_destination_path(point: Vector2, padding: float) -> bool:
 	var route_specs: Array[Dictionary] = [
@@ -1886,6 +2271,9 @@ func _build_reference_canopy(parent: Node3D) -> void:
 		if not _is_tree_spaced_for_type(island_position, is_skinny_tree):
 			continue
 		var prototypes: Array[Node3D] = pine_prototypes if is_skinny_tree else broadleaf_prototypes
+		var crown_radius := _tree_crown_radius(prototypes[posmod(800 + index, prototypes.size())], item.z)
+		if not _is_tree_canopy_spaced(island_position, crown_radius):
+			continue
 		_add_reference_plant(
 			canopy_root, prototypes, island_position,
 			item.z, 800 + index, "IslandTree"
@@ -2029,11 +2417,14 @@ func _build_forest_floor_bush_pockets(parent: Node3D) -> void:
 		Vector2(-15,37),Vector2(0,-34),Vector2(3,36),Vector2(-78,47),
 		Vector2(-43,40),Vector2(-18,-5),Vector2(94,2),Vector2(-96,-43),
 		Vector2(-43,-46),Vector2(-72,-62),
+		Vector2(-88,-85),Vector2(-66,-85),Vector2(-39,-85),Vector2(-10,-85),
+		Vector2(-105,-58),Vector2(-105,-28),Vector2(-105,39),Vector2(-85,85),
+		Vector2(-58,85),Vector2(-29,85),Vector2(105,28),Vector2(104,-68),
 	]
 	var serial := 0
 	for center_index: int in range(centers.size()):
 		var center := centers[center_index]
-		for plant_index: int in range(5):
+		for plant_index: int in range(9):
 			var angle := float(center_index) * 1.43 + float(plant_index) * 2.17
 			var radius_value := 2.1 + float((plant_index * 3 + center_index) % 5) * 1.05
 			var position_value := Vector3(
@@ -2086,6 +2477,9 @@ func _build_mainland_pine_saplings(parent: Node3D) -> void:
 			continue
 		if not _is_tree_spaced_for_type(position_value, true):
 			continue
+		var crown_radius := _tree_crown_radius(pine_sapling_prototypes[posmod(4200 + candidate_index, pine_sapling_prototypes.size())], 0.86 + float((candidate_index * 3) % 5) * 0.045)
+		if not _is_tree_canopy_spaced(position_value, crown_radius):
+			continue
 		_add_reference_plant(
 			parent, pine_sapling_prototypes, position_value,
 			0.86 + float((candidate_index * 3) % 5) * 0.045,
@@ -2127,6 +2521,11 @@ func _add_authored_mainland_micro_grove(
 		var prototypes: Array[Node3D] = pine_prototypes if is_skinny_tree else broadleaf_prototypes
 		var serial := serial_offset * 100 + point_index
 		var scale_value := 0.80 + 0.045 * float((point_index + serial_offset) % 6)
+		var crown_radius := _tree_crown_radius(prototypes[posmod(serial, prototypes.size())], scale_value)
+		var crown_position := _find_canopy_position(position_value, crown_radius, serial)
+		if not crown_position["found"]:
+			continue
+		position_value = crown_position["position"]
 		_add_reference_plant(
 			parent, prototypes, position_value, scale_value, serial,
 			"MicroGrovePine" if is_skinny_tree else "MicroGroveBroadleaf"
@@ -2269,6 +2668,43 @@ func _build_mainland_meadow_transitions(parent: Node3D) -> void:
 			)
 			serial += 1
 
+func _build_woodland_fallen_fragments(parent: Node3D) -> void:
+	if deadwood_trunk_prototype == null:
+		return
+	var root := Node3D.new()
+	root.name = "WoodlandFallenWoodFragments"
+	parent.add_child(root)
+	var placed := 0
+	for index: int in range(0, occupied_tree_positions.size(), 7):
+		if placed >= 28:
+			break
+		var trunk: Vector2 = occupied_tree_positions[index]
+		var angle := float(index) * 2.399963
+		var point := trunk + Vector2(cos(angle), sin(angle)) * 1.2
+		var position_value := Vector3(point.x, 0.0, point.y)
+		if not _is_vegetation_clear(position_value, 1.0) or not _is_tree_spaced(position_value, 0.65):
+			continue
+		var wood := deadwood_trunk_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+		wood.name = "FallenWoodFragment_%02d" % (placed + 1)
+		wood.position = position_value
+		wood.rotation_degrees = Vector3(0.0, fmod(float(index) * 137.5, 360.0), 88.0 + float(index % 5))
+		var thickness := 0.045 + float(index % 4) * 0.009
+		wood.scale = Vector3(thickness, 0.17 + float(index % 5) * 0.035, thickness)
+		_preserve_asset_world_scale(wood)
+		root.add_child(wood)
+		# The supplied scanned trunk has an end pivot. Settle actual vertices,
+		# avoiding hovering or submerged pieces; these tiny details do not block.
+		var lowest := INF
+		for mesh_node: MeshInstance3D in wood.find_children("*", "MeshInstance3D", true, false):
+			for surface: int in range(mesh_node.mesh.get_surface_count()):
+				var vertices: PackedVector3Array = mesh_node.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+				for vertex: Vector3 in vertices:
+					lowest = minf(lowest, (mesh_node.global_transform * vertex).y)
+		if is_finite(lowest):
+			wood.position.y -= lowest + 0.004
+		placed += 1
+
+
 func _build_deadwood_pass(parent: Node3D) -> void:
 	if deadwood_trunk_prototype == null or hollow_bark_prototype == null:
 		push_warning("Midori deadwood pass skipped because a staged source is unavailable")
@@ -2282,9 +2718,9 @@ func _build_deadwood_pass(parent: Node3D) -> void:
 	# movement; the smaller three remain decorative ground detail.
 	var log_specs: Array[Vector4] = [
 		Vector4(-82,-6,18,1.18),Vector4(-72,10,127,1.34),
-		Vector4(-56,7,246,1.08),Vector4(-21,54,73,1.42),
+		Vector4(-56,7,246,1.08),Vector4(-20.5,55.5,73,1.42),
 		Vector4(10,57,311,1.24),Vector4(-4,-52,154,1.12),
-		Vector4(87,-6,38,1.38),
+		Vector4(90.5,-6,38,1.38),
 	]
 	for index: int in range(log_specs.size()):
 		var spec := log_specs[index]
@@ -2300,17 +2736,34 @@ func _build_deadwood_pass(parent: Node3D) -> void:
 		log_instance.scale = Vector3(cross_scale, spec.w, cross_scale)
 		_preserve_asset_world_scale(log_instance)
 		root.add_child(log_instance)
+		if index in [3, 6]:
+			# Imported end pivots and root flares make a fixed Y unreliable.
+			# Settle only the two restored logs using their actual transformed vertices.
+			var lowest_vertex := INF
+			for mesh_node: MeshInstance3D in log_instance.find_children("*", "MeshInstance3D", true, false):
+				for surface_index: int in range(mesh_node.mesh.get_surface_count()):
+					var vertices: PackedVector3Array = mesh_node.mesh.surface_get_arrays(surface_index)[Mesh.ARRAY_VERTEX]
+					for vertex: Vector3 in vertices:
+						lowest_vertex = minf(lowest_vertex, (mesh_node.global_transform * vertex).y)
+			if is_finite(lowest_vertex):
+				log_instance.position.y -= lowest_vertex + 0.012
 		if index % 2 == 0:
+			var collision_position := position_value
+			if index == 6:
+				# The restored east log's imported pivot sits at its end. Centre
+				# the movement blocker on the visible wood, clear of the path.
+				var visual_bounds: AABB = _vegetation_visual_bounds(log_instance)["bounds"]
+				collision_position = log_instance.transform * visual_bounds.get_center()
 			_add_deadwood_box_collision(
-				root, "FallenLogCollision_%02d" % (index + 1), position_value,
+				root, "FallenLogCollision_%02d" % (index + 1), collision_position,
 				log_instance.rotation_degrees,
 				Vector3(0.92, 2.72 * spec.w, 0.92)
 			)
 
 	# Upright copies retain the scanned root flare and read as broken stump bases.
 	var stump_specs: Array[Vector4] = [
-		Vector4(-88,64,42,0.52),Vector4(-60,0,173,0.62),
-		Vector4(-16,56,286,0.48),Vector4(88,16,104,0.58),
+		Vector4(-90,66,42,0.52),Vector4(-60,-3,173,0.62),
+		Vector4(-13,56,286,0.48),Vector4(88,16,104,0.58),
 		Vector4(-52,-8,229,0.54),
 	]
 	for index: int in range(stump_specs.size()):
@@ -2369,11 +2822,7 @@ func _build_open_lawn_cover(parent: Node3D) -> void:
 	for mesh_node: MeshInstance3D in meshes:
 		if mesh_node.mesh != null:
 			collision_shapes.append({"transform": _vegetation_relative_transform(mesh_node, prototype), "shape": mesh_node.mesh.create_trimesh_shape()})
-	var anchors: Array[Vector2] = [
-		Vector2(-53,-2),Vector2(-38,13),Vector2(-17,5),Vector2(-43,50),
-		Vector2(-2,53),Vector2(32,61),Vector2(86,6),Vector2(-55,-58),
-		Vector2(62,61),
-	]
+	var anchors: Array[Vector2] = TREE_COVER_CLEARINGS.duplicate()
 	var root := Node3D.new()
 	root.name = "OpenLawnBoulderCover"
 	parent.add_child(root)
@@ -2457,15 +2906,16 @@ func _build_japanese_maple_pass(parent: Node3D) -> void:
 		Vector3(-25.0,-0.055,53.0),Vector3(12.0,-0.055,53.0),
 		Vector3(-17.0,-0.055,63.0),
 	]
+	var crown_radius := _tree_crown_radius(japanese_maple_prototype)
 	var maple_position := Vector3.ZERO
 	var found := false
 	for candidate_index: int in range(candidates.size()):
 		var candidate: Vector3 = candidates[candidate_index]
-		if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M):
+		if _is_vegetation_clear(candidate, 3.6) and _is_tree_spaced(candidate, MATURE_TREE_MIN_SPACING_M) and _is_tree_canopy_spaced(candidate, _tree_crown_radius(japanese_maple_prototype)):
 			maple_position = candidate
 			found = true
 			break
-		var relocation := _find_clear_micro_grove_position(candidate, 850 + candidate_index, 3.6)
+		var relocation := _find_canopy_position(candidate, crown_radius, 850 + candidate_index)
 		if relocation["found"]:
 			maple_position = relocation["position"]
 			found = true
@@ -2482,12 +2932,63 @@ func _build_japanese_maple_pass(parent: Node3D) -> void:
 	maple.rotation_degrees.y = 214.0
 	_preserve_asset_world_scale(maple)
 	root.add_child(maple)
+	_occupied_tree_crowns[Vector2(maple_position.x, maple_position.z)] = crown_radius
 	occupied_tree_positions.append(Vector2(maple_position.x, maple_position.z))
 	occupied_tree_is_skinny.append(false)
 	_add_deadwood_stump_collision(
 		root, "JapaneseMapleCollision_01",
 		maple_position + Vector3(0.0,1.25,0.0), 0.48, 2.5
 	)
+
+func _park_furniture_pathside(authored: Vector3, setback: float) -> Dictionary:
+	# Match the rendered, rounded paths, including their human-scale widths.
+	# All distances here are in layout space (two metres per layout unit).
+	var routes: Array[Dictionary] = [
+		{"name":"OuterWalkingCircuit", "points": OUTER_CIRCUIT, "width": 3.8},
+		{"name":"SouthEntranceToLake", "points": SOUTH_ARRIVAL_ROUTE, "width": 4.0},
+		{"name":"WestEntranceToBridgeLanding", "points": WEST_DESTINATION_ROUTE, "width": 4.0},
+		{"name":"NorthEntranceToLake", "points": NORTH_ENTRY_ROUTE, "width": 3.8},
+		{"name":"EastEntranceToBridgeLanding", "points": EAST_DECK_ROUTE, "width": 3.8},
+		{"name":"SportsConnector", "points": SPORTS_LINK_ROUTE, "width": 3.0},
+		{"name":"PlaygroundWoodlandLoop", "points": PLAYGROUND_LOOP, "width": 2.7},
+		{"name":"NorthWoodlandLoop", "points": NORTH_WOODLAND_LOOP, "width": 2.5},
+	]
+	routes.append_array([
+		{"name":"SouthEntranceToPlaza","points":PLAZA_PAVED_ROUTE,"width":4.0},
+		{"name":"ContinuousLakePromenade","points":LAKE_PROMENADE_LOOP,"width":LAKE_PROMENADE_WIDTH_M},
+		{"name":"PlazaToSouthBridgeLanding","points":SOUTH_BRIDGE_APPROACH,"width":3.2},
+		{"name":"PavilionGardenLink","points":PAVILION_LINK_ROUTE,"width":2.8},
+		{"name":"EastPromenadeToViewingDeck","points":VIEWING_DECK_APPROACH_ROUTE,"width":3.0},
+	])
+	var point := Vector2(authored.x, authored.z)
+	var nearest := Vector2.ZERO
+	var tangent := Vector2.RIGHT
+	var distance := INF
+	var half_width := 0.0
+	for route: Dictionary in routes:
+		var anchors: Array[Vector2] = route["points"].duplicate()
+		var closed := anchors[0].is_equal_approx(anchors[-1])
+		if not closed:
+			while anchors.size() > 2 and anchors[-2].distance_to(anchors[-1]) < 3.0:
+				anchors.remove_at(anchors.size() - 2)
+		var curve := _rounded_contour(anchors, closed, _path_curve_radius(str(route.name)), _path_corner_fraction(str(route.name)))
+		for i: int in range(curve.size() - 1):
+			var closest := Geometry2D.get_closest_point_to_segment(point, curve[i], curve[i + 1])
+			var candidate_distance := point.distance_squared_to(closest)
+			if candidate_distance < distance and not curve[i].is_equal_approx(curve[i + 1]):
+				distance = candidate_distance
+				nearest = closest
+				tangent = (curve[i + 1] - curve[i]).normalized()
+				half_width = _path_width_world(str(route.name),float(route.width)) / LAYOUT_SCALE * 0.5
+	var outward := Vector2(-tangent.y, tangent.x)
+	if outward.dot(point - nearest) < 0.0:
+		outward = -outward
+	var location := nearest + outward * (half_width + setback)
+	var facing := -outward
+	return {"position": Vector3(location.x, authored.y, location.y),
+		"direction": Vector3(facing.x, 0.0, facing.y),
+		"yaw": rad_to_deg(atan2(-facing.x, -facing.y))}
+
 
 func _build_park_benches(parent: Node3D) -> void:
 	if neon_park_bench_prototype == null and futuristic_eco_bench_prototype == null:
@@ -2510,7 +3011,9 @@ func _build_park_benches(parent: Node3D) -> void:
 	]
 	var bench_positions: Array[Vector2] = []
 	var placed := 0
-	for candidate: Vector3 in candidates:
+	for authored: Vector3 in candidates:
+		var pathside := _park_furniture_pathside(authored, 0.65)
+		var candidate: Vector3 = pathside.position
 		if placed >= 6:
 			break
 		if not _is_tree_spaced(candidate, 2.2):
@@ -2523,13 +3026,7 @@ func _build_park_benches(parent: Node3D) -> void:
 				break
 		if not separated:
 			continue
-		var yaw := 0.0
-		if candidate.z < -68.0:
-			yaw = 180.0
-		elif candidate.x < -90.0:
-			yaw = 90.0
-		elif candidate.x > 90.0:
-			yaw = -90.0
+		var yaw: float = pathside.yaw + 180.0
 		var use_eco := placed % 2 == 1 and futuristic_eco_bench_prototype != null
 		var source := futuristic_eco_bench_prototype if use_eco else neon_park_bench_prototype
 		if source == null:
@@ -2551,6 +3048,8 @@ func _build_park_benches(parent: Node3D) -> void:
 		push_warning("Midori bench pass placed only %d of 6 because of tree clearance" % placed)
 
 func _build_park_lamps(parent: Node3D) -> void:
+	# Main walks use the Japanese lamps; preserve halo lamps at the monument.
+	if has_node("MidoriJapanesePathLamps"): return
 	if emerald_halo_lamp_prototype == null:
 		push_warning("Midori lamp pass skipped because its source is unavailable")
 		return
@@ -2565,27 +3064,16 @@ func _build_park_lamps(parent: Node3D) -> void:
 		Vector3(-102.5,-0.025,5),Vector3(101.5,-0.025,0),
 	]
 	for index: int in range(placements.size()):
-		var position_value := placements[index]
+		var pathside := _park_furniture_pathside(placements[index], 0.30)
+		var position_value: Vector3 = pathside.position
 		if not _is_tree_spaced(position_value, 1.8):
 			push_warning("Midori path lamp skipped for tree clearance at %s" % position_value)
 			continue
 		var lamp := emerald_halo_lamp_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
 		lamp.name = "EmeraldHaloLamp_%02d" % (index + 1)
 		lamp.position = position_value
-		var path_direction := Vector3.ZERO
-		var lamp_yaw := 0.0
-		if position_value.z > 70.0:
-			path_direction = Vector3(0.0,0.0,1.0)
-			lamp_yaw = 180.0
-		elif position_value.z < -70.0:
-			path_direction = Vector3(0.0,0.0,-1.0)
-			lamp_yaw = 0.0
-		elif position_value.x < 0.0:
-			path_direction = Vector3(-1.0,0.0,0.0)
-			lamp_yaw = 90.0
-		else:
-			path_direction = Vector3(1.0,0.0,0.0)
-			lamp_yaw = -90.0
+		var path_direction: Vector3 = pathside.direction
+		var lamp_yaw: float = pathside.yaw
 		lamp.rotation_degrees.y = lamp_yaw
 		lamp.scale = Vector3.ONE * 7.2
 		_preserve_asset_world_scale(lamp)
@@ -2605,9 +3093,9 @@ func _build_landmark_plaza_furniture(parent: Node3D) -> void:
 
 	if neon_park_bench_prototype != null or futuristic_eco_bench_prototype != null:
 		var bench_points: Array[Vector3] = [
-			Vector3(72.0,-0.025,77.0),
-			Vector3(94.0,-0.025,76.0),
-			Vector3(82.0,-0.025,57.0),
+			Vector3(72.0,0.1345,77.0),
+			Vector3(94.0,0.1345,76.0),
+			Vector3(82.0,0.1415,57.0),
 		]
 		for index: int in range(bench_points.size()):
 			var source := neon_park_bench_prototype
@@ -2618,7 +3106,7 @@ func _build_landmark_plaza_furniture(parent: Node3D) -> void:
 			var bench := source.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
 			var position_value := bench_points[index]
 			var facing := center_3d - position_value
-			var yaw := rad_to_deg(atan2(-facing.x, -facing.z))
+			var yaw := rad_to_deg(atan2(facing.x, facing.z))
 			bench.name = "PlazaBench_%02d" % (index + 1)
 			bench.position = position_value
 			bench.rotation_degrees.y = yaw
@@ -2633,10 +3121,10 @@ func _build_landmark_plaza_furniture(parent: Node3D) -> void:
 	if emerald_halo_lamp_prototype == null:
 		return
 	var lamp_specs: Array[Dictionary] = [
-		{"p":Vector3(73.0,-0.025,76.0), "target":Vector3(77.0,0.0,74.0)},
-		{"p":Vector3(88.0,-0.025,75.0), "target":Vector3(88.0,0.0,72.0)},
-		{"p":Vector3(94.0,-0.025,63.0), "target":Vector3(92.0,0.0,61.0)},
-		{"p":Vector3(72.0,-0.025,66.0), "target":Vector3(73.0,0.0,69.0)},
+		{"p":Vector3(70.0,0.1345,76.0), "target":Vector3(77.0,0.1345,74.0)},
+		{"p":Vector3(88.0,0.1475,75.0), "target":Vector3(88.0,0.1475,72.0)},
+		{"p":Vector3(94.0,0.1345,63.0), "target":Vector3(92.0,0.1345,61.0)},
+		{"p":Vector3(72.0,0.1345,66.0), "target":Vector3(73.0,0.1345,69.0)},
 	]
 	for index: int in range(lamp_specs.size()):
 		var position_value: Vector3 = lamp_specs[index]["p"]
@@ -2654,7 +3142,7 @@ func _build_landmark_plaza_furniture(parent: Node3D) -> void:
 		_preserve_asset_world_scale(lamp)
 		root.add_child(lamp)
 		_add_lamp_lights(root, lamp_index, position_value, path_direction)
-		_add_lamp_path_streak(root, lamp_index, position_value, path_direction)
+		_add_lamp_path_streak(root, lamp_index, position_value, path_direction, 0.170)
 		_add_deadwood_stump_collision(
 			root, "PlazaHaloLampCollision_%02d" % (index + 1),
 			position_value + Vector3(0.0,3.40,0.0), 0.28, 6.8
@@ -2697,7 +3185,8 @@ func _add_lamp_path_streak(
 	parent: Node3D,
 	index: int,
 	position_value: Vector3,
-	path_direction: Vector3
+	path_direction: Vector3,
+	projection_y: float = -1.0
 ) -> void:
 	var streak := MeshInstance3D.new()
 	streak.name = "BlueSlitProjection_%02d" % (index + 1)
@@ -2706,8 +3195,9 @@ func _add_lamp_path_streak(
 	streak.mesh = plane
 	# Path surfaces reach roughly 0.11 m; keep the projection just above them.
 	streak.position = position_value + path_direction * 2.15 + Vector3(0.0,0.125,0.0)
-	if absf(path_direction.x) > 0.5:
-		streak.rotation_degrees.y = 90.0
+	if projection_y >= 0.0:
+		streak.position.y = projection_y
+	streak.rotation.y = atan2(path_direction.x, path_direction.z)
 	streak.material_override = mat_path_light_streak
 	parent.add_child(streak)
 	streak.add_to_group("midori_night_effect")
@@ -2841,16 +3331,16 @@ func _build_wildflower_groundcover(parent: Node3D) -> void:
 	]
 	var flower_serial := 0
 	for patch: Vector4 in patches:
-		var desired := int(patch.w)
+		var desired := int(patch.w) * 3
 		var placed := 0
 		var attempt := 0
 		while placed < desired and attempt < desired * 10:
 			var radial_t := sqrt((float(attempt % desired) + 0.30) / float(desired))
 			var angle := float(attempt) * 2.399963 + patch.x * 0.03
 			var position_value := Vector3(
-				patch.x + cos(angle) * patch.z * radial_t,
+				patch.x + cos(angle) * patch.z * 0.72 * radial_t,
 				0.0,
-				patch.y + sin(angle) * patch.z * radial_t * 0.68
+				patch.y + sin(angle) * patch.z * 0.72 * radial_t * 0.68
 			)
 			attempt += 1
 			if not _is_vegetation_clear(position_value, 0.35):
@@ -2898,13 +3388,20 @@ func _add_flower_multimesh(
 	instance.name = node_name
 	instance.multimesh = multimesh
 	instance.material_override = material
-	instance.visibility_range_end = 90.0
+	# This batch spans the park: distance from its shared origin is unrelated
+	# to distance from an individual flower patch. Retain frustum culling.
+	instance.visibility_range_end = 0.0
 	parent.add_child(instance)
 
 func _build_sakura_trees(parent: Node3D) -> void:
 	var trees_root := Node3D.new()
 	trees_root.name = "HandPlacedSakuraAccentTrees_%d" % SAKURA_TREE_COUNT
 	parent.add_child(trees_root)
+	_occupied_tree_crowns.clear()
+	_tree_crown_radius_cache.clear()
+	var sakura_source: Node3D = load("res://assets/shinrai/vegetation/sakura/jogoss_sakura_01/Sakura.fbx").instantiate()
+	var sakura_radius := _tree_crown_radius(sakura_source, 15.0)
+	sakura_source.free()
 	occupied_tree_positions.clear()
 	occupied_tree_is_skinny.clear()
 	var placements: Array[Vector3] = [
@@ -2928,6 +3425,9 @@ func _build_sakura_trees(parent: Node3D) -> void:
 	for index: int in range(mini(placements.size(), SAKURA_TREE_COUNT)):
 		var scale_value: float = 0.80 + float(index % 7) * 0.04
 		var tree_position := _clear_sakura_position(placements[index])
+		var crown_position := _find_canopy_position(tree_position, sakura_radius * scale_value, index)
+		if crown_position["found"]:
+			tree_position = crown_position["position"]
 		var tree := SakuraTreeScene.instantiate() as Node3D
 		tree.name = "DenseSakura_%02d" % (index + 1)
 		tree.position = tree_position
@@ -2935,6 +3435,7 @@ func _build_sakura_trees(parent: Node3D) -> void:
 		tree.scale = Vector3.ONE * scale_value
 		_preserve_asset_world_scale(tree)
 		trees_root.add_child(tree)
+		_occupied_tree_crowns[Vector2(tree_position.x, tree_position.z)] = sakura_radius * scale_value
 		_configure_vegetation_visibility(tree)
 		_add_sakura_trunk_collision(trees_root, index, tree_position, scale_value)
 		occupied_tree_positions.append(Vector2(tree_position.x, tree_position.z))
@@ -2979,6 +3480,8 @@ func _add_sakura_trunk_collision(parent: Node3D, index: int, position_value: Vec
 	body.add_child(collision)
 
 func _configure_vegetation_visibility(node: Node) -> void:
+	if node is MeshInstance3D:
+		FoliageMaterials.configure_mesh(node as MeshInstance3D)
 	if node is GeometryInstance3D:
 		var geometry := node as GeometryInstance3D
 		geometry.visibility_range_end = 150.0
@@ -3045,70 +3548,37 @@ func _add_lake_island(
 	points.remove_at(points.size() - 1)
 	_add_shoreline_ribbon(
 		parent, "%s_SoftBank" % node_name, points,
-		0.42, y_value + 0.004, mat_shore_bank
+		0.42, y_value + 0.004, mat_island_bank
 	)
 
 func _build_future_bridge_sockets(parent: Node3D) -> void:
-	# These routes are kept as authored gameplay corridors and now use the
-	# supplied bridge meshes. The north and south crossings reuse WAT-02.
-	var bridge_root := Node3D.new()
-	bridge_root.name = "ArtworkLakeBridges"
-	parent.add_child(bridge_root)
-	var crossings: Array[Dictionary] = [
-		{"id":"Main", "route":FUTURE_BRIDGE_WEST, "scene":MainBridgeScene, "width":6.0, "height":8.0},
-		{"id":"North", "route":FUTURE_BRIDGE_NORTH_EAST, "scene":SecondaryBridgeScene, "width":5.6, "height":11.0},
-		{"id":"South", "route":FUTURE_BRIDGE_SOUTH, "scene":SecondaryBridgeScene, "width":5.6, "height":11.0},
-	]
-	for crossing: Dictionary in crossings:
-		var route: Array[Vector2] = crossing["route"]
-		var a: Vector2 = route[0]
-		var b: Vector2 = route[route.size() - 1]
-		var delta := b - a
-		var centre := (a + b) * 0.5
-		var yaw := -rad_to_deg(atan2(delta.y, delta.x))
-		var span_world := delta.length() * LAYOUT_SCALE
-		# Source GLBs are normalized to one unit along X and about 0.265
-		# units across Z. _instance_park_asset preserves world dimensions.
-		var width_world: float = crossing["width"]
-		_instance_park_asset(
-			bridge_root, crossing["scene"], "Bridge_%s" % crossing["id"],
-			Vector3(centre.x, 0.55, centre.y), yaw,
-			Vector3(span_world + 2.0, crossing["height"], width_world / 0.265)
-		)
-		_add_bridge_walkway_collision(
-			bridge_root, "BridgeWalkway_%s" % crossing["id"],
-			Vector3(centre.x, 0.0, centre.y), yaw, span_world, width_world
-		)
+	await MeasuredBridges.new().build(self,parent,MeasuredBridgeArtwork,MeasuredBridgeDisplay)
 
-func _add_bridge_walkway_collision(parent: Node3D, node_name: String, centre: Vector3, yaw_degrees: float, span_world: float, width_world: float) -> void:
-	# A flat deck and two shallow ramps connect the ground plane without a
-	# ledge. The collision body's inverse X/Z scale compensates for the park.
-	var body := StaticBody3D.new()
-	body.name = node_name
-	body.position = centre
-	body.rotation_degrees.y = yaw_degrees
-	body.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
-	parent.add_child(body)
-	var deck := CollisionShape3D.new()
-	var deck_shape := BoxShape3D.new()
-	deck_shape.size = Vector3(span_world - 4.0, 0.24, width_world)
-	deck.position.y = 0.0
-	deck.shape = deck_shape
-	body.add_child(deck)
-	for side: int in [-1, 1]:
-		var ramp := CollisionShape3D.new()
-		var shape := ConvexPolygonShape3D.new()
-		var points := PackedVector3Array()
-		var inner_x := float(side) * (span_world * 0.5 - 2.0)
-		var outer_x := float(side) * (span_world * 0.5 + 0.5)
-		for z_value: float in [-width_world * 0.5, width_world * 0.5]:
-			points.append(Vector3(inner_x, 0.12, z_value))
-			points.append(Vector3(inner_x, -0.12, z_value))
-			points.append(Vector3(outer_x, 0.0, z_value))
-			points.append(Vector3(outer_x, -0.12, z_value))
-		shape.points = points
-		ramp.shape = shape
-		body.add_child(ramp)
+func _build_bridge_landings(parent: Node3D, bridge_id: String, a: Vector2, b: Vector2, width: float, deck: Dictionary) -> void:
+	var anchors := {
+		"Main":[Vector2(20,-44),Vector2(170,-48)],
+		"North":[Vector2(46,-120),Vector2(158,-114)],
+		"South":[Vector2(38,60),Vector2(162,44)],
+	}
+	var axis := (b-a).normalized()
+	for side: int in range(2):
+		var direction := axis if side == 0 else -axis
+		var mouth := (a if side == 0 else b)-direction*0.80
+		var start: Vector2 = anchors[bridge_id][side]
+		var tread := BridgeWalks.height_at(deck,mouth+direction*0.2)
+		var material := WalkMaterials.build(width,0.0)
+		material.set_shader_parameter("night_emission",1.0 if is_night_mode else 0.0)
+		if not modular_path_emissive_materials.has(material):
+			modular_path_emissive_materials.append(material)
+		var landing := BridgeLandings.install(parent,"%s%sBridgeLink" % [bridge_id,"West" if side == 0 else "East"],start,mouth,direction,width,tread,material,_bridge_join_walks)
+		_bridge_walk_surfaces.append({"kind":"landing","spec":landing})
+
+func bridge_surface_height(p: Vector2) -> float:
+	var result := -INF
+	for surface: Dictionary in _bridge_walk_surfaces:
+		var height: float = BridgeWalks.height_at(surface.spec,p) if surface.kind == "deck" else BridgeLandings.height_at(surface.spec,p)
+		result = maxf(result,height)
+	return result
 
 func _add_shoreline_ribbon(
 	parent: Node3D,
@@ -3153,17 +3623,45 @@ func _add_shoreline_ribbon(
 			outer_y = 0.22
 		elif node_name.ends_with("_SoftBank"):
 			outer_y = 0.104
-		_add_shoreline_vertex(surface, points[index], inner_y, Vector2(0.0, float(index)))
-		_add_shoreline_vertex(surface, outer_points[index], outer_y, Vector2(1.0, float(index)))
-		_add_shoreline_vertex(surface, outer_points[next_index], outer_y, Vector2(1.0, float(next_index)))
-		_add_shoreline_vertex(surface, points[index], inner_y, Vector2(0.0, float(index)))
-		_add_shoreline_vertex(surface, outer_points[next_index], outer_y, Vector2(1.0, float(next_index)))
-		_add_shoreline_vertex(surface, points[next_index], inner_y, Vector2(0.0, float(next_index)))
+		# Short bank sections let entrances recess only the turf under their floors.
+		var sections := maxi(1,ceili(points[index].distance_to(points[next_index])*LAYOUT_SCALE/0.5)) if node_name == "ContinuousNaturalBank" else 1
+		for section: int in range(sections):
+			var a := float(section)/float(sections)
+			var b := float(section+1)/float(sections)
+			var inner_a := points[index].lerp(points[next_index],a)
+			var inner_b := points[index].lerp(points[next_index],b)
+			var outer_a := outer_points[index].lerp(outer_points[next_index],a)
+			var outer_b := outer_points[index].lerp(outer_points[next_index],b)
+			_add_shoreline_vertex(surface,inner_a,inner_y,Vector2(0,float(index)+a))
+			_add_shoreline_vertex(surface,outer_a,outer_y,Vector2(1,float(index)+a))
+			_add_shoreline_vertex(surface,outer_b,outer_y,Vector2(1,float(index)+b))
+			_add_shoreline_vertex(surface,inner_a,inner_y,Vector2(0,float(index)+a))
+			_add_shoreline_vertex(surface,outer_b,outer_y,Vector2(1,float(index)+b))
+			_add_shoreline_vertex(surface,inner_b,inner_y,Vector2(0,float(index)+b))
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = node_name
 	mesh_instance.mesh = surface.commit()
 	mesh_instance.material_override = material
 	parent.add_child(mesh_instance)
+
+func _fit_bank_below_bridge_floors(lake_root: Node3D) -> void:
+	var bank := lake_root.get_node("ContinuousNaturalBank") as MeshInstance3D
+	var arrays := bank.mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var recessed := 0
+	for index: int in range(vertices.size()):
+		await LoadingBudget.checkpoint(self)
+		var world := bank.global_transform*vertices[index]
+		var floor_height := bridge_surface_height(Vector2(world.x,world.z))
+		if is_finite(floor_height) and world.y > floor_height-0.015:
+			world.y = floor_height-0.015
+			vertices[index] = bank.global_transform.affine_inverse()*world
+			recessed += 1
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	var fitted := ArrayMesh.new()
+	fitted.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	bank.mesh = fitted
+	print("BRIDGE_BANK_CLEARANCE: recessed_vertices=%d total_vertices=%d" % [recessed,vertices.size()])
 
 func _add_shoreline_vertex(surface: SurfaceTool, point: Vector2, y_value: float, uv_value: Vector2) -> void:
 	surface.set_normal(Vector3.UP)
@@ -3295,32 +3793,6 @@ void fragment() {
 	material.shader = shader
 	return material
 
-# Orthographic albedo bake of the supplied straight module preserves its atlas design.
+# Shared paving preserves the supplied 2050 inlay and lighting artwork.
 func _make_continuous_paving_material(mainland_warm: bool = true) -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = """
-shader_type spatial;
-uniform sampler2D paving : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
-uniform float night_emission = 0.0;
-uniform float mainland_warmth = 1.0;
-void fragment() {
-    // Layout coordinates are scaled 2x: repeat the original tile every 12 world metres.
-    float along = 1.0 - abs(mod(UV.x / 6.0, 2.0) - 1.0);
-    vec2 tile_uv = vec2(UV.y, along);
-    vec3 base = texture(paving, tile_uv).rgb;
-    float cyan = smoothstep(0.08, 0.26, min(base.g, base.b) - base.r);
-    float stone_tone = dot(base, vec3(0.299, 0.587, 0.114));
-    vec3 warm_stone = mix(vec3(0.68, 0.63, 0.53), vec3(stone_tone) * vec3(1.02, 0.97, 0.86), 0.32);
-    ALBEDO = mix(base * mix(vec3(0.62, 0.59, 0.53), vec3(0.55), cyan), warm_stone, mainland_warmth);
-    ROUGHNESS = mix(mix(0.84, 0.3, cyan), 0.88, mainland_warmth);
-    METALLIC = mix(cyan * 0.18, 0.0, mainland_warmth);
-    EMISSION = vec3(0.28, 0.84, 1.0) * cyan * 2.2 * night_emission;
-}
-"""
-	var material := ShaderMaterial.new()
-	material.shader = shader
-	material.set_shader_parameter("paving", load("res://assets/shinrai/parks/midori_park/models/paths/vendor/meshy_midori_path_kit/midori_paving_albedo.png"))
-	material.set_shader_parameter("night_emission", 1.0 if is_night_mode else 0.0)
-	material.set_shader_parameter("mainland_warmth", 1.0 if mainland_warm else 0.0)
-	modular_path_emissive_materials.append(material)
-	return material
+	return WalkMaterials.build(3.68 if mainland_warm else 3.96)

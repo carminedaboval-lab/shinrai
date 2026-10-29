@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://assets/shinrai/districts/corporate_command/elevator.gd" id="1_lift"]
+
+[node name="Elevator" type="Node3D" groups=["cantilever_elevator"]]
+script = ExtResource("1_lift")

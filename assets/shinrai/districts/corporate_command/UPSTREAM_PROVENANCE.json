@@ -1,0 +1,656 @@
+{
+  "title": "Cantilever Command - Japanese corporate neighbourhood, 2050",
+  "date": "2026-10-25",
+  "revision": 5,
+  "manifest_created_utc": "2026-10-25T19:04:01.252722+00:00",
+  "scope_owner": "01a172f8-97d2-79a1-920a-c68e6c5fafbd",
+  "status": "Standalone neighbourhood with police station and three-level corporate garage; integrated routes and tower regressions pass",
+  "production_installed": false,
+  "approved_reference": "reference/approved_cantilever_v3.png",
+  "units": "metres; Blender Z-up; Godot/GLB Y-up",
+  "entry": "preview/Launch Neighbourhood.cmd",
+  "complete_building": "preview/building.tscn",
+  "runtime": "Godot 4.7.2 Forward+; review.gd supplies the standalone player and interactions",
+  "features": {
+    "lift": "Physical moving cab; eight stops; landing/cab door interlocks; calls, destination UI and obstruction handling",
+    "stairs": "Two independent U-shaped routes from ground lobby to roof, with intermediate landings",
+    "rear_emergency_ladder": "Continuous roof-to-ground climb/descent; exits at all three middle floors; collision-checked supported transfers",
+    "floor_heights_metres": [
+      0.8,
+      17.12,
+      20.62,
+      24.12,
+      39.12,
+      43.12,
+      47.12,
+      51.28
+    ],
+    "circulation": "Open cores, replacement floors, front galleries, roof guards and rear catwalk/platforms",
+    "corporate_garage": {
+      "decks_metres": [
+        0.22,
+        3.72,
+        7.22
+      ],
+      "marked_bays": 132,
+      "stationary_evs": 12,
+      "charger_props": 6,
+      "vehicle_ramps": 2,
+      "ramp_run_metres": 30,
+      "pedestrian_flights": 4,
+      "solar_canopy": true
+    },
+    "police_station": "Walkable public lobby, reception, seating/reporting space, ramped entry and two stationary patrol vehicles in a separate court",
+    "neighbourhood": "12 context exteriors, two pocket gardens, four streets, crossings, pedestrian links, bus shelter, trees and day/night street lighting"
+  },
+  "source_validation": {
+    "shell": "exports/corporate_cantilever_traversal.glb",
+    "sha256": "64cb86da25afa2796a745c969b18062fcecec24e3d2dbe9fc4c8c0435f52d97b",
+    "triangles": 82756,
+    "meshes": 7,
+    "materials": 17,
+    "report": "evidence/traversal_shell_glb_audit.json",
+    "status": "PASS",
+    "scope": "Visual shell only; procedural Godot architecture adds geometry, collision and functionality"
+  },
+  "automated_traversal": {
+    "district": {
+      "report": "evidence/district_traversal.json",
+      "sha256": "bd9df6e8f620525788989a47db3b528f7bc894f611f5de2c1a2ffbe8c6a12c29",
+      "status": "PASS"
+    },
+    "tower_stairs": {
+      "report": "evidence/district_tower_traversal.json",
+      "sha256": "d751e42d3a8be834d586652daee20428f967a4e17d56621fb2c2669cbbcd9d84",
+      "status": "PASS"
+    },
+    "tower_lift": {
+      "report": "evidence/district_elevator.json",
+      "sha256": "320e22117b6dd1b864190e81d7e66e162f6db7c937b578eaaf6ea3f79b95dc65",
+      "status": "PASS"
+    },
+    "tower_ladder": {
+      "report": "evidence/district_ladder.json",
+      "sha256": "d246594428c7d0279ec5bafb6f819c24bf3df82806b3cceab0206845803225df",
+      "status": "PASS"
+    }
+  },
+  "rendered_review": {
+    "receipt": "preview/district_validation.json",
+    "sha256": "bc1d0aa35a889712b9db50363f58b8ee4b2e1cf3756851cca816119c912bd60c",
+    "scope": "Standalone native Godot views; individual capture source versions and local-module coverage are documented in the receipt."
+  },
+  "appearance_baseline": {
+    "revision": 3,
+    "provenance": "revision_v3/PROVENANCE.json",
+    "snapshot": "revision_v3/SNAPSHOT_MANIFEST.json",
+    "exterior_glb": "exports/corporate_cantilever.glb",
+    "exterior_glb_sha256": "65f1cf8641fbe8a3af68b081d56363f932fbf4c71fe96614697dcc27b2e8541f",
+    "editable_blender": "exports/corporate_cantilever_editable.blend",
+    "editable_blender_sha256": "4b27bf6ca3aad5641fd9ca4844fb79362fdfe3e6fac56cd7867289eea0abd0d5",
+    "note": "Original exterior GLB, Blender, module and LOD exports remain revision 3. Their old final_* captures are historical; revision 4 uses a new shell and Godot architecture."
+  },
+  "meshy": {
+    "source": "Meshy workspace, user account already signed in",
+    "model": "Meshy 7.1 Flagship",
+    "generated_components": [
+      "office bay",
+      "entrance pavilion"
+    ],
+    "settings_observed": "High Detail; Ultra 2K geometry; 4K textures; Image Enhancement off; Private",
+    "credits_before_observed": 829,
+    "credits_after_observed": 759,
+    "observed_cost": 70,
+    "remesh_settings": "30K Triangle fixed; displayed remesh cost 0",
+    "job_ids": null,
+    "job_id_note": "No explicit job/task identifiers in exported GLB metadata; not inferred from filenames",
+    "proof": "evidence/meshy_completed_modules.png",
+    "office_original_download": "Meshy_AI_Modern_Office_Cube_1025143639_texture.glb",
+    "office_remesh_download": "Meshy_AI_Modern_Office_Cube_1025144418_texture.glb",
+    "entrance_original_download": "Meshy_AI_Neon_Atrium_1025143328_texture.glb",
+    "entrance_remesh_download": "Meshy_AI_Neon_Atrium_1025144239_texture.glb",
+    "raw_metadata": "raw/source_metadata.json",
+    "additional_revision4_credits": 0,
+    "additional_revision5_credits": 0
+  },
+  "known_limits": [
+    "Standalone prototype; not installed in the main Shinrai world",
+    "Human playtesting, AI navigation, vehicle driving and FPS acceptance are not established",
+    "Police upper offices and twelve context buildings are exterior shells",
+    "Parked vehicles and EV chargers are static props; no traffic/police/charging simulation",
+    "District facades and vehicles are simplified geometry; tower generated texture irregularities remain",
+    "Some night interior ceiling lights produce visible bright pools",
+    "The GLB alone contains the tower shell; full neighbourhood uses the Godot project and companion scripts/scenes"
+  ],
+  "files": [
+    {
+      "file": "README.txt",
+      "bytes": 8215,
+      "sha256": "a49901f419caefdd83cc5ec1e8c21f0b2aff3a5af88436bcc2d14b90139f2e94"
+    },
+    {
+      "file": "STATUS.txt",
+      "bytes": 2915,
+      "sha256": "da5cf4c883b13a88ffa0a7da62f660f69d936d2689d0c91460adfd6a286e81de"
+    },
+    {
+      "file": "build_traversal_shell.py",
+      "bytes": 4917,
+      "sha256": "091f6cd5af89fd7b93268df7d9745dd30be984c332110a1a11daba2820ad384a"
+    },
+    {
+      "file": "evidence/district_capture_runs.json",
+      "bytes": 24854,
+      "sha256": "f9a163e10e7b5d73e0d5a86ddafe91f773eae57c97dcae295f52f5bbc6123e71"
+    },
+    {
+      "file": "evidence/district_elevator.json",
+      "bytes": 9619,
+      "sha256": "320e22117b6dd1b864190e81d7e66e162f6db7c937b578eaaf6ea3f79b95dc65"
+    },
+    {
+      "file": "evidence/district_elevator.log",
+      "bytes": 8497,
+      "sha256": "c99f5cf83e1b37fcb229eb3737976baf14a64a129645e22cc8d45fa29df92469"
+    },
+    {
+      "file": "evidence/district_ladder.json",
+      "bytes": 2999,
+      "sha256": "d246594428c7d0279ec5bafb6f819c24bf3df82806b3cceab0206845803225df"
+    },
+    {
+      "file": "evidence/district_ladder.log",
+      "bytes": 3388,
+      "sha256": "6661d3c1d0a9ecc247c79ba7ed5c8f6e8b84b4daf83ef2d96ed56682ad890fc6"
+    },
+    {
+      "file": "evidence/district_runtime_audit.json",
+      "bytes": 2015,
+      "sha256": "4e9198cb6037eb4e66ebaa005cd62aa9e482ebc482a6c26cd50dfe0e3bb68038"
+    },
+    {
+      "file": "evidence/district_runtime_audit.log",
+      "bytes": 842,
+      "sha256": "d3015609984c746e1fac72db27e0c92a468f223082979a46ec9a84a564b4be53"
+    },
+    {
+      "file": "evidence/district_tower_traversal.json",
+      "bytes": 51332,
+      "sha256": "d751e42d3a8be834d586652daee20428f967a4e17d56621fb2c2669cbbcd9d84"
+    },
+    {
+      "file": "evidence/district_tower_traversal.log",
+      "bytes": 34281,
+      "sha256": "0e07e4240cf117b9c0e636d38e1b6dd28e6e4f03a4c26e1421633493085e6f9a"
+    },
+    {
+      "file": "evidence/district_traversal.json",
+      "bytes": 43656,
+      "sha256": "bd9df6e8f620525788989a47db3b528f7bc894f611f5de2c1a2ffbe8c6a12c29"
+    },
+    {
+      "file": "evidence/district_traversal.log",
+      "bytes": 806,
+      "sha256": "49cd0a6b555d71e8c995c689bbb83428525b7adfb497feabb0d87b13b895206a"
+    },
+    {
+      "file": "evidence/traversal_shell.json",
+      "bytes": 2267,
+      "sha256": "d77c1f6cf1a080ac11ff18016f6597040753f39f8e2ac6dd202d82aea2b2f21a"
+    },
+    {
+      "file": "evidence/traversal_shell_glb_audit.json",
+      "bytes": 7519,
+      "sha256": "77773bbe15941814555455684aba559d63377ef09f2390ecaaf3151f10118dfa"
+    },
+    {
+      "file": "exports/corporate_cantilever_traversal.glb",
+      "bytes": 26422236,
+      "sha256": "64cb86da25afa2796a745c969b18062fcecec24e3d2dbe9fc4c8c0435f52d97b"
+    },
+    {
+      "file": "preview/Launch Neighbourhood.cmd",
+      "bytes": 715,
+      "sha256": "6989c11420ac7115831ec1f1cd2d8924d4d3905e34148b0e0e2dff97aa1ca094"
+    },
+    {
+      "file": "preview/Launch Preview.cmd",
+      "bytes": 773,
+      "sha256": "76e49121ef049974fa8ad0d2daae9d2e56dd71bd4f933015d91bab875663d4bc"
+    },
+    {
+      "file": "preview/Launch Walkthrough.cmd",
+      "bytes": 689,
+      "sha256": "8d03e2577fea316a50706d073a9c0bc50639b73961c475f2cbc4192deb4002a7"
+    },
+    {
+      "file": "preview/README.txt",
+      "bytes": 3825,
+      "sha256": "6646025761c6b1296ef63fada1752490bfeab06980d6c472df6f82477f1b4f2a"
+    },
+    {
+      "file": "preview/assets/corporate_cantilever_traversal.glb",
+      "bytes": 26422236,
+      "sha256": "64cb86da25afa2796a745c969b18062fcecec24e3d2dbe9fc4c8c0435f52d97b"
+    },
+    {
+      "file": "preview/audit_building.gd",
+      "bytes": 1774,
+      "sha256": "a28569902dfb2026853da2b1027988bb2558cbe9d32c049bd7277f2122c6bdeb"
+    },
+    {
+      "file": "preview/audit_building.gd.uid",
+      "bytes": 20,
+      "sha256": "dd30435252c90e91656da94837e50bb3e0e947e70e0f62a2473275aa8cf94ad3"
+    },
+    {
+      "file": "preview/audit_district.gd",
+      "bytes": 1778,
+      "sha256": "b6b00fdd186d5335d5301c77840e19bbadfb46b64a183d47ed7cf5aca73e3196"
+    },
+    {
+      "file": "preview/audit_imported_materials.gd",
+      "bytes": 1217,
+      "sha256": "4377703dbdf1b49e3368f258b354eec2dc7d1c7912cbaa7ed2b68479146da2cd"
+    },
+    {
+      "file": "preview/audit_imported_materials.gd.uid",
+      "bytes": 20,
+      "sha256": "4c45cc2d04e66ad6a8cf25791d93e828f28c681945c2215017db2547fef74441"
+    },
+    {
+      "file": "preview/building.tscn",
+      "bytes": 557,
+      "sha256": "844e057f06b4c0abfde552a3404ccca70d43b86349f1c339e9d37d0254f4c274"
+    },
+    {
+      "file": "preview/capture_district.ps1",
+      "bytes": 3937,
+      "sha256": "950c4425d66ac079506ba05fc1834735198809ae32b0f4058950c432b9c9dad9"
+    },
+    {
+      "file": "preview/corporate_garage.gd",
+      "bytes": 13602,
+      "sha256": "4e600e626192c08499289c87f02c4295d74b526b6393997f625896fb356d85ff"
+    },
+    {
+      "file": "preview/corporate_garage.tscn",
+      "bytes": 188,
+      "sha256": "7b58ac39c7cffd239c421a1b457742ceddd6eba474c9966767bf75227a8f0b5a"
+    },
+    {
+      "file": "preview/district.gd",
+      "bytes": 13904,
+      "sha256": "f2454df81c665d26be9e1976b9f3fa66de3f6c70e79a962e6f523789e0c8de20"
+    },
+    {
+      "file": "preview/district.tscn",
+      "bytes": 180,
+      "sha256": "a97b7b0094215daae30f8ae1a6f7ca3160986e6e7a6bb657ec6c338aa52f2305"
+    },
+    {
+      "file": "preview/district_day_overview.log",
+      "bytes": 848,
+      "sha256": "ce2fbda94e82a142c69fb159061d921469b51fbc94813eed46563952010cf224"
+    },
+    {
+      "file": "preview/district_day_overview.png",
+      "bytes": 709601,
+      "sha256": "ed16cb436257dbc7624655c89ae2f9835988fd4ec493fd9ea93b7af64f07d6ed"
+    },
+    {
+      "file": "preview/district_garage_front.log",
+      "bytes": 850,
+      "sha256": "b82fc00f528fd8041f21ebfab986e1ed118c1f54f8dd75c97295ebf08f57bcc9"
+    },
+    {
+      "file": "preview/district_garage_front.png",
+      "bytes": 816641,
+      "sha256": "1203ffb7fe4d200f8bcd33e0aabb0df01ceef391a045cc1e54f13a7d5588b951"
+    },
+    {
+      "file": "preview/district_garage_ground.log",
+      "bytes": 851,
+      "sha256": "52af820afc6141f45d40dbc0276c6df4e9f8c086c4149eba3e31acdff8c090fd"
+    },
+    {
+      "file": "preview/district_garage_ground.png",
+      "bytes": 409887,
+      "sha256": "83d9de280065db17e0e440070c03af828a0c2b1fb07e601d60db5a7f66ef2c4d"
+    },
+    {
+      "file": "preview/district_garage_middle.log",
+      "bytes": 851,
+      "sha256": "e1d9faead4c993e7fdddd35dab83e2b4d6ce8225fa386b4028ea44373cdf7197"
+    },
+    {
+      "file": "preview/district_garage_middle.png",
+      "bytes": 438913,
+      "sha256": "744c8f331bc64b36bf6403d3cfd6fb9982f2ce5be2a100958476f6363649dbac"
+    },
+    {
+      "file": "preview/district_garage_ramp.log",
+      "bytes": 847,
+      "sha256": "166174cdefef491bb91924bd3abcf00483e62b8fc8cb75f85bd1da98625fd4e9"
+    },
+    {
+      "file": "preview/district_garage_ramp.png",
+      "bytes": 815983,
+      "sha256": "16a22d78dc63472d58251a19711bf5ab396a88725aff017b2bec2a23a26ca630"
+    },
+    {
+      "file": "preview/district_garage_roof.log",
+      "bytes": 847,
+      "sha256": "1a9cb203bb9d69fa6c4764ac84588d42c99cb1c0962251018eb47710fe6ca6f5"
+    },
+    {
+      "file": "preview/district_garage_roof.png",
+      "bytes": 777047,
+      "sha256": "8bd12d9d3beaa0f1c64bc93ef4e22e5d5437cd181247707eab103d8693a52c97"
+    },
+    {
+      "file": "preview/district_geometry.gd",
+      "bytes": 6093,
+      "sha256": "b892c70df65c97e41cbc6115fbe2cca5a045f5da5d40c2fb1ace21ed4d8b1f6d"
+    },
+    {
+      "file": "preview/district_night_street.log",
+      "bytes": 850,
+      "sha256": "ad784bcd69bc8bdf5bcf0acd897a6a662b596597c64e0a106ebe52e57329691c"
+    },
+    {
+      "file": "preview/district_night_street.png",
+      "bytes": 744501,
+      "sha256": "e9b978b3a53681524c25c5d68ea6c9e6a8945c90f7bfe9d486fef3a9bf19b8c7"
+    },
+    {
+      "file": "preview/district_police_court.log",
+      "bytes": 848,
+      "sha256": "0b737033b9c6abf2c0ea1cbd6ce330f1c8a416563162a1991a855befffa94c56"
+    },
+    {
+      "file": "preview/district_police_court.png",
+      "bytes": 662408,
+      "sha256": "5d45f38a4c93f8bbcc4bd472397c3aacda36b7dd7a2437633a3e01d336d4f7b2"
+    },
+    {
+      "file": "preview/district_police_front.log",
+      "bytes": 850,
+      "sha256": "1eabd08d3f1685f4b55bcba35b67d7be7201ce481284d8e36a96bf51edc0acb4"
+    },
+    {
+      "file": "preview/district_police_front.png",
+      "bytes": 516438,
+      "sha256": "fb46c8fb39460543697b3b23c70f3c93341ae160a464452cea683e92173f270f"
+    },
+    {
+      "file": "preview/district_police_inside.log",
+      "bytes": 851,
+      "sha256": "8cdc8f8112fc7ef256eb472b767b0cd0a71b73ea25ee88babbd93a5294669081"
+    },
+    {
+      "file": "preview/district_police_inside.png",
+      "bytes": 360907,
+      "sha256": "e8fbade190004ba024668f828376d1b4fe29ea897a0874a959762c4b8ff69d6a"
+    },
+    {
+      "file": "preview/district_validation.json",
+      "bytes": 37137,
+      "sha256": "bc1d0aa35a889712b9db50363f58b8ee4b2e1cf3756851cca816119c912bd60c"
+    },
+    {
+      "file": "preview/elevator.gd",
+      "bytes": 12227,
+      "sha256": "a9c4a7784c3d7e98de650f79b60621823253a35ed74afadc116f54f645110ed6"
+    },
+    {
+      "file": "preview/elevator.gd.uid",
+      "bytes": 19,
+      "sha256": "4f3d385b71d161ca15c6f30295d436611a2a1280a76639da11014201362a304b"
+    },
+    {
+      "file": "preview/elevator.tscn",
+      "bytes": 200,
+      "sha256": "c0bc2204da76fe562fbbd30e3273ad820e3b89d292327724d396cd1671341de8"
+    },
+    {
+      "file": "preview/elevator_integration_test.gd",
+      "bytes": 12102,
+      "sha256": "ee6ab7901fcdaedaafc68028fe3b9b562ebc12df8a9a11babac8287a2420a29a"
+    },
+    {
+      "file": "preview/elevator_test.gd",
+      "bytes": 6561,
+      "sha256": "712f8766e10f5bca15a9a2d4abd3b24a79ac5c6b91e84b035305d50b58be21e5"
+    },
+    {
+      "file": "preview/elevator_test.gd.uid",
+      "bytes": 20,
+      "sha256": "7d83baee62ad1423d2c8a1ad29050fa56ddce13fa856de1af4a6cf27af591562"
+    },
+    {
+      "file": "preview/emergency_ladder.gd",
+      "bytes": 6458,
+      "sha256": "a6201266dc25774183b2785eda601bb986ed1452486d9c4c627ddb522842f650"
+    },
+    {
+      "file": "preview/emergency_ladder.gd.uid",
+      "bytes": 19,
+      "sha256": "809ea1c8e25892bd127c8169a01252a698ab48d680c5f36ef728cc371e454e5b"
+    },
+    {
+      "file": "preview/emergency_ladder.tscn",
+      "bytes": 182,
+      "sha256": "3a2fb7d1ab1866084aee4cd457c11dd3910999e13355b6567268472d28ebad16"
+    },
+    {
+      "file": "preview/lighting_rig.gd",
+      "bytes": 5162,
+      "sha256": "680e2c053f5ad1d00d4a6f9306660fa094a2bc55e8682cecf2c175e2703b70cb"
+    },
+    {
+      "file": "preview/lighting_rig.gd.uid",
+      "bytes": 20,
+      "sha256": "167751717e9664149ae15b0b9223cb8ef7d2088370641ae05270201c4680190f"
+    },
+    {
+      "file": "preview/lighting_rig.tscn",
+      "bytes": 198,
+      "sha256": "950bd5816573bd71f33fbb2043eeff7cfc709fa68ceced2d583067bd578eb3e8"
+    },
+    {
+      "file": "preview/lighting_rig_README.txt",
+      "bytes": 4504,
+      "sha256": "827a2b4ca774ad069b05df51093ec798f89cf4d9655357c5b5125fd08da23ad3"
+    },
+    {
+      "file": "preview/main.tscn",
+      "bytes": 179,
+      "sha256": "af3f6684fc5043e8aba61e2eeff87b132db4adbe1932673b6a4dc2f9fe2a97e1"
+    },
+    {
+      "file": "preview/police_station.gd",
+      "bytes": 10574,
+      "sha256": "0d88d8cbfd69de00af54a1fa029b53739db4341b083ba743eb34f83bb9e9ba41"
+    },
+    {
+      "file": "preview/police_station.tscn",
+      "bytes": 184,
+      "sha256": "fe777ed5a9e3a53c07e253ccd19cdaaf61e64a664040bc4ec9c5807f7463c5c0"
+    },
+    {
+      "file": "preview/project.godot",
+      "bytes": 767,
+      "sha256": "638c7b03be326fa8bc246e166f04adee5f35ae37e26ac3ab6b2a14a8314e22a6"
+    },
+    {
+      "file": "preview/review.gd",
+      "bytes": 24078,
+      "sha256": "2d35f14cca820646d5fd0eb17757aff8bdfbdee09087ca99f18cd0e74f31ae67"
+    },
+    {
+      "file": "preview/review.gd.uid",
+      "bytes": 20,
+      "sha256": "86fcfd9c967027b800f5141e2df27c1dcebe81b434334aee43346161665f3eb8"
+    },
+    {
+      "file": "preview/staircases.gd",
+      "bytes": 10504,
+      "sha256": "3f987bc3c8979b653233a1efc95f58af03b447c7efa3415a7022cbd6ed0429a9"
+    },
+    {
+      "file": "preview/staircases.gd.uid",
+      "bytes": 20,
+      "sha256": "3c3dd718479a044b914bce3fbc66be3b1d930e53e5b19d540a662a84f99cda8e"
+    },
+    {
+      "file": "preview/staircases.tscn",
+      "bytes": 177,
+      "sha256": "7f295674637e8f96776d3dafc51aeed8081328c22521ecaf9ced4c78bcb7b9e8"
+    },
+    {
+      "file": "preview/test_building_traversal.gd",
+      "bytes": 9502,
+      "sha256": "0b071e3d10b7407a47bd2508ba9a5f88a4d98ab44e060305c90a6a8e535395a8"
+    },
+    {
+      "file": "preview/test_district.gd",
+      "bytes": 8692,
+      "sha256": "f1c5c4be49f34ca606edebc1dd21040d5da76b342b46ff27aeabf7822952ebdd"
+    },
+    {
+      "file": "preview/test_district_elevator.gd",
+      "bytes": 12411,
+      "sha256": "934bf329860fda41d26bf941160ab33e6a30087e9acbf5a43e99999ad6db4316"
+    },
+    {
+      "file": "preview/test_district_ladder.gd",
+      "bytes": 7003,
+      "sha256": "79a177be90f6c5229649904e55176d3447ffb734fa7d1af5e2b0bcb4a93f18df"
+    },
+    {
+      "file": "preview/test_district_tower.gd",
+      "bytes": 9862,
+      "sha256": "0c1d8a0000dc75b7a0771517091ca6171b339c2ea497a4654f822688fc69bbc2"
+    },
+    {
+      "file": "preview/test_emergency_ladder.gd",
+      "bytes": 6513,
+      "sha256": "36ca81d1a2e8bc7014369608a9cb03346e6e7e62bc9f0bf2f6e63c2cee15a92d"
+    },
+    {
+      "file": "preview/test_staircases.gd",
+      "bytes": 5304,
+      "sha256": "2cd7ee777a10a6e53893be9cefed1fb24061630409a8e719ccab645eada9c34e"
+    },
+    {
+      "file": "preview/test_staircases.gd.uid",
+      "bytes": 19,
+      "sha256": "310f250773e0d0491c24d47c308c0467b697b8e48775863fd592e985a4414286"
+    },
+    {
+      "file": "preview/traversal.gd",
+      "bytes": 10849,
+      "sha256": "c71813cce184ff795d2029a05fff184bdf54db1beff46e54d24eeee9459071d5"
+    },
+    {
+      "file": "preview/traversal.gd.uid",
+      "bytes": 20,
+      "sha256": "d70d142a0d175e8bb421b68b460f77190ceaea4720225228d948da9c69e64485"
+    },
+    {
+      "file": "preview/traversal.tscn",
+      "bytes": 155,
+      "sha256": "24c12f5b33c83ad4366f82f497bf31a029c9b7e9254b254c5cab8de647f78028"
+    },
+    {
+      "file": "preview/traversal_layout.gd",
+      "bytes": 622,
+      "sha256": "9e48b9f6c8e45f59fd1507381b7bab11c2412e66906b97c65ffd3548d920ff9e"
+    },
+    {
+      "file": "preview/traversal_layout.gd.uid",
+      "bytes": 20,
+      "sha256": "65fdf45a2416f1664d3d7487d02ad82b3a3af9ad5a3f6c3f164e27c46e106fd6"
+    },
+    {
+      "file": "preview/wet_paving.gdshader",
+      "bytes": 1513,
+      "sha256": "9975cbae89e0d731eeada25269fff65e1bc6da30e6f52c118ab68805b94c1923"
+    },
+    {
+      "file": "preview/wet_paving.gdshader.uid",
+      "bytes": 20,
+      "sha256": "01722cdbd853df66b98c867f78bcaba5cbfc9a51bb5355af038c78126ca34842"
+    },
+    {
+      "file": "raw/source_metadata.json",
+      "bytes": 17418,
+      "sha256": "9127b083e6c3a5b63a1a1206bfa9672f8bcef1c0e9f019f26edea409608a9e4e"
+    },
+    {
+      "file": "reference/approved_cantilever_v3.png",
+      "bytes": 2658446,
+      "sha256": "bf48911b2e60febcb8f4c8861dc7f5c49ca8aee7beea2d128fd2b6a71a08b68a"
+    },
+    {
+      "file": "reference/prompts.txt",
+      "bytes": 4389,
+      "sha256": "c3d55d741a44b2d6b4fd18fac4796250d6db2f7a51cbd0d63607cd586d7662d6"
+    },
+    {
+      "file": "refresh_district_provenance.py",
+      "bytes": 7352,
+      "sha256": "aa070b3f01d5152f6879805ebec66ef1840542f82e1d71946412ea9746cdc5bf"
+    },
+    {
+      "file": "refresh_provenance.py",
+      "bytes": 4033,
+      "sha256": "cc03b48b28d9909712a3ac691a275274d6d8bae1162c10ab7828280f4122c253"
+    },
+    {
+      "file": "refresh_traversal_provenance.py",
+      "bytes": 8786,
+      "sha256": "63f9dc023ad19e1bf301b626831b2d9aece55ae2bb6a11b13a986414f212cb49"
+    },
+    {
+      "file": "revision_v4/PROVENANCE.json",
+      "bytes": 18736,
+      "sha256": "ed5600475366eaf6dc4c44848227f131cb1153a63cc6b204abcdbb86f456d21c"
+    },
+    {
+      "file": "revision_v4/SNAPSHOT_MANIFEST.json",
+      "bytes": 14004,
+      "sha256": "75c73daa0b82505173df541042e3c55a2ee288094c25b9e601f3aad7a24e30a3"
+    }
+  ],
+  "scene_assembly": "preview/main.tscn with --district; review instantiates building.tscn and district.tscn at the same origin",
+  "placement": {
+    "tower_origin": [
+      0,
+      0,
+      0
+    ],
+    "police_centre": [
+      -83,
+      0,
+      0
+    ],
+    "garage_centre": [
+      83,
+      0,
+      0
+    ],
+    "walkable_ground_metres": [
+      320,
+      280
+    ],
+    "public_spine_z": 34
+  },
+  "functional_baseline": {
+    "revision": 4,
+    "provenance": "revision_v4/PROVENANCE.json",
+    "snapshot": "revision_v4/SNAPSHOT_MANIFEST.json",
+    "note": "Tower geometry and lift/stair/ladder sources retained; viewer gains optional district loading and overview."
+  }
+}

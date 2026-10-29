@@ -1,0 +1,67 @@
+{
+  "mikan": {
+    "sha256": "0FF48F902AEE3ADAA42A8DA4E2D21D50EA747E69346C982204CE270502767607",
+    "bytes": 1654236,
+    "triangles": 3101,
+    "gltf_vertices_including_uv_seams": 5446,
+    "actual_referenced_godot_bounds": [
+      [
+        -0.03696998581290245,
+        -0.02765722945332527,
+        -0.03749999776482582
+      ],
+      [
+        0.03696998953819275,
+        0.02765722945332527,
+        0.03749999776482582
+      ]
+    ],
+    "texture_sha256": [
+      "B89B74D26233689A605EED8495BD75FD4E2A8206BEB3FA99F230304818CB8BFE",
+      "77D6F340113FC97D8479B3859101EB1B4213B6D7B210F4FA3D8EC8A15FC0CECD"
+    ],
+    "texture_bytes_identical_to_source": true,
+    "max_normal_delta_at_same_position": 0.0,
+    "mesh_count": 1,
+    "nodes": [
+      {
+        "mesh": 0,
+        "name": "MikanMandarin"
+      }
+    ],
+    "finite_position_uv_unit_normal_checks": true
+  },
+  "kaki": {
+    "sha256": "D692D09D7B5C8E13AFA6E24B0E9F9BD4A387A7F58422042183FC65A10A5E87C3",
+    "bytes": 3127940,
+    "triangles": 9609,
+    "gltf_vertices_including_uv_seams": 15317,
+    "actual_referenced_godot_bounds": [
+      [
+        -0.04500000178813934,
+        -0.054938092827796936,
+        -0.04191224277019501
+      ],
+      [
+        0.04500000178813934,
+        0.054938092827796936,
+        0.04191224277019501
+      ]
+    ],
+    "texture_sha256": [
+      "70881281699B7B2E850EDEFDC2C8E9EDC61CFE23394E67FED25FDD642416AAE6",
+      "11BEA08AF28665CDD69B6202D154F16B6EFF70EEC822214DFAB9CB6D813F26B7",
+      "F8D6A0E9A827EF7883A9CD741701EA638F6E0E500A4DF2E405233260C419823F"
+    ],
+    "texture_bytes_identical_to_source": true,
+    "max_normal_delta_at_same_position": 0.0,
+    "mesh_count": 1,
+    "nodes": [
+      {
+        "mesh": 0,
+        "name": "KakiPersimmon"
+      }
+    ],
+    "finite_position_uv_unit_normal_checks": true
+  }
+}

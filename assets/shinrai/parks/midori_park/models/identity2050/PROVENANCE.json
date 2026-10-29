@@ -1,0 +1,195 @@
+{
+  "title": "Midori Park 2050 identity assets",
+  "date": "2026-10-16",
+  "scene_owner": "01a13c7d-06a4-7132-ba89-e8a43d0d1d89",
+  "helper_owner": "01a143af-ffc4-7781-aa7a-06eb43691a2e",
+  "method": "Built-in ImageGen isolated bitmap references; actual Meshy generation/remesh/export; non-destructive Blender derivatives; native Godot context review",
+  "generation_credits": {
+    "main": 105,
+    "helper": 70,
+    "purchases": 0,
+    "remesh_displayed_cost": 0,
+    "note": "Existing account credits only; no authentication codes entered."
+  },
+  "assets": [
+    {
+      "asset": "midori_2050_leaf_canopy.glb",
+      "provider": "Meshy",
+      "generation": "7.1 Flagship; Image to 3D; Ultra 2K; Texture ON; Enhancement OFF; Private",
+      "raw_export": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\canopy\\raw\\Meshy_AI_Solar_Arbor_Canopy_1016080049_texture.glb",
+        "sha256": "6664C4B221A1CFBD8350A7A0F79A606333CF4D4C2F02D43C7C4D3511C6E303B6"
+      },
+      "normalized_derivative": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\processed\\canopy\\v5\\midori_2050_leaf_canopy.glb",
+        "sha256": "922A9126DCF20D1A2FCA9356D53792D3A3A496EBA52439919E8A0B4295ECAC56"
+      },
+      "processing_report": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\processed\\canopy\\v5\\asset_report.json",
+        "sha256": "D338D208730F4EA641B96E83CBBBE08629C7F88BC3A57AE2F34944F4D53DB0CA"
+      },
+      "image_reference": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\canopy\\reference.png",
+        "sha256": "A707D4E468DD1EF87EC772D0BBECDA3D9488C70C9C09AD4255B9AA76C8B3BF67"
+      },
+      "full_imagegen_prompt": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\canopy\\reference_prompt.txt",
+        "sha256": "1EB1511D64F10B26654E25D727828CF2E3B0DBF9B47B37E4054464D28D0F0BB1"
+      },
+      "dimensions_xyz_m": [
+        9.800000190734863,
+        4.199999809265137,
+        5.0
+      ],
+      "normalized_triangles": 28668,
+      "local_roof_repair": {
+        "released_glb": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\canopy_repair\\candidate_v5\\midori2050_canopy_repaired.glb",
+        "sha256": "36884081751136665ED6DAB00FF57ACCAB3CAC3E53289EF76225DC8FF18F2D2F",
+        "provenance": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\canopy_repair\\PROVENANCE.json",
+        "provenance_sha256": "3ADEB866C2521D1D2285DB4A41F660EC597118D302C1682D84A9986B57EEB6E3",
+        "isolated_qa": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\canopy_repair\\qa\\RESULT.json",
+        "isolated_qa_sha256": "B5A31C2A721F8736BDC67CBC1BE4C1A433F48F40E960653BB15BCE6B952EBA38",
+        "checks": 97,
+        "source_preserved": true,
+        "geometry": "34 local patches, 29962 triangles, unchanged dimensions and steel shoe",
+        "limits": "Tiny original rim/column slivers and surface creases remain. Native park context review follows."
+      },
+      "installed_sha256": "36884081751136665ED6DAB00FF57ACCAB3CAC3E53289EF76225DC8FF18F2D2F",
+      "installed_triangles": 29962,
+      "installed_materials": 3
+    },
+    {
+      "asset": "midori_2050_timber_bench.glb",
+      "provider": "Meshy",
+      "generation": "7.1 Flagship; Image to 3D; Ultra 2K; Texture ON; Enhancement OFF; Private",
+      "raw_export": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\bench\\raw\\Meshy_AI_Urban_Glow_Bench_1016081136_texture.glb",
+        "sha256": "7224FBD16E7913841515DCED88A7D719E55024392CC5FEBD9367BEB206A21A3F"
+      },
+      "normalized_derivative": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\processed\\bench\\v3\\midori_2050_timber_bench.glb",
+        "sha256": "13CC638E1C5B067CC374F731EDAB40922DB2C52CEBB09590A4035F1A5DB9CA1F"
+      },
+      "processing_report": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\processed\\bench\\v3\\asset_report.json",
+        "sha256": "623F2081964EF495A1207C6F7D104F309BBA601C6BB9D8EE794896409306FFF4"
+      },
+      "image_reference": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\bench\\reference.png",
+        "sha256": "ED8911C09AE16E6FBD875A0466C03FEF4C3E3996D40A7A31308BEFC71739DF6F"
+      },
+      "full_imagegen_prompt": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\bench\\reference_prompt.txt",
+        "sha256": "7FE029E1CE24EA330A0338A2205B710F631D987C1C579075B0CF4094FA8E8F1D"
+      },
+      "dimensions_xyz_m": [
+        2.25,
+        0.9800000190734863,
+        0.8097800612449646
+      ],
+      "normalized_triangles": 8784,
+      "installed_sha256": "13CC638E1C5B067CC374F731EDAB40922DB2C52CEBB09590A4035F1A5DB9CA1F",
+      "installed_triangles": 8784,
+      "installed_materials": 1
+    },
+    {
+      "asset": "midori_2050_iris_clump.glb",
+      "provider": "Meshy",
+      "generation": "7.1 Flagship; Image to 3D; Ultra 2K; Texture ON; Enhancement OFF; Private",
+      "raw_export": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\flowers\\raw\\Meshy_AI_Lavender_Iris_Bloom_1016083800_texture.glb",
+        "sha256": "9F41E26A986A90139ADAC47B99A4E9262F1A56F3C9BBD6A888F903B97B5E1E0A"
+      },
+      "normalized_derivative": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\processed\\flowers\\v1\\midori_2050_iris_clump.glb",
+        "sha256": "945419D63031CD84ED1C3169BCCB965AD26AD92AFEAFF56C5B650FC926358D39"
+      },
+      "processing_report": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\processed\\flowers\\v1\\asset_report.json",
+        "sha256": "BB385B0AB557BC474CBC23814B004AD1EDA337ADE0BF42BCC725D60111ADBE09"
+      },
+      "image_reference": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\flowers\\reference.png",
+        "sha256": "D03465A639CFC5CE2B40EA1C3478DE080A6AA832FD2B2CE957621EE7BE3E5F5A"
+      },
+      "full_imagegen_prompt": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_2050_20261016\\meshy\\flowers\\reference_prompt.txt",
+        "sha256": "E68AB2A42F8DE133475BE624AD1B34EC9D658A13FAEB16E37FB5F163AE356356"
+      },
+      "dimensions_xyz_m": [
+        0.6499999761581421,
+        0.6499999761581421,
+        0.550000011920929
+      ],
+      "normalized_triangles": 6865,
+      "installed_sha256": "945419D63031CD84ED1C3169BCCB965AD26AD92AFEAFF56C5B650FC926358D39",
+      "installed_triangles": 6865,
+      "installed_materials": 1
+    },
+    {
+      "asset": "midori_2050_planter.glb",
+      "provider": "Meshy; measured local derivative",
+      "released_derivative": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\planter\\candidate_v4\\midori2050_planter_lod0.glb",
+        "sha256": "FE92A42DBCD64A45CA3817A5627341E1F1934EC931402FA2390EC91DA439D823"
+      },
+      "helper_provenance": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\PROVENANCE.json",
+        "sha256": "6DFD64780BB7D8A1B54DBE3634D499310F374EC5B12A3C2A663CABD2BA5A185F"
+      },
+      "preparation_report": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\planter\\candidate_v4\\PREPARATION_REPORT.json",
+        "sha256": "73D8D928595571C52D43CB8889655B5EF3E696AACEF799F07122255C2F96A21C"
+      },
+      "installed_sha256": "FE92A42DBCD64A45CA3817A5627341E1F1934EC931402FA2390EC91DA439D823",
+      "installed_triangles": 2736,
+      "installed_materials": 2
+    },
+    {
+      "asset": "midori_2050_totem.glb",
+      "provider": "Meshy; measured local derivative",
+      "released_derivative": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\totem\\candidate_v6\\midori2050_totem_lod0.glb",
+        "sha256": "DB271201AEE1AA3791F223D9CECCEB30A42AAD3202574005E33A1362B7D575B1"
+      },
+      "helper_provenance": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\PROVENANCE.json",
+        "sha256": "6DFD64780BB7D8A1B54DBE3634D499310F374EC5B12A3C2A663CABD2BA5A185F"
+      },
+      "preparation_report": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\totem\\candidate_v6\\PREPARATION_REPORT.json",
+        "sha256": "457F301323CF0E7B45BF268BDA1FDDB591AB9F190C1BF46FD3A04E2A8C9FDEEC"
+      },
+      "installed_sha256": "DB271201AEE1AA3791F223D9CECCEB30A42AAD3202574005E33A1362B7D575B1",
+      "installed_triangles": 3973,
+      "installed_materials": 3
+    },
+    {
+      "asset": "midori_2050_rear_planter.glb",
+      "provider": "Meshy; measured local derivative",
+      "released_derivative": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\rear_planter\\candidate_v2\\midori2050_rear_planter_lod0.glb",
+        "sha256": "EFD7DF7C246FF44DFFD585DB59E6440702AA03184C4153FA89CC9B2A85B8E38A"
+      },
+      "helper_provenance": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\PROVENANCE.json",
+        "sha256": "6DFD64780BB7D8A1B54DBE3634D499310F374EC5B12A3C2A663CABD2BA5A185F"
+      },
+      "preparation_report": {
+        "path": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\meshy_asset_supply\\midori2050_helper_20261016\\rear_planter\\candidate_v2\\PREPARATION_REPORT.json",
+        "sha256": "0A1FECCC65B80575504C1AED4A92912170042DE2A7DEA41189ABE477F583EF3A"
+      },
+      "installed_sha256": "EFD7DF7C246FF44DFFD585DB59E6440702AA03184C4153FA89CC9B2A85B8E38A",
+      "installed_triangles": 771,
+      "installed_materials": 2
+    }
+  ],
+  "runtime_contract": {
+    "axes": "metres, Godot Y up, bottom-centred, front +Z",
+    "planter_light": "Override only named diffuser surface 0, never the shared soil material",
+    "totem": "MidoriEInkPanel surface 0 receives map derived from deployed route constants and lake contour; separate real lettering",
+    "collision": "Authored measured bench/planter/totem solids, column capsule and overhead roof hull; no imported embedded physics",
+    "planting": "Large .555-.685m iris clumps, bounded per-pocket MultiMeshes",
+    "preservation": "Original exports, references, prompts and editable helper sources remain at the listed staging paths"
+  }
+}

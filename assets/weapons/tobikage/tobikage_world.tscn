@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/weapons/tobikage/tobikage_weapon.tscn" id="1"]
+
+[node name="TobikageWorld" type="Node3D"]
+metadata/weapon_id = "tobikage"
+metadata/world_forward_axis = "-X"
+
+[node name="Weapon" parent="." instance=ExtResource("1")]

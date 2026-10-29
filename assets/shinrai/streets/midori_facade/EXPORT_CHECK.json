@@ -1,0 +1,16 @@
+{
+  "ac_condenser.glb": {
+    "bytes": 55168,
+    "triangles": 928,
+    "surfaces": 3,
+    "materials": 3,
+    "images": 0
+  },
+  "shop_lantern.glb": {
+    "bytes": 39880,
+    "triangles": 768,
+    "surfaces": 3,
+    "materials": 3,
+    "images": 0
+  }
+}

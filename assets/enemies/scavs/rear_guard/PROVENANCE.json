@@ -1,0 +1,49 @@
+{
+  "role": "rear_guard",
+  "name": "Rugged Sentinel",
+  "provider": "Meshy",
+  "state": "exported_and_rig_validated",
+  "source_texture_task": "01a16b63-8afe-7076-b1b3-f59fe0286c9a",
+  "game_remesh_task": "01a16b67-c171-7485-a4c0-26c3a90e3418",
+  "rig_task": "01a16b76-c6ff-7676-ace0-f8f200b99725",
+  "generation": {
+    "engine": "Meshy 7.1 Flagship",
+    "input": "single image",
+    "pose": "A-Pose",
+    "high_detail": true,
+    "texture": "4K",
+    "image_enhancement": false,
+    "private": true,
+    "cost_credits": 35
+  },
+  "remesh": {
+    "target_triangles": 60000,
+    "topology": "triangle",
+    "cost_credits": 0
+  },
+  "rig": {
+    "type": "Humanoid",
+    "height_m": 1.75,
+    "export_skeleton": "Mixamo",
+    "embedded_mesh": true,
+    "all_added_motions_single_file": true
+  },
+  "direction": "Knitted balaclava, navy workwear, green vest/backpack, anatomical left cybernetic shin.",
+  "reference_concept_sha256": "8FFA050AF84BA2819ADCA495A16F942A7B6F180DDD050AFB66289C2DB3A70717",
+  "files": {
+    "original_meshy_animated.glb": {
+      "sha256": "A92C1EC83635C6C135CAA3115D6221CDF1D4D76AD3F016A65EC2BF20F9A4C0D7",
+      "bytes": 60737540
+    },
+    "original_meshy_game.glb": {
+      "sha256": "F59E768328798124D670E8B21BA28426F9D8ECE29078E62B44C5E21A7A9E57F8",
+      "bytes": 57182980
+    },
+    "original_meshy_high.glb": {
+      "sha256": "5DF1A73B17E7CB1F08ED026218C47F39171AE284B566C68E2F475308509BC564",
+      "bytes": 66398324
+    }
+  },
+  "reference_apose_sha256": "8F8DDE957BD942A46D437E1FE06772E34EC9169DC6D9FE4952228676F2487F38",
+  "evidence": "Generative first pass. Original high detail and remeshed sources retained for later clothing/face corrections. No claim of exact concept identity."
+}

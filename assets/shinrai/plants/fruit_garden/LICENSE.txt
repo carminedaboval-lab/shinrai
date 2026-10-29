@@ -1,0 +1,5 @@
+FRUIT: Mikan mandarin and kaki persimmon scans by ffish.asia / floraZia.com, CC0 1.0 Universal Public Domain: https://creativecommons.org/publicdomain/zero/1.0/ . See PROVENANCE.json.
+PLANTS: Lemon Trees by Jagobo, https://sketchfab.com/3d-models/lemon-trees-7ddb656429914056a1f2870ed7792e6a , CC BY4.0 https://creativecommons.org/licenses/by/4.0/ . Selected freestanding citrus, original lemons removed, scaled and branch sockets added for harvested mikan.
+Blender柿树(Diospyros Kaki) by UESReseach, https://sketchfab.com/3d-models/blenderdiospyros-kaki-d0f0a39fafca4adaad7736bbd501aa2e , CC BY4.0 https://creativecommons.org/licenses/by/4.0/ . Whole botanical plant normalized for a garden, selected branch points for scanned fruit.
+Source models and textures remain credited to their authors. Geometry/scale/socket adaptations and fruit reduction by the Shinrai project. Original downloads preserved in staging.
+See PLANT_PROVENANCE.json and receipts for derivative details.

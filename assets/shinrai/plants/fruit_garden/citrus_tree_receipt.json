@@ -1,0 +1,573 @@
+{
+  "variant": "source .004 freestanding citrus; no pot",
+  "source_bark_node": "structure.004_430",
+  "source_foliage_node": "foliage.004_428",
+  "omitted_existing_yellow_fruit_node": "fruit.004_429",
+  "triangles": 6914,
+  "sockets": [
+    {
+      "name": "FruitSocket_0",
+      "godot_position": [
+        -0.9271363019943237,
+        1.1956006288528442,
+        -0.33754730224609375
+      ],
+      "blender_position": [
+        -0.9271363019943237,
+        0.33754730224609375,
+        1.1956006288528442
+      ],
+      "actual_source_bark_vertex": 1951,
+      "distance_to_authored_lemon_top_m": 0.009511482901871204,
+      "source_lemon_center_godot": [
+        -0.9178287982940674,
+        1.1593067646026611,
+        -0.33692026138305664
+      ]
+    },
+    {
+      "name": "FruitSocket_1",
+      "godot_position": [
+        -0.8086035847663879,
+        0.9209511280059814,
+        0.10516548156738281
+      ],
+      "blender_position": [
+        -0.8086035847663879,
+        -0.10516548156738281,
+        0.9209511280059814
+      ],
+      "actual_source_bark_vertex": 6142,
+      "distance_to_authored_lemon_top_m": 0.008719072677195072,
+      "source_lemon_center_godot": [
+        -0.8050915598869324,
+        0.8831115961074829,
+        0.11207008361816406
+      ]
+    },
+    {
+      "name": "FruitSocket_2",
+      "godot_position": [
+        -0.6733580827713013,
+        0.9348350167274475,
+        -0.4254322052001953
+      ],
+      "blender_position": [
+        -0.6733580827713013,
+        0.4254322052001953,
+        0.9348350167274475
+      ],
+      "actual_source_bark_vertex": 4019,
+      "distance_to_authored_lemon_top_m": 0.020063072443008423,
+      "source_lemon_center_godot": [
+        -0.6884374618530273,
+        0.907163143157959,
+        -0.4129824638366699
+      ]
+    },
+    {
+      "name": "FruitSocket_3",
+      "godot_position": [
+        -0.49826502799987793,
+        1.4002989530563354,
+        0.4597930908203125
+      ],
+      "blender_position": [
+        -0.49826502799987793,
+        -0.4597930908203125,
+        1.4002989530563354
+      ],
+      "actual_source_bark_vertex": 3570,
+      "distance_to_authored_lemon_top_m": 0.010514719411730766,
+      "source_lemon_center_godot": [
+        -0.49180591106414795,
+        1.363893985748291,
+        0.45190906524658203
+      ]
+    },
+    {
+      "name": "FruitSocket_4",
+      "godot_position": [
+        -0.37714841961860657,
+        1.4020707607269287,
+        -0.21548938751220703
+      ],
+      "blender_position": [
+        -0.37714841961860657,
+        0.21548938751220703,
+        1.4020707607269287
+      ],
+      "actual_source_bark_vertex": 3888,
+      "distance_to_authored_lemon_top_m": 0.010254964232444763,
+      "source_lemon_center_godot": [
+        -0.3742082118988037,
+        1.3741962909698486,
+        -0.20568561553955078
+      ]
+    },
+    {
+      "name": "FruitSocket_5",
+      "godot_position": [
+        0.011698885820806026,
+        1.3021810054779053,
+        0.6508016586303711
+      ],
+      "blender_position": [
+        0.011698885820806026,
+        -0.6508016586303711,
+        1.3021810054779053
+      ],
+      "actual_source_bark_vertex": 3728,
+      "distance_to_authored_lemon_top_m": 0.011640033684670925,
+      "source_lemon_center_godot": [
+        0.009665356017649174,
+        1.264906883239746,
+        0.6413693428039551
+      ]
+    }
+  ],
+  "all_attachment_candidates": [
+    {
+      "godot_position": [
+        0.647689163684845,
+        1.4807080030441284,
+        -0.0908823013305664
+      ],
+      "distance_to_authored_lemon_top_m": 0.011017701588571072
+    },
+    {
+      "godot_position": [
+        0.6570108532905579,
+        1.5050582885742188,
+        -0.0797872543334961
+      ],
+      "distance_to_authored_lemon_top_m": 0.009732591919600964
+    },
+    {
+      "godot_position": [
+        0.6572874784469604,
+        1.5068373680114746,
+        -0.0841836929321289
+      ],
+      "distance_to_authored_lemon_top_m": 0.007586004212498665
+    },
+    {
+      "godot_position": [
+        -0.9005133509635925,
+        1.1895939111709595,
+        -0.33147621154785156
+      ],
+      "distance_to_authored_lemon_top_m": 0.016409840434789658
+    },
+    {
+      "godot_position": [
+        -0.9015513062477112,
+        1.1921436786651611,
+        -0.33089351654052734
+      ],
+      "distance_to_authored_lemon_top_m": 0.015591203235089779
+    },
+    {
+      "godot_position": [
+        -0.9271363019943237,
+        1.1956006288528442,
+        -0.33754730224609375
+      ],
+      "distance_to_authored_lemon_top_m": 0.009511482901871204
+    },
+    {
+      "godot_position": [
+        0.4440551698207855,
+        1.3272607326507568,
+        0.48238468170166016
+      ],
+      "distance_to_authored_lemon_top_m": 0.007207304704934359
+    },
+    {
+      "godot_position": [
+        0.4587487280368805,
+        1.3500702381134033,
+        0.4908332824707031
+      ],
+      "distance_to_authored_lemon_top_m": 0.0170462466776371
+    },
+    {
+      "godot_position": [
+        0.4582352042198181,
+        1.348016381263733,
+        0.49297332763671875
+      ],
+      "distance_to_authored_lemon_top_m": 0.00631475355476141
+    },
+    {
+      "godot_position": [
+        0.9022125005722046,
+        0.9058245420455933,
+        -0.08233356475830078
+      ],
+      "distance_to_authored_lemon_top_m": 0.01724274642765522
+    },
+    {
+      "godot_position": [
+        0.9255034923553467,
+        0.9130717515945435,
+        -0.0690927505493164
+      ],
+      "distance_to_authored_lemon_top_m": 0.017873244360089302
+    },
+    {
+      "godot_position": [
+        0.9251442551612854,
+        0.9108315110206604,
+        -0.06717300415039062
+      ],
+      "distance_to_authored_lemon_top_m": 0.009249054826796055
+    },
+    {
+      "godot_position": [
+        0.09952802211046219,
+        1.5898181200027466,
+        -0.638524055480957
+      ],
+      "distance_to_authored_lemon_top_m": 0.013049128465354443
+    },
+    {
+      "godot_position": [
+        0.10256264358758926,
+        1.6151865720748901,
+        -0.6626625061035156
+      ],
+      "distance_to_authored_lemon_top_m": 0.013313855044543743
+    },
+    {
+      "godot_position": [
+        0.10256264358758926,
+        1.6151865720748901,
+        -0.6626625061035156
+      ],
+      "distance_to_authored_lemon_top_m": 0.008124763146042824
+    },
+    {
+      "godot_position": [
+        -0.7870754599571228,
+        0.9055573344230652,
+        0.09930229187011719
+      ],
+      "distance_to_authored_lemon_top_m": 0.015447748824954033
+    },
+    {
+      "godot_position": [
+        -0.8086035847663879,
+        0.9209511280059814,
+        0.10516548156738281
+      ],
+      "distance_to_authored_lemon_top_m": 0.019427962601184845
+    },
+    {
+      "godot_position": [
+        -0.8086035847663879,
+        0.9209511280059814,
+        0.10516548156738281
+      ],
+      "distance_to_authored_lemon_top_m": 0.008719072677195072
+    },
+    {
+      "godot_position": [
+        0.08548640459775925,
+        1.2581716775894165,
+        -0.48238277435302734
+      ],
+      "distance_to_authored_lemon_top_m": 0.010308281518518925
+    },
+    {
+      "godot_position": [
+        0.08319543302059174,
+        1.2622599601745605,
+        -0.4800291061401367
+      ],
+      "distance_to_authored_lemon_top_m": 0.010499333031475544
+    },
+    {
+      "godot_position": [
+        0.0747789815068245,
+        1.2621815204620361,
+        -0.5075578689575195
+      ],
+      "distance_to_authored_lemon_top_m": 0.00982244499027729
+    },
+    {
+      "godot_position": [
+        -0.48060882091522217,
+        1.3999181985855103,
+        0.4373197555541992
+      ],
+      "distance_to_authored_lemon_top_m": 0.016269654035568237
+    },
+    {
+      "godot_position": [
+        -0.4818205237388611,
+        1.4020434617996216,
+        0.4383869171142578
+      ],
+      "distance_to_authored_lemon_top_m": 0.008250744082033634
+    },
+    {
+      "godot_position": [
+        -0.49826502799987793,
+        1.4002989530563354,
+        0.4597930908203125
+      ],
+      "distance_to_authored_lemon_top_m": 0.010514719411730766
+    },
+    {
+      "godot_position": [
+        0.01960476115345955,
+        1.288684606552124,
+        0.6268167495727539
+      ],
+      "distance_to_authored_lemon_top_m": 0.00984257087111473
+    },
+    {
+      "godot_position": [
+        0.02234405279159546,
+        1.293116569519043,
+        0.6266422271728516
+      ],
+      "distance_to_authored_lemon_top_m": 0.011801325716078281
+    },
+    {
+      "godot_position": [
+        0.011698885820806026,
+        1.3021810054779053,
+        0.6508016586303711
+      ],
+      "distance_to_authored_lemon_top_m": 0.011640033684670925
+    },
+    {
+      "godot_position": [
+        -0.37714841961860657,
+        1.4020707607269287,
+        -0.21548938751220703
+      ],
+      "distance_to_authored_lemon_top_m": 0.010254964232444763
+    },
+    {
+      "godot_position": [
+        -0.3702268898487091,
+        1.4267550706863403,
+        -0.2052898406982422
+      ],
+      "distance_to_authored_lemon_top_m": 0.009899752214550972
+    },
+    {
+      "godot_position": [
+        -0.3731314539909363,
+        1.4272685050964355,
+        -0.20845603942871094
+      ],
+      "distance_to_authored_lemon_top_m": 0.009312822483479977
+    },
+    {
+      "godot_position": [
+        -0.6685323119163513,
+        0.9462110996246338,
+        -0.4000530242919922
+      ],
+      "distance_to_authored_lemon_top_m": 0.025252554565668106
+    },
+    {
+      "godot_position": [
+        -0.6733580827713013,
+        0.9348350167274475,
+        -0.4254322052001953
+      ],
+      "distance_to_authored_lemon_top_m": 0.020063072443008423
+    },
+    {
+      "godot_position": [
+        -0.6685323119163513,
+        0.9462110996246338,
+        -0.4000530242919922
+      ],
+      "distance_to_authored_lemon_top_m": 0.014706981368362904
+    }
+  ],
+  "normalization": {
+    "source_world_ground_center_blender": [
+      -0.0534282922744751,
+      -17.64836883544922,
+      -0.31543710827827454
+    ],
+    "uniform_scale": 0.5001783485368213,
+    "height_m": 2.2,
+    "axis": "Blender+Z to glTF/Godot+Y"
+  },
+  "materials": "source bark and foliage PBR/opacity untouched; source yellow lemons omitted by separate mesh/material; no decimation",
+  "godot_bounds": [
+    [
+      -1.110023942037061,
+      0,
+      -0.8405559310745401
+    ],
+    [
+      1.110023942037061,
+      2.2,
+      0.8405564080817848
+    ]
+  ],
+  "sha256": "FFC5EFAFCF2FF49EEE992BEA2C670C5384B47064377EA558A579225D5F692504",
+  "bytes": 6173700,
+  "source_sha256": "6EA3365EB6494490EFF96175C3782D186E4847C1AFA40DE4996131AC165C0BD1",
+  "source_original_filename": "lemon_trees.glb",
+  "source_bytes": 92126476,
+  "license": "CC BY 4.0, Lemon Trees by Jagobo; primary source and attribution page owned by root",
+  "actual_referenced_godot_bounds": [
+    [
+      -1.1100239753723145,
+      1.4901161193847656e-08,
+      -0.8405553698539734
+    ],
+    [
+      1.110023856163025,
+      2.1999998092651367,
+      0.8405569195747375
+    ]
+  ],
+  "material_proof": [
+    {
+      "material": "bark",
+      "source_PBR_textures_bytes_and_sampler_equal": true,
+      "alphaMode": "OPAQUE",
+      "alphaCutoff": 0.5,
+      "doubleSided": true,
+      "maps": {
+        "normalTexture": {
+          "image_sha256": "E7422CF0AF37D35EC4F03FAAD713A4CE011572A8949192EF758D238ECF97BDAF",
+          "sampler": {
+            "wrapS": 10497,
+            "wrapT": 10497,
+            "magFilter": 9729,
+            "minFilter": 9987
+          },
+          "texCoord": 0
+        },
+        "baseColorTexture": {
+          "image_sha256": "419402C5978095DCDF9424017C725ADAC2E4F7052585E1501F4DD35DF64B3F34",
+          "sampler": {
+            "wrapS": 10497,
+            "wrapT": 10497,
+            "magFilter": 9729,
+            "minFilter": 9987
+          },
+          "texCoord": 0
+        },
+        "metallicRoughnessTexture": {
+          "image_sha256": "131AA7B032B45A1D48752F96F2514AD0D262B6B164B34DE2EE6527A0E91179CF",
+          "sampler": {
+            "wrapS": 10497,
+            "wrapT": 10497,
+            "magFilter": 9729,
+            "minFilter": 9987
+          },
+          "texCoord": 0
+        }
+      }
+    },
+    {
+      "material": "foliage",
+      "source_PBR_textures_bytes_and_sampler_equal": true,
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.26288118958473206,
+      "doubleSided": true,
+      "maps": {
+        "normalTexture": {
+          "image_sha256": "06F015E5CD7A2D37BF1C1DD20AC8EC30B7498D1818DB1B5B7FC87B45AC0A3C76",
+          "sampler": {
+            "wrapS": 10497,
+            "wrapT": 10497,
+            "magFilter": 9729,
+            "minFilter": 9987
+          },
+          "texCoord": 0
+        },
+        "baseColorTexture": {
+          "image_sha256": "DEC43D5269D92C5CBEDAB706C7F0EE43D7E75654557B1319760805B8ABD48BF5",
+          "sampler": {
+            "wrapS": 10497,
+            "wrapT": 10497,
+            "magFilter": 9729,
+            "minFilter": 9987
+          },
+          "texCoord": 0
+        },
+        "metallicRoughnessTexture": {
+          "image_sha256": "7998414838526B786005A15FEA4F6EF348AE8CFD1251CF1C77DDA90400083556",
+          "sampler": {
+            "wrapS": 10497,
+            "wrapT": 10497,
+            "magFilter": 9729,
+            "minFilter": 9987
+          },
+          "texCoord": 0
+        }
+      }
+    }
+  ],
+  "socket_native_vertex_proof": [
+    {
+      "name": "FruitSocket_0",
+      "godot_position": [
+        -0.9271363019943237,
+        1.1956006288528442,
+        -0.33754730224609375
+      ],
+      "distance_to_actual_bark_vertex_m": 0.0
+    },
+    {
+      "name": "FruitSocket_1",
+      "godot_position": [
+        -0.8086035847663879,
+        0.9209511280059814,
+        0.10516548156738281
+      ],
+      "distance_to_actual_bark_vertex_m": 1.6391277313232422e-07
+    },
+    {
+      "name": "FruitSocket_2",
+      "godot_position": [
+        -0.6733580827713013,
+        0.9348350167274475,
+        -0.4254322052001953
+      ],
+      "distance_to_actual_bark_vertex_m": 8.642673492431641e-07
+    },
+    {
+      "name": "FruitSocket_3",
+      "godot_position": [
+        -0.49826502799987793,
+        1.4002989530563354,
+        0.4597930908203125
+      ],
+      "distance_to_actual_bark_vertex_m": 6.556510925292969e-07
+    },
+    {
+      "name": "FruitSocket_4",
+      "godot_position": [
+        -0.37714841961860657,
+        1.4020707607269287,
+        -0.21548938751220703
+      ],
+      "distance_to_actual_bark_vertex_m": 1.4901161193847656e-08
+    },
+    {
+      "name": "FruitSocket_5",
+      "godot_position": [
+        0.011698885820806026,
+        1.3021810054779053,
+        0.6508016586303711
+      ],
+      "distance_to_actual_bark_vertex_m": 4.76837158203125e-07
+    }
+  ],
+  "verification": "CPU Blender preview visually inspected; independent actual GLB indices/finite position/UV/unit normals/PBR source image bytes+samplers/opacity+double sided and six actualbarkvertex sockets PASS. No GPU/Godot or production writes."
+}

@@ -1,6 +1,55 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/midori_park_size_blockout.gd" id="1_blockout"]
 
+[ext_resource type="Script" path="res://scripts/midori_vegetation_breeze.gd" id="2_breeze"]
+
+[ext_resource type="Script" path="res://scripts/midori_lake_life.gd" id="3_lake_life"]
+
+[ext_resource type="Script" path="res://scripts/midori_park_props.gd" id="4_park_props"]
+
+[ext_resource type="PackedScene" path="res://assets/shinrai/parks/midori_park/models/furniture/ambient/entrance_bollards/measured_entrance_bollards.tscn" id="5_entrance_bollards"]
+
+[ext_resource type="Script" path="res://scripts/midori_planted_beds.gd" id="6_planted_beds"]
+
+[ext_resource type="Script" path="res://scripts/midori_terrain.gd" id="8_terrain"]
+
+[ext_resource type="Script" path="res://scripts/midori_japanese_flowers.gd" id="9_flowers"]
+
+[ext_resource type="Script" path="res://scripts/midori_island_nature.gd" id="10_island_nature"]
+
+[ext_resource type="Script" path="res://scripts/midori_japanese_path_lamps.gd" id="japanese_path_lamps"]
+
+[ext_resource type="Script" path="res://scripts/midori_secondary_path_lamps.gd" id="secondary_path_lamps"]
+
 [node name="MidoriParkSizeBlockout" type="Node3D"]
 script = ExtResource("1_blockout")
+
+[node name="MidoriAmbientLife" type="Node3D" parent="."]
+script = ExtResource("2_breeze")
+
+[node name="MidoriLakeLife" type="Node3D" parent="."]
+script = ExtResource("3_lake_life")
+
+[node name="MidoriParkProps" type="Node3D" parent="."]
+script = ExtResource("4_park_props")
+
+[node name="MeasuredEntranceBollards" parent="." instance=ExtResource("5_entrance_bollards")]
+
+[node name="MidoriPlantedBeds" type="Node3D" parent="."]
+script = ExtResource("6_planted_beds")
+
+[node name="MidoriTerrain" type="Node3D" parent="."]
+script = ExtResource("8_terrain")
+
+[node name="MidoriJapaneseFlowers" type="Node3D" parent="."]
+script = ExtResource("9_flowers")
+
+[node name="MidoriIslandNature" type="Node3D" parent="."]
+script = ExtResource("10_island_nature")
+
+[node name="MidoriJapanesePathLamps" type="Node3D" parent="."]
+script = ExtResource("japanese_path_lamps")
+
+[node name="MidoriSecondaryPathLamps" type="Node3D" parent="."]
+script = ExtResource("secondary_path_lamps")

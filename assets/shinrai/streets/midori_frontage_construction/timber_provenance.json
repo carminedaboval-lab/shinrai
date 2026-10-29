@@ -1,0 +1,17 @@
+{
+  "material": "Smoked Walnut Veneer",
+  "author": "Jenelle van Heerden",
+  "source": "https://polyhaven.com/a/smoked_walnut_veneer",
+  "license": "CC0",
+  "license_url": "https://polyhaven.com/license",
+  "physical_tile_m": 1.0,
+  "grain_direction": "U (horizontal image), UV length follows physical member",
+  "resolution": 2048,
+  "modifications": "Original source maps unchanged. Dark finish via shader brightness, restrained normals/roughness; all constructed members use physical scale.",
+  "files": {
+    "smoked_walnut_veneer_diff_2k.jpg": "9B2FA1DE2705058CC82D012D74ECB483597A2E90B0287A9F0254D8E2A931C036",
+    "smoked_walnut_veneer_nor_gl_2k.png": "5FA1B15DB50636D7555EDEC22251EB3214C9D8CC11F91B339C8A195468F1C1B0",
+    "smoked_walnut_veneer_rough_2k.jpg": "E8245F6EC6DBE3064B1377C8EB443C60E964A4B62937E98019127A30303DAEBC"
+  },
+  "superseded": "Fine Grained Wood remains as unused rollback-source material, not active facade finish."
+}

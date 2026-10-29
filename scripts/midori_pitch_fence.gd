@@ -1,6 +1,6 @@
 extends Node3D
 
-# Replaces the irregular perimeter net in the supplied one-mesh pitch GLB.
+# Metric enclosure shared by the remastered pitch and interactive gate.
 # Dimensions are world metres; the caller cancels the park's 2x layout scale.
 const HALF_LENGTH := 19.9
 const HALF_WIDTH := 10.55
@@ -75,19 +75,18 @@ func _add_span(label: String, start: Vector3, finish: Vector3) -> void:
 	_body.add_child(collision)
 
 func _add_kickboard(label: String, start: Vector3, finish: Vector3) -> void:
-	# The source model has a ragged low stone/net skirt. A solid inner-facing
-	# plinth covers it on both sides and anchors the new regular mesh visually.
+	# Thin rebound boards now align with the existing 130 mm fence collider.
+	# The old bulky plinth is unnecessary after retiring the ragged source mesh.
 	var midpoint := (start + finish) * 0.5
-	var inward := Vector3(-midpoint.x, 0.0, -midpoint.z).normalized()
 	var plinth := MeshInstance3D.new()
 	plinth.name = label + "_Kickboard"
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(start.distance_to(finish), NET_BOTTOM, 1.6)
+	mesh.size = Vector3(start.distance_to(finish), NET_BOTTOM, 0.13)
 	var material := _frame_material.duplicate() as StandardMaterial3D
 	material.albedo_color = Color("#293633")
 	mesh.material = material
 	plinth.mesh = mesh
-	plinth.position = midpoint + inward * 0.55 + Vector3.UP * (NET_BOTTOM * 0.5)
+	plinth.position = midpoint + Vector3.UP * (NET_BOTTOM * 0.5)
 	plinth.rotation.y = -atan2(finish.z - start.z, finish.x - start.x)
 	add_child(plinth)
 

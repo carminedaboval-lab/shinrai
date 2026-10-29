@@ -41,8 +41,33 @@ func _refresh_navigation_path(destination: Vector3) -> void:
 	# patrols oscillate between their starting cell and the next waypoint.
 	if navigation_path.size() > 1:
 		var first: Vector3 = navigation_path[0]
+		var park := navigation_source.get_parent() if is_instance_valid(navigation_source) else null
+		if park != null and park.has_method("bridge_surface_height"):
+			if is_finite(float(park.bridge_surface_height(Vector2(global_position.x,global_position.z)))) or is_finite(float(park.bridge_surface_height(Vector2(first.x,first.z)))):
+				# Bridge routes already choose a forward start through checked links.
+				# A blind grid-cell skip can bypass the next necessary ramp corner.
+				return
 		if Vector2(global_position.x, global_position.z).distance_to(Vector2(first.x, first.z)) < 2.9:
 			navigation_path_index = 1
+
+func _get_navigation_direction() -> Vector3:
+	var park := navigation_source.get_parent() if is_instance_valid(navigation_source) else null
+	while navigation_path_index < navigation_path.size():
+		var waypoint := navigation_path[navigation_path_index]
+		var offset := Vector3(waypoint.x-global_position.x,0.0,waypoint.z-global_position.z)
+		var arrival := WAYPOINT_REACHED_DISTANCE
+		if park != null and park.has_method("bridge_surface_height"):
+			var current_floor: float = park.bridge_surface_height(Vector2(global_position.x,global_position.z))
+			var waypoint_floor: float = park.bridge_surface_height(Vector2(waypoint.x,waypoint.z))
+			if is_finite(current_floor) or is_finite(waypoint_floor):
+				# Follow the fitted approaches closely; early corner cutting can leave
+				# their floor and make the next replan turn back toward the shore.
+				arrival = 0.12
+		if offset.length() <= arrival:
+			navigation_path_index += 1
+			continue
+		return offset.normalized()
+	return Vector3.ZERO
 
 func _build_visual_socket() -> void:
 	# No proxy fallback: the raid controller refuses to spawn without real art.

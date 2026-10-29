@@ -1,0 +1,28 @@
+{
+  "source": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\hub_meshy_20261022\\sources\\market_stall.glb",
+  "source_sha256": "7a0f8712c5713f1e62942c6e4c11ee6113f2ff639a38e995bde770e8e49ec1b9",
+  "source_triangles": 1252394,
+  "author": "Existing shared Meshy export; supplied source preserved unchanged",
+  "derivative": "Uniform metric scale, serving face rotated to -Z, floorcenter pivot, collapse decimation preserving original material/UV textures",
+  "uniform_scale": 1.263184672261583,
+  "front": "-Z",
+  "up": "+Y",
+  "godot_min": [
+    -1.2000000476837158,
+    0.0,
+    -1.077275276184082
+  ],
+  "godot_max": [
+    1.2000000476837158,
+    1.9849318265914917,
+    1.077275276184082
+  ],
+  "triangles": 36000,
+  "materials": 1,
+  "images": 3,
+  "bytes": 9257300,
+  "derivative_sha256": "3772bc890dc4d756cc59d0c88481df875c4169bcc76dbf68a2b08b6815f5aee8",
+  "collision": "none; scene owner supplies non-enterable prop collision",
+  "tool": "5.2.1 LTS",
+  "limits": "Decorative stall has ~1.98m total height at 2.4m width; not a walk-through building"
+}

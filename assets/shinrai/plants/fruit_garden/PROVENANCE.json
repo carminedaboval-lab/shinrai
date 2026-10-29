@@ -1,0 +1,25 @@
+{
+  "method": "Downloaded through the existing signed-in Sketchfab browser download controls, GLB converted format with 1k textures. No viewer extraction or generated substitute.",
+  "author": "ffish.asia / floraZia.com",
+  "license": "CC0 1.0 Public Domain; primary download dialogs explicitly confirm commercial use and no required credit",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "models": [
+    {
+      "species": "Diospyros kaki",
+      "item": "Kaki persimmon",
+      "source": "https://sketchfab.com/3d-models/cc0-persimmon-diospyros-kaki-17a813ffb43848ad88ec7cf70f50c10c",
+      "download": "C:/Users/hp/Downloads/cc0____persimmon_diospyros_kaki.glb",
+      "displayed_triangles": "4.3 million",
+      "displayed_glb_1k_size": "175 MB"
+    },
+    {
+      "species": "Citrus unshiu",
+      "item": "Mikan satsuma mandarin",
+      "source": "https://sketchfab.com/3d-models/cc0-satsuma-mandarin-citrus-unshiu-70a3631eead941d693a04ecc94fa06bb",
+      "download": "C:/Users/hp/Downloads/cc0____satsuma_mandarin_citrus_unshiu.glb",
+      "displayed_triangles": "952.8 thousand",
+      "displayed_glb_1k_size": "38 MB"
+    }
+  ],
+  "runtime_acceptance": "pending Blender reduction, guarded installation and actual native-game day/night and interaction review"
+}

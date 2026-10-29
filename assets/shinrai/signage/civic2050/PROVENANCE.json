@@ -1,0 +1,27 @@
+{
+  "title": "Midori civic wayfinding 2050",
+  "revision": "v2: destination English size46 weight700 dark ink after installed01 readability review; same panel size, Japanese, routes and coordinates",
+  "method": "Original vector layout, purpose-drawn pictograms/arrows, outlined Noto Sans JP glyphs; no raster or generated lettering.",
+  "font": {
+    "name": "Noto Sans JP",
+    "license": "SIL Open Font License 1.1",
+    "source_url": "https://github.com/google/fonts/tree/main/ofl/notosansjp",
+    "local_source": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\signage_2050_20261026\\fonts\\NotoSansJP.ttf",
+    "sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+    "license_file": "NotoSansJP-OFL.txt",
+    "license_sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+  },
+  "housing": {
+    "provider": "Meshy; preserved measured derivative",
+    "asset": "res://assets/shinrai/parks/midori_park/models/identity2050/midori_2050_totem.glb",
+    "sha256": "db271201aee1aa3791f223d9cecceb30a42aad3202574005e33a1362b7d575b1",
+    "derivative_changes": "Panel artwork only; source housing not modified",
+    "generation_credits_used": 0
+  },
+  "source_routes": {
+    "path": "C:\\Users\\hp\\OneDrive\\Documenti\\GitHub\\shinrai\\scripts\\midori_park_size_blockout.gd",
+    "sha256": "5c2228f97661b0a9e4b8e84a1b74ce86f6ebee35d744b2e155b89f0030417610",
+    "coordinates": "source X/Z multiplied by LAYOUT_SCALE 2.0"
+  },
+  "evidence_limits": "Typography glyph coverage and art bounds checked; raw route geometry advisory only. Native scene validation remains pending."
+}

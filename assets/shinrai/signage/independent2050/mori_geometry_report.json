@@ -1,0 +1,30 @@
+{
+  "bounds_local_xyz": [
+    [
+      -0.672866940498352,
+      0.672866940498352
+    ],
+    [
+      -0.20000001788139343,
+      0.20000003278255463
+    ],
+    [
+      -0.009999999776482582,
+      0.009999999776482582
+    ]
+  ],
+  "dimensions": [
+    1.345733880996704,
+    0.40000005066394806,
+    0.019999999552965164
+  ],
+  "mesh_objects": 3,
+  "vertices": 7812,
+  "polygons": 5683,
+  "front": "-Z; X mirrored so camera at -Z with +Y up reads correctly",
+  "solid_depth": 0.02,
+  "method": "Font contours sampled, closed 2D curves filled with holes, extruded .010 both sides, converted to mesh, .0006 edge bevel",
+  "no_lights": true,
+  "no_colliders": true,
+  "glb_export_yup": false
+}

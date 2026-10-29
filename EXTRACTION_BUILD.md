@@ -74,6 +74,16 @@ Post-fix isolated 1080p Balanced sweep (seven FPS samples per view): daylight we
 
 Immediate next step: profile and optimize the dense grove/lawn views toward a stable 60 FPS without sacrificing nearby foliage and shadows. Then test alternate routes and both extraction gates; the full-run check covers the main relay circuit, not every possible walkable segment or active combat.
 
+Latest stop checkpoint: performance inspection resumed, but no new runtime or graphics changes were applied. A diagnostic script was saved outside the game at `C:/Users/hp/Documents/Codex/2026-09-18/ok-x20/work/profile_park_cost.gd`. Its first launch stopped on an indentation parse error before measurements; it is unfinished, not a verified benchmark. Next: fix that diagnostic, compare ground-clump cost, mesh LOD and shadows in fixed grove/lawn views, then apply only measured, visually checked improvements. The last verified live gameplay checkpoint remains intact.
+
+### Balanced graphics follow-up
+
+The diagnostic was fixed and run on the RTX 5050 Laptop GPU at a 1920×1080 output. The grove baseline cost 19.52 ms/frame and 8.82 million primitives; the lawn cost 18.80 ms/frame and 11.92 million. The main measured cost was distant imported tree geometry. Setting the viewport mesh LOD threshold to 4 in Balanced mode roughly halved rendered primitives and brought both fixed views to the 60 FPS cap in an isolated comparison. High mode retains threshold 1.
+
+Balanced also now renders 3D at 0.75 scale (formerly 0.70) while fading the existing 22,000 ground-clump instances by chunk past 80 m over a 15 m margin. Near scatter, tree placements and shadow settings were kept. The final six-view 1080p sweep reported mean/min 60/60 FPS in daylight grove, open cover, south lawn and lake edge, and night grove and open cover. A player-controlled crossing of the installed bridge passed with mean 59.9/min 59 FPS over nine moving samples; the separate open-cover sample was 60/60. Seven lawn-transition captures showed no obvious missing patch as the distant clumps faded. All 71 extraction regression checks still pass.
+
+These tests are sampled recon gameplay on the current laptop, without K17 combat or a manual editor/debugger sign-off. Keep the frame-time margin under review when enemies, audio and additional art are added. The diagnostics and screenshots are in the Codex review workspace, outside the game assets.
+
 1. Complete K17 materials, animation and readable attack cues when the user supplies those assets, then playtest combat pacing.
 2. Improve the park's encounter spaces and landmark visibility using existing high-quality assets. Validate at ground level, not just from the aerial artwork.
 3. Add user-supplied search-container / maintenance-terminal assets and authored audio (UZI, impacts, footsteps, park ambience, extraction radio). Do not generate replacements without asking.

@@ -1,0 +1,80 @@
+{
+  "tool": "Blender 5.2 Python bpy",
+  "units": "metres",
+  "front_axis": "-Z",
+  "assets": [
+    {
+      "file": "ueda_clay_roof.glb",
+      "source": "ueda_clay_roof.blend",
+      "triangles": 23792,
+      "tile_columns": 35,
+      "tile_rows_per_slope": 11,
+      "materials": [
+        "arch_tile",
+        "arch_cedar"
+      ],
+      "blender_bounds": [
+        [
+          -5.639999866485596,
+          -8.680000305175781,
+          6.170000076293945
+        ],
+        [
+          5.639999866485596,
+          0.6800000071525574,
+          8.765000343322754
+        ]
+      ],
+      "sha256": "9faac873130f3e1f754ed734c850781df061c6675b9ea32b776505f1b850f583"
+    },
+    {
+      "file": "hinata_clay_roof.glb",
+      "source": "hinata_clay_roof.blend",
+      "triangles": 21804,
+      "tile_columns": 32,
+      "tile_rows_per_slope": 11,
+      "materials": [
+        "arch_tile",
+        "arch_cedar"
+      ],
+      "blender_bounds": [
+        [
+          -5.139999866485596,
+          -8.680000305175781,
+          6.21999979019165
+        ],
+        [
+          5.139999866485596,
+          0.6800000071525574,
+          8.765000343322754
+        ]
+      ],
+      "sha256": "9a5b76678058229162901d635373817534a8653dd89a1283cf2ac170b19896a6"
+    },
+    {
+      "file": "yakitori_clay_roof.glb",
+      "source": "yakitori_clay_roof.blend",
+      "triangles": 13320,
+      "tile_columns": 29,
+      "tile_rows_per_slope": 7,
+      "materials": [
+        "arch_tile",
+        "arch_cedar"
+      ],
+      "blender_bounds": [
+        [
+          -2.75,
+          -8.630000114440918,
+          5.570000171661377
+        ],
+        [
+          2.75,
+          0.6299999952316284,
+          7.465000152587891
+        ]
+      ],
+      "sha256": "07520eccff1beab371dcff0b74c3cbd53d148e2bb9c7ec2b280979aec4c53cfb"
+    }
+  ],
+  "license": "Project-authored procedural geometry; existing Shinrai V5 textures remain external and unchanged."
+}

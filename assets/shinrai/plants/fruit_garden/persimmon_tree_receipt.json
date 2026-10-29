@@ -1,0 +1,172 @@
+{
+  "source": "UESReseach Blender(Diospyros kaki) whole biological growth model",
+  "source_url": "https://sketchfab.com/3d-models/blenderdiospyros-kaki-d0f0a39fafca4adaad7736bbd501aa2e",
+  "license": "CC BY 4.0",
+  "source_triangles": 489666,
+  "original_bark_triangles": 20418,
+  "original_leaf_triangles": 394368,
+  "output_leaf_triangles": 80000,
+  "output_triangles": 100418,
+  "blender_bounds": [
+    [
+      -2.6624343395233154,
+      -1.2375682592391968,
+      0.0
+    ],
+    [
+      2.2831192016601562,
+      1.728211522102356,
+      2.9995601177215576
+    ]
+  ],
+  "godot_bounds": [
+    [
+      -2.6624343395233154,
+      0.0,
+      -1.728211522102356
+    ],
+    [
+      2.2831192016601562,
+      2.9995601177215576,
+      1.2375682592391968
+    ]
+  ],
+  "trunk_base_blender": [
+    0,
+    0,
+    0
+  ],
+  "normalization": "uniform source scale to3m; original branch and leaf spatial structure preserved; no procedural replacement",
+  "sockets": [
+    {
+      "name": "FruitSocket_0",
+      "blender": [
+        -2.236680746078491,
+        0.8079227805137634,
+        0.9142400026321411
+      ],
+      "godot": [
+        -2.236680746078491,
+        0.9142400026321411,
+        -0.8079227805137634
+      ],
+      "source_bark_vertex": 12799,
+      "nearest_original_fruit_distance": 0.058636438101530075
+    },
+    {
+      "name": "FruitSocket_1",
+      "blender": [
+        -1.6263704299926758,
+        -0.4687339961528778,
+        1.7522188425064087
+      ],
+      "godot": [
+        -1.6263704299926758,
+        1.7522188425064087,
+        0.4687339961528778
+      ],
+      "source_bark_vertex": 15284,
+      "nearest_original_fruit_distance": 0.015322585590183735
+    },
+    {
+      "name": "FruitSocket_2",
+      "blender": [
+        -1.957732915878296,
+        -0.13011756539344788,
+        1.3394207954406738
+      ],
+      "godot": [
+        -1.957732915878296,
+        1.3394207954406738,
+        0.13011756539344788
+      ],
+      "source_bark_vertex": 15874,
+      "nearest_original_fruit_distance": 0.034010179340839386
+    },
+    {
+      "name": "FruitSocket_3",
+      "blender": [
+        -1.341746211051941,
+        0.9001126885414124,
+        1.1939263343811035
+      ],
+      "godot": [
+        -1.341746211051941,
+        1.1939263343811035,
+        -0.9001126885414124
+      ],
+      "source_bark_vertex": 13169,
+      "nearest_original_fruit_distance": 0.13644176721572876
+    },
+    {
+      "name": "FruitSocket_4",
+      "blender": [
+        -1.3225607872009277,
+        0.44917380809783936,
+        1.3105629682540894
+      ],
+      "godot": [
+        -1.3225607872009277,
+        1.3105629682540894,
+        -0.44917380809783936
+      ],
+      "source_bark_vertex": 14457,
+      "nearest_original_fruit_distance": 0.05161094665527344
+    },
+    {
+      "name": "FruitSocket_5",
+      "blender": [
+        -1.07296621799469,
+        -0.5234060883522034,
+        1.7435799837112427
+      ],
+      "godot": [
+        -1.07296621799469,
+        1.7435799837112427,
+        0.5234060883522034
+      ],
+      "source_bark_vertex": 18299,
+      "nearest_original_fruit_distance": 0.027317702770233154
+    }
+  ],
+  "materials": "Original nonemissive source material colors/PBR; source has full 3D leaf geometry, no alpha texture needed",
+  "selection": "complete bark plus all1248originalleafgeometries;1248decorativefruitmeshesremoved; six scanned harvest fruit attachatnativeoutertwigs",
+  "source_fruit_mesh_objects_removed": 1248,
+  "disconnected_fruit_components_removed": 3744,
+  "cpu_preview": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_fruit_harvest_20261024\\asset_review\\kaki_tree_ready_preview.png",
+  "source_sha256": "5ef858385cb66ca810d56c64489b27299d4e6ed4bbc44886150f3874bea59c88",
+  "output_sha256": "c3accaec520b8b4891104e059f90138a7174b840e8ccdac2e46b38c672288ed5",
+  "actual_glb_triangles": 100418,
+  "verified_actual_glb_socket_count": 6,
+  "trunk_radius_at_05to45cm": 0.0789694726089908,
+  "source_license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "runtime_acceptance": "not run; native day/night, actual geometry and harvesting root owned",
+  "runtime_trunk_collider_radius_m": 0.14,
+  "collider_note": "Actual low wood radius0.0789695m atY.05-.45;0.14m solid conservative cylinder covers tilted upper trunk and root requested body width; source leaf/branch geometry unchanged",
+  "actual_glb_socket_bark_vertex_distances": [
+    {
+      "name": "FruitSocket_0",
+      "nearest_actual_exported_bark_vertex_m": 0.0
+    },
+    {
+      "name": "FruitSocket_1",
+      "nearest_actual_exported_bark_vertex_m": 0.0
+    },
+    {
+      "name": "FruitSocket_2",
+      "nearest_actual_exported_bark_vertex_m": 0.0
+    },
+    {
+      "name": "FruitSocket_3",
+      "nearest_actual_exported_bark_vertex_m": 0.0
+    },
+    {
+      "name": "FruitSocket_4",
+      "nearest_actual_exported_bark_vertex_m": 0.0
+    },
+    {
+      "name": "FruitSocket_5",
+      "nearest_actual_exported_bark_vertex_m": 0.0
+    }
+  ]
+}

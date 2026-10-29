@@ -1,0 +1,5 @@
+Japanese Parks Foundation picnic furniture: https://www.midori-hanabunka.jp/kouenbenchtent/
+Reference envelope 1.4-1.5m long, 1.6-1.7m total depth, 0.7-0.8m tabletop.
+Model: 1.5m long, 1.66m deep, 0.75m tabletop, 0.43m seat.
+2046 interpretation: replaceable graphite metal shoes, recessed fasteners, flush charging/service plate, low-glare locator. Decorative charging detail only.
+Existing project wood image reused; new geometry explicitly requested by user.

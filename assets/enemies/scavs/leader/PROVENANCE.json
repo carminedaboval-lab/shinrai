@@ -1,0 +1,49 @@
+{
+  "role": "leader",
+  "name": "Iron Warden",
+  "provider": "Meshy",
+  "state": "exported_and_rig_validated",
+  "source_texture_task": "01a16b5e-deb9-7514-b3f3-51b3bec7533b",
+  "game_remesh_task": "01a16b62-1dca-7717-a998-b983c61a06b9",
+  "rig_task": "01a16b69-f4b0-7210-8e5c-fd937bc0bd12",
+  "generation": {
+    "engine": "Meshy 7.1 Flagship",
+    "input": "single image",
+    "pose": "A-Pose",
+    "high_detail": true,
+    "texture": "4K",
+    "image_enhancement": false,
+    "private": true,
+    "cost_credits": 35
+  },
+  "remesh": {
+    "target_triangles": 60000,
+    "topology": "triangle",
+    "cost_credits": 0
+  },
+  "rig": {
+    "type": "Humanoid",
+    "height_m": 1.75,
+    "export_skeleton": "Mixamo",
+    "embedded_mesh": true,
+    "all_added_motions_single_file": true
+  },
+  "direction": "Brown work jacket, dark chest pouches, orange strip, beard, anatomical right cybernetic eye/temple.",
+  "reference_concept_sha256": "8FFA050AF84BA2819ADCA495A16F942A7B6F180DDD050AFB66289C2DB3A70717",
+  "files": {
+    "original_meshy_animated.glb": {
+      "sha256": "8AA6A46928AEFC5E1DD6AC8136B3E68F2FE105D3CEAA00ECCDEC1FBF12A62AAD",
+      "bytes": 62464980
+    },
+    "original_meshy_game.glb": {
+      "sha256": "4F674761F42257265F0D1F732E43963B576C08CE73B705633783222D5E22B761",
+      "bytes": 58358312
+    },
+    "original_meshy_high.glb": {
+      "sha256": "AC0D64B14E22F3D91C69D00C344E40430DDE6D43E1DD329462E324368A6453F9",
+      "bytes": 76794028
+    }
+  },
+  "reference_apose_sha256": "E50268C38CECC0AA417C3EBB02C09A9ABF9EF8A463BB11B7850FCEB8B72DAC4E",
+  "evidence": "Generative first pass. Original high detail and remeshed sources retained for later clothing/face corrections. No claim of exact concept identity."
+}

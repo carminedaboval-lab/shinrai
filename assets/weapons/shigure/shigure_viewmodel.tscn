@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/extraction_modular_viewmodel.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/weapons/shigure/shigure_weapon.tscn" id="2"]
+
+[node name="ShigureViewmodel" type="Node3D"]
+script = ExtResource("1")
+weapon_key = "shigure"
+assembly_scene = ExtResource("2")

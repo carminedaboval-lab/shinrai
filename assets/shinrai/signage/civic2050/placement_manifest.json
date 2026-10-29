@@ -1,0 +1,746 @@
+[
+  {
+    "id": "east",
+    "gate_jp": "東口",
+    "gate_en": "EAST GATE",
+    "code": "E1",
+    "world_xz": [
+      211.5,
+      -34.0
+    ],
+    "yaw_degrees": 108.434949,
+    "incoming_route": "EAST_DECK_ROUTE",
+    "approach_world_xz": [
+      220.0,
+      -40.0
+    ],
+    "svg": "east.svg",
+    "svg_sha256": "0f10878814d628d9257293770a60d5622146b314b7c959c24744821eb5412781",
+    "panel_size_m": [
+      0.52,
+      1.13
+    ],
+    "panel_centre_local": [
+      0,
+      1.065,
+      0.098
+    ],
+    "panel_front_local": "+Z",
+    "front_normal_world_xz": [
+      0.9486832970731822,
+      -0.3162277689488327
+    ],
+    "close_art_camera_world_xz": [
+      214.15631323180492,
+      -34.885437753056735
+    ],
+    "rows": [
+      {
+        "japanese": "湖畔散策",
+        "english": "LAKE WALK",
+        "icon": "lake",
+        "arrow": "up",
+        "route": "EAST_DECK_ROUTE westbound",
+        "next_route_target_xz": [
+          196,
+          -32
+        ]
+      },
+      {
+        "japanese": "北口",
+        "english": "NORTH GATE",
+        "icon": "gate",
+        "arrow": "right",
+        "route": "OUTER_CIRCUIT northbound",
+        "next_route_target_xz": [
+          206,
+          -50
+        ]
+      },
+      {
+        "japanese": "南口",
+        "english": "SOUTH GATE",
+        "icon": "gate",
+        "arrow": "left",
+        "route": "OUTER_CIRCUIT southbound",
+        "next_route_target_xz": [
+          208,
+          0
+        ]
+      }
+    ],
+    "glyphs_verified": true,
+    "text_bounds_svg": [
+      {
+        "text": "みどり公園",
+        "bounds": [
+          106.962416015625,
+          40.13852001953125,
+          297.2029497070313,
+          76.68552856445312
+        ]
+      },
+      {
+        "text": "MIDORI PARK",
+        "bounds": [
+          109.254072265625,
+          91.95847387695312,
+          276.4785551757812,
+          110.32808032226562
+        ]
+      },
+      {
+        "text": "東口",
+        "bounds": [
+          36.99911709594726,
+          136.7609691772461,
+          94.60552081298829,
+          165.68926040649413
+        ]
+      },
+      {
+        "text": "E1",
+        "bounds": [
+          422.24098205566406,
+          136.1078607940674,
+          460.66124687194826,
+          162.0
+        ]
+      },
+      {
+        "text": "湖畔散策",
+        "bounds": [
+          37.563461181640626,
+          311.59272875976563,
+          246.7778557128906,
+          361.95024658203124
+        ]
+      },
+      {
+        "text": "LAKE WALK",
+        "bounds": [
+          42.19884765625,
+          366.92225439453125,
+          303.8614853515625,
+          401.0
+        ]
+      },
+      {
+        "text": "北口",
+        "bounds": [
+          37.08538720703125,
+          562.8297534179687,
+          136.48807763671874,
+          611.1774895019531
+        ]
+      },
+      {
+        "text": "NORTH GATE",
+        "bounds": [
+          42.19884765625,
+          616.3242543945313,
+          340.9156552734375,
+          651.6338813476563
+        ]
+      },
+      {
+        "text": "南口",
+        "bounds": [
+          38.97858447265625,
+          812.3199260253906,
+          136.48807763671874,
+          861.6195141601562
+        ]
+      },
+      {
+        "text": "SOUTH GATE",
+        "bounds": [
+          39.9356611328125,
+          866.3242543945313,
+          338.1813505859375,
+          901.6338813476563
+        ]
+      },
+      {
+        "text": "EAST GATE",
+        "bounds": [
+          38.571476440429684,
+          1037.7315021820068,
+          183.73980146789552,
+          1058.3676051483155
+        ]
+      },
+      {
+        "text": "SHINRAI  /  PUBLIC WAYFINDING",
+        "bounds": [
+          36.84340853881836,
+          1079.7797617645263,
+          353.0548045654297,
+          1098.4257957305908
+        ]
+      }
+    ],
+    "raw_route_distances": {
+      "EAST_DECK_ROUTE": {
+        "distance_to_raw_centreline_m": 3.0041637771599583,
+        "nearest_point": [
+          210.55,
+          -36.85
+        ]
+      },
+      "OUTER_CIRCUIT": {
+        "distance_to_raw_centreline_m": 4.856116659387909,
+        "nearest_point": [
+          206.64776357827475,
+          -33.80591054313099
+        ]
+      }
+    },
+    "status": "STAGED CANDIDATE. Terrain/foliage/rounded-path/collision/readability acceptance required; no live placement claimed."
+  },
+  {
+    "id": "north",
+    "gate_jp": "北口",
+    "gate_en": "NORTH GATE",
+    "code": "N1",
+    "world_xz": [
+      -49.0,
+      -168.0
+    ],
+    "yaw_degrees": -119.744881,
+    "incoming_route": "NORTH_ENTRY_ROUTE",
+    "approach_world_xz": [
+      -64,
+      -173.142857
+    ],
+    "svg": "north.svg",
+    "svg_sha256": "88ff145b3e7ca3c17d9d9e7880c6c8e2f0e9f34c95f232c973d0567427840283",
+    "panel_size_m": [
+      0.52,
+      1.13
+    ],
+    "panel_centre_local": [
+      0,
+      1.065,
+      0.098
+    ],
+    "panel_front_local": "+Z",
+    "front_normal_world_xz": [
+      -0.8682431446957584,
+      -0.4961389338570602
+    ],
+    "close_art_camera_world_xz": [
+      -51.43108080514812,
+      -169.38918901479977
+    ],
+    "rows": [
+      {
+        "japanese": "湖畔散策",
+        "english": "LAKE WALK",
+        "icon": "lake",
+        "arrow": "up",
+        "route": "NORTH_ENTRY_ROUTE southeastbound",
+        "next_route_target_xz": [
+          -16,
+          -148
+        ]
+      },
+      {
+        "japanese": "スポーツ広場",
+        "english": "FOOTBALL / CAFE",
+        "icon": "sports",
+        "arrow": "right",
+        "route": "OUTER_CIRCUIT westbound then SPORTS_LINK_ROUTE",
+        "next_route_target_xz": [
+          -110,
+          -160
+        ]
+      }
+    ],
+    "glyphs_verified": true,
+    "text_bounds_svg": [
+      {
+        "text": "みどり公園",
+        "bounds": [
+          106.962416015625,
+          40.13852001953125,
+          297.2029497070313,
+          76.68552856445312
+        ]
+      },
+      {
+        "text": "MIDORI PARK",
+        "bounds": [
+          109.254072265625,
+          91.95847387695312,
+          276.4785551757812,
+          110.32808032226562
+        ]
+      },
+      {
+        "text": "北口",
+        "bounds": [
+          36.75080584716797,
+          137.26688751220703,
+          94.60552081298829,
+          165.37863790893556
+        ]
+      },
+      {
+        "text": "N1",
+        "bounds": [
+          422.24098205566406,
+          136.1078607940674,
+          465.35124687194826,
+          162.0
+        ]
+      },
+      {
+        "text": "湖畔散策",
+        "bounds": [
+          37.563461181640626,
+          311.59272875976563,
+          246.7778557128906,
+          361.95024658203124
+        ]
+      },
+      {
+        "text": "LAKE WALK",
+        "bounds": [
+          42.19884765625,
+          366.92225439453125,
+          303.8614853515625,
+          401.0
+        ]
+      },
+      {
+        "text": "スポーツ広場",
+        "bounds": [
+          40.00882373046875,
+          658.1263132324219,
+          352.4365388183594,
+          708.9555388183594
+        ]
+      },
+      {
+        "text": "FOOTBALL / CAFE",
+        "bounds": [
+          42.19884765625,
+          710.9156782226562,
+          446.24190771484376,
+          756.3471694335938
+        ]
+      },
+      {
+        "text": "NORTH GATE",
+        "bounds": [
+          38.571476440429684,
+          1037.7315021820068,
+          213.36697293090822,
+          1058.3676051483155
+        ]
+      },
+      {
+        "text": "SHINRAI  /  PUBLIC WAYFINDING",
+        "bounds": [
+          36.84340853881836,
+          1079.7797617645263,
+          353.0548045654297,
+          1098.4257957305908
+        ]
+      }
+    ],
+    "raw_route_distances": {
+      "NORTH_ENTRY_ROUTE": {
+        "distance_to_raw_centreline_m": 2.976833630140996,
+        "nearest_point": [
+          -50.47692307692308,
+          -165.41538461538462
+        ]
+      },
+      "OUTER_CIRCUIT": {
+        "distance_to_raw_centreline_m": 4.695847447305035,
+        "nearest_point": [
+          -48.74654042243263,
+          -163.31099781500365
+        ]
+      }
+    },
+    "status": "STAGED CANDIDATE. Terrain/foliage/rounded-path/collision/readability acceptance required; no live placement claimed."
+  },
+  {
+    "id": "sports",
+    "gate_jp": "スポーツ広場",
+    "gate_en": "SPORTS LINK",
+    "code": "S1",
+    "world_xz": [
+      -120.0,
+      -43.0
+    ],
+    "yaw_degrees": 0.0,
+    "incoming_route": "SPORTS_LINK_ROUTE",
+    "approach_world_xz": [
+      -116,
+      -39
+    ],
+    "svg": "sports.svg",
+    "svg_sha256": "85c62c14ecfbf31da77b480fc11ed8d56bfc4c40768375bbb2c8b82bcd3aee24",
+    "panel_size_m": [
+      0.52,
+      1.13
+    ],
+    "panel_centre_local": [
+      0,
+      1.065,
+      0.098
+    ],
+    "panel_front_local": "+Z",
+    "front_normal_world_xz": [
+      0.0,
+      1.0
+    ],
+    "close_art_camera_world_xz": [
+      -120.0,
+      -40.2
+    ],
+    "rows": [
+      {
+        "japanese": "クラブハウス",
+        "english": "CLUBHOUSE / WC",
+        "icon": "clubhouse",
+        "arrow": "left",
+        "route": "Public rear ramp at (-126,-44), corridor to public WC and cafe",
+        "next_route_target_xz": [
+          -126,
+          -44
+        ]
+      },
+      {
+        "japanese": "湖畔散策",
+        "english": "LAKE WALK",
+        "icon": "lake",
+        "arrow": "right",
+        "route": "SPORTS_LINK_ROUTE eastbound to LAKE_PROMENADE_LOOP",
+        "next_route_target_xz": [
+          -80,
+          -56
+        ]
+      }
+    ],
+    "glyphs_verified": true,
+    "text_bounds_svg": [
+      {
+        "text": "みどり公園",
+        "bounds": [
+          106.962416015625,
+          40.13852001953125,
+          297.2029497070313,
+          76.68552856445312
+        ]
+      },
+      {
+        "text": "MIDORI PARK",
+        "bounds": [
+          109.254072265625,
+          91.95847387695312,
+          276.4785551757812,
+          110.32808032226562
+        ]
+      },
+      {
+        "text": "スポーツ広場",
+        "bounds": [
+          38.55623419189453,
+          136.3148721008301,
+          221.00026040649414,
+          165.81326040649415
+        ]
+      },
+      {
+        "text": "S1",
+        "bounds": [
+          420.4997395324707,
+          135.65286079406738,
+          460.9569983673096,
+          162.48037574768065
+        ]
+      },
+      {
+        "text": "クラブハウス",
+        "bounds": [
+          39.683383544921874,
+          310.97475341796877,
+          349.796126953125,
+          360.49278540039063
+        ]
+      },
+      {
+        "text": "CLUBHOUSE / WC",
+        "bounds": [
+          40.4931865234375,
+          363.91567822265625,
+          447.4677900390625,
+          409.34716943359376
+        ]
+      },
+      {
+        "text": "湖畔散策",
+        "bounds": [
+          37.563461181640626,
+          658.5927287597656,
+          246.7778557128906,
+          708.9502465820312
+        ]
+      },
+      {
+        "text": "LAKE WALK",
+        "bounds": [
+          42.19884765625,
+          713.9222543945313,
+          303.8614853515625,
+          748.0
+        ]
+      },
+      {
+        "text": "SPORTS LINK",
+        "bounds": [
+          37.19852792358398,
+          1037.7315021820068,
+          219.39547903442386,
+          1058.3676051483155
+        ]
+      },
+      {
+        "text": "SHINRAI  /  PUBLIC WAYFINDING",
+        "bounds": [
+          36.84340853881836,
+          1079.7797617645263,
+          353.0548045654297,
+          1098.4257957305908
+        ]
+      }
+    ],
+    "raw_route_distances": {
+      "SPORTS_LINK_ROUTE": {
+        "distance_to_raw_centreline_m": 2.910427500435999,
+        "nearest_point": [
+          -120.70588235294117,
+          -40.17647058823529
+        ]
+      },
+      "OUTER_CIRCUIT": {
+        "distance_to_raw_centreline_m": 92.0,
+        "nearest_point": [
+          -212.0,
+          -43.0
+        ]
+      }
+    },
+    "status": "STAGED CANDIDATE. Terrain/foliage/rounded-path/collision/readability acceptance required; no live placement claimed."
+  },
+  {
+    "id": "south",
+    "gate_jp": "南口",
+    "gate_en": "SOUTH GATE",
+    "code": "S0",
+    "world_xz": [
+      -14.035548069283832,
+      157.84503792197987
+    ],
+    "yaw_degrees": 11.459155902616466,
+    "incoming_route": "SOUTH_ARRIVAL_ROUTE",
+    "approach_world_xz": [
+      -8,
+      160
+    ],
+    "mount": "Companion wing on existing SouthGateWayfinding; no new ground footprint",
+    "host_panel_centre_local": [
+      0.78,
+      1.065,
+      0.119
+    ],
+    "svg": "south.svg",
+    "svg_sha256": "15bda7b73e080d5c3800586f71b032a65f17a398c40e77fc923fff55da047378",
+    "panel_size_m": [
+      0.52,
+      1.13
+    ],
+    "panel_centre_local": [
+      0,
+      1.065,
+      0.098
+    ],
+    "panel_front_local": "+Z",
+    "front_normal_world_xz": [
+      0.19866933079506124,
+      0.9800665778412416
+    ],
+    "close_art_camera_world_xz": [
+      -13.479273943057661,
+      160.58922433993536
+    ],
+    "rows": [
+      {
+        "japanese": "湖畔散策",
+        "english": "LAKE WALK",
+        "icon": "lake",
+        "arrow": "up_left",
+        "route": "SOUTH_ARRIVAL_ROUTE northwestbound",
+        "next_route_target_xz": [
+          -24,
+          136
+        ]
+      },
+      {
+        "japanese": "広場",
+        "english": "PLAZA",
+        "icon": "plaza",
+        "arrow": "right",
+        "route": "PLAZA_PAVED_ROUTE eastbound",
+        "next_route_target_xz": [
+          24,
+          160
+        ]
+      },
+      {
+        "japanese": "スポーツ広場",
+        "english": "FOOTBALL / CAFE",
+        "icon": "sports",
+        "arrow": "left",
+        "route": "OUTER_CIRCUIT westbound then SPORTS_LINK_ROUTE",
+        "next_route_target_xz": [
+          -76,
+          164
+        ]
+      }
+    ],
+    "glyphs_verified": true,
+    "text_bounds_svg": [
+      {
+        "text": "みどり公園",
+        "bounds": [
+          106.962416015625,
+          40.13852001953125,
+          297.2029497070313,
+          76.68552856445312
+        ]
+      },
+      {
+        "text": "MIDORI PARK",
+        "bounds": [
+          109.254072265625,
+          91.95847387695312,
+          276.4785551757812,
+          110.32808032226562
+        ]
+      },
+      {
+        "text": "南口",
+        "bounds": [
+          37.776295837402344,
+          136.8970662536621,
+          94.60552081298829,
+          165.63686749267578
+        ]
+      },
+      {
+        "text": "S0",
+        "bounds": [
+          420.4997395324707,
+          135.65286079406738,
+          461.58962860107425,
+          162.48037574768065
+        ]
+      },
+      {
+        "text": "湖畔散策",
+        "bounds": [
+          37.563461181640626,
+          311.59272875976563,
+          246.7778557128906,
+          361.95024658203124
+        ]
+      },
+      {
+        "text": "LAKE WALK",
+        "bounds": [
+          42.19884765625,
+          366.92225439453125,
+          303.8614853515625,
+          401.0
+        ]
+      },
+      {
+        "text": "広場",
+        "bounds": [
+          37.09811962890625,
+          561.9764611816406,
+          140.43653881835937,
+          611.9555388183594
+        ]
+      },
+      {
+        "text": "PLAZA",
+        "bounds": [
+          42.19884765625,
+          616.9222543945313,
+          187.45489501953125,
+          651.0
+        ]
+      },
+      {
+        "text": "スポーツ広場",
+        "bounds": [
+          40.00882373046875,
+          811.1263132324219,
+          352.4365388183594,
+          861.9555388183594
+        ]
+      },
+      {
+        "text": "FOOTBALL / CAFE",
+        "bounds": [
+          42.19884765625,
+          863.9156782226562,
+          446.24190771484376,
+          909.3471694335938
+        ]
+      },
+      {
+        "text": "SOUTH GATE",
+        "bounds": [
+          37.19852792358398,
+          1037.7315021820068,
+          211.97592581176758,
+          1058.3676051483155
+        ]
+      },
+      {
+        "text": "SHINRAI  /  PUBLIC WAYFINDING",
+        "bounds": [
+          36.84340853881836,
+          1079.7797617645263,
+          353.0548045654297,
+          1098.4257957305908
+        ]
+      }
+    ],
+    "raw_route_distances": {
+      "SOUTH_ARRIVAL_ROUTE": {
+        "distance_to_raw_centreline_m": 3.8265216600021192,
+        "nearest_point": [
+          -10.851689595788933,
+          155.7224656063166
+        ]
+      },
+      "OUTER_CIRCUIT": {
+        "distance_to_raw_centreline_m": 9.403234158546399,
+        "nearest_point": [
+          -14.529771084237147,
+          167.23527520609278
+        ]
+      }
+    },
+    "status": "STAGED CANDIDATE. Terrain/foliage/rounded-path/collision/readability acceptance required; no live placement claimed."
+  }
+]

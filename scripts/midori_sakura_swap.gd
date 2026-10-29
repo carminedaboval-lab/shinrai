@@ -1,5 +1,7 @@
 extends Node
 
+const FoliageMaterials = preload("res://scripts/midori_foliage_materials.gd")
+
 const SakuraScene: PackedScene = preload("res://assets/shinrai/vegetation/sakura/jogoss_sakura_01/Sakura.fbx")
 const BlossomTexture: Texture2D = preload("res://assets/shinrai/vegetation/sakura/jogoss_sakura_01/Sakura_RGBA.png")
 const IMPORT_SCALE := 15.0
@@ -53,6 +55,7 @@ func _walk(node: Node) -> void:
 func _is_old_midori_sakura(node: Node) -> bool:
 	return (
 		is_instance_valid(node)
+		and not node.is_queued_for_deletion()
 		and node is Node3D
 		and String(node.name).begins_with("DenseSakura_")
 		and not node.has_meta(REPLACED_META)
@@ -180,6 +183,8 @@ func _add_falling_petals(tree_root: Node3D) -> void:
 	tree_root.add_child(petals)
 
 func _configure_visibility(node: Node) -> void:
+	if node is MeshInstance3D:
+		FoliageMaterials.configure_mesh(node as MeshInstance3D)
 	if node is GeometryInstance3D:
 		(node as GeometryInstance3D).visibility_range_end = VISIBILITY_RANGE_M
 	for child: Node in node.get_children():

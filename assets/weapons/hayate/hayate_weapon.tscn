@@ -1,0 +1,40 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/weapons/hayate/hayate_geometry.glb" id="1"]
+
+[node name="Hayate" type="Node3D"]
+metadata/magazine_node_path = "Geometry/Magazine"
+metadata/action_node_path = "Geometry/Action"
+metadata/action_grip_node_path = "Geometry/Action/BoltGrip"
+
+[node name="Geometry" parent="." instance=ExtResource("1")]
+
+[node name="Muzzle" type="Marker3D" parent="."]
+position = Vector3(-0.663, 0.115, 0)
+rotation = Vector3(0, -1.5707963267949, 0)
+
+[node name="GripRight" type="Marker3D" parent="."]
+position = Vector3(0.126, -0.02, 0)
+
+[node name="GripLeft" type="Marker3D" parent="."]
+position = Vector3(-0.13, 0.048, 0.007)
+
+[node name="IronRearSight" type="Marker3D" parent="."]
+position = Vector3(0.119, 0.178, 0)
+
+[node name="IronFrontSight" type="Marker3D" parent="."]
+position = Vector3(-0.597, 0.178, 0)
+
+[node name="OpticSocket" type="Marker3D" parent="."]
+position = Vector3(0.033, 0.15, 0)
+rotation = Vector3(0, -1.5707963267949, 0)
+
+[node name="BoltRelease" type="Marker3D" parent="."]
+position = Vector3(0.155, 0.103, -0.033)
+
+[node name="EjectionPort" type="Marker3D" parent="."]
+position = Vector3(0.025, 0.119, -0.024)
+
+[node name="ActionGrip" type="Marker3D" parent="."]
+position = Vector3(0.141, 0.064, -0.071)
+

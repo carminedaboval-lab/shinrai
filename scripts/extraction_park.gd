@@ -6,7 +6,7 @@ const RaidScript = preload("res://scripts/extraction_run.gd")
 func _ready() -> void:
 	DisplayServer.window_set_title("SHINRAI — Park Extraction")
 	start_at_night = false
-	super._ready()
+	await super._ready()
 	# Keep the original review scene intact; hide only its diagnostic overlay.
 	for child: Node in get_children():
 		if child is CanvasLayer:

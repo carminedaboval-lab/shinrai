@@ -1,0 +1,35 @@
+RECOMMENDED FISSURE MATERIAL: ambientCG Asphalt008
+PRIMARY ASSET: https://ambientcg.com/a/Asphalt008
+DOWNLOAD: https://ambientcg.com/get?file=Asphalt008_2K-JPG.zip
+LICENSE: CC0 1.0 Universal; https://docs.ambientcg.com/license/
+TECHNIQUE: PBRApproximated / Approximation. Official definition: material approximated from a color map. https://docs.ambientcg.com/creation-methods/
+PROVENANCE LIMIT: Not photogrammetry. No verified capture-equipment claim. Distinct from PBRProcedural assets rejected during selection.
+RETRIEVED UTC: 2026-10-22T23:04:10.516791+00:00
+2K COLOR INSPECTED: clean, irregular connected fissures and embedded aggregate; sparse tiny incidental debris. Strongly worn; use only restrained local areas against maintained road. Original color has blue-gray cast.
+SCALE: Official asset page/API provides no nonzero physical dimensions. Suggested initial tile 2m x 2m is art calibration, NOT an authoritative source measurement. Check fissure widths at standing player height before acceptance.
+MAPS: Original extracted 2048x2048 JPG Color(sRGB), NormalGL(linear/non-color,+Y), Roughness(linear/non-color); unchanged bytes.
+SELECTED MAP BYTES: 16768914 (<30,000,000). Archive SHA256 5A590061C86DB397C79E066CB704E0BC2DCEF4CA9C5584B7E546783A6ADC9486; official ZIP bytes 29819930. ZIP CRC verified during extraction.
+COLOR MEAN sRGB normalized: [0.4908004657915439, 0.5238699099754811, 0.5999888887739635]
+COLOR MEAN linear: [0.2122551236961105, 0.24434448226261235, 0.32814086651861935]
+Mean linear computed by IEC sRGB inverse transfer per decoded pixel then averaging, not inverse-transfer of the mean. To match base road brightness/tint, multiply linear color by target base mean / source linear mean; preserve relative crack variation. No edited/tinted texture saved.
+SOURCE INSPECTION: Existing production FineAggregate base is even repeated grain. CrackSeal albedo is an isolated branching line; PotholeRepair is an isolated dark patch. README documents high-poly reconstruction/heightfield + concept reference; no external photographic provenance/license record found in that asset tree. Cannot certify those as photographed fissures.
+REJECTED: Poly Haven Worn Asphalt has excessive leaves/twigs; asphalt_03 lacks visible fractures; road_damaged variants have strong brown dirt/erosion. ambientCG Asphalt022/026/027/etc explicitly procedural, rejected for this request. Photogrammetry Asphalt015/030/033 inspected but do not supply visible fissure network.
+SCOPE: staged only; no production edits, engine/GPU, Godot import, shader modifications or installed visual acceptance.
+
+Asphalt008_2K-JPG_Color.jpg
+BYTES 5557850
+SHA256 68D056A54DC3E4919D6EF9847A4820A59EED7826B0379C62EE6DFC8B2716E4CC
+ZIP_CRC32 835F3D25
+
+Asphalt008_2K-JPG_NormalGL.jpg
+BYTES 8386600
+SHA256 D888975F69F8E492B4C2715871C768C9A03312FFCE482515169C3CD933C3ACBA
+ZIP_CRC32 1B909831
+
+Asphalt008_2K-JPG_Roughness.jpg
+BYTES 2824464
+SHA256 222D5A7358ED5B4B6F9F94F21C01C0013A47E1D7D27D0454A915CE0A3F125580
+ZIP_CRC32 E63EB655
+
+
+BASE MATCH: production base mean linear [0.029008479891098823, 0.028371972872935584, 0.025102259433601695]; Asphalt008-to-base linear gain [0.13666798419731338, 0.11611464523451953, 0.07649842489879981]. See BASE_MATCH.json.

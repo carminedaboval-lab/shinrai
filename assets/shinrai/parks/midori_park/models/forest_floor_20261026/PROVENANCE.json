@@ -1,0 +1,212 @@
+{
+  "credit": "Powered by Poly Haven",
+  "license": "CC0 https://polyhaven.com/license",
+  "downloads": "Staging park_floor_20261026/sources/download_receipt.json",
+  "derivatives": [
+    {
+      "file": "stone_00.glb",
+      "source_pack": "rock_moss_set_01",
+      "source_object": "rock_moss_set_01_rock01",
+      "original_triangles": 11000,
+      "triangles": 1400,
+      "dimensions": [
+        2.232656478881836,
+        3.390355348587036,
+        1.4828951358795166
+      ]
+    },
+    {
+      "file": "stone_01.glb",
+      "source_pack": "rock_moss_set_01",
+      "source_object": "rock_moss_set_01_rock02",
+      "original_triangles": 10996,
+      "triangles": 1400,
+      "dimensions": [
+        2.6478843688964844,
+        3.273390054702759,
+        1.2517640590667725
+      ]
+    },
+    {
+      "file": "stone_02.glb",
+      "source_pack": "rock_moss_set_01",
+      "source_object": "rock_moss_set_01_rock03",
+      "original_triangles": 5000,
+      "triangles": 1400,
+      "dimensions": [
+        2.1067066192626953,
+        2.0797119140625,
+        1.098649024963379
+      ]
+    },
+    {
+      "file": "stone_03.glb",
+      "source_pack": "rock_moss_set_01",
+      "source_object": "rock_moss_set_01_rock04",
+      "original_triangles": 10589,
+      "triangles": 1399,
+      "dimensions": [
+        2.1321587562561035,
+        1.976442575454712,
+        1.773559331893921
+      ]
+    },
+    {
+      "file": "stone_04.glb",
+      "source_pack": "rock_moss_set_01",
+      "source_object": "rock_moss_set_01_rock05",
+      "original_triangles": 16548,
+      "triangles": 1400,
+      "dimensions": [
+        1.8224835395812988,
+        2.994394540786743,
+        1.2089455127716064
+      ]
+    },
+    {
+      "file": "stone_05.glb",
+      "source_pack": "rock_moss_set_01",
+      "source_object": "rock_moss_set_01_rock06",
+      "original_triangles": 8994,
+      "triangles": 1399,
+      "dimensions": [
+        2.137558937072754,
+        2.766045570373535,
+        1.2527439594268799
+      ]
+    },
+    {
+      "file": "branch_00.glb",
+      "source_pack": "dry_branches_medium_01",
+      "source_object": "dry_branches_medium_01_a",
+      "original_triangles": 5933,
+      "triangles": 1600,
+      "dimensions": [
+        0.32395803928375244,
+        1.296575665473938,
+        0.34005382657051086
+      ]
+    },
+    {
+      "file": "branch_01.glb",
+      "source_pack": "dry_branches_medium_01",
+      "source_object": "dry_branches_medium_01_b",
+      "original_triangles": 5254,
+      "triangles": 1600,
+      "dimensions": [
+        0.14904797077178955,
+        1.038527011871338,
+        0.1413089632987976
+      ]
+    },
+    {
+      "file": "branch_02.glb",
+      "source_pack": "dry_branches_medium_01",
+      "source_object": "dry_branches_medium_01_c",
+      "original_triangles": 5616,
+      "triangles": 1600,
+      "dimensions": [
+        0.12898117303848267,
+        0.7800628542900085,
+        0.14298994839191437
+      ]
+    },
+    {
+      "file": "groundcover_00.glb",
+      "source_pack": "periwinkle_plant",
+      "source_object": "periwinkle_plant_01_LOD0",
+      "original_triangles": 11252,
+      "triangles": 4200,
+      "dimensions": [
+        0.2607530951499939,
+        0.32074978947639465,
+        0.3971704840660095
+      ]
+    },
+    {
+      "file": "groundcover_01.glb",
+      "source_pack": "periwinkle_plant",
+      "source_object": "periwinkle_plant_02_LOD0",
+      "original_triangles": 9096,
+      "triangles": 4200,
+      "dimensions": [
+        0.23113858699798584,
+        0.22478270530700684,
+        0.4107210040092468
+      ]
+    },
+    {
+      "file": "groundcover_02.glb",
+      "source_pack": "periwinkle_plant",
+      "source_object": "periwinkle_plant_03_LOD0",
+      "original_triangles": 5338,
+      "triangles": 4200,
+      "dimensions": [
+        0.16746914386749268,
+        0.14655235409736633,
+        0.3002440333366394
+      ]
+    },
+    {
+      "file": "groundcover_03.glb",
+      "source_pack": "periwinkle_plant",
+      "source_object": "periwinkle_plant_04_LOD0",
+      "original_triangles": 4108,
+      "triangles": 4108,
+      "dimensions": [
+        0.15581762790679932,
+        0.18423789739608765,
+        0.26496779918670654
+      ]
+    },
+    {
+      "file": "groundcover_04.glb",
+      "source_pack": "periwinkle_plant",
+      "source_object": "periwinkle_plant_05_LOD0",
+      "original_triangles": 3078,
+      "triangles": 3078,
+      "dimensions": [
+        0.11110654473304749,
+        0.14089442789554596,
+        0.2057981938123703
+      ]
+    },
+    {
+      "file": "groundcover_05.glb",
+      "source_pack": "periwinkle_plant",
+      "source_object": "periwinkle_plant_06_LOD0",
+      "original_triangles": 1478,
+      "triangles": 1478,
+      "dimensions": [
+        0.10294052958488464,
+        0.08942308276891708,
+        0.15972968935966492
+      ]
+    },
+    {
+      "file": "paper_00.glb",
+      "source": "Original Blender geometry",
+      "triangles": 110
+    },
+    {
+      "file": "can_00.glb",
+      "source": "Original Blender geometry",
+      "triangles": 1532
+    },
+    {
+      "file": "leaf_00.glb",
+      "source": "Original Blender curled serrated leaf with modeled midrib and petiole",
+      "triangles": 240
+    },
+    {
+      "file": "leaf_01.glb",
+      "source": "Original Blender curled serrated leaf with modeled midrib and petiole",
+      "triangles": 240
+    },
+    {
+      "file": "leaf_02.glb",
+      "source": "Original Blender curled serrated leaf with modeled midrib and petiole",
+      "triangles": 240
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "role": "scout",
+  "name": "Wasteland Ronin",
+  "provider": "Meshy",
+  "state": "exported_and_rig_validated",
+  "source_texture_task": "01a16b4b-91be-73ce-a760-74c525a6d7ea",
+  "game_remesh_task": "01a16b50-9776-70ed-9d44-c934ec1499de",
+  "rig_task": "01a16b56-2792-73d7-9078-baced4d4dc4b",
+  "generation": {
+    "engine": "Meshy 7.1 Flagship",
+    "input": "single image",
+    "pose": "A-Pose",
+    "high_detail": true,
+    "texture": "4K",
+    "image_enhancement": false,
+    "private": true,
+    "cost_credits": 35
+  },
+  "remesh": {
+    "target_triangles": 60000,
+    "topology": "triangle",
+    "cost_credits": 0,
+    "note": "A duplicate free remesh was submitted; runtime uses the first remesh."
+  },
+  "rig": {
+    "type": "Humanoid",
+    "height_m": 1.75,
+    "export_skeleton": "Mixamo",
+    "embedded_mesh": true,
+    "all_added_motions_single_file": true
+  },
+  "direction": "Grey beanie and jacket, olive sling, anatomical right cybernetic forearm.",
+  "reference_concept_sha256": "8FFA050AF84BA2819ADCA495A16F942A7B6F180DDD050AFB66289C2DB3A70717",
+  "files": {
+    "original_meshy_animated.glb": {
+      "sha256": "7223D65E4A508DF83BD751EF4D9E4E22FBBD4D9B7476F31E546B8DA6B0FAA13B",
+      "bytes": 63674740
+    },
+    "original_meshy_game.glb": {
+      "sha256": "797A290C43EA5EB43BF2EABBC2E48C88F94EF7317E70AB1DAE7955EC482D82D8",
+      "bytes": 60844196
+    },
+    "original_meshy_high.glb": {
+      "sha256": "528F4638E74A986C3E91CA27A9EBA0CD56356401C1C80A90C195EFA212869416",
+      "bytes": 81910748
+    }
+  },
+  "reference_apose_sha256": "3FB024B2E7117A916B5951163061FE865815951E3FF94A47B08A75376EB46A15",
+  "evidence": "Generative first pass. Original high detail and remeshed sources retained for later clothing/face corrections. No claim of exact concept identity."
+}

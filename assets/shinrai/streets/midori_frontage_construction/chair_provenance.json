@@ -1,0 +1,15 @@
+{
+  "asset": "Mori bentwood cafe chair",
+  "creator": "Codex custom parametric Blender modeling, 2026-10-23",
+  "tool": "Blender 5.2, scripted mesh authoring; Cycles CPU studio render",
+  "source": "build_chair.py; editable named components in mori_bentwood_chair.blend",
+  "references_viewed": [
+    "midori_street_concept_20261022/midori_street_art_target_v1.png",
+    "midori_shop_craft_20261023/qa/installed_02/street_day_frontage.png"
+  ],
+  "third_party_assets": "Original custom geometry plus CC0 texture maps: Poly Haven smoked_walnut_veneer by Jenelle van Heerden. Source https://polyhaven.com/a/smoked_walnut_veneer ; license https://polyhaven.com/license . Derived color: source linear RGB multiplied .55. Derived roughness: .55 + .15 times source value, yielding .55-.70. No normal map.",
+  "design": "Continuous steam-bent rear leg/back bow, curved lumbar crest, molded dished wood seat with rolled edge, splayed tapered front legs, tucked underseat rails and slender side stretchers. Source repeat 1m. Horizontal grain U follows swept cumulative length of bow/legs; physical circumference V. Seat planar with longitudinal grain; crest horizontal grain. No added geometry.",
+  "export": "Single joined mesh, one material, meter scale; Godot Y-up, feet at Y=0, front -Z and back +Z.",
+  "validation": "Actual evaluated mesh audit stored in audit.json; CPU studio PNG inspected. No Godot, GPU, production edits or installed acceptance.",
+  "license": "Original project geometry; texture maps CC0, with attribution and source retained for provenance."
+}

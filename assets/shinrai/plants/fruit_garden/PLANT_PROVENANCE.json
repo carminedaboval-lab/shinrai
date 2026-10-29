@@ -1,0 +1,24 @@
+{
+  "download_method": "Existing signed-in Sketchfab browser Download 3D Model controls; explicit CC BY4.0 download dialogs verified.",
+  "models": [
+    {
+      "title": "Lemon Trees",
+      "author": "Jagobo",
+      "url": "https://sketchfab.com/3d-models/lemon-trees-7ddb656429914056a1f2870ed7792e6a",
+      "license": "Creative Commons Attribution 4.0 International",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "download": "C:/Users/hp/Downloads/lemon_trees.glb",
+      "changes": "Selected one free-standing young citrus variant, omitted original lemons and other demonstration objects, scaled proportionally, preserved source bark/leaf PBR and opacity, added markers at actual branch vertices for independently harvestable scanned mikan. Adapted as a game mikan garden tree; original source is a citrus lemon tree."
+    },
+    {
+      "title": "Blender柿树(Diospyros Kaki)",
+      "author": "UESReseach",
+      "url": "https://sketchfab.com/3d-models/blenderdiospyros-kaki-d0f0a39fafca4adaad7736bbd501aa2e",
+      "license": "Creative Commons Attribution 4.0 International",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "download": "C:/Users/hp/Downloads/blenderdiospyros_kaki.glb",
+      "source_description": "Creator describes plant growth generated with The Grove for ecological digital twin research, published June2024.",
+      "changes": "Whole species-specific plant retained and normalized for the garden; branch sockets and independently harvested scanned kaki added. Exact derivative geometry and source preservation recorded in asset receipt."
+    }
+  ]
+}

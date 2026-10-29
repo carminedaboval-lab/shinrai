@@ -1,0 +1,13 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="assets/corporate_cantilever_traversal.glb" id="1_building"]
+[ext_resource type="PackedScene" path="lighting_rig.tscn" id="2_lighting"]
+[ext_resource type="PackedScene" path="traversal.tscn" id="3_traversal"]
+
+[node name="CantileverCommand" type="Node3D"]
+
+[node name="Architecture" parent="." instance=ExtResource("1_building")]
+
+[node name="ArchitecturalLighting" parent="." instance=ExtResource("2_lighting")]
+
+[node name="Traversal" parent="." instance=ExtResource("3_traversal")]

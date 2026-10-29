@@ -1,0 +1,170 @@
+[
+  {
+    "asset": "mori_fascia.svg",
+    "width": 774.811,
+    "height": 244.352,
+    "ratio": 3.1708805330015717,
+    "substrate_preview": "#404B3E",
+    "sha256": "23b78e817e01290b898667d8bb9e5ff0047609fdf1d2e15cac6cc4140d0230f1",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "mori_english.svg",
+    "width": 818.196,
+    "height": 96.15,
+    "ratio": 8.509578783151326,
+    "substrate_preview": "#404B3E",
+    "sha256": "09117fadf0943c925371152633867c84fd8aa6b1a15c6d3a0704164d3b900a93",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "mori_mark.svg",
+    "width": 940,
+    "height": 940,
+    "ratio": 1.0,
+    "substrate_preview": "#404B3E",
+    "sha256": "795de54a5ce346399605fc1675bd64d7fcd87bc41790ae264a0d5bb070ca9533",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "ueda_fascia.svg",
+    "width": 1051,
+    "height": 284,
+    "ratio": 3.7007042253521125,
+    "substrate_preview": "#DBD1B4",
+    "ink": "#30352D",
+    "sha256": "a9d9acce8ef0c7895c79b6186c9a2ef4d2d28e84a402af543149fbcc0307ecd8",
+    "lettering_source": "Noto Sans JP / Noto Serif JP",
+    "contours": "Skia union simplified, correct nonzero winding, holes preserved"
+  },
+  {
+    "asset": "ueda_vertical.svg",
+    "width": 274,
+    "height": 1084,
+    "ratio": 0.25276752767527677,
+    "substrate_preview": "#DBD1B4",
+    "ink": "#30352D",
+    "sha256": "4d046dcbc5a9ff5541974ea387f581bf3dba525b0c8009b35290e4ec1cdbcbfb",
+    "lettering_source": "Noto Sans JP / Noto Serif JP",
+    "contours": "Skia union simplified, correct nonzero winding, holes preserved"
+  },
+  {
+    "asset": "ueda_english.svg",
+    "width": 774.128,
+    "height": 96.32,
+    "ratio": 8.037043189368772,
+    "substrate_preview": "#DBD1B4",
+    "ink": "#30352D",
+    "sha256": "a147892111f0dd9370ba9fddddce333e5c4f8bf1f48f9e544671514796c2fdf0",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "ueda_mark.svg",
+    "width": 820,
+    "height": 780,
+    "ratio": 1.0512820512820513,
+    "substrate_preview": "#30403C",
+    "sha256": "c7aab1af014db84cb54433b98443c50cb9f3b5c259b74151eaed3f6df71367b9",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "hinata_fascia.svg",
+    "width": 1257.75,
+    "height": 257.75,
+    "ratio": 4.879728419010669,
+    "substrate_preview": "#E9E0C8",
+    "sha256": "f1ff4d0b20d140e388bb79350cfa29f7d584e639a9ed601c6ac94a8b219b1e01",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "hinata_english.svg",
+    "width": 792.03,
+    "height": 93.873,
+    "ratio": 8.437250327570228,
+    "substrate_preview": "#E9E0C8",
+    "sha256": "5e1eb9c385a0e93b054a1fdfa88183dd414f928b10356aa139520a0cc545113b",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "hinata_mark.svg",
+    "width": 820,
+    "height": 680,
+    "ratio": 1.2058823529411764,
+    "substrate_preview": "#E9E0C8",
+    "sha256": "775b47276d848085c14f461117f81a18fbfa17a98aa0412cf763b80ad2e0fe59",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "hinata_offers.svg",
+    "width": 459,
+    "height": 554,
+    "ratio": 0.8285198555956679,
+    "substrate_preview": "#EEE8D6",
+    "sha256": "1cca372266c172cfa4675f33446f1abb2e7df5fe55788bc752469af8499e60b6",
+    "lettering_source": "Yusei Magic Regular"
+  },
+  {
+    "asset": "yakitori_fascia.svg",
+    "width": 578.93,
+    "height": 287.737,
+    "ratio": 2.012010968349569,
+    "substrate_preview": "#26221C",
+    "sha256": "c1836c5024001a18128833f0b7c8987d23c09d82cc5967ce99acf1aa2c5048bf",
+    "lettering_source": "Yuji Boku Regular"
+  },
+  {
+    "asset": "yakitori_english.svg",
+    "width": 887.028,
+    "height": 96.43,
+    "ratio": 9.198672612257596,
+    "substrate_preview": "#26221C",
+    "sha256": "183fae5dcc30da2a361de1c330b17d2fb7074e18b8facf0c39c7329ef89cf741",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "yakitori_mark.svg",
+    "width": 844,
+    "height": 844,
+    "ratio": 1.0,
+    "substrate_preview": "#26221C",
+    "sha256": "34d039aaa274d0bdcb1c0be5e655758ad64648ba5d76acd9f58a90ae64f1f742",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "haku_fascia.svg",
+    "width": 1114.0,
+    "height": 254,
+    "ratio": 4.3858267716535435,
+    "substrate_preview": "#D3C9AF",
+    "sha256": "5d9efbb739b12986aa2f06c971f46d5ef20871d10e653b3a9ee783eabe010892",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "haku_english.svg",
+    "width": 943.618,
+    "height": 96.15,
+    "ratio": 9.814019760790432,
+    "substrate_preview": "#D3C9AF",
+    "sha256": "63c58ef849f83f011f35c7edada8e576f71722df7dc57439f1867c19de2ca49f",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "haku_mark.svg",
+    "width": 844,
+    "height": 634,
+    "ratio": 1.3312302839116719,
+    "substrate_preview": "#D3C9AF",
+    "sha256": "1cf58b31eda7805f624d83576bfd32bf8b979f7749e72257546de6e624adc553",
+    "lettering_source": "Noto Sans JP / Noto Serif JP"
+  },
+  {
+    "asset": "mori_letters.glb",
+    "geometry_report": "mori_geometry_report.json",
+    "sha256": "9a1d6f6ce28e73e99d4496d5fe4fe8e9ec4432b20a9a5a2b42ab0605b6f7746b"
+  },
+  {
+    "asset": "haku_plaque.glb",
+    "geometry_report": "haku_geometry_report.json",
+    "sha256": "8069d9ec4b5423771fcfe09ba0e78abae94fbfd3e9cc1b67c5c9b0f56bd58a95"
+  }
+]

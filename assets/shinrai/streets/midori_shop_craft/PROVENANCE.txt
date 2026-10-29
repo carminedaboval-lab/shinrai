@@ -1,0 +1,41 @@
+ORIGINAL CAFE HERO PROPS - FINAL STAGED DELIVERY
+Authoring: original geometry and constant materials/vertex colours authored for Shinrai
+by Codex. No downloaded geometry/art/textures, Meshy usage, paid services, collision
+geometry, external images or runtime font dependencies. MORI lettering converted to mesh.
+Source: build_hero_props.py plus individual editable artisan_espresso.blend and
+artisan_pastry.blend. Blender5.2.1 LTS, path supplied by root. Source .blend keeps named
+editable construction parts; exported GLBs consolidate into one mesh per asset.
+
+artisan_espresso.glb
+GodotXYZ .82x.48x.42m, bottomY0, front-Z. 13,988 triangles,1mesh,9material primitives.
+Two separate brewing groups/baskets/locking ears/double spouts/black grips; rounded
+stainless chassis,24individual removable tray slats, steam wand/heat grip/nozzle,
+hot-water outlet, two needle gauges, brew controls, cup warmer/rails, back louvers,
+service screws and MORI plaque. Large stainless faces keep flat manufactured normals;
+custom weighted-normal interpolation removed, brushed housing roughness.42. Chrome
+remains smoother for actual fittings. No animation or collider.
+Materials: Black, Brushed stainless, Satin backsplash, Dark stainless, Brass, Polished chrome, Amber,
+Ivory, Needle. Full linear base colors/metallic/roughness inventory in BUILD_AUDIT.json.
+SHA256 CB8EFE0D92E0F11A982DF3F6EB9928352C4F269700566F82600FA87BA1910567
+
+artisan_pastry.glb
+GodotXYZ .20x.085x.13m, bottomY0, front-Z. 2,588triangles,1mesh,1material primitive.
+Curved tapered crescent with physical soft rolled folds and continuous warm baked
+vertex colour. Earlier floating lip strips and per-face color patches removed.
+COLOR_0 is present inGLB; preserve imported vertex-colour material, no runtime override.
+Material: Continuous baked croissant. No external textures, collider, detached flakes.
+SHA256 132A88EECF6AB02212C0F1F3834755470FB40F41AECFCA4B3A1C3275091239E8
+
+Independent GLB audit parsed actual exported indices/POSITION bounds/materials/images,
+confirmed budgets/bottom0/dimensions and0images; seeGLB_AUDIT.json. Exact source/blend/
+preview hashes inFINAL_HASHES.json. Authoring script SHA256
+6F0635072DA825F422F66BD05F69CEA65A728746014B22DA89D6CE42E25BD289
+
+CPU-only preview: Cycles deviceCPU,24samples,1000x800,4threads. Preview PNGs inspected.
+No Godot or GPU launches, no production edits. Blender attempted user-cache sourcefile
+thumbnail writes which were denied; GLB/blend/explicitCPUrender outputs saved and audited.
+These are staged asset checks and studio previews, not installed Godot/scene acceptance.
+Root owns import/runtime/material/placement review. No third-party-asset licence burden
+added by these original generated assets; no CC0 scan claim is made.
+
+FINAL MATERIAL POLISH: Broad lower stainless face separately satin roughness.64; no custom normals, flat face shading explicitly asserted. Draft wave pattern was reflected tray slats, not rippled mesh. Croissant crust roughness.68 with restrained continuous golden ridge/fold variation. No geometry or dimensions changed. Final CPU previews reviewed by root; native installed acceptance remains root-owned.

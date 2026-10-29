@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/weapons/kasumi_scope/kasumi_scope_geometry.glb" id="1"]
+
+[node name="KasumiScope" type="Node3D"]
+metadata/magnification = 6.0
+
+[node name="Geometry" parent="." instance=ExtResource("1")]
+
+[node name="RearSight" type="Marker3D" parent="."]
+position = Vector3(0, 0.059, -0.149)
+
+[node name="FrontSight" type="Marker3D" parent="."]
+position = Vector3(0, 0.059, 0.180)

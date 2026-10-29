@@ -1,0 +1,28 @@
+{
+  "source_sha256": "9E80975957FD72E0E11222CD70D42F68FE2A5177035A9234893B1FBFD8CD2102",
+  "source_triangles": 206064,
+  "game_triangles": 10000,
+  "height_m": 0.3,
+  "top_centre_hit_z": 2.473592758178711e-06,
+  "materials": [
+    "Material_0"
+  ],
+  "output_sha256": "AD1BF9EC6EF54C7613749B33842E8C5604AAFBC3183050A067A59A3DEE946566",
+  "generator": "Meshy 6 geometry; Meshy 7 PBR texture",
+  "generation_date": "2026-10-23",
+  "workspace": "https://www.meshy.ai/workspace?model-tab=text-to-3d",
+  "source_export": "Meshy_AI_One_realistic_handmad_1023120311_texture.glb",
+  "visibility": "Private in user Meshy workspace",
+  "credits_spent": 30,
+  "credits_before": 964,
+  "credits_after": 934,
+  "geometry_prompt": "One realistic handmade Japanese studio stoneware vase, isolated single object. 30 cm tall, pear shaped rounded body, subtly asymmetric hand-thrown silhouette, narrow neck and gently flared uneven lip. Deep open mouth with visible 6 mm ceramic rim, inner wall and hollow interior. Discreet foot ring and stable flat bottom. Fine shallow wheel-thrown horizontal ridges and natural surface pitting. Warm ivory ash glaze, restrained sage-grey glaze pooling, small iron-brown exposed clay foot. Elegant contemporary ceramic gallery collectible, photoreal physically plausible materials and construction. No flowers, branches, handles, lid, pedestal, table, scene, text or logos. One separate vessel with thick walls and open mouth.",
+  "texture_prompt": "Real Japanese handmade stoneware ceramic vase: quiet warm ivory ash glaze, faint sage-grey glaze pooling near the neck, subtle kiln speckling and fine natural pores. Small unglazed iron-brown clay foot ring. Satin ceramic roughness, delicate glaze variation, softly worn rim and truthful ceramic inner surface. Photoreal physically based albedo, roughness and normal detail. No painted scenery, no decorative symbols, no text, no baked directional lighting, no fake black cavity painted on the exterior.",
+  "processing": "Blender5.2 normalized30cm; bottom origin; decimated206064 to10000 triangles; smooth shading; retained PBR and UV; no source overwritten",
+  "artwork": {
+    "file": "street_study.png",
+    "origin": "User-approved generated Midori street concept, reused unchanged as a framed architectural study",
+    "source": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\midori_street_concept_20261022\\midori_street_art_target_v1.png",
+    "sha256": "7E81A3DBB3021DF9DD0762B72A5DE52907EC4EED8D56FFC1D22356800236D958"
+  }
+}

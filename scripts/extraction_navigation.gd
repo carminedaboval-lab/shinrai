@@ -1,24 +1,31 @@
 extends RefCounted
+const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const StartupTrace = preload("res://scripts/startup_trace.gd")
 
 const CELL := 4.0
 const ORIGIN := Vector2(-220, -180)
+const FLOOR_NODE_START := 20000
+const FLOOR_NODE_SPACING := 0.75
+const FLOOR_SAMPLE_SPACING := 0.25
+const MAX_FLOOR_STEP := 0.065
 var grid := AStarGrid2D.new()
 var walk_graph := AStar2D.new()
 var shoreline := PackedVector2Array()
-var bridge_corridors: Array[PackedVector2Array] = []
 var ready := false
+var _park: Node3D
+var _floor_heights: Dictionary = {}
+var _space: PhysicsDirectSpaceState3D
+var _edge_query: PhysicsShapeQueryParameters3D
 
 func build(park: Node3D) -> void:
+	var _boot_tick := StartupTrace.begin()
+	_park = park
+	_floor_heights.clear()
 	ready = false
 	walk_graph.clear()
 	shoreline.clear()
-	bridge_corridors.clear()
-	for route: Array[Vector2] in [park.FUTURE_BRIDGE_WEST, park.FUTURE_BRIDGE_NORTH_EAST, park.FUTURE_BRIDGE_SOUTH]:
-		var corridor := PackedVector2Array()
-		for point: Vector2 in route:
-			corridor.append(point * park.LAYOUT_SCALE)
-		bridge_corridors.append(corridor)
 	for point: Vector2 in park.lake_contour:
+		await LoadingBudget.checkpoint(park)
 		shoreline.append(point * park.LAYOUT_SCALE)
 	grid.region = Rect2i(0, 0, 111, 91)
 	grid.cell_size = Vector2.ONE * CELL
@@ -32,30 +39,43 @@ func build(park: Node3D) -> void:
 	query.collision_mask = 1
 	query.collide_with_areas = false
 	var player: CharacterBody3D = park.get_node("ParkScaleReviewPlayer")
-	query.exclude = [player.get_rid()]
+	var excluded: Array[RID] = [player.get_rid()]
+	# Walkable deck/ramp supports are floors. Keep prop and obstacle bodies in the query.
+	for support: Node in park.get_tree().get_nodes_in_group("midori_walk_surface"):
+		await LoadingBudget.checkpoint(park)
+		if support is StaticBody3D and park.is_ancestor_of(support):
+			excluded.append(support.get_rid())
+	query.exclude = excluded
 	var space := park.get_world_3d().direct_space_state
+	_space = space
 	for y: int in range(91):
+		await LoadingBudget.checkpoint(park)
 		for x: int in range(111):
+			await LoadingBudget.checkpoint(park)
 			var cell := Vector2i(x, y)
 			var p := grid.get_point_position(cell)
 			var blocked := x < 2 or y < 2 or x > 108 or y > 88 or is_water(p)
 			if not blocked:
-				query.transform = Transform3D(Basis.IDENTITY, Vector3(p.x, 0.85, p.y))
+				query.transform = Transform3D(Basis.IDENTITY, Vector3(p.x, _floor_height(p)+0.85, p.y))
 				blocked = not space.intersect_shape(query, 1).is_empty()
 			grid.set_point_solid(cell, blocked)
 			if not blocked:
 				# Prefer the authored park paths without forbidding grass flanks.
-				var on_path: bool = park._is_near_destination_path(p / park.LAYOUT_SCALE, 0.4)
+				var on_path: bool = is_finite(float(park.bridge_surface_height(p))) or park._is_near_destination_path(p / park.LAYOUT_SCALE, 0.4)
 				grid.set_point_weight_scale(cell, 1.0 if on_path else 1.65)
-				walk_graph.add_point(_cell_id(cell), p, grid.get_point_weight_scale(cell))
+				_add_walk_point(_cell_id(cell), p, grid.get_point_weight_scale(cell))
+	_boot_tick = StartupTrace.finish("navigation.vertices",_boot_tick)
 	# Clear endpoints do not imply a clear edge: sweep a player-sized capsule
 	# between cells so routes cannot cut through a lamp, tree or boulder.
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.42
 	capsule.height = 1.75
 	query.shape = capsule
+	_edge_query = query
 	for y: int in range(2, 89):
+		await LoadingBudget.checkpoint(park)
 		for x: int in range(2, 109):
+			await LoadingBudget.checkpoint(park)
 			var cell := Vector2i(x, y)
 			if grid.is_point_solid(cell):
 				continue
@@ -68,16 +88,108 @@ func build(park: Node3D) -> void:
 					if grid.is_point_solid(cell + Vector2i(direction.x, 0)) or grid.is_point_solid(cell + Vector2i(0, direction.y)):
 						continue
 				var b := grid.get_point_position(next)
-				if is_water(a.lerp(b, 0.25)) or is_water(a.lerp(b, 0.5)) or is_water(a.lerp(b, 0.75)):
-					continue
-				query.transform = Transform3D(Basis.IDENTITY, Vector3(a.x, 1.1, a.y))
-				query.motion = Vector3(b.x - a.x, 0, b.y - a.y)
-				if not space.intersect_shape(query, 1).is_empty():
-					continue
-				var clearance := space.cast_motion(query)
-				if clearance[0] >= 0.9999:
+				if _can_walk_edge(a, b):
 					walk_graph.connect_points(_cell_id(cell), _cell_id(next))
+	_boot_tick = StartupTrace.finish("navigation.edges",_boot_tick)
+	await _add_bridge_floor_routes()
+	_boot_tick = StartupTrace.finish("navigation.bridge_links",_boot_tick)
 	ready = true
+
+func _add_walk_point(id: int, p: Vector2, weight: float = 1.0) -> void:
+	walk_graph.add_point(id, p, weight)
+	# Cache graph vertices only. Dense edge probes must not cache the whole lawn.
+	_floor_heights[p] = maxf(float(_park.bridge_surface_height(p)), _terrain_height(p))
+
+func _add_bridge_floor_routes() -> void:
+	var next_id := FLOOR_NODE_START
+	var deck_ends: Array[int] = []
+	var landing_ends: Array[int] = []
+	var floor_nodes: Array[int] = []
+	for surface: Dictionary in _park._bridge_walk_surfaces:
+		await LoadingBudget.checkpoint(_park)
+		var points: Array[Vector2] = []
+		if surface.kind == "deck":
+			for sample: Vector2 in surface.spec.samples:
+				points.append(surface.spec.start + surface.spec.axis * sample.x)
+		else:
+			for point: Vector3 in surface.spec.points:
+				points.append(Vector2(point.x, point.z))
+		var route := _resample_floor_route(points)
+		var ids: Array[int] = []
+		for p: Vector2 in route:
+			await LoadingBudget.checkpoint(_park)
+			_add_walk_point(next_id, p)
+			ids.append(next_id)
+			floor_nodes.append(next_id)
+			next_id += 1
+		for index: int in range(ids.size() - 1):
+			await LoadingBudget.checkpoint(_park)
+			_connect_walk_points(ids[index], ids[index + 1])
+		if ids.is_empty():
+			continue
+		if surface.kind == "deck":
+			deck_ends.append(ids[0])
+			deck_ends.append(ids[-1])
+		else:
+			landing_ends.append(ids[-1])
+	# The mouths overlap the front treads by 20cm; connect the exact floor chains.
+	for landing_id: int in landing_ends:
+		await LoadingBudget.checkpoint(_park)
+		var mouth := walk_graph.get_point_position(landing_id)
+		for deck_id: int in deck_ends:
+			await LoadingBudget.checkpoint(_park)
+			if mouth.distance_to(walk_graph.get_point_position(deck_id)) <= 1.5:
+				_connect_walk_points(landing_id, deck_id)
+	# Join the coarse park grid only across genuinely walkable floor transitions.
+	# Checking the whole link prevents shore nodes entering a raised deck's side.
+	for id: int in floor_nodes:
+		await LoadingBudget.checkpoint(_park)
+		var p := walk_graph.get_point_position(id)
+		var raw := Vector2i(((p - ORIGIN) / CELL).round())
+		for y: int in range(-2, 3):
+			await LoadingBudget.checkpoint(_park)
+			for x: int in range(-2, 3):
+				var cell := raw + Vector2i(x, y)
+				if not grid.region.has_point(cell) or grid.is_point_solid(cell):
+					continue
+				var grid_id := _cell_id(cell)
+				if not walk_graph.has_point(grid_id):
+					continue
+				if p.distance_to(walk_graph.get_point_position(grid_id)) <= CELL * 1.5:
+					_connect_walk_points(id, grid_id)
+	print("BRIDGE_NAV_FLOORS: nodes=%d deck_ends=%d landing_mouths=%d cached_heights=%d" % [floor_nodes.size(), deck_ends.size(), landing_ends.size(), _floor_heights.size()])
+
+func _resample_floor_route(points: Array[Vector2]) -> Array[Vector2]:
+	var route: Array[Vector2] = []
+	if points.is_empty():
+		return route
+	route.append(points[0])
+	# Keep the supplied curve shape while making long toe/deck segments dense.
+	for index: int in range(points.size() - 1):
+		var a := points[index]
+		var b := points[index + 1]
+		var sections := maxi(1, ceili(a.distance_to(b) / FLOOR_NODE_SPACING))
+		for section: int in range(1, sections + 1):
+			var p := a.lerp(b, float(section) / float(sections))
+			if section == sections and index < points.size() - 2 and route[-1].distance_to(p) < FLOOR_NODE_SPACING * 0.5:
+				continue
+			route.append(p)
+	return route
+
+func _connect_walk_points(a_id: int, b_id: int) -> void:
+	if a_id == b_id or walk_graph.are_points_connected(a_id, b_id):
+		return
+	if _can_walk_edge(walk_graph.get_point_position(a_id), walk_graph.get_point_position(b_id)):
+		walk_graph.connect_points(a_id, b_id)
+
+func _can_walk_edge(a: Vector2, b: Vector2) -> bool:
+	if not _can_walk_floor(a, b):
+		return false
+	_edge_query.transform = Transform3D(Basis.IDENTITY, Vector3(a.x, _floor_height(a) + 1.1, a.y))
+	_edge_query.motion = Vector3(b.x - a.x, _floor_height(b) - _floor_height(a), b.y - a.y)
+	if not _space.intersect_shape(_edge_query, 1).is_empty():
+		return false
+	return _space.cast_motion(_edge_query)[0] >= 0.9999
 
 func _cell_id(cell: Vector2i) -> int:
 	return cell.y * 111 + cell.x
@@ -85,15 +197,9 @@ func _cell_id(cell: Vector2i) -> int:
 func is_water(p: Vector2) -> bool:
 	if not Geometry2D.is_point_in_polygon(p, shoreline):
 		return false
-	# Only the installed bridge decks are dry traversable corridors.
-	for corridor: PackedVector2Array in bridge_corridors:
-		for index: int in range(corridor.size() - 1):
-			var a := corridor[index]
-			var b := corridor[index + 1]
-			var segment := b - a
-			var t := clampf((p - a).dot(segment) / segment.length_squared(), 0.0, 1.0)
-			if p.distance_to(a + segment * t) <= 2.6:
-				return false
+	if _park != null and is_finite(float(_park.bridge_surface_height(p))):
+		return false
+	# Only actual installed floor footprints make water traversable.
 	return true
 
 func nearest_cell(point: Vector3) -> Vector2i:
@@ -119,13 +225,120 @@ func nearest_cell(point: Vector3) -> Vector2i:
 	return Vector2i(55, 85)
 
 func nearest(point: Vector3) -> Vector3:
-	var p := grid.get_point_position(nearest_cell(point))
-	return Vector3(p.x, 0.2, p.y)
+	# Spawn/patrol anchors snap onto a real floor, including requests in the lake.
+	var id := _closest_graph_point(Vector2(point.x, point.z))
+	if id < 0:
+		return point
+	var p := walk_graph.get_point_position(id)
+	return Vector3(p.x, _floor_height(p)+0.2, p.y)
 
 func path(from: Vector3, to: Vector3) -> PackedVector3Array:
 	var output := PackedVector3Array()
 	if not ready:
 		return output
-	for p: Vector2 in walk_graph.get_point_path(_cell_id(nearest_cell(from)), _cell_id(nearest_cell(to))):
-		output.append(Vector3(p.x, 0.2, p.y))
+	var from_id := _nearest_graph_point(from)
+	var to_id := _nearest_graph_point(to)
+	if from_id < 0 or to_id < 0:
+		return output
+	for p: Vector2 in walk_graph.get_point_path(from_id, to_id):
+		output.append(Vector3(p.x, _floor_height(p)+0.2, p.y))
+	# On a fitted floor, replanning can snap to a nearby grid node behind the
+	# actor. Start farther along only when the complete live-position link passes
+	# the same floor continuity and obstacle capsule checks as every graph edge.
+	var live_start := Vector2(from.x,from.z)
+	if is_finite(float(_park.bridge_surface_height(live_start))):
+		var advance := 0
+		for index: int in range(mini(6,output.size())):
+			var candidate := Vector2(output[index].x,output[index].z)
+			if live_start.distance_to(candidate) > CELL*2.0:
+				break
+			if _can_walk_edge(live_start,candidate):
+				advance = index
+		if advance > 0:
+			output = output.slice(advance)
 	return output
+
+func _nearest_graph_point(point: Vector3) -> int:
+	if walk_graph.get_point_count() == 0:
+		return -1
+	var p := Vector2(point.x, point.z)
+	var closest := walk_graph.get_closest_point(p)
+	# Interactive goals can be inside a lamp/relay collider. Snap them to a clear
+	# connected graph vertex; only the floor transition must be reachable here.
+	# The actual graph edges already passed full obstacle capsule sweeps.
+	if not walk_graph.get_point_connections(closest).is_empty() and _can_walk_floor(p, walk_graph.get_point_position(closest)):
+		return closest
+	# A nearby floor node across a tall side cannot be the start of a walking route.
+	var best := -1
+	var best_distance := INF
+	for id: int in walk_graph.get_point_ids():
+		var candidate := walk_graph.get_point_position(id)
+		var distance := p.distance_squared_to(candidate)
+		if distance >= best_distance or distance > CELL * CELL * 4.0 or walk_graph.get_point_connections(id).is_empty():
+			continue
+		if _can_walk_floor(p, candidate):
+			best = id
+			best_distance = distance
+	return best
+
+func _closest_graph_point(p: Vector2) -> int:
+	if walk_graph.get_point_count() == 0:
+		return -1
+	var closest := walk_graph.get_closest_point(p)
+	if not walk_graph.get_point_connections(closest).is_empty():
+		return closest
+	var best := -1
+	var best_distance := INF
+	for id: int in walk_graph.get_point_ids():
+		var distance := p.distance_squared_to(walk_graph.get_point_position(id))
+		if distance < best_distance and not walk_graph.get_point_connections(id).is_empty():
+			best = id
+			best_distance = distance
+	return best
+
+func _floor_height(p: Vector2) -> float:
+	if _park == null:
+		return 0.0
+	if _floor_heights.has(p):
+		return _floor_heights[p]
+	return maxf(float(_park.bridge_surface_height(p)), _terrain_height(p))
+
+func _can_walk_floor(a: Vector2, b: Vector2) -> bool:
+	if not _can_walk_floor_centre(a,b):
+		return false
+	if is_finite(float(_park.bridge_surface_height(a))) or is_finite(float(_park.bridge_surface_height(b))):
+		# A centre line grazing a curved ramp edge is too fragile for an actor.
+		# Check floor continuity across the navigation capsule's width as well.
+		var side := Vector2(-(b-a).y,(b-a).x).normalized()*0.45
+		if not _can_walk_floor_centre(a+side,b+side) or not _can_walk_floor_centre(a-side,b-side):
+			return false
+	return true
+
+func _can_walk_floor_centre(a: Vector2, b: Vector2) -> bool:
+	# Excluded floors must still be entered through their shallow approaches.
+	# A clear capsule sweep above a deck does not make its raised sides walkable.
+	var steps := maxi(1, ceili(a.distance_to(b) / FLOOR_SAMPLE_SPACING))
+	if is_water(a):
+		return false
+	var previous := _floor_height(a)
+	var previous_bridge := float(_park.bridge_surface_height(a))
+	for index: int in range(1, steps + 1):
+		var p := a.lerp(b, float(index) / float(steps))
+		# Reuse the same exact height for water, support and transition checks.
+		# No quantization or persistent cache: changed floors are still read live.
+		var bridge_height := float(_park.bridge_surface_height(p))
+		if not is_finite(bridge_height) and Geometry2D.is_point_in_polygon(p,shoreline):
+			return false
+		var height := float(_floor_heights[p]) if _floor_heights.has(p) else maxf(bridge_height,_terrain_height(p))
+		var previous_point := a.lerp(b, float(index-1)/float(steps))
+		var bridge_transition := is_finite(bridge_height) or is_finite(previous_bridge)
+		var allowed_step := MAX_FLOOR_STEP if bridge_transition else maxf(MAX_FLOOR_STEP, p.distance_to(previous_point)*0.60)
+		if absf(height - previous) > allowed_step:
+			return false
+		previous = height
+		previous_bridge = bridge_height
+	return true
+
+func _terrain_height(p: Vector2) -> float:
+	var terrain := _park.get_node_or_null("MidoriTerrain")
+	return terrain.height_at(p) if terrain != null and terrain.installed else 0.0

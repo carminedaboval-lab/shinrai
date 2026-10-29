@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/catalogue_bolt_viewmodel.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/weapons/hayate/hayate_weapon.tscn" id="2"]
+
+[node name="HayateViewmodel" type="Node3D"]
+script = ExtResource("1")
+weapon_key = "hayate"
+assembly_scene = ExtResource("2")
+magazine_grip = Vector3(0.0, -0.045, 0.0)
+optic_id = ""

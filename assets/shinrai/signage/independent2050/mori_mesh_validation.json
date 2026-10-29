@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Mori metal glyph 1",
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "volume": 0.0012329739051921886
+  },
+  {
+    "name": "Mori metal glyph 2",
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "volume": 0.0014315876485802583
+  },
+  {
+    "name": "Mori metal glyph 3",
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "volume": 0.0012512335905990534
+  }
+]

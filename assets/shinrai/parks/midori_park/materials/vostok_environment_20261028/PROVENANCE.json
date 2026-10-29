@@ -1,0 +1,82 @@
+{
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "assets": {
+    "leafy_grass": {
+      "name": "Leafy Grass",
+      "author": "Charlotte Baglioni",
+      "source": "https://polyhaven.com/a/leafy_grass",
+      "world_width_m": 2.0
+    },
+    "dirt": {
+      "name": "Dirt",
+      "author": "Charlotte Baglioni",
+      "source": "https://polyhaven.com/a/dirt",
+      "world_width_m": 2.0
+    }
+  },
+  "files": [
+    {
+      "asset": "leafy_grass",
+      "map": "albedo",
+      "resolution": "2k",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_diff_2k.jpg",
+      "size": 4766204,
+      "md5": "8014f4dace676a62ed71b3dd76119dae",
+      "sha256": "8e1c6d21365d4b89bc5a35ab664da98a78dbc3ab9ba6100474881c8619a5b113",
+      "candidate_path": "assets/shinrai/parks/midori_park/materials/vostok_environment_20261028/leafy_grass/leafy_grass_diff_2k.jpg"
+    },
+    {
+      "asset": "leafy_grass",
+      "map": "normal",
+      "resolution": "1k",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/leafy_grass/leafy_grass_nor_gl_1k.jpg",
+      "size": 1466049,
+      "md5": "8279e096e204ea326d57a318869f99df",
+      "sha256": "832328216adc0a7e1f70a31d5ee48c9ab7f2152d83816122736cf42ac4b2ebd6",
+      "candidate_path": "assets/shinrai/parks/midori_park/materials/vostok_environment_20261028/leafy_grass/leafy_grass_nor_gl_1k.jpg"
+    },
+    {
+      "asset": "leafy_grass",
+      "map": "roughness",
+      "resolution": "1k",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/leafy_grass/leafy_grass_rough_1k.jpg",
+      "size": 511385,
+      "md5": "05f6bb1383e12b327727d313c5899cf2",
+      "sha256": "0c2a1d91aacb8e54a496051b59854e51e456fe858abeade778e308359ef16463",
+      "candidate_path": "assets/shinrai/parks/midori_park/materials/vostok_environment_20261028/leafy_grass/leafy_grass_rough_1k.jpg"
+    },
+    {
+      "asset": "dirt",
+      "map": "albedo",
+      "resolution": "2k",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirt/dirt_diff_2k.jpg",
+      "size": 3053062,
+      "md5": "8e6fb7316bca5840c386cb72a3f16c62",
+      "sha256": "126d3e4886cc94b494ba609ddc323a77ff0362a1b156c3750d5d2a0a0ead02b8",
+      "candidate_path": "assets/shinrai/parks/midori_park/materials/vostok_environment_20261028/dirt/dirt_diff_2k.jpg"
+    },
+    {
+      "asset": "dirt",
+      "map": "normal",
+      "resolution": "1k",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dirt/dirt_nor_gl_1k.jpg",
+      "size": 1202783,
+      "md5": "362610edf09fd31735958eecec823a84",
+      "sha256": "5a5f97d920fdcdf352b350b95558bf48bb306be1fe61a47418aadc60b7deb0ce",
+      "candidate_path": "assets/shinrai/parks/midori_park/materials/vostok_environment_20261028/dirt/dirt_nor_gl_1k.jpg"
+    },
+    {
+      "asset": "dirt",
+      "map": "roughness",
+      "resolution": "1k",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/dirt/dirt_rough_1k.jpg",
+      "size": 253549,
+      "md5": "d936d6760ce0f899b131d30626d52ce9",
+      "sha256": "eff62d5ae7bf0c46b84173bc46f07528dd164aa39f5d550c93a805b36f54b704",
+      "candidate_path": "assets/shinrai/parks/midori_park/materials/vostok_environment_20261028/dirt/dirt_rough_1k.jpg"
+    }
+  ],
+  "date": "2026-10-28",
+  "purpose": "Independent scanned turf/soil layers for Shinrai; no Road to Vostok assets used."
+}

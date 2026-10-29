@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/weapons/optics/ame_reflex_geometry.glb" id="1"]
+
+[node name="AmeReflex" type="Node3D"]
+
+[node name="Geometry" parent="." instance=ExtResource("1")]
+
+[node name="RearSight" type="Marker3D" parent="."]
+position = Vector3(0, 0.0336322, -0.026134)
+
+[node name="FrontSight" type="Marker3D" parent="."]
+position = Vector3(0, 0.0336322, 0.012172)

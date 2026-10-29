@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/shinrai/parks/midori_park/models/furniture/ambient/neon_vending/vending_cyberpunk.glb" id="1_model"]
+[ext_resource type="Script" path="res://assets/shinrai/parks/midori_park/models/furniture/ambient/neon_vending/neon_vending.gd" id="2_motion"]
+
+[node name="MeasuredNeonVending" type="Node3D"]
+script = ExtResource("2_motion")
+
+[node name="VendingModel" parent="." instance=ExtResource("1_model")]

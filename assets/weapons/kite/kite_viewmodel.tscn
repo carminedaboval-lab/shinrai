@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/extraction_modular_viewmodel.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/weapons/kite/kite_weapon.tscn" id="2"]
+
+[node name="KiteViewmodel" type="Node3D"]
+script = ExtResource("1")
+weapon_key = "kite"
+assembly_scene = ExtResource("2")
+magazine_grip = Vector3(0.015, -0.078, 0)
+optic_id = "prism_01"

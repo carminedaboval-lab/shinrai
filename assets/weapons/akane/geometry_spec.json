@@ -1,0 +1,75 @@
+{
+  "id": "akane",
+  "canonical": "meters; -X forward, +Y up",
+  "parts": [
+    "Receiver",
+    "Slide",
+    "Barrel",
+    "Magazine",
+    "Trigger"
+  ],
+  "markers": {
+    "GripRight": [
+      0.036,
+      -0.052,
+      0
+    ],
+    "GripLeft": [
+      0.017,
+      -0.057,
+      0.022
+    ],
+    "Muzzle": [
+      -0.15,
+      0.019999999999999997,
+      0
+    ],
+    "IronRearSight": [
+      0.052000000000000005,
+      0.045,
+      0
+    ],
+    "IronFrontSight": [
+      -0.13,
+      0.045,
+      0
+    ],
+    "OpticSocket": [
+      0.022000000000000006,
+      0.041,
+      0
+    ],
+    "BoltRelease": [
+      0.014,
+      -0.006,
+      0.019
+    ],
+    "EjectionPort": [
+      -0.003,
+      0.026,
+      -0.017
+    ],
+    "MagazineGrip": [
+      0.05,
+      -0.091,
+      0
+    ]
+  },
+  "magazine_origin": [
+    0,
+    0,
+    0
+  ],
+  "magazine_grip": [
+    0.05,
+    -0.091,
+    0
+  ],
+  "slide_travel_m": 0.03,
+  "dimensions_approx_m": [
+    0.215,
+    0.158,
+    0.034
+  ],
+  "source": "C:\\Users\\hp\\OneDrive\\Documenti\\ChatGPT\\shinrai\\shooter_foundations_20261026\\catalogue\\pistols_smgs\\source\\akane.blend"
+}

@@ -1,6 +1,37 @@
 extends CharacterBody3D
 
+const ControllerInput = preload("./shinrai_input.gd")
+const Lean = preload("./player_lean.gd")
+var lean_controller = Lean.new()
+const CONTROLLER_LOOK_SPEED: float = 2.4
+var _controller_crouch := false
+var _controller_sprint := false
+var _controller_epoch: int = 0
+
+const Medical = preload("./extraction_medical.gd")
+var medical := Medical.new()
+
+const Swimming = preload("res://scripts/player_swimming.gd")
+var swim_controller = Swimming.new()
+var is_swimming := false
+var is_underwater := false
+
 const UziViewmodelScript = preload("res://scripts/uzi_viewmodel.gd")
+const WeaponCatalog = preload("res://scripts/extraction_weapon_catalog.gd")
+const MagazineRecord = preload("./extraction_magazine_record.gd")
+const WeaponAudio = preload("./extraction_weapon_audio.gd")
+const FieldHandling = preload("./extraction_field_handling.gd")
+var field_handling = FieldHandling.new()
+var _weapon_audio: Node
+var _dry_fire_latched := false
+var _bolt_open_played := false
+var physical_magazines := false
+var physical_reload_handler: Callable
+var equipped_clothing: Dictionary = {}
+var weapon_id := "uzi"
+var weapon_definition: Dictionary = WeaponCatalog.weapon("uzi")
+var weapon_input_locked := false
+var weapon_transition_pending := false
 const AUTO_FIRE_INTERVAL: float = 0.095
 # v10.5 recoil: the UZI is a light 9 mm SMG, so the camera climb is deliberately
 # modest. Recoil is applied to the actual look direction rather than faking the
@@ -12,19 +43,62 @@ const FLY_SPEED: float = 20.0
 const FLY_BOOST_SPEED: float = 55.0
 const STUN_MOVE_MULTIPLIER: float = 0.36
 const STUN_RECOVERY_IMMUNITY: float = 3.0
+const DRONE_STUN_AIM_MULTIPLIER: float = 0.75
+const DRONE_STUN_MAX_DURATION: float = 3.0
+const LEGACY_STUN_STATUS: String = "STUNNED — movement and weapon disrupted"
+const DRONE_STUN_STATUS: String = "DRONE STUN — aim slowed; ADS and sprint unavailable"
 
 signal died
 signal shot_fired
 signal damage_received(amount: float)
+signal healing_cancelled
 var extraction_mode := false
+
+# Extraction survival movement. Review mode retains its unrestricted controls.
+const STAMINA_DRAIN := 18.0
+const STAMINA_RECOVERY := 22.0
+const STAMINA_RECOVERY_DELAY := 1.25
+const SPRINT_RESTART_STAMINA := 20.0
+const JUMP_STAMINA_COST := 12.0
+const MANTLE_STAMINA_COST := 18.0
+const STANDING_CAPSULE_HEIGHT := 1.75
+const CROUCH_CAPSULE_HEIGHT := 1.10
+const STANDING_HEAD_HEIGHT := 1.58
+const CROUCH_HEAD_HEIGHT := 0.93
+const CROUCH_SPEED := 2.10
+const STRAFE_SPEED_MULTIPLIER := 0.88
+const BACKPEDAL_SPEED_MULTIPLIER := 0.72
+const AIR_STEERING_ACCELERATION := 2.0
+const JUMP_GROUND_SETTLE := 0.075
+const LANDING_JUMP_LOCK := 0.26
+const STEP_HEIGHT := 0.32
+
+var _ground_contact_time := 0.0
+var _landing_recovery := 0.0
+var _jump_recovery := 0.0
+var _air_speed_limit := 0.0
+var _movement_was_grounded := false
+
+var stamina := 100.0
+var max_stamina := 100.0
+var coffee_boost_remaining := 0.0
+var _coffee_base_max := 100.0
+var sprinting := false
+var crouching := false
+var healing_active := false
+var cargo_load_ratio := 0.0
+var body_collision: CollisionShape3D
+var body_capsule: CapsuleShape3D
+var _stamina_recovery_delay := 0.0
+var _sprint_exhausted := false
 
 var mouse_sensitivity: float = 0.00215
 var ads_mouse_multiplier: float = 0.55
-var walk_speed: float = 5.0
-var sprint_speed: float = 8.0
-var acceleration: float = 18.0
-var friction: float = 22.0
-var jump_velocity: float = 6.2
+var walk_speed: float = 3.85
+var sprint_speed: float = 6.65
+var acceleration: float = 14.0
+var friction: float = 19.0
+var jump_velocity: float = 5.1
 var gravity: float = 18.0
 
 const MANTLE_MIN_HEIGHT: float = 0.55
@@ -33,6 +107,7 @@ const MANTLE_REACH: float = 0.95
 var mantle_active: bool = false
 var mantle_start: Vector3 = Vector3.ZERO
 var mantle_target: Vector3 = Vector3.ZERO
+var mantle_corner: Vector3 = Vector3.ZERO
 var mantle_elapsed: float = 0.0
 var mantle_duration: float = 0.28
 var mantle_saved_layer: int = 1
@@ -46,9 +121,24 @@ var health: float = 100.0
 var ammo: int = 30
 var reserve: int = 150
 var mag_size: int = 30
+var chambered := false
+var magazine_inserted := true
+var inserted_magazine: Dictionary = {}
+var bolt_locked := false
+var bolt_cycle_active := false
+var bolt_cycle_elapsed := 0.0
+var bolt_cycle_duration := 0.0
+var _bolt_cycle_weapon_id := ""
+var _reload_mag_out := false
+var _reload_mag_in := false
+var _reload_bolt_released := false
+var _reload_chamber_only := false
 var kills: int = 0
 var wave: int = 1
 
+var weapon_lowered:=false
+var weapon_lower_blend:=0.0
+var weapon_posture: Node3D
 var ads: bool = false
 var ads_blend: float = 0.0
 var reloading: bool = false
@@ -58,12 +148,24 @@ var reload_empty: bool = false
 var fire_cooldown: float = 0.0
 var recoil_pitch: float = 0.0
 var recoil_velocity: float = 0.0
+var recoil_burst_shots: int = 0
+var recoil_yaw: float = 0.0
+var _recoil_idle_time: float = 10.0
+var _fire_requested := false
+var _trigger_was_down := false
+var _sprint_fire_delay := 0.0
+var _semi_buffer_remaining := 0.0
+var _sprint_pose := 0.0
 var weapon_kick: float = 0.0
 var muzzle_timer: float = 0.0
 var hit_marker: float = 0.0
 var damage_flash: float = 0.0
 var stun_remaining: float = 0.0
 var stun_immunity_remaining: float = 0.0
+var drone_stun_active: bool = false
+var drone_stun_fx: CanvasLayer
+const FaceDroneLatch = preload("player_drone_face_latch.gd")
+var face_drone_latch: FaceDroneLatch
 var bob_phase: float = 0.0
 var alive: bool = true
 
@@ -129,6 +231,9 @@ var hip_weapon_pos: Vector3 = Vector3(0.39, -0.365, -0.84)
 var ads_weapon_pos: Vector3 = Vector3(0.0, -0.245, -0.625)
 
 func _ready() -> void:
+    ControllerInput.ensure_actions()
+    add_to_group("shinrai_input_players")
+    _controller_epoch = ControllerInput.release_epoch
     collision_layer = 1
     collision_mask = 1 | 2
     fly_saved_layer = collision_layer
@@ -136,11 +241,42 @@ func _ready() -> void:
     _build_collision()
     _build_camera()
     _build_weapon()
+    _build_weapon_posture()
     _build_hud()
     Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
     _update_hud()
+    add_child(preload("res://scripts/urban_explorer_body.gd").new())
+
+func _build_weapon_posture() -> void:
+    weapon_posture=Node3D.new()
+    weapon_posture.name="WeaponPosture"
+    camera.add_child(weapon_posture)
+    weapon.reparent(weapon_posture)
+    if is_instance_valid(uzi_viewmodel): uzi_viewmodel.reparent(weapon_posture)
+
+func is_weapon_lowered() -> bool:
+    return weapon_lowered and weapon_lower_blend>.85
+
+func set_weapon_lowered(value: bool) -> void:
+    weapon_lowered=value
+    if value:
+        ads=false
+        field_handling.cancel(self)
+
+func _tick_weapon_posture(delta: float) -> void:
+    if not _weapon_handling_allowed(): _reset_weapon_handling()
+    weapon_lower_blend=move_toward(weapon_lower_blend,1.0 if weapon_lowered else 0.0,delta*4.5)
+    _sprint_pose = lerpf(_sprint_pose, 1.0 if sprinting else 0.0, 1.0 - exp(-16.0 * delta))
+    if is_instance_valid(weapon_posture):
+        weapon_posture.rotation = Vector3(-0.85, 0.08, 0.12) * weapon_lower_blend + Vector3(-0.28, 0.08, 0.09) * _sprint_pose * (1.0 - weapon_lower_blend)
+        weapon_posture.position = Vector3(0, -0.16, 0.04) * weapon_lower_blend + Vector3(0.025, -0.045, 0.03) * _sprint_pose
+        weapon_posture.rotation += field_handling.check.rotation_offset
+        weapon_posture.position += field_handling.check.position_offset
 
 func _build_collision() -> void:
+    floor_snap_length = STEP_HEIGHT + 0.03
+    floor_constant_speed = true
+    floor_stop_on_slope = true
     var shape_node := CollisionShape3D.new()
     var capsule := CapsuleShape3D.new()
     capsule.radius = 0.36
@@ -148,6 +284,8 @@ func _build_collision() -> void:
     shape_node.shape = capsule
     shape_node.position = Vector3(0, 0.9, 0)
     add_child(shape_node)
+    body_collision = shape_node
+    body_capsule = capsule
 
 func _build_camera() -> void:
     head = Node3D.new()
@@ -390,11 +528,174 @@ func _build_uzi_viewmodel() -> void:
     if uzi_viewmodel == null:
         return
     camera.add_child(uzi_viewmodel)
+    uzi_viewmodel.call("configure_handling", weapon_definition)
     uzi_viewmodel.connect("status_changed", Callable(self, "_on_uzi_status_changed"))
+
+func _weapon_handling_allowed() -> bool:
+    return not field_handling.check.active and _controller_gameplay_allowed() and not weapon_id.is_empty() and not weapon_input_locked and not weapon_transition_pending and not weapon_lowered and not reloading and not bolt_cycle_active and not sprinting and not healing_active and not mantle_active and not fly_mode and not is_swimming and stun_remaining <= 0.0
+
+func _forward_weapon_look(radians: Vector2) -> void:
+    if _weapon_handling_allowed() and is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("add_handling_look_delta"):
+        uzi_viewmodel.call("add_handling_look_delta", radians)
+
+func _reset_weapon_handling() -> void:
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("reset_handling"):
+        uzi_viewmodel.call("reset_handling")
+
+func _reset_weapon_feedback() -> void:
+    field_handling.cancel(self)
+    _reset_weapon_handling()
+    _dry_fire_latched = false
+    if is_instance_valid(_weapon_audio): _weapon_audio.call("reset")
+
+func _play_weapon_sound(event_name: String) -> bool:
+    if weapon_id.is_empty() or not is_inside_tree(): return false
+    if not is_instance_valid(_weapon_audio):
+        _weapon_audio = WeaponAudio.new()
+        _weapon_audio.name = "WeaponMechanicsAudio"
+        add_child(_weapon_audio)
+    return bool(_weapon_audio.call("play_event", event_name, weapon_id))
 
 func _on_uzi_status_changed(text: String) -> void:
     if is_instance_valid(hud_status):
         hud_status.text = text
+
+func can_equip_weapon(id: String) -> bool:
+    if id == "uzi":
+        return true
+    if not WeaponCatalog.available(id):
+        return false
+    var scene := load(WeaponCatalog.WEAPONS[id].scene) as PackedScene
+    if scene == null:
+        return false
+    var candidate := scene.instantiate() as Node3D
+    if candidate == null:
+        return false
+    var valid := true
+    for method: String in ["set_ads_blend", "set_move_speed", "play_fire", "play_reload", "get_reload_duration", "set_optic"]:
+        valid = valid and candidate.has_method(method)
+    candidate.free()
+    return valid
+
+func unequip_weapon() -> bool:
+    if weapon_transition_pending: return false
+    _cancel_bolt_cycle()
+    if not _cancel_physical_reload(): return false
+    _reset_recoil()
+    _reset_weapon_feedback()
+    _fire_requested = false
+    _semi_buffer_remaining = 0.0
+    weapon_id = ""
+    inserted_magazine.clear()
+    ammo = 0
+    reserve = 0
+    chambered = false
+    reloading = false
+    reload_time = 0.0
+    ads = false
+    ads_blend = 0.0
+    muzzle_timer = 0.0
+    if is_instance_valid(uzi_viewmodel): uzi_viewmodel.hide()
+    if is_instance_valid(weapon_posture): weapon_posture.hide()
+    return true
+
+func hud_weapon_state() -> Dictionary:
+    if weapon_id.is_empty(): return {"name":"UNARMED","magazine_capacity":1,"fire_mode":"FIND A WEAPON","reload_ratio":-1.0}
+    return {"name": str(weapon_definition.title), "magazine_capacity": mag_size,
+        "fire_mode": "BOLT" if _uses_manual_bolt() else ("AUTO" if weapon_definition.mode == "auto" else "SEMI"),
+        "bolt_cycle_active": bolt_cycle_active,
+        "bolt_cycle_ratio": clampf(bolt_cycle_elapsed / maxf(bolt_cycle_duration, 0.001), 0.0, 1.0) if bolt_cycle_active else -1.0,
+        "reload_ratio": clampf(reload_time / maxf(reload_duration, 0.001), 0.0, 1.0) if reloading else -1.0}
+
+func apply_weapon_loadout(id: String, record: Dictionary) -> bool:
+    if weapon_transition_pending:
+        return false
+    if not can_equip_weapon(id):
+        return false
+    _cancel_bolt_cycle()
+    if not _cancel_physical_reload(): return false
+    if id != weapon_id:
+        var candidate: Node3D
+        if id == "uzi":
+            candidate = UziViewmodelScript.new()
+        else:
+            candidate = (load(WeaponCatalog.WEAPONS[id].scene) as PackedScene).instantiate() as Node3D
+        if candidate == null:
+            return false
+        if id != "uzi" and not bool(candidate.call("set_optic", str(record.optic))):
+            candidate.free()
+            return false
+        var previous: Node3D = uzi_viewmodel
+        weapon_transition_pending = true
+        if candidate.has_method("hold_presentation"):
+            candidate.call("hold_presentation", true)
+        weapon_posture.add_child(candidate)
+        candidate.hide()
+        uzi_viewmodel = candidate
+        call_deferred("_complete_weapon_transition", previous, candidate)
+        if candidate.has_signal("status_changed"):
+            candidate.connect("status_changed", Callable(self, "_on_uzi_status_changed"))
+        reloading = false
+        reload_time = 0.0
+        reload_empty = false
+        ads = false
+        ads_blend = 0.0
+        weapon_kick = 0.0
+        recoil_pitch = 0.0
+        recoil_velocity = 0.0
+        recoil_burst_shots = 0
+        recoil_yaw = 0.0
+        _sprint_fire_delay = 0.0
+        _semi_buffer_remaining = 0.0
+        _recoil_idle_time = 10.0
+        _fire_requested = false
+        fire_cooldown = maxf(fire_cooldown, 0.25)
+    elif id != "uzi" and not bool(uzi_viewmodel.call("set_optic", str(record.optic))):
+        return false
+    if is_instance_valid(weapon_posture): weapon_posture.show()
+    physical_magazines = bool(record.get("physical_magazines",false))
+    weapon_id = id
+    weapon_definition = WeaponCatalog.effective(id, str(record.optic))
+    _reset_weapon_feedback()
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("configure_handling"):
+        uzi_viewmodel.call("configure_handling", weapon_definition)
+    mag_size = int(weapon_definition.magazine)
+    chambered = bool(record.get("chambered", int(record.ammo) > 0)) and id != "uzi"
+    magazine_inserted = bool(record.get("magazine_inserted", true))
+    bolt_locked = bool(record.get("bolt_locked", int(record.ammo) == 0)) and id != "uzi" and not chambered
+    ammo = clampi(int(record.ammo), 0, mag_size + int(chambered) if magazine_inserted else int(chambered))
+    chambered = chambered and ammo > 0
+    reserve = clampi(int(record.reserve), 0, 999)
+    inserted_magazine = MagazineRecord.normalize(id,record.get("inserted_magazine",{}),maxi(0,ammo-int(chambered))) if physical_magazines and magazine_inserted else {}
+    _sync_weapon_magazine()
+    return true
+
+func _complete_weapon_transition(previous: Node3D, candidate: Node3D) -> void:
+    if is_instance_valid(previous):
+        if previous.has_method("play_holster"):
+            previous.call("play_holster")
+        else:
+            create_tween().tween_property(previous, "position:y", previous.position.y - 0.32, 0.22)
+        await get_tree().create_timer(0.70 if previous.has_method("play_holster") else 0.28).timeout
+        if is_instance_valid(previous):
+            previous.hide()
+            previous.queue_free()
+    if is_instance_valid(candidate):
+        if candidate.has_method("hold_presentation"):
+            candidate.call("hold_presentation", false)
+            candidate.call("play_equip")
+        else:
+            candidate.show()
+    weapon_transition_pending = false
+
+func _weapon_ready_for_input() -> bool:
+    if weapon_id.is_empty(): return false
+    if bolt_cycle_active: return false
+    if weapon_transition_pending:
+        return false
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("is_ready_for_input"):
+        return bool(uzi_viewmodel.call("is_ready_for_input"))
+    return true
 
 func _build_real_arms_system() -> void:
     real_arms_holder = Node3D.new()
@@ -857,129 +1158,179 @@ func _add_hit_marker_stroke(parent: Control, start: Vector2, finish: Vector2) ->
     stroke.points = PackedVector2Array([start, finish])
     parent.add_child(stroke)
 
+func _input(event: InputEvent) -> void:
+    if is_instance_valid(face_drone_latch) and face_drone_latch.consume_space_event(event):
+        get_viewport().set_input_as_handled()
+
+func reset_controller_intents() -> void:
+    field_handling.cancel(self)
+    _cancel_bolt_cycle()
+    _reset_weapon_feedback()
+    _controller_crouch = false
+    _controller_sprint = false
+    _fire_requested = false
+    _trigger_was_down = false
+    _semi_buffer_remaining = 0.0
+    sprinting = false
+    ads = false
+    jump_was_down = false
+    _controller_epoch = ControllerInput.release_epoch
+
+func _controller_gameplay_allowed() -> bool:
+    return alive and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and ControllerInput.gameplay_ready()
+
+func _apply_controller_look(delta: float) -> void:
+    if not _controller_gameplay_allowed() or not is_instance_valid(head): return
+    var stick: Vector2 = ControllerInput.look()
+    var speed: float = CONTROLLER_LOOK_SPEED * lerpf(1.0, 0.5, smoothstep(0.0, 1.0, ads_blend))
+    if drone_stun_active and stun_remaining > 0.0: speed *= DRONE_STUN_AIM_MULTIPLIER
+    rotate_y(-stick.x * speed * delta)
+    head.rotate_x(-stick.y * speed * delta)
+    _forward_weapon_look(-stick * speed * delta)
+    var head_rot: Vector3 = head.rotation
+    var pitch_limit: float = 89.5 if fly_mode else 84.0
+    head_rot.x = clampf(head_rot.x, deg_to_rad(-pitch_limit), deg_to_rad(pitch_limit))
+    head.rotation = head_rot
+
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventKey and event.pressed and not event.echo:
-        if event.keycode == KEY_ESCAPE:
-            if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-                Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-            else:
-                Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+        if event.keycode == KEY_ESCAPE and not extraction_mode:
+            Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED else Input.MOUSE_MODE_CAPTURED)
+            ControllerInput.require_release()
+            reset_controller_intents()
         elif event.keycode == KEY_F3 and not extraction_mode:
             _set_fly_mode(not fly_mode)
-        elif event.keycode == KEY_R and not fly_mode:
-            start_reload()
-
-    if not alive:
-        return
-
-    if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-        var sens: float = mouse_sensitivity * (ads_mouse_multiplier if ads_blend > 0.5 else 1.0)
+    if ControllerInput.released(event,"aim"): ads = false
+    if not _controller_gameplay_allowed(): return
+    if event is InputEventMouseMotion:
+        var sens: float = mouse_sensitivity * lerpf(1.0, ads_mouse_multiplier, smoothstep(0.0, 1.0, ads_blend))
+        if drone_stun_active and stun_remaining > 0.0: sens *= DRONE_STUN_AIM_MULTIPLIER
         rotate_y(-event.relative.x * sens)
         head.rotate_x(-event.relative.y * sens)
+        _forward_weapon_look(-event.relative * sens)
         var head_rot: Vector3 = head.rotation
-        var pitch_limit := 89.5 if fly_mode else 84.0
+        var pitch_limit: float = 89.5 if fly_mode else 84.0
         head_rot.x = clampf(head_rot.x, deg_to_rad(-pitch_limit), deg_to_rad(pitch_limit))
         head.rotation = head_rot
-
-    if event is InputEventMouseButton:
-        if fly_mode:
-            return
-        if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-            shoot()
-        elif event.button_index == MOUSE_BUTTON_RIGHT:
-            ads = event.pressed and not reloading and stun_remaining <= 0.0
-            if is_instance_valid(crosshair) and ads:
-                crosshair.visible = false
+    if event is InputEventJoypadButton:
+        # B is held to dive while swimming, toggled only for ground stance.
+        if ControllerInput.pressed(event,"crouch") and not is_swimming:
+            _controller_crouch = not _controller_crouch
+            if _controller_crouch: _controller_sprint = false
+        if ControllerInput.pressed(event,"sprint"):
+            _controller_sprint = not _controller_sprint
+            if _controller_sprint: _controller_crouch = false
+    if ControllerInput.pressed(event,"lower_weapon") and extraction_mode and not weapon_input_locked and not reloading:
+        set_weapon_lowered(not weapon_lowered)
+    if fly_mode: return
+    if ControllerInput.pressed(event,"mag_check"):
+        field_handling.begin(self)
+    if ControllerInput.pressed(event,"reload"):
+        if event is InputEventJoypadButton and ControllerInput.down("inspect"):
+            field_handling.begin(self)
+        else:
+            _cancel_healing_for_weapon_action()
+            start_reload()
+    if ControllerInput.pressed(event,"fire"):
+        if field_handling.check.active:
+            field_handling.cancel(self)
+            _sprint_fire_delay = maxf(_sprint_fire_delay, 0.18)
+        _cancel_healing_for_weapon_action()
+        _fire_requested = true
+    if ControllerInput.pressed(event,"aim"):
+        field_handling.cancel(self)
+        set_weapon_lowered(false)
+        ads = not weapon_id.is_empty() and not weapon_input_locked and not reloading and not bolt_cycle_active and stun_remaining <= 0.0 and not (extraction_mode and (healing_active or mantle_active))
+        if is_instance_valid(crosshair) and ads: crosshair.visible = false
 
 func _physics_process(delta: float) -> void:
+    if _controller_epoch != ControllerInput.release_epoch or not _controller_gameplay_allowed():
+        reset_controller_intents()
+    _apply_controller_look(delta)
+    if not ControllerInput.down("aim"): ads = false
+    if is_instance_valid(face_drone_latch) and (face_drone_latch.is_active() or face_drone_latch.blocks_jump()):
+        face_drone_latch.tick(delta)
     if not alive:
+        if drone_stun_active or stun_remaining > 0.0:
+            clear_stun()
         return
 
+    _tick_coffee_boost(delta)
     var was_stunned := stun_remaining > 0.0
     stun_remaining = maxf(0.0, stun_remaining - delta)
     stun_immunity_remaining = maxf(0.0, stun_immunity_remaining - delta)
-    if was_stunned and stun_remaining <= 0.0 and is_instance_valid(hud_status) and not reloading:
-        hud_status.text = "Ready"
-    if stun_remaining > 0.0:
+    if drone_stun_active:
+        if is_instance_valid(drone_stun_fx):
+            drone_stun_fx.call("update_remaining", stun_remaining)
+        if stun_remaining <= 0.0:
+            drone_stun_active = false
+    if was_stunned and stun_remaining <= 0.0:
+        _restore_stun_status()
+    if stun_remaining > 0.0 or bolt_cycle_active or field_handling.check.active or (extraction_mode and healing_active):
         ads = false
 
     if fly_mode:
+        _tick_blocked_weapon(delta)
         _process_fly_mode(delta)
         return
 
-    var jump_down: bool = Input.is_key_pressed(KEY_SPACE) and stun_remaining <= 0.0
+    var jump_down: bool = _controller_gameplay_allowed() and ControllerInput.down("jump") and (extraction_mode or not _is_legacy_stunned())
     if mantle_active:
+        _tick_blocked_weapon(delta)
+        if extraction_mode:
+            sprinting = false
+            _tick_stamina(delta, false, false)
         _process_mantle(delta)
         jump_was_down = jump_down
         return
 
-    fire_cooldown = maxf(0.0, fire_cooldown - delta)
-    if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-        shoot()
     muzzle_timer = maxf(0.0, muzzle_timer - delta)
     hit_marker = maxf(0.0, hit_marker - delta)
     damage_flash = maxf(0.0, damage_flash - delta * 2.5)
-    muzzle_light.light_energy = 9.0 if muzzle_timer > 0.0 else 0.0
+    muzzle_light.light_energy = 9.0 if muzzle_timer > 0.0 and weapon_id == "uzi" else 0.0
     _animate_trigger_finger()
     var hit_mod: Color = hit_cross.modulate
     hit_mod.a = clampf(hit_marker * 9.0, 0.0, 1.0)
     hit_cross.modulate = hit_mod
     var damage_color := Color(0.7, 0.0, 0.0, clampf(damage_flash * 0.22, 0.0, 0.24))
-    if stun_remaining > 0.0 and damage_flash < 0.25:
+    if _is_legacy_stunned() and damage_flash < 0.25:
         damage_color = Color(0.09, 0.31, 0.72, minf(0.13, stun_remaining * 0.12))
     damage_rect.color = damage_color
 
     if reloading:
         reload_time += delta
+        _advance_reload_events(reload_time / maxf(reload_duration, 0.001))
         if reload_time >= reload_duration:
             _finish_reload()
 
-    ads_blend = move_toward(ads_blend, 1.0 if ads and not reloading else 0.0, delta * 7.5)
-    camera.fov = lerpf(73.0, 50.0, ads_blend)
+    ads_blend = move_toward(ads_blend, 1.0 if ads and not reloading else 0.0, delta * float(weapon_definition.ads_speed))
+    camera.fov = lerpf(73.0, float(weapon_definition.ads_fov), ads_blend)
 
-    var input_vec: Vector2 = Vector2.ZERO
-    if Input.is_key_pressed(KEY_W): input_vec.y -= 1.0
-    if Input.is_key_pressed(KEY_S): input_vec.y += 1.0
-    if Input.is_key_pressed(KEY_A): input_vec.x -= 1.0
-    if Input.is_key_pressed(KEY_D): input_vec.x += 1.0
-    input_vec = input_vec.normalized()
-
-    var basis: Basis = global_transform.basis
-    var wish: Vector3 = basis.x * input_vec.x + basis.z * input_vec.y
-    wish.y = 0.0
-    wish = wish.normalized()
-
-    var sprinting: bool = Input.is_key_pressed(KEY_SHIFT) and ads_blend < 0.25 and input_vec.y < 0.0 and stun_remaining <= 0.0
-    var speed: float = sprint_speed if sprinting else walk_speed
-    if ads_blend > 0.5:
-        speed *= 0.72
-    if stun_remaining > 0.0:
-        speed *= STUN_MOVE_MULTIPLIER
-
-    velocity.x = move_toward(velocity.x, wish.x * speed, acceleration * delta if input_vec != Vector2.ZERO else friction * delta)
-    velocity.z = move_toward(velocity.z, wish.z * speed, acceleration * delta if input_vec != Vector2.ZERO else friction * delta)
-
-    if jump_down and not jump_was_down and _try_start_mantle(wish):
-        jump_was_down = jump_down
+    var gameplay_allowed: bool = _controller_gameplay_allowed()
+    var input_vec: Vector2 = ControllerInput.movement() if gameplay_allowed else Vector2.ZERO
+    if sprinting:
+        _sprint_fire_delay = float(weapon_definition.get("sprint_to_fire", 0.24))
+    else:
+        _sprint_fire_delay = maxf(0.0, _sprint_fire_delay - delta)
+    var wants_weapon: bool = _fire_requested or (gameplay_allowed and ControllerInput.down("fire"))
+    if wants_weapon or ads: _controller_sprint = false
+    var sprint_requested: bool = gameplay_allowed and not wants_weapon and (Input.is_key_pressed(KEY_SHIFT) or _controller_sprint)
+    var crouch_requested: bool = gameplay_allowed and (ControllerInput.down("crouch") if is_swimming else (Input.is_key_pressed(KEY_CTRL) or _controller_crouch))
+    if is_swimming: _controller_crouch = false
+    if sprint_requested and field_handling.check.active:
+        field_handling.cancel(self)
+    if _advance_ground_movement(delta, input_vec, sprint_requested, crouch_requested, jump_down):
+        _tick_blocked_weapon(delta)
         return
 
-    if not is_on_floor():
-        velocity.y -= gravity * delta
-    else:
-        if jump_down:
-            velocity.y = jump_velocity
-        else:
-            velocity.y = 0.0
-
-    move_and_slide()
-
+    lean_controller.tick(self, delta)
+    field_handling.tick(self, delta)
+    _tick_weapon_posture(delta)
+    _advance_weapon_fire(delta)
     var horizontal_speed: float = Vector2(velocity.x, velocity.z).length()
     bob_phase += horizontal_speed * delta * 1.8
 
-    recoil_velocity += -recoil_pitch * 34.0 * delta
-    recoil_velocity *= pow(0.025, delta)
-    recoil_pitch += recoil_velocity
-    recoil_pitch = clampf(recoil_pitch, 0.0, 0.08)
+    _tick_recoil(delta)
     weapon_kick = move_toward(weapon_kick, 0.0, delta * 5.8)
 
     _animate_weapon(horizontal_speed)
@@ -989,13 +1340,323 @@ func _physics_process(delta: float) -> void:
     _update_hud()
     jump_was_down = jump_down
 
+func reset_survival() -> void:
+    reset_controller_intents()
+    field_handling.reset(self)
+    _reset_recoil()
+    _sprint_fire_delay = 0.0
+    _sprint_pose = 0.0
+    lean_controller.reset(self)
+    set_weapon_lowered(false)
+    weapon_lower_blend=0.0
+    reset_medical()
+    if is_instance_valid(face_drone_latch):
+        face_drone_latch.release(null, "reset")
+    clear_coffee_boost()
+    swim_controller.reset(self)
+    stamina = max_stamina
+    sprinting = false
+    crouching = false
+    healing_active = false
+    cargo_load_ratio = 0.0
+    _stamina_recovery_delay = 0.0
+    _sprint_exhausted = false
+    jump_was_down = false
+    _ground_contact_time = 0.0
+    _landing_recovery = 0.0
+    _jump_recovery = 0.0
+    _air_speed_limit = 0.0
+    _movement_was_grounded = false
+    if mantle_active:
+        collision_layer = mantle_saved_layer
+        collision_mask = mantle_saved_mask
+    mantle_active = false
+    _set_crouch_state(false)
+    if is_instance_valid(head):
+        head.position.y = STANDING_HEAD_HEIGHT
+
+func set_cargo_mass(used_kg: float, limit_kg: float) -> void:
+    cargo_load_ratio = clampf(used_kg / maxf(0.001, limit_kg), 0.0, 1.0)
+
+func set_cargo_load(used: int, capacity: int) -> void:
+    cargo_load_ratio = clampf(float(used) / float(maxi(1, capacity)), 0.0, 1.0)
+
+func set_medical_active(value: bool) -> void:
+    healing_active = value and extraction_mode and alive
+    if healing_active:
+        field_handling.cancel(self)
+        _cancel_bolt_cycle()
+        ads = false
+        sprinting = false
+
+func _cancel_healing_for_weapon_action() -> void:
+    if extraction_mode and healing_active:
+        healing_active = false
+        healing_cancelled.emit()
+
+func _can_sprint(input_vec: Vector2) -> bool:
+    if extraction_mode and medical.leg_impaired(): return false
+    return is_on_floor() and input_vec.y < -0.55 and _landing_recovery <= 0.0 and not ads and ads_blend < 0.25 and not reloading and not healing_active and not crouching and stun_remaining <= 0.0 and not mantle_active
+
+func _tick_stamina(delta: float, wants_sprint: bool, eligible: bool) -> void:
+    delta = maxf(delta, 0.0)
+    stamina = clampf(stamina, 0.0, max_stamina)
+    if stamina <= 0.0:
+        _sprint_exhausted = true
+    if _sprint_exhausted and stamina >= SPRINT_RESTART_STAMINA:
+        _sprint_exhausted = false
+    sprinting = wants_sprint and eligible and not _sprint_exhausted and stamina > 0.0
+    if sprinting:
+        stamina = maxf(0.0, stamina - STAMINA_DRAIN * lerpf(1.0, 1.30, cargo_load_ratio) * delta)
+        _stamina_recovery_delay = STAMINA_RECOVERY_DELAY
+        if stamina <= 0.0:
+            sprinting = false
+            _sprint_exhausted = true
+    else:
+        # Recover only the part of this frame that falls after the delay.
+        var recovery_time := maxf(0.0, delta - _stamina_recovery_delay)
+        _stamina_recovery_delay = maxf(0.0, _stamina_recovery_delay - delta)
+        stamina = minf(max_stamina, stamina + STAMINA_RECOVERY * (1.04 if coffee_boost_remaining > 0.0 else 1.0) * recovery_time)
+
+func _spend_stamina(amount: float) -> void:
+    stamina = maxf(0.0, stamina - amount)
+    _stamina_recovery_delay = STAMINA_RECOVERY_DELAY
+    if stamina <= 0.0:
+        _sprint_exhausted = true
+        sprinting = false
+
+func movement_speed() -> float:
+    var speed := sprint_speed if sprinting else walk_speed
+    if extraction_mode:
+        if crouching:
+            speed = CROUCH_SPEED
+        elif sprinting:
+            speed *= lerpf(1.0, 0.85, cargo_load_ratio)
+        else:
+            speed *= lerpf(1.0, 0.90, cargo_load_ratio)
+    if ads_blend > 0.5:
+        speed *= 0.72
+    if extraction_mode and medical.leg_impaired():
+        speed *= 0.55
+    if extraction_mode and healing_active:
+        speed *= 0.55
+    if _is_legacy_stunned():
+        speed *= STUN_MOVE_MULTIPLIER
+    if _landing_recovery > 0.0:
+        speed *= 0.78
+    return speed
+
+func _set_crouch_state(value: bool) -> void:
+    crouching = value
+    if body_capsule != null and is_instance_valid(body_collision):
+        body_capsule.height = CROUCH_CAPSULE_HEIGHT if value else STANDING_CAPSULE_HEIGHT
+        body_collision.position.y = 0.575 if value else 0.90
+
+func _standing_capsule_clear(at: Vector3) -> bool:
+    if not is_inside_tree():
+        return false
+    var shape := CapsuleShape3D.new()
+    shape.radius = 0.36
+    shape.height = STANDING_CAPSULE_HEIGHT
+    var query := PhysicsShapeQueryParameters3D.new()
+    query.shape = shape
+    # Floor contact can put the capsule bottom exactly on its support surface.
+    # A 5 mm upward query allowance avoids mistaking that floor for a ceiling.
+    query.transform = Transform3D(global_transform.basis, at + Vector3.UP * 0.005) * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.90, 0.0))
+    query.collision_mask = collision_mask
+    query.exclude = [get_rid()]
+    query.margin = 0.001
+    return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+func _can_stand() -> bool:
+    return _standing_capsule_clear(global_position)
+
+func _standing_capsule_sweep_clear(start: Vector3, finish: Vector3) -> bool:
+    if not _standing_capsule_clear(start) or not _standing_capsule_clear(finish):
+        return false
+    var motion := finish - start
+    if motion.length_squared() < 0.000001:
+        return true
+    var shape := CapsuleShape3D.new()
+    shape.radius = 0.36
+    shape.height = STANDING_CAPSULE_HEIGHT
+    var query := PhysicsShapeQueryParameters3D.new()
+    query.shape = shape
+    query.transform = Transform3D(global_transform.basis, start + Vector3.UP * 0.005) * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.90, 0.0))
+    query.collision_mask = collision_mask
+    query.exclude = [get_rid()]
+    query.margin = 0.001
+    query.motion = motion
+    var clearance := get_world_3d().direct_space_state.cast_motion(query)
+    return clearance.size() >= 2 and clearance[0] >= 0.999
+
+func _update_stance(delta: float, requested: bool) -> void:
+    if requested:
+        if not crouching:
+            _set_crouch_state(true)
+    elif crouching and _can_stand():
+        _set_crouch_state(false)
+    if is_instance_valid(head):
+        var target := CROUCH_HEAD_HEIGHT if crouching else STANDING_HEAD_HEIGHT
+        head.position.y = move_toward(head.position.y, target, maxf(delta, 0.0) * 4.40)
+
+func _advance_ground_movement(delta: float, input_vec: Vector2, sprint_requested: bool, crouch_requested: bool, jump_down: bool) -> bool:
+    delta = maxf(0.0, delta)
+    _landing_recovery = maxf(0.0, _landing_recovery - delta)
+    _jump_recovery = maxf(0.0, _jump_recovery - delta)
+    if drone_stun_active and stun_remaining > 0.0:
+        sprint_requested = false
+    if mantle_active:
+        if extraction_mode:
+            _tick_stamina(delta, false, false)
+        _process_mantle(delta)
+        jump_was_down = jump_down
+        return true
+    if swim_controller.advance(self, delta, input_vec, sprint_requested, crouch_requested, jump_down):
+        _ground_contact_time = 0.0
+        _movement_was_grounded = false
+        _air_speed_limit = Vector2(velocity.x, velocity.z).length()
+        return false
+    # Consumed latch presses block ground jump/mantle; swimming retains its raw Space input.
+    if is_instance_valid(face_drone_latch) and face_drone_latch.blocks_jump():
+        jump_down = false
+    input_vec = input_vec.limit_length(1.0)
+    var grounded := is_on_floor()
+    _ground_contact_time = _ground_contact_time + delta if grounded else 0.0
+    if not grounded and _movement_was_grounded:
+        _air_speed_limit = Vector2(velocity.x, velocity.z).length()
+    var stamina_before_move := stamina
+    var recovery_delay_before_move := _stamina_recovery_delay
+    var exhausted_before_move := _sprint_exhausted
+    if extraction_mode:
+        _update_stance(delta, crouch_requested)
+        _tick_stamina(delta, sprint_requested, _can_sprint(input_vec))
+    else:
+        sprinting = sprint_requested and _can_sprint(input_vec)
+    var basis := global_transform.basis
+    var wish := basis.x * input_vec.x + basis.z * input_vec.y
+    wish.y = 0.0
+    wish = wish.normalized() * input_vec.length()
+    var speed := movement_speed() * _directional_speed_multiplier(input_vec)
+    var horizontal := _advance_horizontal_velocity(Vector2(velocity.x, velocity.z), Vector2(wish.x, wish.z) * speed, grounded, delta)
+    velocity.x = horizontal.x
+    velocity.z = horizontal.y
+    var jump_pressed := jump_down and not jump_was_down
+    var jumped_this_tick := false
+    if jump_pressed and _jump_recovery <= 0.0 and _try_start_mantle(wish):
+        jump_was_down = jump_down
+        return true
+    if not grounded:
+        velocity.y -= gravity * delta
+    else:
+        var can_jump := jump_pressed and _jump_recovery <= 0.0 and _ground_contact_time >= JUMP_GROUND_SETTLE
+        if extraction_mode:
+            can_jump = can_jump and not crouching and not healing_active and not medical.leg_impaired() and not _is_legacy_stunned() and stamina >= JUMP_STAMINA_COST
+        if can_jump:
+            jumped_this_tick = true
+            velocity.y = jump_velocity * (lerpf(1.0, 0.88, cargo_load_ratio) if extraction_mode else 1.0)
+            # Jumping preserves takeoff momentum, but never creates a speed boost.
+            _air_speed_limit = horizontal.length()
+            _ground_contact_time = 0.0
+            sprinting = false
+            if extraction_mode:
+                _spend_stamina(JUMP_STAMINA_COST)
+        else:
+            velocity.y = 0.0
+            if wish.length_squared() > 0.01:
+                _try_step_up(Vector3(velocity.x, 0.0, velocity.z) * delta)
+    var impact_speed := maxf(0.0, -velocity.y)
+    move_and_slide()
+    if grounded and Vector2(velocity.x, velocity.z).length_squared() < 0.01:
+        # Holding sprint into a wall must not spend stamina or keep the weapon in
+        # its sprint pose. Preserve pre-frame recovery state when no sprint occurred.
+        if extraction_mode and stamina < stamina_before_move and not jumped_this_tick:
+            stamina = stamina_before_move
+            _stamina_recovery_delay = recovery_delay_before_move
+            _sprint_exhausted = exhausted_before_move
+        sprinting = false
+    if not grounded and is_on_floor() and impact_speed > 3.0:
+        var severity := clampf((impact_speed - 3.0) / 9.0, 0.0, 1.0)
+        _landing_recovery = lerpf(0.14, 0.38, severity)
+        _jump_recovery = LANDING_JUMP_LOCK + severity * 0.12
+        velocity.x *= lerpf(0.96, 0.82, severity)
+        velocity.z *= lerpf(0.96, 0.82, severity)
+        _ground_contact_time = 0.0
+        sprinting = false
+    _movement_was_grounded = grounded
+    jump_was_down = jump_down
+    return false
+
+func _directional_speed_multiplier(input_vec: Vector2) -> float:
+    if input_vec.length_squared() < 0.0001:
+        return 1.0
+    var direction := input_vec.normalized()
+    # An ellipse keeps diagonals between their forward/back and strafe limits.
+    var longitudinal := BACKPEDAL_SPEED_MULTIPLIER if direction.y > 0.0 else 1.0
+    return 1.0 / sqrt(pow(direction.x / STRAFE_SPEED_MULTIPLIER, 2.0) + pow(direction.y / longitudinal, 2.0))
+
+func _advance_horizontal_velocity(current: Vector2, target: Vector2, grounded: bool, delta: float) -> Vector2:
+    if not grounded:
+        # Small course corrections only. Looking/strafe input cannot build air speed.
+        if target.length_squared() < 0.0001:
+            return current
+        var air_target := target.limit_length(_air_speed_limit)
+        return current.move_toward(air_target, AIR_STEERING_ACCELERATION * delta).limit_length(maxf(_air_speed_limit, current.length()))
+    var rate := acceleration
+    if target.length_squared() < 0.0001 or current.dot(target) < 0.0:
+        rate = friction
+    if extraction_mode:
+        rate *= lerpf(1.0, 0.76, cargo_load_ratio)
+    if crouching:
+        rate *= 0.85
+    # A single vector step avoids faster diagonal acceleration and braking.
+    return current.move_toward(target, rate * delta)
+
+func _try_step_up(horizontal_motion: Vector3) -> bool:
+    if horizontal_motion.length_squared() < 0.000001 or not is_on_floor():
+        return false
+    var obstacle := KinematicCollision3D.new()
+    if not test_move(global_transform, horizontal_motion, obstacle) or obstacle.get_normal().y > cos(floor_max_angle):
+        return false
+    var raised := global_transform
+    if test_move(raised, Vector3.UP * STEP_HEIGHT):
+        return false
+    raised.origin.y += STEP_HEIGHT
+    if test_move(raised, horizontal_motion):
+        return false
+    # A capsule hits a stair corner with a diagonal normal even when its tread is
+    # flat. Read the actual tread beneath the leading foot, not that corner normal.
+    var probe := global_position + horizontal_motion.normalized() * (body_capsule.radius + 0.08)
+    var query := PhysicsRayQueryParameters3D.create(probe + Vector3.UP * (STEP_HEIGHT + 0.04), probe + Vector3.DOWN * 0.02, collision_mask, [get_rid()])
+    var support := get_world_3d().direct_space_state.intersect_ray(query)
+    if support.is_empty() or Vector3(support.normal).dot(Vector3.UP) < cos(floor_max_angle):
+        return false
+    var foot_offset := body_collision.position.y - body_capsule.height * 0.5
+    var lift: float = support.position.y - global_position.y - foot_offset + 0.002
+    if lift <= 0.015 or lift > STEP_HEIGHT:
+        return false
+    global_position.y += lift
+    # Keep the eye position continuous; stance smoothing catches up after the step.
+    if extraction_mode and is_instance_valid(head):
+        head.position.y -= lift
+    return true
+
 func _set_fly_mode(enabled: bool) -> void:
+    _cancel_bolt_cycle()
+    _cancel_physical_reload()
+    swim_controller.reset(self)
     fly_mode = enabled
+    lean_controller.reset(self)
     velocity = Vector3.ZERO
     mantle_active = false
     ads = false
     reloading = false
     jump_was_down = false
+    _ground_contact_time = 0.0
+    _landing_recovery = 0.0
+    _jump_recovery = 0.0
+    _air_speed_limit = 0.0
+    _movement_was_grounded = false
     if fly_mode:
         fly_saved_layer = collision_layer
         fly_saved_mask = collision_mask
@@ -1042,6 +1703,10 @@ func _process_fly_mode(delta: float) -> void:
     velocity = Vector3.ZERO
 
 func _try_start_mantle(wish: Vector3) -> bool:
+    if _jump_recovery > 0.0 or velocity.y < -3.5:
+        return false
+    if extraction_mode and (crouching or healing_active or reloading or medical.leg_impaired() or _is_legacy_stunned() or stamina < MANTLE_STAMINA_COST):
+        return false
     var forward: Vector3 = wish
     if forward.length_squared() < 0.01:
         forward = -global_transform.basis.z
@@ -1080,14 +1745,29 @@ func _try_start_mantle(wish: Vector3) -> bool:
         return false
 
     var ledge_position: Vector3 = top_hit.position
+    if Vector3(top_hit.normal).dot(Vector3.UP) < cos(floor_max_angle):
+        return false
     var ledge_height: float = ledge_position.y - global_position.y
     if ledge_height < MANTLE_MIN_HEIGHT or ledge_height > MANTLE_MAX_HEIGHT:
         return false
 
+    var landing := ledge_position + forward * 0.32 + Vector3.UP * 0.06
+    var corner := Vector3(global_position.x, landing.y, global_position.z)
+    if extraction_mode:
+        # Lift the whole standing capsule before crossing the lip; a diagonal
+        # collision-disabled interpolation would travel through the ledge wall.
+        if not _standing_capsule_sweep_clear(global_position, corner) or not _standing_capsule_sweep_clear(corner, landing):
+            return false
+    if extraction_mode:
+        _spend_stamina(MANTLE_STAMINA_COST)
+        sprinting = false
     mantle_start = global_position
-    mantle_target = ledge_position + forward * 0.32 + Vector3.UP * 0.06
+    mantle_target = landing
+    mantle_corner = corner
     mantle_elapsed = 0.0
-    mantle_duration = lerpf(0.22, 0.34, inverse_lerp(MANTLE_MIN_HEIGHT, MANTLE_MAX_HEIGHT, ledge_height))
+    mantle_duration = lerpf(0.48, 0.95, inverse_lerp(MANTLE_MIN_HEIGHT, MANTLE_MAX_HEIGHT, ledge_height))
+    if extraction_mode:
+        mantle_duration *= lerpf(1.0, 1.18, cargo_load_ratio)
     mantle_saved_layer = collision_layer
     mantle_saved_mask = collision_mask
     collision_layer = 0
@@ -1100,14 +1780,23 @@ func _process_mantle(delta: float) -> void:
     mantle_elapsed += delta
     var amount: float = clampf(mantle_elapsed / mantle_duration, 0.0, 1.0)
     var smooth_amount: float = amount * amount * (3.0 - 2.0 * amount)
-    global_position = mantle_start.lerp(mantle_target, smooth_amount)
-    global_position.y += sin(amount * PI) * 0.14
+    if extraction_mode:
+        if amount < 0.55:
+            global_position = mantle_start.lerp(mantle_corner, _smooth01(amount / 0.55))
+        else:
+            global_position = mantle_corner.lerp(mantle_target, _smooth01((amount - 0.55) / 0.45))
+    else:
+        global_position = mantle_start.lerp(mantle_target, smooth_amount)
+        global_position.y += sin(amount * PI) * 0.14
     if amount >= 1.0:
         global_position = mantle_target
         collision_layer = mantle_saved_layer
         collision_mask = mantle_saved_mask
         mantle_active = false
-        velocity = -global_transform.basis.z * 1.2
+        _landing_recovery = 0.12
+        _jump_recovery = LANDING_JUMP_LOCK
+        _ground_contact_time = 0.0
+        velocity = Vector3.ZERO
 
 func _smooth01(value: float) -> float:
     var x: float = clampf(value, 0.0, 1.0)
@@ -1119,6 +1808,15 @@ func _stage(value: float, start_t: float, end_t: float) -> float:
     return _smooth01((value - start_t) / (end_t - start_t))
 
 func _animate_weapon(horizontal_speed: float) -> void:
+    if is_instance_valid(crosshair):
+        crosshair.visible = not weapon_id.is_empty() and not weapon_lowered and weapon_lower_blend < 0.05 and not ads and ads_blend < 0.05 and not reloading and not field_handling.check.active
+    if is_instance_valid(ads_dot): ads_dot.visible = false
+    # Authored models own the complete magazine exchange. Never run the legacy
+    # block-magazine choreography over the supplied animated weapon and hands.
+    if is_instance_valid(uzi_viewmodel) and bool(uzi_viewmodel.get("loaded")):
+        if is_instance_valid(weapon_body): _hide_legacy_viewmodel_meshes(weapon_body)
+        if is_instance_valid(vest_pouch): vest_pouch.hide()
+        return
     var bob_strength: float = clampf(horizontal_speed / sprint_speed, 0.0, 1.0) * (1.0 - ads_blend * 0.9)
     var bob: Vector3 = Vector3(sin(bob_phase * 5.5) * 0.018, abs(cos(bob_phase * 5.5)) * 0.015, 0.0) * bob_strength
     var target_pos: Vector3 = hip_weapon_pos.lerp(ads_weapon_pos, ads_blend) + bob
@@ -1284,86 +1982,423 @@ func _animate_weapon(horizontal_speed: float) -> void:
         magazine.rotation = mag_rot
 
     if is_instance_valid(crosshair):
-        crosshair.visible = not ads and ads_blend < 0.05 and not reloading
+        crosshair.visible = not weapon_lowered and weapon_lower_blend<.05 and not ads and ads_blend < 0.05 and not reloading and not field_handling.check.active
     if is_instance_valid(ads_dot):
         # The authored UZI now uses its physical iron sights for ADS. Keeping
         # a screen-space dot would hide alignment errors and does not match the
         # requested iron-sight reference.
         ads_dot.visible = false
 
-func shoot() -> void:
-    if not alive or reloading or fire_cooldown > 0.0 or stun_remaining > 0.0:
+# Input is collected by events; physical shots are dispatched only in the physics
+# step. A signed timer carries fractional intervals across ticks (no RPM rounding).
+func _advance_weapon_fire(delta: float) -> void:
+    if fire_cooldown > 0.0:
+        fire_cooldown -= delta
+    var held: bool = _controller_gameplay_allowed() and ControllerInput.down("fire")
+    var pressed: bool = _fire_requested or (held and not _trigger_was_down)
+    if pressed or not held: _dry_fire_latched = false
+    _fire_requested = false
+    _trigger_was_down = held
+    if bolt_cycle_active:
+        _semi_buffer_remaining = 0.0
+        _advance_bolt_cycle(delta)
+        # Presses during a bolt action are discarded, including its final frame.
+        # Holding the trigger through cycling never fires the next round.
+        fire_cooldown = maxf(0.0, fire_cooldown)
         return
-    if ammo <= 0:
-        hud_status.text = "EMPTY — press R"
+    var automatic: bool = str(weapon_definition.mode) == "auto"
+    if pressed and not automatic:
+        _semi_buffer_remaining = clampf(maxf(0.10, _sprint_fire_delay + 0.05), 0.10, 0.40)
+    elif not held:
+        _semi_buffer_remaining = 0.0
+    else:
+        _semi_buffer_remaining = maxf(0.0, _semi_buffer_remaining - delta)
+    if field_handling.check.active:
+        _semi_buffer_remaining = 0.0
+        return
+    if reloading or weapon_input_locked or mantle_active or is_swimming or not alive:
+        _semi_buffer_remaining = 0.0
+    var wants_shot: bool = held if automatic else (pressed or (held and _semi_buffer_remaining > 0.0))
+    # A click can begin and end between physics ticks.
+    wants_shot = wants_shot or pressed
+    if not wants_shot or not _controller_gameplay_allowed():
+        fire_cooldown = maxf(0.0, fire_cooldown)
+        return
+    var count := 0
+    while fire_cooldown <= 0.000001 and count < 3:
+        var previous_ammo := ammo
+        shoot()
+        if ammo == previous_ammo:
+            fire_cooldown = maxf(0.0, fire_cooldown)
+            break
+        count += 1
+        _semi_buffer_remaining = 0.0
+        if str(weapon_definition.mode) != "auto": break
+    # Long stalls must not create a backlog that sprays several future ticks.
+    if count == 3: fire_cooldown = maxf(0.0, fire_cooldown)
+
+func _tick_blocked_weapon(delta: float) -> void:
+    field_handling.cancel(self)
+    field_handling.tick(self, delta)
+    _tick_weapon_posture(delta)
+    # Traversal owns the hands. A click during a vault is discarded, never
+    # replayed after landing; passive recovery still follows elapsed time.
+    _fire_requested = false
+    _reset_weapon_handling()
+    _cancel_bolt_cycle()
+    lean_controller.tick(self, delta)
+    _semi_buffer_remaining = 0.0
+    _trigger_was_down = ControllerInput.down("fire")
+    fire_cooldown = maxf(0.0, fire_cooldown - delta)
+    _sprint_fire_delay = maxf(0.0, _sprint_fire_delay - delta)
+    _tick_recoil(delta)
+    weapon_kick = move_toward(weapon_kick, 0.0, delta * 5.8)
+    muzzle_timer = maxf(0.0, muzzle_timer - delta)
+
+func _uses_manual_bolt() -> bool:
+    return str(weapon_definition.get("mode", "")) == "bolt"
+
+func _bolt_cycle_allowed() -> bool:
+    # Presentation readiness is deliberately excluded: the adapter is busy while
+    # this authoritative action runs. Its animation never chambers ammunition.
+    return _uses_manual_bolt() and not weapon_id.is_empty() and alive and not weapon_transition_pending and not weapon_input_locked and not reloading and not fly_mode and not mantle_active and not is_swimming and not is_underwater and not sprinting and not healing_active and not _is_legacy_stunned() and _controller_gameplay_allowed()
+
+func _start_bolt_cycle(allow_empty: bool = false) -> bool:
+    if bolt_cycle_active or chambered or not _bolt_cycle_allowed():
+        return false
+    if not allow_empty and (ammo <= 0 or not magazine_inserted):
+        return false
+    bolt_cycle_active = true
+    _reset_weapon_handling()
+    _bolt_open_played = false
+    bolt_cycle_elapsed = 0.0
+    bolt_cycle_duration = maxf(0.10, float(weapon_definition.get("bolt_cycle", weapon_definition.get("manual_cycle_seconds", 1.35))))
+    _bolt_cycle_weapon_id = weapon_id
+    bolt_locked = true
+    ads = false
+    _semi_buffer_remaining = 0.0
+    _fire_requested = false
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("play_cycle"):
+        uzi_viewmodel.call("play_cycle", bolt_cycle_duration)
+    if is_instance_valid(hud_status): hud_status.text = "Cycling bolt…"
+    return true
+
+func _advance_bolt_cycle(delta: float) -> void:
+    if not bolt_cycle_active:
+        return
+    if _bolt_cycle_weapon_id != weapon_id or not _bolt_cycle_allowed():
+        _cancel_bolt_cycle()
+        return
+    bolt_cycle_elapsed += maxf(0.0, delta)
+    if not _bolt_open_played and bolt_cycle_elapsed >= bolt_cycle_duration * 0.20:
+        _play_weapon_sound("bolt_open")
+        _bolt_open_played = true
+    if bolt_cycle_elapsed + 0.000001 < bolt_cycle_duration:
+        return
+    # Ammo already includes all loaded rounds. Chambering only changes their
+    # location, never the count or reserve; an absent/empty magazine stays empty.
+    chambered = magazine_inserted and ammo > 0
+    bolt_locked = not chambered
+    _sync_inserted_magazine_record()
+    bolt_cycle_active = false
+    _play_weapon_sound("bolt_close")
+    bolt_cycle_elapsed = 0.0
+    _bolt_cycle_weapon_id = ""
+    _semi_buffer_remaining = 0.0
+    _fire_requested = false
+    _sync_weapon_magazine()
+    if is_instance_valid(hud_status): hud_status.text = "Ready" if chambered else "EMPTY — press R"
+
+func _cancel_bolt_cycle() -> void:
+    if not bolt_cycle_active:
+        return
+    bolt_cycle_active = false
+    if is_instance_valid(_weapon_audio): _weapon_audio.call("reset")
+    bolt_cycle_elapsed = 0.0
+    _bolt_cycle_weapon_id = ""
+    _semi_buffer_remaining = 0.0
+    _fire_requested = false
+    # The live/save chamber flag remains false until a whole action completes.
+    # Re-equipping or resuming cannot turn a cancelled visual cycle into a round.
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("cancel_cycle"):
+        uzi_viewmodel.call("cancel_cycle")
+
+func _reset_recoil() -> void:
+    recoil_pitch = 0.0
+    recoil_velocity = 0.0
+    recoil_yaw = 0.0
+    recoil_burst_shots = 0
+    _recoil_idle_time = 10.0
+
+func _tick_recoil(delta: float) -> void:
+    _recoil_idle_time += delta
+    if _recoil_idle_time >= float(weapon_definition.get("burst_reset", 0.28)):
+        recoil_burst_shots = 0
+    # Exact critically damped spring integration: identical recovery at 30/60/144Hz.
+    var frequency: float = float(weapon_definition.get("recoil_recovery", 20.0))
+    var decay: float = exp(-frequency * delta)
+    var spring: float = recoil_velocity + frequency * recoil_pitch
+    recoil_pitch = maxf(0.0, (recoil_pitch + spring * delta) * decay)
+    recoil_velocity = (recoil_velocity - frequency * spring * delta) * decay
+    recoil_yaw *= exp(-12.0 * delta)
+
+func _apply_shot_recoil() -> void:
+    var aiming: float = smoothstep(0.0, 1.0, ads_blend)
+    var vertical: float = lerpf(float(weapon_definition.recoil_hip), float(weapon_definition.recoil_ads), aiming)
+    var settled: float = lerpf(1.0, 0.82, float(crouching))
+    var fatigue: float = 1.0 + (1.0 - clampf(stamina / maxf(max_stamina, 1.0), 0.0, 1.0)) * 0.15
+    var burst: float = 1.0 + minf(float(recoil_burst_shots), 8.0) * float(weapon_definition.get("recoil_growth", 0.035))
+    if recoil_burst_shots == 0: burst *= float(weapon_definition.get("first_shot_multiplier", 1.12))
+    var pattern: Array = weapon_definition.get("recoil_pattern", [-0.3, 0.2, 0.6, 0.3, -0.5, -0.7, -0.2, 0.4])
+    var lateral: float = float(pattern[recoil_burst_shots % pattern.size()]) * float(weapon_definition.get("recoil_horizontal", 0.12))
+    lateral *= lerpf(1.25, 1.0, aiming) * settled * fatigue
+    # Permanent aim displacement belongs to the player; visual spring recovery
+    # never drags a mouse correction back toward an old aim angle.
+    head.rotation.x = clampf(head.rotation.x + deg_to_rad(vertical * settled * fatigue * burst), deg_to_rad(-84.0), deg_to_rad(84.0))
+    rotate_y(deg_to_rad(lateral))
+    recoil_yaw += deg_to_rad(lateral)
+    recoil_velocity += float(weapon_definition.get("visual_recoil_impulse", 0.5)) * lerpf(1.25, 1.0, aiming)
+    recoil_burst_shots += 1
+    _recoil_idle_time = 0.0
+
+func _get_shot_spread() -> float:
+    var aiming: float = smoothstep(0.92, 1.0, ads_blend)
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("is_sight_aligned") and not bool(uzi_viewmodel.call("is_sight_aligned")):
+        aiming = 0.0
+    var spread: float = lerpf(float(weapon_definition.spread_hip), float(weapon_definition.spread_ads), aiming)
+    var speed_ratio: float = clampf(Vector2(velocity.x, velocity.z).length() / maxf(walk_speed, 0.1), 0.0, 1.8)
+    spread += speed_ratio * lerpf(0.0045, 0.0011, aiming)
+    if not is_on_floor(): spread += lerpf(0.018, 0.008, aiming)
+    spread += minf(float(recoil_burst_shots), 10.0) * float(weapon_definition.get("spread_growth", 0.00010)) * lerpf(1.0, 0.35, aiming)
+    if crouching: spread *= 0.80
+    if extraction_mode and medical.arm_impaired(): spread += 0.006
+    return spread
+
+func _bullet_exclusions() -> Array[RID]:
+    var excluded: Array[RID] = [get_rid()]
+    for proxy: Node in get_tree().get_nodes_in_group("weapon_proxy_bodies"):
+        if proxy is CollisionObject3D: excluded.append(proxy.get_rid())
+    return excluded
+
+func _trace_bullet(origin: Vector3, end: Vector3, excluded: Array[RID]) -> Dictionary:
+    var query := PhysicsRayQueryParameters3D.create(origin, end, 1 | 2 | 4 | 8, excluded)
+    query.collide_with_areas = true
+    return get_world_3d().direct_space_state.intersect_ray(query)
+
+func shoot() -> void:
+    if field_handling.check.active: return
+    if weapon_lowered:
+        set_weapon_lowered(false)
+        fire_cooldown = maxf(fire_cooldown, 0.3)
+        return
+    if weapon_lower_blend > 0.05 or not _weapon_ready_for_input(): return
+    if weapon_input_locked or is_swimming or is_underwater or not alive or reloading or fire_cooldown > 0.000001 or _is_legacy_stunned() or sprinting or _sprint_fire_delay > 0.0 or (extraction_mode and (healing_active or mantle_active)):
+        return
+    if _uses_manual_bolt() and not chambered and ammo > 0 and magazine_inserted:
+        _start_bolt_cycle()
+        return
+    if ammo <= 0 or (bool(weapon_definition.get("closed_bolt", weapon_id != "uzi")) and not chambered):
+        if not _dry_fire_latched:
+            _play_weapon_sound("dry_fire")
+            _dry_fire_latched = true
+        if is_instance_valid(hud_status): hud_status.text = "EMPTY — press R"
         return
 
+    # Resolve the sight picture BEFORE the recoil impulse from this shot.
+    var origin: Vector3 = camera.global_position
+    var spread: float = _get_shot_spread()
+    var angle: float = randf() * TAU
+    var radius: float = sqrt(randf()) * spread
+    var basis: Basis = camera.global_transform.basis
+    var direction: Vector3 = (-basis.z + basis.x * cos(angle) * radius + basis.y * sin(angle) * radius).normalized()
+    var end: Vector3 = origin + direction * float(weapon_definition.get("range", 180.0))
+    var excluded: Array[RID] = _bullet_exclusions()
+    var sight_result: Dictionary = _trace_bullet(origin, end, excluded)
+    var target: Vector3 = sight_result.get("position", end)
+    var muzzle: Vector3 = origin
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("get_muzzle_world_position"):
+        muzzle = uzi_viewmodel.call("get_muzzle_world_position")
+    # A camera can see over cover while its barrel is blocked. Test the near
+    # segment too, so a clipped barrel cannot fire through a thin wall.
+    var result: Dictionary = _trace_bullet(origin, muzzle, excluded) if origin.distance_to(muzzle) > 0.001 else {}
+    if result.is_empty():
+        var muzzle_direction: Vector3 = (target - muzzle).normalized()
+        result = _trace_bullet(muzzle, target + muzzle_direction * 0.01, excluded)
+        direction = muzzle_direction
+
+    field_handling.clear_readout()
     ammo -= 1
-    shot_fired.emit()
-    fire_cooldown = AUTO_FIRE_INTERVAL
+    _dry_fire_latched = false
+    if _uses_manual_bolt():
+        chambered = false
+        bolt_locked = true
+    elif bool(weapon_definition.get("closed_bolt", weapon_id != "uzi")):
+        chambered = ammo > 0 and magazine_inserted
+        bolt_locked = not chambered
+    _sync_inserted_magazine_record()
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("set_bolt_locked"):
+        uzi_viewmodel.call("set_bolt_locked", bolt_locked)
+    fire_cooldown += 60.0 / maxf(float(weapon_definition.rpm), 1.0)
     muzzle_timer = 0.055
     weapon_kick = 1.0
-    recoil_velocity += 0.028 if ads_blend > 0.6 else 0.048
-
-    # Put recoil into the real camera aim direction. Positive local X matches
-    # the existing mouse-look convention for looking upward. We intentionally
-    # do not auto-return this angle: during a burst the player counters the
-    # climb by pulling the mouse slightly down, and the centered camera ray
-    # follows the resulting sight direction exactly.
-    var recoil_degrees: float = ADS_RECOIL_DEGREES_PER_SHOT if ads_blend > 0.6 else HIP_RECOIL_DEGREES_PER_SHOT
-    head.rotate_x(deg_to_rad(recoil_degrees))
-    var recoil_head_rot: Vector3 = head.rotation
-    recoil_head_rot.x = clampf(recoil_head_rot.x, deg_to_rad(-84.0), deg_to_rad(84.0))
-    head.rotation = recoil_head_rot
-
-    if is_instance_valid(uzi_viewmodel):
-        uzi_viewmodel.call("play_fire")
-
-    # With the physical front/rear iron sights aligned to camera center, keep
-    # ADS dispersion tiny so the shot follows the sight picture instead of
-    # visibly missing a correctly aligned post.
-    var spread: float = 0.00025 if ads_blend > 0.6 else 0.008
-    spread += recoil_pitch * 0.045
-    var origin: Vector3 = camera.global_position
-    var direction: Vector3 = -camera.global_transform.basis.z
-    direction = direction.rotated(camera.global_transform.basis.y, randf_range(-spread, spread))
-    direction = direction.rotated(camera.global_transform.basis.x, randf_range(-spread, spread))
-    var end: Vector3 = origin + direction * 120.0
-
-    var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(origin, end, 1 | 2)
-    query.exclude = [get_rid()]
-    var result: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
     if not result.is_empty():
         var collider: Object = result.get("collider") as Object
-        if collider and collider.has_method("take_damage"):
-            collider.take_damage(randf_range(32.0, 43.0), self)
+        var damage: float = randf_range(float(weapon_definition.damage_min), float(weapon_definition.damage_max))
+        if collider and collider.has_method("receive_bullet_hit"):
+            if collider.receive_bullet_hit(damage, self, result.position, direction): hit_marker = 0.14
+        elif collider and collider.has_method("take_damage"):
+            collider.take_damage(damage, self)
             hit_marker = 0.14
-
+    _apply_shot_recoil()
+    if is_instance_valid(uzi_viewmodel): uzi_viewmodel.call("play_fire")
+    if _uses_manual_bolt(): _start_bolt_cycle(true)
+    shot_fired.emit()
     _update_hud()
 
+func _cancel_physical_reload() -> bool:
+    var was_reloading := reloading
+    var can_complete := true
+    if physical_magazines and physical_reload_handler.is_valid():
+        can_complete = bool(physical_reload_handler.call("cancel"))
+    if was_reloading and is_instance_valid(uzi_viewmodel):
+        if uzi_viewmodel.has_method("cancel_reload_presentation"):
+            uzi_viewmodel.call("cancel_reload_presentation")
+        elif uzi_viewmodel.has_method("cancel_action"):
+            uzi_viewmodel.call("cancel_action")
+    if was_reloading:
+        _reset_weapon_feedback()
+    reloading = false
+    reload_time = 0.0
+    _sync_weapon_magazine()
+    return can_complete
+
 func start_reload() -> void:
-    if not alive or reloading or ammo >= mag_size or reserve <= 0:
+    field_handling.cancel(self)
+    if not _weapon_ready_for_input():
         return
-    reload_empty = ammo <= 0
-    reload_duration = 3.75 if reload_empty else 3.10
-    if is_instance_valid(uzi_viewmodel):
+    if weapon_input_locked or not alive or reloading or (extraction_mode and (healing_active or mantle_active or _is_legacy_stunned())):
+        return
+    if _uses_manual_bolt() and not chambered and ammo > 0 and magazine_inserted:
+        _start_bolt_cycle()
+        return
+    _reload_chamber_only = weapon_id != "uzi" and magazine_inserted and ammo > 0 and not chambered
+    if physical_magazines and not _reload_chamber_only:
+        if not physical_reload_handler.is_valid() or not physical_reload_handler.call("begin"): return
+    if not physical_magazines and not _reload_chamber_only and (ammo >= mag_size + int(chambered) or reserve <= 0):
+        return
+    reload_empty = not chambered if weapon_id != "uzi" else ammo <= 0
+    _reload_mag_out = false
+    _reload_mag_in = false
+    _reload_bolt_released = false
+    reload_duration = float(weapon_definition.reload_empty) if reload_empty else float(weapon_definition.reload_partial)
+    if _reload_chamber_only:
+        reload_duration = 0.95 if weapon_id == "shigure" else 1.1
+        if is_instance_valid(uzi_viewmodel):
+            uzi_viewmodel.call("play_chamber", reload_duration)
+    elif is_instance_valid(uzi_viewmodel):
         var authored_duration: Variant = uzi_viewmodel.call("get_reload_duration", reload_empty)
         if authored_duration is float:
             reload_duration = maxf(float(authored_duration), 1.0)
         uzi_viewmodel.call("play_reload", reload_empty)
     reloading = true
+    _reset_weapon_handling()
     ads = false
     reload_time = 0.0
     hud_status.text = "Empty reload…" if reload_empty else "Reloading…"
 
+func _sync_inserted_magazine_record() -> void:
+    if not physical_magazines or weapon_id.is_empty() or not magazine_inserted:
+        inserted_magazine.clear()
+        return
+    inserted_magazine = MagazineRecord.normalize(weapon_id,inserted_magazine,maxi(0,ammo-int(chambered)))
+
+func _sync_weapon_magazine() -> void:
+    _sync_inserted_magazine_record()
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("set_magazine_inserted"):
+        uzi_viewmodel.call("set_magazine_inserted", magazine_inserted)
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("set_bolt_locked"):
+        uzi_viewmodel.call("set_bolt_locked", bolt_locked)
+
+func _advance_reload_events(ratio: float) -> bool:
+    if not reloading: return false
+    if physical_magazines:
+        if not _reload_chamber_only:
+            if not _reload_mag_out and ratio >= (0.08 if reload_empty else 0.16):
+                var had_magazine := magazine_inserted
+                if not bool(physical_reload_handler.call("eject")):
+                    _cancel_physical_reload()
+                    return false
+                _reload_mag_out = true
+                if had_magazine: _play_weapon_sound("magazine_out")
+            if not _reload_mag_in and ratio >= (0.40 if reload_empty else 0.65):
+                if not bool(physical_reload_handler.call("insert")):
+                    _cancel_physical_reload()
+                    return false
+                _reload_mag_in = true
+                _play_weapon_sound("magazine_in")
+        if weapon_id!="uzi" and reload_empty and not _reload_bolt_released and ratio >= (0.30 if _reload_chamber_only else 0.72):
+            chambered=magazine_inserted and ammo>0
+            bolt_locked=not chambered
+            _reload_bolt_released=true
+            if chambered: _play_weapon_sound("bolt_close")
+        if weapon_id == "uzi" and reload_empty and _reload_mag_in and not _reload_bolt_released and ratio >= 0.72:
+            _reload_bolt_released = true
+            _play_weapon_sound("bolt_open")
+        _sync_weapon_magazine()
+        return true
+    if weapon_id == "uzi":
+        # Legacy pool mode still follows the visible magazine action; its round
+        # transfer remains at completion, as before this feedback pass.
+        if not _reload_mag_out and ratio >= (0.08 if reload_empty else 0.16):
+            _reload_mag_out = true
+            if magazine_inserted: _play_weapon_sound("magazine_out")
+        if not _reload_mag_in and ratio >= (0.40 if reload_empty else 0.65):
+            _reload_mag_in = true
+            _play_weapon_sound("magazine_in")
+        if reload_empty and not _reload_bolt_released and ratio >= 0.72:
+            _reload_bolt_released = true
+            _play_weapon_sound("bolt_open")
+        return true
+    if not _reload_chamber_only:
+        if not _reload_mag_out and ratio >= (0.08 if reload_empty else 0.16):
+            # The retained old magazine returns its rounds to the reserve pool.
+            # A closed-bolt tactical reload preserves the separate chamber round.
+            var had_magazine := magazine_inserted
+            var retained := int(chambered)
+            reserve += maxi(0, ammo - retained)
+            ammo = retained
+            magazine_inserted = false
+            _reload_mag_out = true
+            if had_magazine: _play_weapon_sound("magazine_out")
+        if not _reload_mag_in and ratio >= (0.40 if reload_empty else 0.65):
+            var moved := mini(mag_size, reserve)
+            ammo += moved
+            reserve -= moved
+            magazine_inserted = true
+            _reload_mag_in = true
+            _play_weapon_sound("magazine_in")
+    if reload_empty and not _reload_bolt_released and ratio >= (0.30 if _reload_chamber_only else 0.72):
+        chambered = magazine_inserted and ammo > 0
+        bolt_locked = not chambered
+        _reload_bolt_released = true
+        if chambered: _play_weapon_sound("bolt_close")
+    _sync_weapon_magazine()
+    return true
+
 func _finish_reload() -> void:
-    var needed: int = mag_size - ammo
-    var moved: int = mini(needed, reserve)
-    ammo += moved
-    reserve -= moved
+    if physical_magazines:
+        if not _advance_reload_events(1.0): return
+    elif weapon_id == "uzi":
+        var needed: int = mag_size - ammo
+        var moved: int = mini(needed, reserve)
+        ammo += moved
+        reserve -= moved
+    else:
+        _advance_reload_events(1.0)
     reloading = false
     reload_time = 0.0
     reload_empty = false
+    _sync_weapon_magazine()
     if is_instance_valid(magazine):
         magazine.visible = true
         magazine.position = magazine_default_pos
@@ -1380,21 +2415,53 @@ func _finish_reload() -> void:
         left_hand.rotation = left_hand_base_rot
     hud_status.text = "Ready"
 
-func take_damage(amount: float) -> void:
-    if not alive:
+func can_accept_face_drone() -> bool:
+    if not alive or not is_inside_tree() or is_queued_for_deletion() or not is_instance_valid(camera):
+        return false
+    return not is_instance_valid(face_drone_latch) or face_drone_latch.can_accept()
+
+func begin_face_drone(bot: Node3D, release_callback: Callable) -> bool:
+    if not can_accept_face_drone():
+        return false
+    if not is_instance_valid(face_drone_latch):
+        face_drone_latch = FaceDroneLatch.new()
+        face_drone_latch.name = "FaceDroneLatch"
+        add_child(face_drone_latch)
+        face_drone_latch.setup(self)
+    # Combat owns the single initial 12HP; this state owns only full-second DOT.
+    return face_drone_latch.begin(bot, release_callback)
+
+func release_face_drone(bot: Node3D, reason: String = "external") -> void:
+    if is_instance_valid(face_drone_latch):
+        face_drone_latch.release(bot, reason)
+
+func is_face_drone_attached_to(bot: Node3D) -> bool:
+    return is_instance_valid(face_drone_latch) and face_drone_latch.is_attached_to(bot)
+
+func get_face_drone_anchor() -> Node3D:
+    return camera if is_instance_valid(camera) and camera.is_inside_tree() else null
+
+func _exit_tree() -> void:
+    if is_instance_valid(face_drone_latch):
+        face_drone_latch.shutdown()
+
+func is_combat_alive() -> bool:
+    return alive
+
+func take_damage(amount: float, body_part: String = "") -> void:
+    if not alive or not is_finite(amount) or amount <= 0.0:
         return
-    health -= amount
+    if extraction_mode:
+        var part := Medical.hit_part(randf()) if body_part.is_empty() else body_part
+        if not medical.hp.has(part): return
+        amount=preload("./extraction_clothing.gd").protected_damage(equipped_clothing,part,amount)
+        medical.damage(part, amount, randf(), randf())
+        health = medical.effective_hp()
+    else:
+        health = maxf(0.0, health - amount)
     damage_received.emit(amount)
     damage_flash = 0.75
-    if health <= 0.0:
-        health = 0.0
-        alive = false
-        ads = false
-        if is_instance_valid(ads_dot):
-            ads_dot.visible = false
-        hud_status.text = "You were eliminated — press Enter to restart"
-        Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-        died.emit()
+    if health <= 0.0: _eliminate()
     _update_hud()
 
 func apply_stun(duration: float) -> bool:
@@ -1402,20 +2469,56 @@ func apply_stun(duration: float) -> bool:
         return false
     stun_remaining = clampf(duration, 0.25, 2.5)
     stun_immunity_remaining = stun_remaining + STUN_RECOVERY_IMMUNITY
+    drone_stun_active = false
+    if is_instance_valid(drone_stun_fx):
+        drone_stun_fx.call("clear")
     ads = false
     if is_instance_valid(hud_status):
-        hud_status.text = "STUNNED — movement and weapon disrupted"
+        hud_status.text = LEGACY_STUN_STATUS
     return true
+
+func apply_drone_stun(duration: float = 3.0) -> bool:
+    if not alive or stun_remaining > 0.0 or stun_immunity_remaining > 0.0 or not is_finite(duration):
+        return false
+    stun_remaining = clampf(duration, 0.25, DRONE_STUN_MAX_DURATION)
+    stun_immunity_remaining = stun_remaining + STUN_RECOVERY_IMMUNITY
+    drone_stun_active = true
+    ads = false
+    ads_blend = 0.0
+    sprinting = false
+    if is_instance_valid(camera):
+        camera.fov = 73.0
+    if is_instance_valid(uzi_viewmodel):
+        uzi_viewmodel.call("set_ads_blend", 0.0)
+    if not is_instance_valid(drone_stun_fx):
+        drone_stun_fx = preload("player_drone_stun_fx.gd").new()
+        drone_stun_fx.name = "DroneStunFX"
+        add_child(drone_stun_fx)
+    drone_stun_fx.call("bind_camera", camera, bool(get_meta("reduced_motion", false)))
+    drone_stun_fx.call("begin", stun_remaining)
+    if is_instance_valid(hud_status) and not reloading and not healing_active:
+        hud_status.text = DRONE_STUN_STATUS
+    return true
+
+func _is_legacy_stunned() -> bool:
+    return stun_remaining > 0.0 and not drone_stun_active
+
+func _restore_stun_status() -> void:
+    if is_instance_valid(hud_status) and alive and not reloading and not healing_active:
+        if hud_status.text == LEGACY_STUN_STATUS or hud_status.text == DRONE_STUN_STATUS:
+            hud_status.text = "Ready"
 
 func clear_stun() -> void:
     stun_remaining = 0.0
     stun_immunity_remaining = 0.0
-    if is_instance_valid(hud_status) and alive and not reloading:
-        hud_status.text = "Ready"
+    drone_stun_active = false
+    if is_instance_valid(drone_stun_fx):
+        drone_stun_fx.call("clear")
+    _restore_stun_status()
 
 func notify_kill() -> void:
     kills += 1
-    reserve = mini(reserve + 6, 240)
+    reserve += mini(6, maxi(0, 240 - reserve))
     hit_marker = 0.18
     _update_hud()
 
@@ -1430,7 +2533,63 @@ func _process(_delta: float) -> void:
 func _update_hud() -> void:
     if not hud_health:
         return
+    # Extraction hides the entire legacy row; normal modes still update it.
+    if extraction_mode and not hud_health.is_visible_in_tree():
+        return
     hud_health.text = "HP %d" % int(ceil(health))
     hud_ammo.text = "AMMO %d / %d" % [ammo, reserve]
     hud_kills.text = "KILLS %d" % kills
     hud_wave.text = "WAVE %d" % wave
+
+func apply_coffee_boost() -> void:
+    if coffee_boost_remaining <= 0.0:
+        _coffee_base_max = max_stamina
+    coffee_boost_remaining = 180.0
+    max_stamina = _coffee_base_max * 1.04
+
+func clear_coffee_boost() -> void:
+    if coffee_boost_remaining > 0.0:
+        max_stamina = _coffee_base_max
+    coffee_boost_remaining = 0.0
+    stamina = minf(stamina, max_stamina)
+
+func _tick_coffee_boost(delta: float) -> void:
+    if coffee_boost_remaining <= 0.0:
+        return
+    if delta >= coffee_boost_remaining:
+        clear_coffee_boost()
+    else:
+        coffee_boost_remaining -= delta
+
+func max_health() -> float:
+    return Medical.TOTAL_HP if extraction_mode else 100.0
+
+func health_ratio() -> float:
+    return clampf(health / max_health(), 0.0, 1.0)
+
+func reset_medical() -> void:
+    medical.reset()
+    health = max_health()
+
+func advance_medical(delta: float, recover_blood: bool = false, blood_multiplier: float = 1.0, tissue_rate: float = 0.0) -> void:
+    if not extraction_mode or not alive: return
+    if not is_zero_approx(medical.tick(delta, recover_blood, blood_multiplier, tissue_rate)):
+        _sync_medical_health()
+
+func _sync_medical_health() -> void:
+    health = medical.effective_hp()
+    if medical.is_dead() and alive:
+        _eliminate()
+
+func _eliminate() -> void:
+    _cancel_bolt_cycle()
+    health = 0.0
+    alive = false
+    if is_instance_valid(face_drone_latch):
+        face_drone_latch.release(null, "player_died")
+    clear_stun()
+    ads = false
+    if is_instance_valid(ads_dot): ads_dot.visible = false
+    if is_instance_valid(hud_status): hud_status.text = "You were eliminated — press Enter to restart"
+    Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+    died.emit()

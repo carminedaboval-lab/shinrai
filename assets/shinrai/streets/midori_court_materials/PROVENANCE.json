@@ -1,0 +1,34 @@
+{
+  "asset": "White Plaster 02",
+  "author": "Rob Tuytel",
+  "source": "https://polyhaven.com/a/white_plaster_02",
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "physical_width_metres": 1.0,
+  "resolution": "1k",
+  "download_utc": "2026-10-23T13:48:05.620084+00:00",
+  "files": {
+    "white_plaster_02_diff_1k.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_plaster_02/white_plaster_02_diff_1k.jpg",
+      "bytes": 527219,
+      "md5": "7b10c2686bcfd76d1f309a20fd06b57e",
+      "sha256": "A1EBBE091BD1AE93D2ABD5DE8D69F9003A8D0EE6532BCF9A87C2492C97051F23",
+      "category": "Diffuse"
+    },
+    "white_plaster_02_nor_gl_1k.png": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/white_plaster_02/white_plaster_02_nor_gl_1k.png",
+      "bytes": 6075625,
+      "md5": "576d036eb85d0887c7613f8d3f5e13df",
+      "sha256": "36AC2EEC35A5678EDA0C1CCFD81F6AB8A2E2FED0CA3E77D6E1D44E372E130450",
+      "category": "nor_gl"
+    },
+    "white_plaster_02_rough_1k.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_plaster_02/white_plaster_02_rough_1k.jpg",
+      "bytes": 295900,
+      "md5": "8b28f263360b8c4ddbdc4f7c650c4eeb",
+      "sha256": "4FF1FE957CD161B07F721FE6C28A9459C8C2E8EC65627A26C16E483A07C80D85",
+      "category": "Rough"
+    }
+  },
+  "modification": "Original source map bytes unchanged. Scoped runtime tint/material only."
+}

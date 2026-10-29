@@ -1,0 +1,133 @@
+{
+  "title": "Shinrai original mechanical weapon foley",
+  "authorship": "Procedurally authored for this Shinrai task; no recordings or external audio assets used.",
+  "source": "tools/generate_weapon_audio.py",
+  "generator_sha256": "fb1a3267ca00ad54a91a072818dd5caaefb0e4387d4a519b468082d8f5166a44",
+  "method": "Deterministic noise, damped inharmonic resonators and band-limited sliding friction.",
+  "external_assets": [],
+  "gzw_assets_used": false,
+  "scope": "Mechanical action cues only. No gunshot, real-weapon acoustic accuracy or listening acceptance claimed.",
+  "runtime": "Five cached clips, six bounded first-person voices; preview is evidence only.",
+  "files": [
+    {
+      "path": "magazine_out.wav",
+      "duration_seconds": 0.34,
+      "sample_rate": 48000,
+      "channels": 1,
+      "bits_per_sample": 16,
+      "peak": 0.4600054933317057,
+      "rms": 0.041871032998507196,
+      "rms_dbfs": -27.56172649031132,
+      "dc_mean": 4.497366132951787e-06,
+      "clipped_samples": 0,
+      "first_sample": 0,
+      "last_sample": 0,
+      "sha256": "b9c5ce07c8420aa6bba557adb080fa682da43472aa10fa3dc4f4f4962002b898"
+    },
+    {
+      "path": "magazine_in.wav",
+      "duration_seconds": 0.3,
+      "sample_rate": 48000,
+      "channels": 1,
+      "bits_per_sample": 16,
+      "peak": 0.4600054933317057,
+      "rms": 0.04125283690045303,
+      "rms_dbfs": -27.690923605142554,
+      "dc_mean": 2.9034970820913957e-06,
+      "clipped_samples": 0,
+      "first_sample": 0,
+      "last_sample": 0,
+      "sha256": "dc4adba2bc4ae7754f9a2c05a1c9db2c896be5c7a965e78a16f77faa0654c089"
+    },
+    {
+      "path": "bolt_open.wav",
+      "duration_seconds": 0.32,
+      "sample_rate": 48000,
+      "channels": 1,
+      "bits_per_sample": 16,
+      "peak": 0.4600054933317057,
+      "rms": 0.04685188404498406,
+      "rms_dbfs": -26.585458804643224,
+      "dc_mean": 3.854551327046425e-07,
+      "clipped_samples": 0,
+      "first_sample": 0,
+      "last_sample": 0,
+      "sha256": "bbd72232cd0b988885a59fc9713778d50d79f884e54fff1c0f7b3544042e96fa"
+    },
+    {
+      "path": "bolt_close.wav",
+      "duration_seconds": 0.23,
+      "sample_rate": 48000,
+      "channels": 1,
+      "bits_per_sample": 16,
+      "peak": 0.4600054933317057,
+      "rms": 0.04549826127336368,
+      "rms_dbfs": -26.8401039938081,
+      "dc_mean": 6.545999133981988e-06,
+      "clipped_samples": 0,
+      "first_sample": 0,
+      "last_sample": 0,
+      "sha256": "6073f328502b3c7a62eea569769c3a46c52e0e9bbb9b4344d5ded15569f5e642"
+    },
+    {
+      "path": "dry_fire.wav",
+      "duration_seconds": 0.095,
+      "sample_rate": 48000,
+      "channels": 1,
+      "bits_per_sample": 16,
+      "peak": 0.35999633777886286,
+      "rms": 0.03940549968316852,
+      "rms_dbfs": -28.088863220661793,
+      "dc_mean": 9.155552842799163e-06,
+      "clipped_samples": 0,
+      "first_sample": 0,
+      "last_sample": 0,
+      "sha256": "6c35bb9069f88964a16900992362af8c8688afc5e73f831fd701d62e730ee9cb"
+    }
+  ],
+  "preview": {
+    "path": "mechanical_preview.wav",
+    "duration_seconds": 6.0,
+    "sample_rate": 48000,
+    "channels": 1,
+    "bits_per_sample": 16,
+    "peak": 0.3220007934812464,
+    "rms": 0.01671066221894257,
+    "rms_dbfs": -35.54012678629262,
+    "dc_mean": 1.1634122067255972e-06,
+    "clipped_samples": 0,
+    "first_sample": 0,
+    "last_sample": 0,
+    "sha256": "a1bf849e0f166da94dc91cd232fb322be69d86f0a322c5a1556450ddd55ffc64"
+  },
+  "preview_sequence": [
+    {
+      "seconds": 0.25,
+      "event": "magazine_out"
+    },
+    {
+      "seconds": 1.1,
+      "event": "magazine_in"
+    },
+    {
+      "seconds": 2.0,
+      "event": "bolt_open"
+    },
+    {
+      "seconds": 2.75,
+      "event": "bolt_close"
+    },
+    {
+      "seconds": 3.6,
+      "event": "dry_fire"
+    },
+    {
+      "seconds": 4.35,
+      "event": "magazine_in"
+    },
+    {
+      "seconds": 5.15,
+      "event": "bolt_close"
+    }
+  ]
+}

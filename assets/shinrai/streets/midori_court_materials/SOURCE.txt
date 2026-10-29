@@ -1,0 +1,4 @@
+White Plaster 02 by Rob Tuytel, Poly Haven. CC0-1.0.
+https://polyhaven.com/a/white_plaster_02
+https://polyhaven.com/license
+Original 1k Diffuse, OpenGL Normal, Roughness; 1 metre physical surface. Source map bytes retained unchanged, provider MD5 verified. See PROVENANCE.json for exact URLs and SHA256.

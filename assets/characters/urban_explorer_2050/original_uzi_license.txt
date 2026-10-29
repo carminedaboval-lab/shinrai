@@ -1,0 +1,11 @@
+Model Information:
+* title:	[UZI] Ultimate FPS Animations
+* source:	https://sketchfab.com/3d-models/uzi-ultimate-fps-animations-73266e9f1eb949b69a3ab11d8f636048
+* author:	1Matzh (https://sketchfab.com/1Matzh)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "[UZI] Ultimate FPS Animations" (https://sketchfab.com/3d-models/uzi-ultimate-fps-animations-73266e9f1eb949b69a3ab11d8f636048) by 1Matzh (https://sketchfab.com/1Matzh) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

@@ -1,0 +1,9 @@
+{
+  "kind": "Original English placeholder NPC speech",
+  "generator": "Windows System.Speech, installed Microsoft David Desktop and Microsoft Mark; scripted character delivery, no voice impersonation or external service",
+  "script": "lines.json",
+  "source_package": "scav_social_20261024",
+  "generated_date": "2026-10-24",
+  "clips": 24,
+  "quality_boundary": "Synthetic placeholder voices. Engine playback, stereo energy and distance attenuation tested separately. Human voice-acting acceptance not claimed."
+}

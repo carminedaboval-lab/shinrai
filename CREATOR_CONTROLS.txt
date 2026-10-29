@@ -1,0 +1,27 @@
+CREATE IN PARK
+
+Double-click Create in Park.cmd in the Shinrai game folder.
+It opens the actual park directly in first person. Your gameplay inventory and
+raid save are separate from this editing session.
+
+WASD: walk. Mouse: look. Shift: run. Ctrl: crouch. Space: jump.
+E: pick up the object you are looking at.
+While holding: aim at a clear surface, left-click to put down.
+Mouse wheel: rotate. Right-click or Escape: cancel and restore the object.
+B: choose another named asset from the right-hand menu.
+Delete: remove the object you are looking at.
+Ctrl+Z / Ctrl+Y: undo / redo. Ctrl+S: save the park layout.
+N: day / night. F9: exit Creator Mode.
+
+The Adjust section contains height, grid and surface alignment options.
+Original layout restores the park's starting arrangement. Save to keep it.
+Exit and reload ask what to do when you have unsaved changes.
+
+Saved layouts are separate data files in Godot's user folder, under
+creator_layouts/midori_default.json. A valid saved layout is also applied before
+the next normal gameplay deployment. Original assets are never rewritten.
+
+Some scenery is protected because its parts are combined with other objects.
+Catalog dependencies are listed with a reason when they cannot be placed.
+Creator Mode keeps original object identities while editing; it does not enter
+an active raid or use the normal gameplay distance-partition copies.

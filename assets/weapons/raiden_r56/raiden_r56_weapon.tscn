@@ -1,0 +1,38 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/weapons/raiden_r56/raiden_r56_geometry.glb" id="1"]
+
+[node name="Raiden" type="Node3D"]
+metadata/magazine_node_path = NodePath("Geometry/Magazine")
+metadata/action_node_path = NodePath("Geometry/Action")
+
+[node name="Geometry" parent="." instance=ExtResource("1")]
+
+[node name="GripRight" type="Marker3D" parent="."]
+position = Vector3(0.112, -0.047, 0)
+
+[node name="GripLeft" type="Marker3D" parent="."]
+position = Vector3(-0.145, 0.033, 0.014)
+
+[node name="OpticSocket" type="Marker3D" parent="."]
+position = Vector3(0.04, 0.121, 0)
+rotation = Vector3(0, -1.5707963268, 0)
+
+[node name="Muzzle" type="Marker3D" parent="."]
+position = Vector3(-0.539, 0.075, 0)
+rotation = Vector3(0, -1.5707963268, 0)
+
+[node name="IronRearSight" type="Marker3D" parent="."]
+position = Vector3(0.145, 0.155, 0)
+
+[node name="IronFrontSight" type="Marker3D" parent="."]
+position = Vector3(-0.343, 0.155, 0)
+
+[node name="BoltRelease" type="Marker3D" parent="."]
+position = Vector3(0.114, 0.025, 0.033)
+
+[node name="EjectionPort" type="Marker3D" parent="."]
+position = Vector3(0.055, 0.073, 0.033)
+
+[node name="ActionGrip" type="Marker3D" parent="."]
+position = Vector3(0.092, 0.08, 0.061)
