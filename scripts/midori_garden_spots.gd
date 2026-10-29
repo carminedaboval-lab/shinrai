@@ -211,8 +211,7 @@ func _clear(p: Vector2,radius: float,stone: bool) -> bool:
 	# This follows main-path widening and terminal tapers without fixed bands.
 	if park.path_edge_distance_world(p)<radius+.20: return false
 	if desire_paths != null and desire_paths.distance_to_path(p)<radius+1.2: return false
-	for trunk: Vector2 in park.occupied_tree_positions:
-		if p.distance_to(trunk*park.LAYOUT_SCALE)<radius+(.75 if stone else .3): return false
+	if park.any_trunk_within(p,radius+(.75 if stone else .3)): return false
 	for prior in footprints:
 		if p.distance_to(prior.p)<radius+float(prior.radius)+.08: return false
 	var flowers := park.get_node("MidoriJapaneseFlowers")

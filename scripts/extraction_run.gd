@@ -49,6 +49,7 @@ const WeaponCatalog = preload("res://scripts/extraction_weapon_catalog.gd")
 const Navigation = preload("res://scripts/extraction_navigation.gd")
 const Hud = preload("./extraction_hud.gd")
 const Enemy = preload("res://scripts/extraction_enemy.gd")
+const StartupTrace = preload("res://scripts/startup_trace.gd")
 const PoliceGroups = preload("res://assets/enemies/police_spider/park_drone_groups.gd")
 const ScavSquad = preload("./scav_squad.gd")
 const Cover = preload("res://scripts/extraction_cover.gd")
@@ -197,8 +198,10 @@ func _prepare_park() -> void:
 		await get_tree().physics_frame
 	# Furniture must exist before native obstacle sampling and cache registration.
 	var identity := park.get_node_or_null("Midori2050Identity")
+	var _t := StartupTrace.begin()
 	while identity != null and not identity.installed:
 		await get_tree().process_frame
+	_t = StartupTrace.finish("raid.wait_identity", _t)
 	if identity != null:
 		await get_tree().physics_frame
 		await get_tree().physics_frame
@@ -206,18 +209,23 @@ func _prepare_park() -> void:
 	var fruit_street := park.get_node_or_null("MidoriSouthStreet")
 	while fruit_street != null and fruit_street.get("installed") != true:
 		await get_tree().process_frame
+	_t = StartupTrace.finish("raid.wait_south_street", _t)
 	# Recent emergency fixtures must exist before navigation and Creator scanning.
 	var aftermath := park.get_node_or_null("MidoriAftermath")
 	while aftermath != null and aftermath.get("installed") != true:
 		await get_tree().process_frame
+	_t = StartupTrace.finish("raid.wait_aftermath", _t)
 	# Finish the road-connected corporate parcel before world caches and HQ.
 	var corporate := park.get_node_or_null("MidoriCorporateDistrict")
 	while corporate != null and corporate.get("installed") != true:
 		await get_tree().process_frame
+	_t = StartupTrace.finish("raid.wait_corporate", _t)
 	var fruit_garden: Dictionary = preload("./midori_fruit_garden.gd").install(park)
 	if fruit_garden.get("report",{}).has("error"):
 		push_warning("MIDORI_FRUIT_GARDEN: " + str(fruit_garden.report.error))
+	_t = StartupTrace.finish("raid.fruit_garden", _t)
 	creator_layout_result = await preload("./creator/creator_game_integration.gd").apply_before_navigation(park)
+	_t = StartupTrace.finish("raid.creator_layout", _t)
 	LoadingBudget.stage(park,"Preparing park routes")
 	await navigation.build(park)
 	map_routes = [park.OUTER_CIRCUIT, park.LAKE_PROMENADE_LOOP, park.SOUTH_ARRIVAL_ROUTE, park.WEST_DESTINATION_ROUTE, park.PLAZA_PAVED_ROUTE, park.NORTH_ENTRY_ROUTE, park.EAST_DECK_ROUTE, park.SPORTS_LINK_ROUTE, park.PLAYGROUND_LOOP, park.NORTH_WOODLAND_LOOP, park.SOUTH_BRIDGE_APPROACH, park.PAVILION_LINK_ROUTE, park.VIEWING_DECK_APPROACH_ROUTE, park.FUTURE_BRIDGE_WEST, park.FUTURE_BRIDGE_NORTH_EAST, park.FUTURE_BRIDGE_SOUTH]
@@ -237,7 +245,9 @@ func _prepare_park() -> void:
 	_register_sites()
 	# Finish late planting and partition once while deployment is still locked.
 	LoadingBudget.stage(park,"Finishing park details")
+	_t = StartupTrace.begin()
 	var detail_result: Dictionary = await preload("res://scripts/midori_distance_boot.gd").install_before_hq(park)
+	_t = StartupTrace.finish("raid.distance_boot", _t)
 	if detail_result.get("status", "") == "cancelled": return
 	if detail_result.has("error"):
 		push_warning("MIDORI_DISTANCE_BOOT: " + str(detail_result.error))

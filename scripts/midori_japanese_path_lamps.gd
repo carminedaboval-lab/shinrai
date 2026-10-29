@@ -154,8 +154,7 @@ func _clear(p: Vector2,path: Vector2) -> Dictionary:
 	if terrain.water_at(p) or terrain.edge_distance(p,terrain.shoreline)<.8: return {}
 	if paving_edge_distance(p)<.42: return {}
 	if desire.distance_to_path(p)<1.5: return {}
-	for trunk: Vector2 in park.occupied_tree_positions:
-		if p.distance_to(trunk*park.LAYOUT_SCALE)<1.15: return {}
+	if park.any_trunk_within(p,1.15): return {}
 	var gardens := park.get_node_or_null("MidoriGardenSpots")
 	if gardens!=null:
 		for footprint: Dictionary in gardens.footprints:

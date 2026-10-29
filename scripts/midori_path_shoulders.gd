@@ -69,8 +69,7 @@ func install(park: Node3D, terrain: Node, trails: Node) -> void:
 			if terrain.water_at(p) or terrain.edge_distance(p,terrain.shoreline)<2.0+radius:continue
 			for rect:Rect2 in trails.obstacles:
 				if rect.grow(radius).has_point(p):clear=false;break
-			for trunk:Vector2 in park.occupied_tree_positions:
-				if p.distance_to(trunk*2)<radius+.75:clear=false;break
+			if park.any_trunk_within(p,radius+.75):clear=false
 			if not clear:continue
 			var low:=INF
 			var high:=-INF

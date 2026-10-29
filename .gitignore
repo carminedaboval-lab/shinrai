@@ -10,3 +10,5 @@
 *.zip
 *.pck
 *.exe
+startup_profile*.log
+profile_startup.flag

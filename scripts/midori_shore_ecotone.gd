@@ -30,8 +30,7 @@ func safe(p: Vector2, margin: float, min_y: float = .117) -> bool:
 	for path: PackedVector2Array in terrain.paths:
 		for i in range(path.size()-1):
 			if p.distance_to(Geometry2D.get_closest_point_to_segment(p,path[i],path[i+1]))<margin+2.2: return false
-	for trunk: Vector2 in park.occupied_tree_positions:
-		if p.distance_to(trunk*park.LAYOUT_SCALE)<margin+1.0: return false
+	if park.any_trunk_within(p,margin+1.0): return false
 	return true
 
 func install() -> void:

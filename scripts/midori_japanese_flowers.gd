@@ -26,6 +26,8 @@ func install() -> void:
 	var park := get_parent() as Node3D
 	var terrain: Node = park.get_node("MidoriTerrain")
 	while not terrain.installed: await get_tree().process_frame
+	var _ft := preload("res://scripts/startup_trace.gd").begin()
+	var _fs := _ft
 	desire_paths = park.get_node_or_null("MidoriDesirePaths")
 	if desire_paths != null:
 		for frame in range(600):
@@ -44,6 +46,7 @@ func install() -> void:
 		assert(parts.has("FlowerStem") and parts.has("LeafFan"))
 		templates.append(parts)
 		model.free()
+	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.templates", _fs)
 	var sockets: Array[Vector2] = []
 	var planned := park.find_child("PlannedPropSockets", true, false)
 	if planned:
@@ -109,14 +112,21 @@ func install() -> void:
 			patch_centres.append(origin)
 			centres.append(centre)
 			if centres.size() >= 3: break
+	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.groves", _fs)
 	_install_west_carpet(park, terrain, detail, sockets, templates)
+	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.west_carpet", _fs)
 	flowering_shoots = plant_positions.size()
 	# Spatially bounded replacement of tall grass keeps the iris fans readable.
 	_install_azaleas(park, terrain, detail, sockets, rng)
+	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.azaleas", _fs)
 	for root in colony_roots: _index_root(root, 0.0)
 	for root in azalea_positions: _index_root(root, .45)
+	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.index_roots", _fs)
 	_trim_colony_grass(park)
+	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.trim_colony_grass", _fs)
 	_clear_overtopping_roots(park)
+	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.clear_overtopping", _fs)
+	preload("res://scripts/startup_trace.gd").finish("feature.japanese_flowers", _ft)
 	installed = true
 	print("JAPANESE_IRIS_READY ", JSON.stringify({"patches": patch_centres.size(), "west_carpet_clumps": west_carpet_roots.size(), "west_carpet_size_m": [west_carpet_bounds.size.x, west_carpet_bounds.size.y], "plants": plant_positions.size(), "leaf_clumps": colony_roots.size(), "removed_grass_lod_instances": removed_grass_instances, "removed_companion_mesh_instances": removed_companion_instances, "hidden_overtopping_plants": hidden_overtopping_plants, "height_m": [.46, .57], "azalea_shrubs": azalea_positions.size(), "new_collisions": 0}))
 
@@ -198,8 +208,7 @@ func _clear(p: Vector2, park: Node3D, terrain: Node, detail: Node, sockets: Arra
 	if not park._is_vegetation_clear(Vector3(p.x / 2.0, 0, p.y / 2.0), .3): return false
 	for marker in sockets:
 		if p.distance_to(marker) < 11.0: return false
-	for trunk: Vector2 in park.occupied_tree_positions:
-		if p.distance_to(trunk * 2.0) < 1.1: return false
+	if park.any_trunk_within(p, 1.1): return false
 	for side in range(8):
 		var q := p + Vector2(.45, 0).rotated(side * TAU / 8.0)
 		if not detail._is_lawn_position(q.x, q.y): return false

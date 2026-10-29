@@ -176,6 +176,7 @@ func install() -> void:
 	if installed or get_parent() == null: return
 	var terrain := get_parent().get_node_or_null("MidoriTerrain")
 	while terrain != null and not terrain.installed: await get_tree().process_frame
+	var _ft := preload("res://scripts/startup_trace.gd").begin()
 	_water = get_parent().find_child("LakeWaterSurface",true,false) as MeshInstance3D
 	if _water == null or not _water.material_override is ShaderMaterial:
 		push_warning("MIDORI_LAKE_LIFE: supplied lake material not found")
@@ -213,6 +214,7 @@ func install() -> void:
 	_last_shore_clock = INF
 	_last_reflection_ready = -1.0
 	_reflection_matrices_valid = false
+	preload("res://scripts/startup_trace.gd").finish("feature.lake_life", _ft)
 	installed = true
 	report = {"modified_surfaces":1,"vertex_displacement_m":0.0,"water_y":_water_y,"depth_map_resolution":[441,361],"maximum_depth_m":maximum_depth,"planar_reflection":_reflection != null,"reflection_probe_reused":get_parent().find_child("LakeCachedReflection",true,false)!=null,"source_shader_unchanged":true}
 	report["animated_bank_surfaces"] = _shore_banks.size()

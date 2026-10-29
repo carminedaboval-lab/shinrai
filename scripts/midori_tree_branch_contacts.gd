@@ -43,6 +43,7 @@ static func apply(park: Node3D) -> void:
 			continue
 		tree.global_position = spec.after
 		park.occupied_tree_positions[old_index] = next_point
+		if park.has_method("invalidate_trunk_index"): park.invalidate_trunk_index()
 		if park._occupied_tree_crowns.has(old_point):
 			var radius: float = park._occupied_tree_crowns[old_point]
 			park._occupied_tree_crowns.erase(old_point)

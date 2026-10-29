@@ -37,6 +37,7 @@ func install() -> void:
 	park = get_parent()
 	terrain = park.get_node("MidoriTerrain")
 	while not terrain.installed: await get_tree().process_frame
+	var _ft := preload("res://scripts/startup_trace.gd").begin()
 	var broad := PackedVector2Array()
 	var authored = park.get("LAKE_PROMENADE_LOOP")
 	for i in range(authored.size()-1): broad.append(authored[i]*2.0)
@@ -98,6 +99,7 @@ func install() -> void:
 	surface.generate_normals()
 	ropes.mesh=surface.commit()
 	add_child(ropes)
+	preload("res://scripts/startup_trace.gd").finish("feature.lake_barrier", _ft)
 	installed=true
 	print("LAKE_BARRIER_INSTALLED posts=",posts.size()," spans=",spans.size()," openings_samples=",rejected)
 

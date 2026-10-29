@@ -41,7 +41,9 @@ func _start() -> void:
 	preload("./creator/creator_game_integration.gd").prepare_world(park, creator_layout_path)
 	park.set_meta("shinrai_incremental_loading",true);park.set_meta("shinrai_structure_pending",true)
 	get_tree().root.add_child(park)
-	while is_instance_valid(park) and park.get_meta("shinrai_structure_pending",false): await get_tree().process_frame
+	while is_instance_valid(park) and park.get_meta("shinrai_structure_pending",false):
+		preload("./startup_trace.gd").watch(park)
+		await get_tree().process_frame
 	if not is_instance_valid(park): _fail("Park preparation was interrupted.");return
 	# The native scene is now the autoload target; its structural work is complete.
 	get_tree().current_scene=park
@@ -52,6 +54,7 @@ func _start() -> void:
 	while is_instance_valid(park):
 		raid=park.get_node_or_null("ExtractionRun")
 		if raid!=null and raid.phase==raid.Phase.HQ: break
+		preload("./startup_trace.gd").watch(park)
 		await get_tree().process_frame
 	if not is_instance_valid(park): _fail("Park preparation was interrupted.");return
 	loading.set_stage("Preparing the view")

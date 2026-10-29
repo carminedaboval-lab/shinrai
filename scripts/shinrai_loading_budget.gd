@@ -1,6 +1,6 @@
 extends RefCounted
 ## Shared main-thread budget. Geometry, physics queries and RNG order stay native.
-const FRAME_BUDGET_USEC := 12000
+const FRAME_BUDGET_USEC := 50000
 static func wait_structure(park: Node) -> void:
 	while is_instance_valid(park) and park.get_meta("shinrai_structure_pending",false):
 		await park.get_tree().process_frame

@@ -13,8 +13,7 @@ func _ready():
  call_deferred("install")
 func _land(p:Vector2,r:float,island:Dictionary,terrain:Node,park:Node3D)->bool:
  if not Geometry2D.is_point_in_polygon(p,island.points) or terrain.edge_distance(p,island.points)<r+.45:return false
- for trunk:Vector2 in park.occupied_tree_positions:
-  if p.distance_to(trunk*park.LAYOUT_SCALE)<r+1.15:return false
+ if park.any_trunk_within(p,r+1.15):return false
  for route:PackedVector2Array in terrain.paths:
   for i in range(route.size()-1):
    if p.distance_to(Geometry2D.get_closest_point_to_segment(p,route[i],route[i+1]))<r+1.6:return false
@@ -41,6 +40,7 @@ func install():
  var park=get_parent() as Node3D
  var terrain=park.get_node("MidoriTerrain")
  while not terrain.installed:await get_tree().process_frame
+ var _ft := preload("res://scripts/startup_trace.gd").begin()
  set_as_top_level(true);global_transform=Transform3D.IDENTITY
  var rocks:Array[Node3D]=[]
  var rock_material:Material
@@ -138,6 +138,7 @@ func install():
   counts.append({"island":index,"stones":placed_rocks,"floor_plants":planted,"moss_fronds":moss_instances-moss_before})
  await _install_mainland_cover(park,terrain,rocks[3])
  for model in rocks:model.free()
+ preload("res://scripts/startup_trace.gd").finish("feature.island_nature", _ft)
  installed=true
  print("ISLAND_NATURE_READY ",JSON.stringify({"islands":counts,"rocks":rock_positions.size(),"plants":plant_positions.size(),"moss":moss_instances,"stone_collisions":rock_positions.size()}))
 
@@ -163,8 +164,7 @@ func _install_mainland_cover(park:Node3D,terrain:Node,source:Node3D):
    for route:PackedVector2Array in terrain.paths:
     for i in range(route.size()-1):
      if p.distance_to(Geometry2D.get_closest_point_to_segment(p,route[i],route[i+1]))<radius+2:blocked=true
-   for trunk:Vector2 in park.occupied_tree_positions:
-    if p.distance_to(trunk*2)<radius+1.25:blocked=true
+   if park.any_trunk_within(p,radius+1.25):blocked=true
    for marker:Node3D in sockets.get_children():
     if p.distance_to(Vector2(marker.global_position.x,marker.global_position.z))<radius+11:blocked=true
    for old:Node3D in old_cover.get_children():

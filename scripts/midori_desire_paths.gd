@@ -36,7 +36,10 @@ func install() -> void:
 		push_error("DESIRE_PATHS: planting/terrain did not finish")
 		return
 	if installed: return
+	var _dt := preload("res://scripts/startup_trace.gd").begin()
 	_index_scene()
+	_index_obstacles()
+	_dt = preload("res://scripts/startup_trace.gd").finish("desire.index_scene", _dt)
 	for link: Dictionary in LINKS:
 		var points := _route(link.a,link.b)
 		if points.is_empty():
@@ -52,6 +55,7 @@ func install() -> void:
 					var key := cell+Vector2i(x,z)
 					if not route_cells.has(key): route_cells[key]=[]
 					route_cells[key].append(segment)
+	_dt = preload("res://scripts/startup_trace.gd").finish("desire.routes", _dt)
 	var removed := 0
 	var before := 0
 	for batch: MultiMeshInstance3D in park.find_children("*","MultiMeshInstance3D",true,false):
@@ -90,12 +94,14 @@ func install() -> void:
 			if mm.use_colors: trimmed.set_instance_color(j,mm.get_instance_color(kept[j]))
 			if mm.use_custom_data: trimmed.set_instance_custom_data(j,mm.get_instance_custom_data(kept[j]))
 		batch.multimesh = trimmed
+	_dt = preload("res://scripts/startup_trace.gd").finish("desire.trim_grass", _dt)
 	var picnic = load(get_script().resource_path.get_base_dir()+"/midori_path_picnic.gd").new()
 	picnic.name = "WoodlandPicnicStop"
 	park.add_child(picnic)
 	picnic.install(park,routes)
 	await load(get_script().resource_path.get_base_dir()+"/midori_trail_surface.gd").new().install(park,terrain,routes)
 	await load(get_script().resource_path.get_base_dir()+"/midori_path_shoulders.gd").new().install(park,terrain,self)
+	_dt = preload("res://scripts/startup_trace.gd").finish("desire.surface_shoulders", _dt)
 	installed = true
 	finished = true
 	park.set_meta("desire_paths",{"routes":routes.size(),"removed_lod_instances":removed,"original_lod_instances":before,"retained_fraction":1.0-float(removed)/maxi(before,1)})
@@ -143,6 +149,20 @@ func _index_scene() -> void:
 		if box.size.y < .4 or box.position.y > 3.5: continue
 		obstacles.append(Rect2(Vector2(box.position.x,box.position.z),Vector2(box.size.x,box.size.z)).grow(1.65))
 
+## Obstacle rectangles bucketed by cell, so each route cell only tests the
+## few obstacles that can contain it (identical results to testing them all).
+const OBSTACLE_CELL_M := 4.0
+var _obstacle_grid: Dictionary = {}
+
+func _index_obstacles() -> void:
+	_obstacle_grid.clear()
+	for rect: Rect2 in obstacles:
+		for z in range(floori(rect.position.y/OBSTACLE_CELL_M),floori(rect.end.y/OBSTACLE_CELL_M)+1):
+			for x in range(floori(rect.position.x/OBSTACLE_CELL_M),floori(rect.end.x/OBSTACLE_CELL_M)+1):
+				var key:=Vector2i(x,z)
+				if not _obstacle_grid.has(key): _obstacle_grid[key]=[]
+				_obstacle_grid[key].append(rect)
+
 func _route(a: Vector2,b: Vector2) -> PackedVector2Array:
 	var grid := AStarGrid2D.new()
 	var low := a.min(b)-Vector2(24,24)
@@ -156,15 +176,13 @@ func _route(a: Vector2,b: Vector2) -> PackedVector2Array:
 			var id := Vector2i(x,z)
 			var p := Vector2(id)
 			var blocked := _near_paving(p)
-			for rect in obstacles:
-				if rect.has_point(p):
-					blocked=true
-					break
+			if not blocked:
+				for rect: Rect2 in _obstacle_grid.get(Vector2i(floori(p.x/OBSTACLE_CELL_M),floori(p.y/OBSTACLE_CELL_M)),[]):
+					if rect.has_point(p):
+						blocked=true
+						break
 			if terrain != null and terrain.water_at(p): blocked=true
-			for trunk: Vector2 in park.occupied_tree_positions:
-				if p.distance_squared_to(trunk*2)<6.25:
-					blocked=true
-					break
+			if not blocked and park.any_trunk_within(p,2.5): blocked=true
 			grid.set_point_solid(id,blocked)
 			var weight := 1.0+.20*int(density.get(Vector2i(floori(p.x/2),floori(p.y/2)),0))
 			grid.set_point_weight_scale(id,weight)

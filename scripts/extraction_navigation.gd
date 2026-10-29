@@ -48,6 +48,18 @@ func build(park: Node3D) -> void:
 	query.exclude = excluded
 	var space := park.get_world_3d().direct_space_state
 	_space = space
+	# The graph only depends on the built park, so it is cached on disk. The key
+	# changes whenever any project file or the Creator layout changes.
+	var cache_key := _cache_key()
+	if _load_cache(cache_key):
+		var cached_capsule := CapsuleShape3D.new()
+		cached_capsule.radius = 0.42
+		cached_capsule.height = 1.75
+		query.shape = cached_capsule
+		_edge_query = query
+		_boot_tick = StartupTrace.finish("navigation.cache_load",_boot_tick)
+		ready = true
+		return
 	for y: int in range(91):
 		await LoadingBudget.checkpoint(park)
 		for x: int in range(111):
@@ -93,6 +105,7 @@ func build(park: Node3D) -> void:
 	_boot_tick = StartupTrace.finish("navigation.edges",_boot_tick)
 	await _add_bridge_floor_routes()
 	_boot_tick = StartupTrace.finish("navigation.bridge_links",_boot_tick)
+	_save_cache(cache_key)
 	ready = true
 
 func _add_walk_point(id: int, p: Vector2, weight: float = 1.0) -> void:
@@ -342,3 +355,93 @@ func _can_walk_floor_centre(a: Vector2, b: Vector2) -> bool:
 func _terrain_height(p: Vector2) -> float:
 	var terrain := _park.get_node_or_null("MidoriTerrain")
 	return terrain.height_at(p) if terrain != null and terrain.installed else 0.0
+
+const NAV_CACHE_DIR := "user://shinrai_cache/"
+const NAV_CACHE_VERSION := 1
+
+static func _cache_key() -> String:
+	var ctx := HashingContext.new()
+	ctx.start(HashingContext.HASH_SHA256)
+	ctx.update(var_to_bytes([NAV_CACHE_VERSION, CELL, ORIGIN, FLOOR_NODE_SPACING, MAX_FLOOR_STEP]))
+	var pending: Array[String] = ["res://"]
+	while not pending.is_empty():
+		var dir: String = pending.pop_back()
+		for sub: String in DirAccess.get_directories_at(dir):
+			if sub.begins_with("."): continue
+			pending.append(dir.path_join(sub))
+		for file: String in DirAccess.get_files_at(dir):
+			if file.ends_with(".log") or file.ends_with(".tmp"): continue
+			var path := dir.path_join(file)
+			ctx.update(("%s|%d\n" % [path, FileAccess.get_modified_time(path)]).to_utf8_buffer())
+	var layout := "user://creator_layouts/midori_default.json"
+	if FileAccess.file_exists(layout):
+		ctx.update(FileAccess.get_sha256(layout).to_utf8_buffer())
+	return ctx.finish().hex_encode()
+
+func _load_cache(key: String) -> bool:
+	var path := NAV_CACHE_DIR + "navigation_" + key + ".bin"
+	if not FileAccess.file_exists(path): return false
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null: return false
+	var data: Variant = file.get_var()
+	file.close()
+	if typeof(data) != TYPE_DICTIONARY or int(data.get("version", 0)) != NAV_CACHE_VERSION: return false
+	var solids: PackedByteArray = data.solids
+	var weights: PackedFloat32Array = data.grid_weights
+	if solids.size() != 111 * 91 or weights.size() != 111 * 91: return false
+	for y: int in range(91):
+		for x: int in range(111):
+			var i := y * 111 + x
+			grid.set_point_solid(Vector2i(x, y), solids[i] == 1)
+			if solids[i] == 0: grid.set_point_weight_scale(Vector2i(x, y), weights[i])
+	var ids: PackedInt64Array = data.point_ids
+	var positions: PackedVector2Array = data.point_positions
+	var point_weights: PackedFloat32Array = data.point_weights
+	for i: int in range(ids.size()):
+		walk_graph.add_point(ids[i], positions[i], point_weights[i])
+	var links: PackedInt64Array = data.links
+	for i: int in range(0, links.size(), 2):
+		walk_graph.connect_points(links[i], links[i + 1])
+	var height_keys: PackedVector2Array = data.height_keys
+	var height_values: PackedFloat32Array = data.height_values
+	for i: int in range(height_keys.size()):
+		_floor_heights[height_keys[i]] = height_values[i]
+	print("NAVIGATION_CACHE: loaded %d points, %d links" % [ids.size(), links.size() / 2])
+	return true
+
+func _save_cache(key: String) -> void:
+	var solids := PackedByteArray()
+	var weights := PackedFloat32Array()
+	solids.resize(111 * 91)
+	weights.resize(111 * 91)
+	for y: int in range(91):
+		for x: int in range(111):
+			var i := y * 111 + x
+			var solid := grid.is_point_solid(Vector2i(x, y))
+			solids[i] = 1 if solid else 0
+			weights[i] = 1.0 if solid else grid.get_point_weight_scale(Vector2i(x, y))
+	var ids := PackedInt64Array()
+	var positions := PackedVector2Array()
+	var point_weights := PackedFloat32Array()
+	var links := PackedInt64Array()
+	for id: int in walk_graph.get_point_ids():
+		ids.append(id)
+		positions.append(walk_graph.get_point_position(id))
+		point_weights.append(walk_graph.get_point_weight_scale(id))
+		for other: int in walk_graph.get_point_connections(id):
+			if other > id:
+				links.append(id)
+				links.append(other)
+	var height_keys := PackedVector2Array()
+	var height_values := PackedFloat32Array()
+	for k: Vector2 in _floor_heights:
+		height_keys.append(k)
+		height_values.append(float(_floor_heights[k]))
+	DirAccess.make_dir_recursive_absolute(NAV_CACHE_DIR)
+	for name: String in DirAccess.get_files_at(NAV_CACHE_DIR):
+		if name.begins_with("navigation_"): DirAccess.remove_absolute(NAV_CACHE_DIR + name)
+	var file := FileAccess.open(NAV_CACHE_DIR + "navigation_" + key + ".bin", FileAccess.WRITE)
+	if file == null: return
+	file.store_var({"version": NAV_CACHE_VERSION, "solids": solids, "grid_weights": weights, "point_ids": ids, "point_positions": positions, "point_weights": point_weights, "links": links, "height_keys": height_keys, "height_values": height_values})
+	file.close()
+

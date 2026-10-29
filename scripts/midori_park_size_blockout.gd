@@ -2198,6 +2198,38 @@ func _lake_shore_outward(index: int) -> Vector2:
 		outward = -outward
 	return outward
 
+## Spatial index over occupied_tree_positions (world metres = position * 2).
+## Answers "is any trunk within radius of p" by checking nearby cells only,
+## instead of every tree in the park. Rebuilt when the tree list changes.
+const TRUNK_GRID_CELL_M := 4.0
+var _trunk_grid: Dictionary = {}
+var _trunk_grid_count := -1
+
+func invalidate_trunk_index() -> void:
+	_trunk_grid_count = -1
+
+func any_trunk_within(p: Vector2, radius: float) -> bool:
+	if _trunk_grid_count != occupied_tree_positions.size():
+		_trunk_grid.clear()
+		for trunk: Vector2 in occupied_tree_positions:
+			var w := trunk * 2.0
+			var key := Vector2i(floori(w.x / TRUNK_GRID_CELL_M), floori(w.y / TRUNK_GRID_CELL_M))
+			if not _trunk_grid.has(key): _trunk_grid[key] = PackedVector2Array()
+			(_trunk_grid[key] as PackedVector2Array).append(w)
+		_trunk_grid_count = occupied_tree_positions.size()
+	var r2 := radius * radius
+	var x0 := floori((p.x - radius) / TRUNK_GRID_CELL_M)
+	var x1 := floori((p.x + radius) / TRUNK_GRID_CELL_M)
+	var y0 := floori((p.y - radius) / TRUNK_GRID_CELL_M)
+	var y1 := floori((p.y + radius) / TRUNK_GRID_CELL_M)
+	for cy in range(y0, y1 + 1):
+		for cx in range(x0, x1 + 1):
+			var bucket = _trunk_grid.get(Vector2i(cx, cy))
+			if bucket == null: continue
+			for w: Vector2 in bucket:
+				if p.distance_squared_to(w) < r2: return true
+	return false
+
 func _is_vegetation_clear(position_value: Vector3, padding: float) -> bool:
 	# Clubhouse apron and its connector: reserve in world metres.
 	if Rect2(-133,-66,14,18).grow(padding*LAYOUT_SCALE).has_point(Vector2(position_value.x,position_value.z)*LAYOUT_SCALE):
@@ -3541,6 +3573,7 @@ func _build_sakura_trees(parent: Node3D) -> void:
 	var sakura_radius := _tree_crown_radius(sakura_source, 15.0)
 	sakura_source.free()
 	occupied_tree_positions.clear()
+	invalidate_trunk_index()
 	occupied_tree_is_skinny.clear()
 	var placements: Array[Vector3] = [
 		Vector3(-92.0, 0.0, -66.0), Vector3(-68.0, 0.0, -70.0), Vector3(-43.0, 0.0, -67.0),

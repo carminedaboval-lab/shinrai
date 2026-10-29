@@ -71,10 +71,8 @@ func _install() -> void:
 				continue
 			var world := Vector3(layout.x*2.0,-0.016,layout.y*2.0)
 			var too_close := false
-			for trunk: Vector2 in park.occupied_tree_positions:
-				if Vector2(world.x,world.z).distance_squared_to(trunk*2.0) < 0.80*0.80:
-					too_close = true
-					break
+			if park.any_trunk_within(Vector2(world.x,world.z), 0.80):
+				too_close = true
 			if too_close:
 				continue
 			for previous: Vector3 in bed_positions:
