@@ -249,7 +249,7 @@ func _add_lamp(source: PackedScene,fit: Dictionary,route_name: String) -> void:
 	spill.spot_attenuation=.8
 	spill.light_size=.14
 	spill.shadow_enabled=true
-	spill.light_volumetric_fog_energy=.12
+	spill.light_volumetric_fog_energy=1.1
 	spill.look_at(Vector3(fit.path.x,fit.base_y+.12,fit.path.y),Vector3.FORWARD)
 	spill.add_to_group("midori_night_effect")
 	lights.append(spill)
@@ -261,7 +261,7 @@ func _add_lamp(source: PackedScene,fit: Dictionary,route_name: String) -> void:
 	glow.light_energy=.22
 	glow.omni_range=2.8
 	glow.shadow_enabled=false
-	glow.light_volumetric_fog_energy=0.0
+	glow.light_volumetric_fog_energy=2.4
 	glow.add_to_group("midori_night_effect")
 	lights.append(glow)
 	placements.append({"name":lamp.name,"route":route_name,"position":lamp.position,"path":fit.path,"edge_clearance_m":fit.edge_clearance,"ground_spread_m":fit.spread})

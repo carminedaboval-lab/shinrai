@@ -493,10 +493,10 @@ func _create_environment() -> void:
 		environment.volumetric_fog_enabled = false
 		environment.volumetric_fog_density = 0.012
 		environment.volumetric_fog_length = 90.0
-		environment.volumetric_fog_albedo = Color("#8ea3bf")
+		environment.volumetric_fog_albedo = Color("#6d7f96")
 		environment.volumetric_fog_emission = Color("#101826")
-		environment.volumetric_fog_emission_energy = 0.12
-		environment.volumetric_fog_ambient_inject = 0.35
+		environment.volumetric_fog_emission_energy = 0.05
+		environment.volumetric_fog_ambient_inject = 0.18
 		environment.volumetric_fog_sky_affect = 0.65
 		environment.volumetric_fog_anisotropy = 0.45
 	world_environment.environment = environment
@@ -649,7 +649,14 @@ func _apply_render_quality() -> void:
 	park_environment.glow_enabled = forward_plus
 	park_environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	park_environment.glow_hdr_scale = 1.5
-	park_environment.volumetric_fog_enabled = forward_plus and high_render_quality and is_night_mode
+	# Night air: volumetric fog on both presets so lanterns throw visible light
+	# into the haze. Balanced keeps it short and thin; High reaches further.
+	park_environment.volumetric_fog_enabled = forward_plus and is_night_mode
+	park_environment.volumetric_fog_density = 0.018 if high_render_quality else 0.012
+	park_environment.volumetric_fog_length = 96.0 if high_render_quality else 64.0
+	park_environment.volumetric_fog_detail_spread = 2.2
+	park_environment.volumetric_fog_temporal_reprojection_enabled = true
+	park_environment.volumetric_fog_temporal_reprojection_amount = 0.92
 	park_directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if high_render_quality else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	park_directional_light.directional_shadow_max_distance = 110.0 if high_render_quality else 90.0
 	# Two-map Balanced shadows need less normal offset to retain thin fence/goal casts.
