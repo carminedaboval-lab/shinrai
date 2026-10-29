@@ -467,25 +467,38 @@ func _create_environment() -> void:
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
+	sky.radiance_size = Sky.RADIANCE_SIZE_256
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color("#547b9e")
 	sky_material.sky_horizon_color = Color("#bacdd5")
+	sky_material.sky_cover_modulate = Color("#ffffff")
 	sky.sky_material = sky_material
 	environment.sky = sky
 	environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
+	# Sky-driven ambient gives cool shadows under a warm sun instead of one flat grey.
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	environment.tonemap_mode = Environment.TONE_MAPPER_AGX
+	environment.tonemap_white = 6.0
 	environment.adjustment_enabled = true
+	# Depth fog: a gentle haze that separates the park from the far shore and softens
+	# the horizon line. Aerial perspective tints it toward the sun.
 	environment.fog_enabled = true
-	environment.fog_density = 0.00045
-	environment.fog_sky_affect = 0.25
+	environment.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+	environment.fog_density = 0.0016
+	environment.fog_aerial_perspective = 0.55
+	environment.fog_sky_affect = 0.45
+	environment.fog_height = -4.0
+	environment.fog_height_density = 0.12
 	if RenderingServer.get_current_rendering_method() == "forward_plus":
 		environment.volumetric_fog_enabled = false
-		environment.volumetric_fog_density = 0.0015
+		environment.volumetric_fog_density = 0.012
 		environment.volumetric_fog_length = 90.0
-		environment.volumetric_fog_albedo = Color("#263b54")
-		environment.volumetric_fog_ambient_inject = 0.08
+		environment.volumetric_fog_albedo = Color("#8ea3bf")
+		environment.volumetric_fog_emission = Color("#101826")
+		environment.volumetric_fog_emission_energy = 0.12
+		environment.volumetric_fog_ambient_inject = 0.35
 		environment.volumetric_fog_sky_affect = 0.65
+		environment.volumetric_fog_anisotropy = 0.45
 	world_environment.environment = environment
 	park_environment = environment
 	add_child(world_environment)
@@ -503,6 +516,7 @@ func _create_environment() -> void:
 	sun.shadow_bias = 0.05
 	sun.shadow_normal_bias = 1.0
 	sun.shadow_blur = 1.8
+	sun.light_angular_distance = 0.6
 	park_directional_light = sun
 	add_child(sun)
 	_apply_time_of_day()
@@ -511,43 +525,67 @@ func _apply_time_of_day() -> void:
 	if park_environment == null or park_directional_light == null:
 		return
 	var sky_material := park_environment.sky.sky_material as ProceduralSkyMaterial
-	park_environment.background_energy_multiplier = 0.5 if is_night_mode else 0.64
 	park_environment.adjustment_brightness = 1.0
-	park_environment.adjustment_contrast = 1.04
-	park_environment.adjustment_saturation = 0.98
-	park_environment.fog_sky_affect = 0.25
+	park_environment.adjustment_contrast = 1.06
+	park_environment.adjustment_saturation = 1.08
 	if is_night_mode:
-		sky_material.sky_top_color = Color("#172845")
-		sky_material.sky_horizon_color = Color("#576b88")
-		sky_material.ground_bottom_color = Color("#111b25")
-		sky_material.ground_horizon_color = Color("#3e506a")
-		park_environment.ambient_light_color = Color("#6b7482")
-		park_environment.ambient_light_energy = 0.75
-		park_environment.fog_light_color = Color("#3f4857")
-		park_environment.fog_light_energy = 0.25
-		park_environment.fog_density = 0.0012
+		# Moonlit night: deep blue sky, cool silver moon, enough fog for lamps to glow.
+		sky_material.sky_top_color = Color("#070d1c")
+		sky_material.sky_horizon_color = Color("#2a3a55")
+		sky_material.ground_bottom_color = Color("#05080e")
+		sky_material.ground_horizon_color = Color("#1a2434")
+		sky_material.sky_curve = 0.12
+		sky_material.sun_angle_max = 8.0
+		sky_material.sun_curve = 0.4
+		sky_material.sky_energy_multiplier = 0.9
+		park_environment.background_energy_multiplier = 0.7
+		park_environment.ambient_light_sky_contribution = 1.0
+		park_environment.ambient_light_energy = 0.7
+		park_environment.fog_light_color = Color("#243247")
+		park_environment.fog_light_energy = 0.55
+		park_environment.fog_density = 0.0032
+		park_environment.fog_sun_scatter = 0.08
+		park_environment.fog_aerial_perspective = 0.35
+		park_environment.tonemap_exposure = 1.15
+		park_environment.glow_intensity = 0.7
+		park_environment.glow_bloom = 0.08
+		park_environment.glow_hdr_threshold = 0.95
 		park_directional_light.name = "ParkNightMoon"
-		park_directional_light.light_color = Color("#acb7cc")
-		park_directional_light.light_energy = 0.45
+		park_directional_light.rotation_degrees = Vector3(-48.0, 24.0, 0.0)
+		park_directional_light.light_color = Color("#9fb3d6")
+		park_directional_light.light_energy = 0.6
 		mat_path.albedo_color = Color("#171c22")
 		mat_boundary.albedo_color = Color("#202832")
 	else:
-		sky_material.sky_top_color = Color("#426b96")
-		sky_material.sky_horizon_color = Color("#d1b9a1")
-		sky_material.ground_bottom_color = Color("#26392f")
-		sky_material.ground_horizon_color = Color("#979788")
-		park_environment.ambient_light_color = Color("#91a5bd")
-		park_environment.ambient_light_energy = 0.28
-		park_environment.fog_light_color = Color("#a6b4bb")
-		park_environment.fog_light_energy = 0.38
-		park_environment.fog_density = 0.00045
+		# Golden-hour daylight: warm low sun, blue sky overhead, hazy pale horizon.
+		sky_material.sky_top_color = Color("#2f68a8")
+		sky_material.sky_horizon_color = Color("#dccbb8")
+		sky_material.ground_bottom_color = Color("#2a3a2e")
+		sky_material.ground_horizon_color = Color("#b8ac97")
+		sky_material.sky_curve = 0.09
+		sky_material.sun_angle_max = 24.0
+		sky_material.sun_curve = 0.18
+		sky_material.sky_energy_multiplier = 1.0
+		park_environment.background_energy_multiplier = 0.85
+		park_environment.ambient_light_sky_contribution = 1.0
+		park_environment.ambient_light_energy = 0.8
+		park_environment.fog_light_color = Color("#cfc3b4")
+		park_environment.fog_light_energy = 0.9
+		park_environment.fog_density = 0.0011
+		park_environment.fog_sun_scatter = 0.16
+		park_environment.fog_aerial_perspective = 0.5
+		park_environment.tonemap_exposure = 0.92
+		park_environment.glow_intensity = 0.45
+		park_environment.glow_bloom = 0.04
+		park_environment.glow_hdr_threshold = 1.25
 		park_directional_light.name = "ParkReviewSun"
-		park_directional_light.light_color = Color("#f4ead9")
-		park_directional_light.light_energy = 0.78
+		park_directional_light.rotation_degrees = Vector3(-26.0, -52.0, 0.0)
+		park_directional_light.light_color = Color("#ffd9a8")
+		park_directional_light.light_energy = 1.35
 		mat_path.albedo_color = Color("#77786f")
 		mat_boundary.albedo_color = Color("#d6d0bf")
 	for material: StandardMaterial3D in lamp_emissive_materials:
-		material.emission_energy_multiplier = 1.2 if is_night_mode else 0.0
+		material.emission_energy_multiplier = 1.8 if is_night_mode else 0.0
 	for material: StandardMaterial3D in plaza_emissive_materials:
 		material.emission_energy_multiplier = 0.72 if is_night_mode else 0.0
 	for material: ShaderMaterial in modular_path_emissive_materials:
@@ -592,19 +630,23 @@ func _apply_render_quality() -> void:
 		# Imported tree meshes already contain LODs. Earlier transitions in
 		# Balanced reduce distant canopy triangles without changing near trees.
 		viewport.mesh_lod_threshold = 1.0 if high_render_quality else 4.0
-	park_environment.ssao_enabled = forward_plus and high_render_quality
-	park_environment.ssao_radius = 0.8
-	park_environment.ssao_intensity = 0.6
-	park_environment.ssao_detail = 0.4
+	# Contact shadows ground objects on both presets; Balanced uses a tighter radius.
+	park_environment.ssao_enabled = forward_plus
+	park_environment.ssao_radius = 1.2 if high_render_quality else 0.9
+	park_environment.ssao_intensity = 1.4 if high_render_quality else 1.1
+	park_environment.ssao_power = 1.8
+	park_environment.ssao_detail = 0.5
+	park_environment.ssao_horizon = 0.06
+	park_environment.ssao_sharpness = 0.98
 	park_environment.ssao_light_affect = 0.0
+	park_environment.ssao_ao_channel_affect = 0.0
 	park_environment.ssil_enabled = false
 	park_environment.ssr_enabled = forward_plus and high_render_quality
 	park_environment.ssr_max_steps = 48
 	park_environment.ssr_depth_tolerance = 0.2
 	park_environment.glow_enabled = forward_plus
-	park_environment.glow_intensity = 0.35
-	park_environment.glow_bloom = 0.0
-	park_environment.glow_hdr_threshold = 1.4
+	park_environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	park_environment.glow_hdr_scale = 1.5
 	park_environment.volumetric_fog_enabled = forward_plus and high_render_quality and is_night_mode
 	park_directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if high_render_quality else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	park_directional_light.directional_shadow_max_distance = 110.0 if high_render_quality else 90.0
@@ -1809,7 +1851,7 @@ func _make_lamp_reflective(node: Node) -> void:
 				material.emission = Color("#6be5ff")
 				material.emission_texture = material.albedo_texture
 				material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
-				material.emission_energy_multiplier = 1.2 if is_night_mode else 0.0
+				material.emission_energy_multiplier = 1.8 if is_night_mode else 0.0
 				mesh_instance.set_surface_override_material(surface_index, material)
 				lamp_emissive_materials.append(material)
 	for child: Node in node.get_children():

@@ -611,6 +611,8 @@ func _apply_movement(delta: float) -> void:
 func _can_see_target() -> bool:
     if not is_instance_valid(target):
         return false
+    if is_instance_valid(navigation_source) and navigation_source.has_method("insertion_grace") and navigation_source.insertion_grace():
+        return false
 
     var eye: Vector3 = global_position + Vector3.UP * 1.52
     var target_point: Vector3 = target.global_position + Vector3.UP * 1.25

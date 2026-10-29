@@ -75,6 +75,8 @@ func _begin_search() -> void:
 
 func can_see_target() -> bool:
 	if not target_alive() or not target.is_visible_in_tree(): return false
+	var _raid: Node=actor.get("navigation_source")
+	if is_instance_valid(_raid) and _raid.has_method("insertion_grace") and _raid.insertion_grace(): return false
 	var origin:=actor.global_position+Vector3.UP*.52
 	var point:=target.global_position+Vector3.UP*.8
 	var offset:=point-origin

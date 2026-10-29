@@ -190,6 +190,7 @@ func _set_crouch(value: bool) -> void:
 
 func _can_see_target() -> bool:
 	if not is_instance_valid(target): return false
+	if is_instance_valid(squad) and is_instance_valid(squad.raid) and squad.raid.has_method("insertion_grace") and squad.raid.insertion_grace(): return false
 	var eye:=global_position+Vector3.UP*(.98 if crouching else 1.52)
 	var target_point:=target.global_position+Vector3.UP*(.95 if bool(target.get("crouching")) else 1.25)
 	var offset:=target_point-eye

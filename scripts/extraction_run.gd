@@ -95,6 +95,9 @@ var hold_id := ""
 var healing := 0.0
 var last_damage_at := -100.0
 var run_time := 0.0
+## Seconds after deployment during which hostiles cannot perceive the player,
+## so a new raid starts with time to orient instead of an instant firefight.
+const INSERTION_GRACE_SECONDS := 15.0
 var last_safe := Vector3(0, 0.2, 160)
 var notice := ""
 var notice_time := 0.0
@@ -1059,6 +1062,10 @@ func _update_healing(delta: float) -> void:
 	if not pending_cache_id.is_empty(): return
 	_advance_healing(delta, treatment_automatic or GameInput.down("heal"), GameInput.down("fire"))
 
+## True while the start-of-raid grace window is active.
+func insertion_grace() -> bool:
+	return phase == Phase.RAID and run_time < INSERTION_GRACE_SECONDS
+
 func _update_extraction(delta: float) -> void:
 	if not pending_cache_id.is_empty():
 		extraction_progress = 0.0
@@ -1068,7 +1075,9 @@ func _update_extraction(delta: float) -> void:
 		if _distance(candidate.position) <= 8.0:
 			exit_point = candidate
 	if exit_point.is_empty() or relays == 0:
-		if not exit_point.is_empty():
+		if insertion_grace():
+			prompt_text = "Insertion · hostiles unaware for %d s · move off the entry" % int(ceil(INSERTION_GRACE_SECONDS - run_time))
+		elif not exit_point.is_empty():
 			prompt_text = "Extraction locked · recover a relay"
 		extraction_progress = 0.0
 		extraction_id = ""

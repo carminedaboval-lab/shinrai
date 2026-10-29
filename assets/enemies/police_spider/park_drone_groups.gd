@@ -9,11 +9,13 @@ func _ready() -> void:
 	top_level=true;global_transform=Transform3D.IDENTITY
 	add_to_group("police_drone_directors")
 	_update_player_capsule()
+	# Packs guard the relays rather than the insertion point: a new raid should
+	# start quiet enough to orient, and the first contact comes on the way in.
 	var preferred: Array[Vector3]=[]
-	var entry: Dictionary=raid._find_visible_entry_guard_position()
-	preferred.append(entry.get("position",raid.player.global_position-raid.player.global_basis.z*24))
 	for site: Dictionary in raid.sites:
 		if site.kind=="relay": preferred.append(site.position)
+	if preferred.is_empty():
+		preferred.append(raid.player.global_position-raid.player.global_basis.z*60)
 	for i in 3:
 		var placement:=_find_formation(preferred[mini(i,preferred.size()-1)],3+i)
 		if placement.is_empty():
@@ -33,9 +35,6 @@ func _ready() -> void:
 		groups.append(pack)
 		spawn_report.append({"name":pack.name,"count":pack.members.size(),"anchor":str(anchor)})
 	print("POLICE_DRONE_GROUPS ",JSON.stringify(spawn_report))
-	if not groups.is_empty():
-		var p: Vector3=groups[0].global_position
-		raid.player.look_at(Vector3(p.x,raid.player.global_position.y,p.z))
 
 func _process(_delta: float) -> void:
 	_update_player_capsule()
@@ -55,7 +54,7 @@ func _find_formation(preferred: Vector3,count: int) -> Array[Vector3]:
 		candidates.append(Vector3(point.x,preferred.y,point.y))
 	candidates.sort_custom(func(a: Vector3,b: Vector3)->bool:return a.distance_squared_to(preferred)<b.distance_squared_to(preferred))
 	for candidate in candidates:
-		if Vector2(candidate.x-raid.player.position.x,candidate.z-raid.player.position.z).length()<18: continue
+		if Vector2(candidate.x-raid.player.position.x,candidate.z-raid.player.position.z).length()<40: continue
 		var too_close:=false
 		for pack in groups:
 			if candidate.distance_to(pack.global_position)<45: too_close=true

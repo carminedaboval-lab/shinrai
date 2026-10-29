@@ -126,6 +126,8 @@ func _can_stun(candidate: Node3D, distance: float) -> bool:
 
 func target_valid(candidate: Node3D) -> bool:
 	if not is_instance_valid(candidate) or not candidate.is_visible_in_tree() or not candidate.has_method("take_damage"): return false
+	var _raid: Node=actor.get("navigation_source")
+	if is_instance_valid(_raid) and _raid.has_method("insertion_grace") and _raid.insertion_grace(): return false
 	if candidate.has_method("is_combat_alive") and not candidate.is_combat_alive(): return false
 	return true
 
