@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=22 format=3]
 
 [ext_resource type="Script" path="res://scripts/extraction_park.gd" id="1"]
 
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scripts/midori_planted_beds.gd" id="6_planted_beds"]
 
 [ext_resource type="Script" path="res://scripts/midori_terrain.gd" id="8_terrain"]
+[ext_resource type="Script" path="res://scripts/midori_horizon.gd" id="8_horizon"]
 
 [ext_resource type="Script" path="res://scripts/midori_japanese_flowers.gd" id="9_flowers"]
 
@@ -59,6 +60,9 @@ script = ExtResource("6_planted_beds")
 
 [node name="MidoriTerrain" type="Node3D" parent="."]
 script = ExtResource("8_terrain")
+
+[node name="MidoriHorizon" type="Node3D" parent="."]
+script = ExtResource("8_horizon")
 
 [node name="MidoriJapaneseFlowers" type="Node3D" parent="."]
 script = ExtResource("9_flowers")

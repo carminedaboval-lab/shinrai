@@ -599,6 +599,8 @@ func _apply_time_of_day() -> void:
 	for node: Node in get_tree().get_nodes_in_group("midori_night_effect"):
 		if node is Node3D:
 			(node as Node3D).visible = is_night_mode
+	for horizon: Node in get_tree().get_nodes_in_group("midori_horizon"):
+		if horizon.has_method("set_night_mode"): horizon.call("set_night_mode", is_night_mode)
 	_apply_render_quality()
 	_update_time_label()
 	_queue_reflection_refresh()
@@ -1545,6 +1547,72 @@ func _naturalize_pitch_material(node: Node) -> void:
 	for child: Node in node.get_children():
 		_naturalize_pitch_material(child)
 
+var _stone_detail_shader: Shader
+
+## Wraps the supplied boulder texture in a stone shader: fine procedural grit
+## in the normals, darker crevices where faces turn away from the sky, and a
+## moss skin on the upward faces so the rock sits in the lawn.
+func _apply_stone_detail(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_node := node as MeshInstance3D
+		if mesh_node.mesh != null:
+			for surface_index: int in range(mesh_node.mesh.get_surface_count()):
+				var source := mesh_node.get_active_material(surface_index)
+				if source is StandardMaterial3D and (source as StandardMaterial3D).albedo_texture != null:
+					mesh_node.set_surface_override_material(surface_index, _stone_detail_material(source as StandardMaterial3D))
+	for child: Node in node.get_children():
+		_apply_stone_detail(child)
+
+func _stone_detail_material(source: StandardMaterial3D) -> ShaderMaterial:
+	if _stone_detail_shader == null:
+		_stone_detail_shader = Shader.new()
+		_stone_detail_shader.code = """
+shader_type spatial;
+render_mode cull_back, depth_draw_opaque;
+uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic;
+uniform float grit_scale = 9.0;
+varying vec3 world_pos;
+varying vec3 world_normal;
+float hsh(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float nz(vec3 p){ vec3 c = floor(p); vec3 f = fract(p); vec3 u = f*f*(3.0-2.0*f);
+	return mix(mix(mix(hsh(c), hsh(c+vec3(1,0,0)), u.x), mix(hsh(c+vec3(0,1,0)), hsh(c+vec3(1,1,0)), u.x), u.y),
+		mix(mix(hsh(c+vec3(0,0,1)), hsh(c+vec3(1,0,1)), u.x), mix(hsh(c+vec3(0,1,1)), hsh(c+vec3(1,1,1)), u.x), u.y), u.z); }
+void vertex(){
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+}
+void fragment(){
+	vec3 tex = texture(albedo_tex, UV).rgb;
+	float luma = dot(tex, vec3(0.2126, 0.7152, 0.0722));
+	// Pull the baked texture toward a cooler grey stone and keep its variation.
+	vec3 stone = mix(tex, luma * vec3(0.78, 0.80, 0.82), 0.55);
+	float grit = nz(world_pos * grit_scale) * 0.55 + nz(world_pos * grit_scale * 3.1) * 0.3 + nz(world_pos * grit_scale * 9.0) * 0.15;
+	stone *= mix(0.82, 1.12, grit);
+	// Crevices: faces that turn down or sideways read darker and damp.
+	float up = clamp(world_normal.y, 0.0, 1.0);
+	stone *= mix(0.62, 1.0, smoothstep(-0.2, 0.55, world_normal.y));
+	// Moss skin on the top faces, broken up by noise so it is patchy.
+	float moss_mask = smoothstep(0.45, 0.85, up) * smoothstep(0.35, 0.7, nz(world_pos * 2.3 + vec3(5.0)));
+	vec3 moss = vec3(0.30, 0.42, 0.16) * mix(0.8, 1.2, nz(world_pos * 11.0));
+	ALBEDO = mix(stone, moss, moss_mask * 0.85);
+	// Procedural grit normal: derivative of the noise field, tangent-space-free.
+	float e = 0.015;
+	float gx = nz((world_pos + vec3(e,0,0)) * grit_scale * 3.1) - nz((world_pos - vec3(e,0,0)) * grit_scale * 3.1);
+	float gy = nz((world_pos + vec3(0,e,0)) * grit_scale * 3.1) - nz((world_pos - vec3(0,e,0)) * grit_scale * 3.1);
+	float gz = nz((world_pos + vec3(0,0,e)) * grit_scale * 3.1) - nz((world_pos - vec3(0,0,e)) * grit_scale * 3.1);
+	vec3 bumped = normalize(world_normal - vec3(gx, gy, gz) * 2.4 * (1.0 - moss_mask * 0.7));
+	NORMAL = normalize((VIEW_MATRIX * vec4(bumped, 0.0)).xyz);
+	ROUGHNESS = mix(0.86, 0.96, moss_mask);
+	SPECULAR = 0.25;
+	METALLIC = 0.0;
+}
+"""
+	var material := ShaderMaterial.new()
+	material.shader = _stone_detail_shader
+	material.resource_name = "SHINRAI_StoneDetail"
+	material.set_shader_parameter("albedo_tex", source.albedo_texture)
+	return material
+
 func _configure_park_asset_visibility(node: Node) -> void:
 	if node is GeometryInstance3D:
 		var geometry := node as GeometryInstance3D
@@ -1931,7 +1999,19 @@ func _add_reference_plant(
 		# These mainland prototypes have a normalized base at Y=0.
 		instance.position.y = -0.015
 	instance.rotation_degrees.y = fmod(float(serial) * 137.507, 360.0)
-	instance.scale = Vector3.ONE * scale_value
+	var is_tree := node_prefix.begins_with("ReferenceBroadleaf") or node_prefix.begins_with("ReferencePine") or node_prefix.begins_with("MicroGrove") or node_prefix.begins_with("MainlandPineSapling") or node_prefix == "IslandTree"
+	if is_tree:
+		# Deterministic per-tree variation so the same prototype never reads as
+		# an identical copy: size spread, a slight lean, and non-uniform crown.
+		var h := float(posmod(serial * 7919, 1000)) / 1000.0
+		var h2 := float(posmod(serial * 104729, 1000)) / 1000.0
+		var size_jitter := lerpf(0.86, 1.16, h)
+		var crown_jitter := lerpf(0.94, 1.08, h2)
+		instance.scale = Vector3(scale_value * size_jitter * crown_jitter, scale_value * size_jitter, scale_value * size_jitter / crown_jitter)
+		instance.rotation_degrees.x = lerpf(-2.2, 2.2, h2)
+		instance.rotation_degrees.z = lerpf(-2.2, 2.2, h)
+	else:
+		instance.scale = Vector3.ONE * scale_value
 	_preserve_asset_world_scale(instance)
 	parent.add_child(instance)
 	if node_prefix.begins_with("ReferenceBroadleaf") or node_prefix.begins_with("ReferencePine") or node_prefix.begins_with("MicroGrove") or node_prefix.begins_with("MainlandPineSapling") or node_prefix == "IslandTree":
@@ -2851,6 +2931,7 @@ func _build_open_lawn_cover(parent: Node3D) -> void:
 	var prototype := MossyBoulderScene.instantiate() as Node3D
 	if prototype == null:
 		return
+	_apply_stone_detail(prototype)
 	var info := _vegetation_visual_bounds(prototype)
 	if not info["valid"]:
 		prototype.free()
@@ -2902,7 +2983,15 @@ func _build_open_lawn_cover(parent: Node3D) -> void:
 		cluster.name = "OpenBoulder_%02d" % (anchor_index + 1)
 		cluster.position = Vector3(point.x, 0.0, point.y)
 		cluster.rotation_degrees.y = float((anchor_index * 137) % 360)
-		cluster.scale = Vector3(factor / LAYOUT_SCALE, factor, factor / LAYOUT_SCALE)
+		# Vary each cluster: size, a settled tilt and slight squash so the single
+		# supplied model does not repeat as identical blobs across the lawn.
+		var rock_h := float(posmod(anchor_index * 7919, 1000)) / 1000.0
+		var rock_h2 := float(posmod(anchor_index * 104729, 1000)) / 1000.0
+		var rock_size := factor * lerpf(0.72, 1.28, rock_h)
+		var rock_squash := lerpf(0.78, 1.0, rock_h2)
+		cluster.rotation_degrees.x = lerpf(-5.0, 5.0, rock_h2)
+		cluster.rotation_degrees.z = lerpf(-4.0, 4.0, rock_h)
+		cluster.scale = Vector3(rock_size / LAYOUT_SCALE, rock_size * rock_squash, rock_size / LAYOUT_SCALE * lerpf(0.85, 1.15, rock_h2))
 		root.add_child(cluster)
 		var offset := Vector3(-bounds.get_center().x, -bounds.position.y - 0.04 / factor, -bounds.get_center().z)
 		var visual := prototype.duplicate() as Node3D
