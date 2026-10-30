@@ -115,10 +115,9 @@ static func _iron_and_cover_materials(street: Node3D) -> void:
 	iron.set_shader_parameter("base_roughness",.82)
 	iron.set_shader_parameter("metalness",.42)
 	mats.land_iron = iron
-	var repairs := "res://assets/environment/roads/shinrai_road/repairs/"
-	for pair: Array in [["road_manhole_cover","M_SHINRAI_ManholeCover.tres"],["road_manhole_cut","M_SHINRAI_ManholeCut.tres"]]:
-		if ResourceLoader.exists(repairs+pair[1]):
-			mats[pair[0]] = load(repairs+pair[1])
+	var cover := "res://assets/environment/roads/shinrai_road/repairs/M_SHINRAI_ManholeCover.tres"
+	if ResourceLoader.exists(cover):
+		mats.road_manhole_cover = load(cover)
 
 ## The wide foundation and courtyard soil beds were flat tinted boxes. Dress
 ## them in the park's scanned compacted earth (world triplanar) so the ground
@@ -401,24 +400,31 @@ static func _drain(street: Node3D,parent: Node3D,pos: Vector3) -> void:
 	_b(street,parent,"CurbInletOpening",Vector3(pos.x,.062,face_z),Vector3(.46,.056,.008),"land_void")
 	_b(street,parent,"CurbInletLintel",Vector3(pos.x,.094,face_z+toward_curb*(-.003)),Vector3(.50,.008,.014),"land_iron")
 
-## Round sewer cover in the carriageway: a 1.0m square asphalt cut (its own
-## sourced texture, 1mm proud) and a 600mm cast lid 2.5mm proud of the road.
+## Round sewer cover in the carriageway: a 600mm cast lid 2.5mm proud of the
+## road inside a 40mm cast frame ring, set straight into clean asphalt. (The
+## sourced asphalt-cut patch was tried and read as a tar-filled pothole.)
 static func _manhole(street: Node3D,parent: Node3D,pos: Vector3) -> void:
 	var mats: Dictionary = street.get("materials")
-	if not mats.has("road_manhole_cover") or not mats.has("road_manhole_cut"): return
-	var cut := SurfaceTool.new()
-	cut.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var corners := [Vector2(-.5,-.5),Vector2(.5,-.5),Vector2(.5,.5),Vector2(-.5,.5)]
-	for index: int in [0,1,2,0,2,3]:
-		var corner: Vector2 = corners[index]
-		cut.set_normal(Vector3.UP)
-		cut.set_uv(corner+Vector2(.5,.5))
-		cut.add_vertex(Vector3(corner.x,0,corner.y))
-	_fitted(street,parent,"ManholeAsphaltCut",cut.commit(),pos+Vector3(0,ROAD_Y+.001,0),"road_manhole_cut")
-	var lid := SurfaceTool.new()
-	lid.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if not mats.has("road_manhole_cover"): return
 	var radius := .30
 	var segments := 28
+	# Frame ring: flat annulus from the lid edge out to 0.34m, 1.5mm proud.
+	var ring := SurfaceTool.new()
+	ring.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i: int in range(segments):
+		var a := TAU*float(i)/float(segments)
+		var b := TAU*float(i+1)/float(segments)
+		var ia := Vector3(cos(a),0,sin(a))*(radius-.004)
+		var ib := Vector3(cos(b),0,sin(b))*(radius-.004)
+		var oa := Vector3(cos(a),0,sin(a))*(radius+.04)
+		var ob := Vector3(cos(b),0,sin(b))*(radius+.04)
+		for vertex: Vector3 in [ia,oa,ob,ia,ob,ib]:
+			ring.set_normal(Vector3.UP)
+			ring.set_uv(Vector2(.5,.5))
+			ring.add_vertex(vertex)
+	_fitted(street,parent,"ManholeFrameRing",ring.commit(),pos+Vector3(0,ROAD_Y+.0015,0),"land_iron")
+	var lid := SurfaceTool.new()
+	lid.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i: int in range(segments):
 		var a := TAU*float(i)/float(segments)
 		var b := TAU*float(i+1)/float(segments)
