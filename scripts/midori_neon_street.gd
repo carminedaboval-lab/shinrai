@@ -5,6 +5,8 @@ extends Node3D
 ## the awning (Y 2.95) and the balcony soffit (Y 3.7), never across a balcony.
 const Kit = preload("res://scripts/midori_park_kit.gd")
 const Retrofit = preload("res://scripts/midori_street_retrofit.gd")
+const Interiors = preload("res://scripts/midori_interiors.gd")
+const Facades = preload("res://scripts/midori_building_facades.gd")
 const WASH := {"UedaBooks":Color("#2fd4ff"), "MoriCoffee":Color("#ff3d82"), "HinataDaily":Color("#ffb03a"), "YakitoriShop":Color("#ff6a2a")}
 const POLES: Array[Vector3] = [Vector3(-16.5,.09,190.9), Vector3(3.4,.09,190.9), Vector3(13.6,.09,190.9)]
 
@@ -47,6 +49,7 @@ var street: Node
 var _glows: Array[StandardMaterial3D] = []
 var _lights: Array[OmniLight3D] = []
 var _screens: Array[ShaderMaterial] = []
+var _interior_lights: Array = []
 var _font: SystemFont
 var _steel: StandardMaterial3D
 var _concrete: StandardMaterial3D
@@ -71,6 +74,8 @@ func _ready() -> void:
 	_dress_yakitori(_shop_root("YakitoriShop"))
 	_build_utility_lines()
 	print("MIDORI_STREET_RETROFIT: ", JSON.stringify(Retrofit.build(self)))
+	print("MIDORI_INTERIORS: ", JSON.stringify(Interiors.build(self)))
+	print("MIDORI_HOME_EXTERIORS: ", Facades.dress_homes(self, street))
 	installed = true
 	set_night_mode(park.get("is_night_mode") == true)
 
@@ -81,12 +86,16 @@ func set_night_mode(value: bool) -> void:
 		material.set_shader_parameter("power", 1.3 if value else .55)
 	for light: OmniLight3D in _lights:
 		light.visible = value
+	for row: Array in _interior_lights:
+		(row[0] as OmniLight3D).light_energy = row[2] if value else row[1]
 	if value: call_deferred("_apply_night_air")
 
 func _apply_night_air() -> void:
 	# Runs after the park's own quality pass so these values are not overwritten.
 	var environment: Environment = park.get("park_environment")
 	if environment == null or park.get("is_night_mode") != true: return
+	# Enough sky fill that woodland reads as dark, not as a black screen.
+	environment.ambient_light_energy = 1.1
 	environment.fog_light_color = Color("#2a2342")
 	environment.fog_density = .0024
 	environment.glow_intensity = 1.0

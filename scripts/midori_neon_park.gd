@@ -1,28 +1,17 @@
 extends Node3D
 ## Night identity for the park and corporate district, matching the street:
-## LED inlays along the real path curves, a lit torii and plaza, and
-## neon crowns on the corporate blocks. Runs once the street and terrain exist.
+## a lit torii and plaza, and neon crowns on the corporate blocks.
+## Runs once the street and terrain exist.
 const Kit = preload("res://scripts/midori_park_kit.gd")
-const INLAY_WIDTH := .06
-const INLAY_INSET := .42
+const Retrofit = preload("res://scripts/midori_street_retrofit.gd")
+const Facades = preload("res://scripts/midori_building_facades.gd")
+const ROAD_ROOT := "res://assets/environment/roads/shinrai_road/textures/SHINRAI_Road_"
+const PAVER_ROOT := "res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_"
 const WINDOW_HASH_SEED := 2050
 const AD_WORDS := ["新東京","電脳","未来","夜市","機動","龍"]
 const TORII_LEFT := Vector2(165.13, 139.94)
 const TORII_RIGHT := Vector2(162.87, 132.06)
 const TORII_HEIGHT := 6.6
-
-const INLAY_SHADER := """
-shader_type spatial;
-render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_never;
-varying vec3 world;
-void vertex(){ world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
-void fragment(){
-	// Long dashes in metres, drifting slowly from cyan toward magenta across the park.
-	if (fract(UV.x / 2.6) < 0.34) discard;
-	vec3 tint = mix(vec3(0.0, 0.42, 1.0), vec3(1.0, 0.0, 0.3), smoothstep(-0.2, 0.9, sin(world.x * 0.014 + world.z * 0.011)));
-	ALBEDO = tint * 0.22;
-}
-"""
 
 var installed := false
 var report := {}
@@ -47,7 +36,6 @@ func _ready() -> void:
 	_night_root.name = "NightOnly"
 	add_child(_night_root)
 	_night_root.add_to_group("midori_night_effect")
-	_build_path_inlays()
 	_build_torii_neon()
 	if corporate != null: _retrofit_corporate(corporate)
 	installed = true
@@ -58,62 +46,6 @@ func set_night_mode(value: bool) -> void:
 	for material: StandardMaterial3D in _windows_lit:
 		material.emission_energy_multiplier = .55 if value else 0.0
 	if _night_root != null: _night_root.visible = value
-
-func _build_path_inlays() -> void:
-	# The park's own edge index already follows every rounded path in world metres.
-	var cells: Dictionary = park.get("_path_edge_cells")
-	var seen := {}
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var quads := 0
-	for bucket: Array in cells.values():
-		for segment: Dictionary in bucket:
-			var a: Vector2 = segment.a
-			var b: Vector2 = segment.b
-			var key := Vector4(a.x, a.y, b.x, b.y)
-			if seen.has(key): continue
-			seen[key] = true
-			var length := a.distance_to(b)
-			if length < .02: continue
-			var side := (b - a).rotated(PI * .5) / length
-			var start_u := a.x + a.y
-			for edge: float in [-1.0, 1.0]:
-				quads += _inlay_quad(st, a, b, side * edge, float(segment.wa) * .5 - INLAY_INSET, float(segment.wb) * .5 - INLAY_INSET, start_u, length)
-	if quads == 0: return
-	var mesh := st.commit()
-	var shader := Shader.new()
-	shader.code = INLAY_SHADER
-	var material := ShaderMaterial.new()
-	material.shader = shader
-	var inlays := MeshInstance3D.new()
-	inlays.name = "PathLedInlays"
-	inlays.mesh = mesh
-	inlays.material_override = material
-	inlays.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_night_root.add_child(inlays)
-	report["inlay_quads"] = quads
-
-func _inlay_quad(st: SurfaceTool, a: Vector2, b: Vector2, side: Vector2, offset_a: float, offset_b: float, u: float, length: float) -> int:
-	var inner_a := a + side * offset_a
-	var inner_b := b + side * offset_b
-	if terrain.water_at(inner_a) or terrain.water_at(inner_b): return 0
-	var outer_a := inner_a + side * INLAY_WIDTH
-	var outer_b := inner_b + side * INLAY_WIDTH
-	var ya := _walk_y(inner_a)
-	var yb := _walk_y(inner_b)
-	var corners: Array[Vector3] = [Vector3(inner_a.x, ya, inner_a.y), Vector3(outer_a.x, ya, outer_a.y), Vector3(inner_b.x, yb, inner_b.y), Vector3(outer_b.x, yb, outer_b.y)]
-	var us: Array[float] = [u, u, u + length, u + length]
-	for index: int in [0, 1, 2, 2, 1, 3]:
-		st.set_uv(Vector2(us[index], 0.0))
-		st.add_vertex(corners[index])
-	return 1
-
-func _walk_y(p: Vector2) -> float:
-	# Walks are draped, so read the real surface rather than the terrain grid.
-	var from := Vector3(p.x, float(terrain.height_at(p)) + 1.0, p.y)
-	var query := PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * 2.0)
-	var hit := park.get_world_3d().direct_space_state.intersect_ray(query)
-	return float(hit.position.y) + .028 if hit.has("position") else from.y - .87
 
 func _strip(label: String, size: Vector3, at: Vector3, yaw: float, color: Color) -> void:
 	var material := Kit.glow(color)
@@ -160,16 +92,51 @@ func _retrofit_corporate(corporate: Node) -> void:
 	var district := corporate.find_child("CorporateDistrict", true, false) as Node3D
 	if district == null: return
 	var blocks: Array[AABB] = []
+	var facades := {}
 	for node: Node in district.get_children():
 		if not node is MeshInstance3D or (node as MeshInstance3D).mesh == null: continue
 		var visual := node as MeshInstance3D
 		var box: AABB = visual.global_transform * visual.get_aabb()
-		if box.size.y > 8.0 and box.size.x * box.size.z > 200.0: blocks.append(box)
+		if box.size.y > 8.0 and box.size.x * box.size.z > 200.0:
+			blocks.append(box)
+			if visual.material_override != null: facades[visual.material_override] = true
 	report["corporate_blocks"] = blocks.size()
+	_surface_corporate(district, facades)
 	report["windows_merged"] = _merge_windows(district, blocks)
+	report["facade_parts"] = Facades.dress_blocks(neon, neon.get("street"), blocks)
 	var colors: Array[Color] = [Color("#22d3ff"), Color("#ff2d78"), Color("#a14dff"), Color("#ffb03a")]
 	for i: int in range(blocks.size()):
 		_dress_block(blocks[i], colors[i % colors.size()], i)
+
+func _surface_corporate(district: Node3D, facades: Dictionary) -> void:
+	# Flat colours become the street's own scanned road and precast maps.
+	_texture_slab(district.find_child("NorthSouthRoad", false, false), ROAD_ROOT + "FineAggregate_BaseColor_2K.png", ROAD_ROOT + "RealisticDry_NormalGL_2K.png", Color(.62, .62, .66), .5)
+	_texture_slab(district.find_child("NorthSouthSidewalk", false, false), PAVER_ROOT + "PrecastPaver_BaseColor_1K.png", PAVER_ROOT + "PrecastExterior_NormalGL_1K.png", Color(.95, .95, .95), .85)
+	var connector := park.get_node_or_null("MidoriCorporateDistrict/CorporateRoadConnection")
+	if connector != null:
+		for node: Node in connector.get_children():
+			if String(node.name).contains("Walk"):
+				_texture_slab(node, PAVER_ROOT + "PrecastPaver_BaseColor_1K.png", PAVER_ROOT + "PrecastExterior_NormalGL_1K.png", Color(.95, .95, .95), .85)
+			elif String(node.name).contains("Road") or String(node.name).contains("Turn"):
+				_texture_slab(node, ROAD_ROOT + "FineAggregate_BaseColor_2K.png", ROAD_ROOT + "RealisticDry_NormalGL_2K.png", Color(.62, .62, .66), .5)
+	var grime := Retrofit._grime(Vector3(.82, .82, .85))
+	for material: Material in facades:
+		material.next_pass = grime
+	report["corporate_facades"] = facades.size()
+
+func _texture_slab(node: Node, albedo: String, normal: String, tint: Color, repeats: float) -> void:
+	var slab := node as MeshInstance3D
+	if slab == null or not slab.material_override is StandardMaterial3D: return
+	var material := slab.material_override as StandardMaterial3D
+	material.albedo_texture = load(albedo)
+	material.albedo_color = tint
+	material.normal_enabled = true
+	material.normal_texture = load(normal)
+	material.normal_scale = .5
+	material.uv1_triplanar = true
+	material.uv1_world_triplanar = true
+	material.uv1_scale = Vector3.ONE * repeats
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 
 func _merge_windows(district: Node3D, blocks: Array[AABB]) -> int:
 	# Thousands of single-box panes become three meshes, with varied night light.

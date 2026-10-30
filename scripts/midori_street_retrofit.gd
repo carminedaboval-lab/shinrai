@@ -8,24 +8,28 @@ const SHOPS := {
 	"UedaBooks":{"w":11.0, "eave":6.35}, "MoriCoffee":{"w":10.0, "eave":6.8},
 	"HinataDaily":{"w":10.0, "eave":6.4}, "YakitoriShop":{"w":5.2, "eave":5.75},
 }
-# Replacement base colours for the shared architecture materials.
-const PALETTE := {
-	"arch_plaster":Color("#7c7d7c"), "arch_mineral":Color("#65696c"), "arch_stone":Color("#5d5f60"),
-	"arch_cedar":Color("#3d3029"), "arch_pale_wood":Color("#5a4a3a"), "arch_tile":Color("#34373c"),
-	"arch_metal":Color("#2a2e31"), "arch_sage":Color("#27382f"), "arch_linen":Color("#5f5b52"),
-}
-const WEATHERED := ["arch_plaster","arch_mineral","arch_stone","arch_cedar"]
+# Only the roof tile is recoloured. Walls and timber darken in the grime pass,
+# which stops at each building's inner walls so rooms keep their own colours.
+const PALETTE := {"arch_tile":Color("#34373c")}
+const KADO_FOOTPRINT := Rect2(-25, 246, 9, 9)
+const WEATHERED := ["arch_plaster","arch_mineral","arch_stone","arch_cedar","arch_cladding_backing"]
 
 const GRIME_SHADER := """
 shader_type spatial;
 render_mode unshaded, blend_mul, depth_draw_never, cull_back, fog_disabled;
 uniform vec3 tone = vec3(0.6);
+uniform vec4 indoors[16];
+uniform int indoor_count = 0;
 varying vec3 world;
 float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float nz(vec2 p){ vec2 c = floor(p); vec2 f = fract(p); vec2 u = f*f*(3.0-2.0*f);
 	return mix(mix(hsh(c), hsh(c+vec2(1,0)), u.x), mix(hsh(c+vec2(0,1)), hsh(c+vec2(1,1)), u.x), u.y); }
 void vertex(){ world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment(){
+	for (int i = 0; i < indoor_count; i++) {
+		vec4 r = indoors[i];
+		if (world.x > r.x && world.z > r.y && world.x < r.z && world.z < r.w) discard;
+	}
 	float along = world.x + world.z;
 	// Rain tracks run down from ledges; damp creeps up from the ground.
 	float tracks = nz(vec2(along * 2.3, world.y * 0.11)) * 0.65 + nz(vec2(along * 7.0, world.y * 0.3)) * 0.35;
@@ -51,11 +55,19 @@ static func build(neon: Node3D) -> Dictionary:
 
 static func _restyle_materials(neon: Node3D) -> int:
 	var street: Node = neon.get("street")
-	var wall_grime := _grime(Vector3(.56, .58, .62))
-	var timber_grime := _grime(Vector3(.68, .63, .6))
+	var wall_grime := _grime(Vector3(.46, .48, .52))
+	var timber_grime := _grime(Vector3(.5, .46, .44))
+	var rooms := _indoor_rects(street)
+	for grime: ShaderMaterial in [wall_grime, timber_grime]:
+		grime.set_shader_parameter("indoors", rooms)
+		grime.set_shader_parameter("indoor_count", rooms.size())
 	var mats: Dictionary = street.get("materials")
 	for key: Variant in PALETTE:
 		if mats.get(key) is StandardMaterial3D: (mats[key] as StandardMaterial3D).albedo_color = PALETTE[key]
+	# Cladding backing doubles as the inside face of timber homes. Lighten it for
+	# the rooms; the grime pass keeps it dark between boards outdoors.
+	if mats.get("arch_cladding_backing") is StandardMaterial3D:
+		(mats.arch_cladding_backing as StandardMaterial3D).albedo_color = Color("#b3a792")
 	var restyled := {}
 	# Walls and timber use per-property shaders, so they are darkened by a
 	# multiply pass rather than by editing each one. Every house keeps its hue.
@@ -69,6 +81,8 @@ static func _restyle_materials(neon: Node3D) -> int:
 			if label.begins_with("land_") or "Road" in label: continue # Road paint and kerbs are not walls.
 			if PALETTE.has(label) and material is StandardMaterial3D:
 				(material as StandardMaterial3D).albedo_color = PALETTE[label]
+			if label == "arch_cladding_backing" and material is StandardMaterial3D:
+				(material as StandardMaterial3D).albedo_color = Color("#b3a792")
 			if label in WEATHERED or "Mineral" in label or "Paint" in label or "Render" in label or "Plaster" in label:
 				material.next_pass = wall_grime
 			elif "Timber" in label or "joinery" in label:
@@ -77,6 +91,19 @@ static func _restyle_materials(neon: Node3D) -> int:
 				continue
 			restyled[material] = true
 	return restyled.size()
+
+static func _indoor_rects(street: Node3D) -> PackedVector4Array:
+	# Footprints inset to sit inside each wall's thickness: outer faces stay weathered.
+	var rects := PackedVector4Array([Vector4(KADO_FOOTPRINT.position.x + .12, KADO_FOOTPRINT.position.y + .12, KADO_FOOTPRINT.end.x - .12, KADO_FOOTPRINT.end.y - .12)])
+	for row: Dictionary in street.get_meta("building_access_registry", []):
+		var house := street.get_tree().root.get_node_or_null(NodePath(str(row.root_path))) as Node3D
+		if house == null: continue
+		var half := float(row.dimensions.width_m) * .5 - .12
+		var front := float(row.dimensions.front_z_m) + .12
+		var a := house.to_global(Vector3(-half, 0, front))
+		var b := house.to_global(Vector3(half, 0, front + float(row.dimensions.depth_m) - .24))
+		rects.append(Vector4(minf(a.x, b.x), minf(a.z, b.z), maxf(a.x, b.x), maxf(a.z, b.z)))
+	return rects
 
 static func _grime(tone: Vector3) -> ShaderMaterial:
 	var shader := Shader.new()

@@ -101,8 +101,25 @@ void fragment(){
 }
 """
 
+const CROW_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, shadows_disabled;
+void vertex(){
+	float a = INSTANCE_CUSTOM.x * TAU + TIME * INSTANCE_CUSTOM.w;
+	float r = INSTANCE_CUSTOM.y * 1000.0;
+	float beat = sin(TIME * 7.0 + INSTANCE_CUSTOM.x * 50.0) * smoothstep(0.2, 0.6, sin(TIME * 0.4 + INSTANCE_CUSTOM.x * 20.0) * 0.5 + 0.5);
+	float y = INSTANCE_CUSTOM.z * 100.0 + sin(a * 2.0) * 4.0 + abs(VERTEX.x) * (0.18 + beat * 0.55);
+	vec2 radial = vec2(cos(a), sin(a));
+	vec2 forward = vec2(-radial.y, radial.x) * sign(INSTANCE_CUSTOM.w);
+	vec2 flat_pos = radial * (r + VERTEX.x) + forward * VERTEX.z;
+	VERTEX = vec3(flat_pos.x, y, flat_pos.y);
+}
+void fragment(){ ALBEDO = vec3(0.012, 0.012, 0.016); }
+"""
+
 var _materials: Array[ShaderMaterial] = []
 var _glows: Array[MeshInstance3D] = []
+var _ground: StandardMaterial3D
 
 func _ready() -> void:
 	add_to_group("midori_horizon")
@@ -116,6 +133,7 @@ func set_night_mode(value: bool) -> void:
 		material.set_shader_parameter("night", 1.0 if value else 0.0)
 	for glow: MeshInstance3D in _glows:
 		glow.visible = value
+	if _ground != null: _ground.albedo_color = Color("#0a0b12") if value else Color("#a9adb4")
 
 func _material(code: String, label: String) -> ShaderMaterial:
 	var shader := Shader.new()
@@ -131,10 +149,11 @@ func _build() -> void:
 	rng.seed = RNG_SEED
 	var towers: Array[Dictionary] = []
 	var beacons: Array[Dictionary] = []
+	# Unshaded and haze-toned, so the land strip melts into the shoreline by day.
 	var ground := StandardMaterial3D.new()
-	ground.albedo_color = Color("#2a2f38")
-	ground.roughness = 1.0
+	ground.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	ground.disable_fog = true
+	_ground = ground
 	for district: Dictionary in DISTRICTS:
 		var angle := deg_to_rad(float(district.dir))
 		# Local X runs along the shoreline, local +Z points away from the park.
@@ -151,6 +170,7 @@ func _build() -> void:
 			_add_tower(root, Vector3(x, 0.0, z), height, rng, towers, beacons)
 	_commit_towers(towers)
 	_commit_beacons(beacons)
+	_build_crows(rng)
 
 func _add_tower(root: Transform3D, at: Vector3, height: float, rng: RandomNumberGenerator, towers: Array[Dictionary], beacons: Array[Dictionary]) -> void:
 	var tower_seed := rng.randf()
@@ -207,6 +227,32 @@ func _commit_beacons(beacons: Array[Dictionary]) -> void:
 	instance.name = "AviationBeacons"
 	instance.multimesh = multimesh
 	instance.material_override = _material(BEACON_SHADER, "SHINRAI_Beacons")
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(instance)
+
+func _build_crows(rng: RandomNumberGenerator) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Two swept wings and a body, roughly a metre across like a jungle crow.
+	for v: Vector3 in [Vector3(0, 0, .22), Vector3(0, 0, -.12), Vector3(-.5, 0, -.06), Vector3(0, 0, .22), Vector3(.5, 0, -.06), Vector3(0, 0, -.12), Vector3(-.06, 0, .3), Vector3(.06, 0, .3), Vector3(0, 0, -.32)]:
+		st.add_vertex(v)
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_custom_data = true
+	multimesh.mesh = st.commit()
+	multimesh.instance_count = 22
+	for i: int in range(multimesh.instance_count):
+		var speed := rng.randf_range(.1, .2) * (1.0 if i % 3 > 0 else -1.0)
+		multimesh.set_instance_custom_data(i, Color(rng.randf(), rng.randf_range(.06, .2), rng.randf_range(.22, .46), speed))
+	var instance := MultiMeshInstance3D.new()
+	instance.name = "ParkCrows"
+	instance.multimesh = multimesh
+	var shader := Shader.new()
+	shader.code = CROW_SHADER
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	instance.material_override = material
+	instance.custom_aabb = AABB(Vector3(-260, 0, -260), Vector3(520, 90, 520))
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(instance)
 
