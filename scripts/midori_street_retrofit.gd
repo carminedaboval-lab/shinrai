@@ -146,6 +146,12 @@ static func _mori_billboard(neon: Node3D) -> void:
 	if root == null: return
 	var steel := Kit.mat(Color("#25282c"), .5, .7)
 	var roof := 7.0
+	# A flat roof reads as a real one once it has a parapet and a stair hut.
+	for side: float in [-1.0, 1.0]:
+		Kit.box(root, "RoofParapet", Vector3(10.1, .55, .18), Vector3(0, roof + .2, 4.0 + side * 4.0), steel)
+		Kit.box(root, "RoofParapet", Vector3(.18, .55, 8.1), Vector3(side * 5.0, roof + .2, 4.0), steel)
+	Kit.box(root, "StairHut", Vector3(2.2, 2.3, 2.6), Vector3(3.3, roof + 1.15, 6.1), Kit.mat(Color("#5d5f60"), .9))
+	Kit.box(root, "StairHutRoof", Vector3(2.5, .12, 2.9), Vector3(3.3, roof + 2.36, 6.1), steel)
 	for x: float in [-2.7, 2.7]:
 		Kit.tube(root, "BillboardLeg", Vector3(x, roof, 1.0), Vector3(x, roof + 1.0, 1.0), .07, steel)
 		Kit.tube(root, "BillboardBrace", Vector3(x, roof, 2.2), Vector3(x, roof + 1.0, 1.0), .05, steel)

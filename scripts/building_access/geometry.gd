@@ -196,13 +196,14 @@ static func furnish(street: Node3D,root: Node3D,width: float,depth: float,front_
 	if shop: return
 	# Front entry and the left-hand stair approach stay clear. Small homes share
 	# furniture dimensions, with their rear fixtures adjusted to actual depth.
-	part(street,root,"HomeLowSofa",Vector3(width*.5-1.35,ground_y+.38,front_z+3.30),Vector3(1.65,.76,.70),"arch_linen",true)
+	# Hidden stand-ins keep collision and loot surfaces; models are dressed over them.
+	part(street,root,"HomeLowSofa",Vector3(width*.5-1.35,ground_y+.38,front_z+3.30),Vector3(1.65,.76,.70),"arch_linen",true).visible=false
 	var table_x: float = .25
 	var table_z: float = front_z+3.20
-	part(street,root,"HomeDiningTable",Vector3(table_x,ground_y+.71,table_z),Vector3(1.50,.08,.85),"arch_cedar",true)
+	part(street,root,"HomeDiningTable",Vector3(table_x,ground_y+.71,table_z),Vector3(1.50,.08,.85),"arch_cedar",true).visible=false
 	for dx: float in [-.66,.66]:
 		for dz: float in [-.335,.335]:
-			part(street,root,"DiningTableLeg",Vector3(table_x+dx,ground_y+.335,table_z+dz),Vector3(.06,.67,.06),"arch_cedar",true)
+			part(street,root,"DiningTableLeg",Vector3(table_x+dx,ground_y+.335,table_z+dz),Vector3(.06,.67,.06),"arch_cedar",true).visible=false
 	loot_anchor(anchors,house_id,"table_top",Vector3(table_x,ground_y+.75,table_z),Vector2(1.46,.81),false,.60,0.0,Vector3(table_x,ground_y,front_z+1.90))
 	loot_anchor(anchors,house_id,"under_table",Vector3(table_x,ground_y,table_z),Vector2(1.20,.55),false,.63,0.0,Vector3(table_x,ground_y,front_z+1.90))
 	var kitchen_x: float = width*.5-.67

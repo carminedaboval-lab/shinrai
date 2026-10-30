@@ -200,9 +200,10 @@ func _air_conditioner(parent: Node3D, at: Vector3, yaw: float) -> void:
 	unit.position = at
 	unit.rotation.y = yaw
 	parent.add_child(unit)
-	Kit.box(unit, "Casing", Vector3(.8, .55, .28), Vector3.ZERO, Kit.mat(Color("#b7b8b2"), .55, .1))
-	var fan := Kit.disc(unit, "FanGrille", .2, .02, Vector3(-.12, 0, -.145), Kit.mat(Color("#23262a"), .6, .4))
-	fan.rotation.x = PI * .5
+	Interiors.model(unit, "exterior_aircon_unit", Vector3(0, -.28, 0), Vector3(.82, .58, .3), PI)
+	for node: Node in unit.find_children("*", "GeometryInstance3D", true, false):
+		(node as GeometryInstance3D).visibility_range_end = 70.0
+
 
 func _antenna(parent: Node3D, base: Vector3, height: float) -> void:
 	Kit.tube(parent, "Mast", base, base + Vector3.UP * height, .03, _steel)

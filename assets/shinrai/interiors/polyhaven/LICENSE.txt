@@ -1,0 +1,9 @@
+﻿CC0 models from Poly Haven (https://polyhaven.com), 1k glTF. No attribution required.
+Sofa_01
+dining_chair_02
+dining_table
+modern_wooden_cabinet
+painted_wooden_nightstand
+exterior_aircon_unit
+pachira_aquatica_01
+modern_ceiling_lamp_01
