@@ -5,7 +5,7 @@ extends Node3D
 const ANCHORS: Array[Vector3] = [
 	Vector3(-44, 0, 141), Vector3(-76, 0, 142), Vector3(-112, 0, 139),
 	Vector3(-154, 0, 132), Vector3(-178, 0, 107), Vector3(-186, 0, 62),
-	Vector3(-179, 0, 24), Vector3(-128, 0, -136), Vector3(-84, 0, -141),
+	Vector3(-179, 0, 24), Vector3(-128, 0, -136), Vector3(-62, 0, -141),
 	Vector3(181, 0, -35), Vector3(185, 0, 27), Vector3(188, 0, 69)]
 var placements: Array[Vector3] = []
 var rejected := 0

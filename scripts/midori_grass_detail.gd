@@ -728,7 +728,11 @@ func _is_lawn_position(x: float, z: float) -> bool:
 		return false
 	if _inside_box(authored_x, authored_z, 107.5, -20.0, 9.0, 16.0):
 		return false
-	if _inside_box(authored_x, authored_z, -72.0, 45.0, 36.0, 30.0):
+	if _inside_box(authored_x, authored_z, -45.0, -69.0, 18.0, 11.5):
+		return false
+	if _inside_box(authored_x, authored_z, -45.0, -76.5, 2.0, 4.5):
+		return false
+	if _inside_box(authored_x, authored_z, -72.0, 45.0, 21.0, 17.0):
 		return false
 	if _inside_box(authored_x, authored_z, 82.0, 68.0, 38.0, 30.0):
 		return false

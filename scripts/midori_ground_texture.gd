@@ -378,7 +378,7 @@ func _install_landscape_mask(scene: Node3D) -> void:
 	var map:=Image.create(440,360,false,Image.FORMAT_RGBA8)
 	var lawn:=0;var woodland:=0;var worn:=0
 	var held_shoulders:=0;var blended_shoulders:=0
-	var apron_rects:Array[Rect2]=[Rect2(-133,-66,14,22),Rect2(-168,-110,56,48),Rect2(-180,58,72,64),Rect2(123,105,85,63),Rect2(127,-167,50,42)]
+	var apron_rects:Array[Rect2]=[Rect2(-133,-66,14,22),Rect2(-168,-110,56,48),Rect2(123,105,85,63),Rect2(127,-167,50,42)]
 	for z:int in range(360):
 		for x:int in range(440):
 			var p:=Vector2(x-219.5,z-179.5)

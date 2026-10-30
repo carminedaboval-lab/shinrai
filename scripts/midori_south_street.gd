@@ -341,10 +341,14 @@ func _batch_direct_geometry(anchor: Node3D) -> void:
 		if not child is MeshInstance3D: continue
 		var visual := child as MeshInstance3D
 		if visual.mesh == null or visual.material_override == null: continue
-		if not layers.has(visual.layers): layers[visual.layers] = {}
-		var groups: Dictionary = layers[visual.layers]
+		# Hidden, range-limited or parenting pieces cannot be represented by a merged mesh.
+		if not visual.visible or visual.visibility_range_end > 0.0 or visual.get_child_count() > 0: continue
+		var slot := Vector2i(visual.layers,visual.cast_shadow)
+		if not layers.has(slot): layers[slot] = {}
+		var groups: Dictionary = layers[slot]
 		var mat: Material = visual.material_override
-		var key := mat.get_instance_id()
+		# Shaders read UVs and vertex colours, so never mix meshes lacking them.
+		var key := "%d:%d" % [mat.get_instance_id(),_vertex_format(visual.mesh)]
 		if not groups.has(key):
 			var group_tool := SurfaceTool.new()
 			group_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -353,23 +357,33 @@ func _batch_direct_geometry(anchor: Node3D) -> void:
 		var tool: SurfaceTool = groups[key]
 		for surface: int in range(visual.mesh.get_surface_count()):
 			tool.append_from(visual.mesh,surface,visual.transform)
-			_batch_stats[1]+=visual.mesh.surface_get_array_len(surface)
 		sources.append(visual)
 	if sources.is_empty(): return
 	_batch_stats[0]+=sources.size()
-	for mask: Variant in layers:
+	for slot: Vector2i in layers:
 		var combined := ArrayMesh.new()
-		for key: Variant in layers[mask]:
-			var tool: SurfaceTool = layers[mask][key]
+		for key: Variant in layers[slot]:
+			var tool: SurfaceTool = layers[slot][key]
 			tool.commit(combined)
+		# Only ArrayMesh has surface_get_array_len; sources may be primitive meshes.
+		for surface: int in range(combined.get_surface_count()):
+			_batch_stats[1]+=combined.surface_get_array_len(surface)
 		var node := MeshInstance3D.new()
 		node.name = "CompleteOwnedGeometry"
 		node.mesh = combined
-		node.layers = int(mask)
+		node.layers = slot.x
+		node.cast_shadow = slot.y as GeometryInstance3D.ShadowCastingSetting
 		anchor.add_child(node)
 	for source: MeshInstance3D in sources:
 		anchor.remove_child(source)
 		source.queue_free()
+
+func _vertex_format(mesh: Mesh) -> int:
+	const ATTRIBUTES := Mesh.ARRAY_FORMAT_NORMAL | Mesh.ARRAY_FORMAT_TANGENT | Mesh.ARRAY_FORMAT_COLOR | Mesh.ARRAY_FORMAT_TEX_UV | Mesh.ARRAY_FORMAT_TEX_UV2
+	if mesh is ArrayMesh and mesh.get_surface_count() > 0:
+		return (mesh as ArrayMesh).surface_get_format(0) & ATTRIBUTES
+	# Primitive meshes always provide normals, tangents and UVs.
+	return Mesh.ARRAY_FORMAT_NORMAL | Mesh.ARRAY_FORMAT_TANGENT | Mesh.ARRAY_FORMAT_TEX_UV
 
 func _prop(parent: Node3D, filename: String, label: String, pos: Vector3) -> void:
 	var packed := load(FACADE_PROPS + filename) as PackedScene

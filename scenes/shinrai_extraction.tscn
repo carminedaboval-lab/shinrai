@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="Script" path="res://scripts/extraction_park.gd" id="1"]
 
@@ -40,6 +40,12 @@
 [ext_resource type="Script" path="res://scripts/midori_civic_lighting.gd" id="civic_lighting"]
 
 [ext_resource type="Script" path="res://scripts/midori_aftermath.gd" id="aftermath"]
+
+[ext_resource type="Script" path="res://scripts/midori_basketball_court.gd" id="basketball_court"]
+
+[ext_resource type="Script" path="res://scripts/midori_kids_playground.gd" id="kids_playground"]
+
+[ext_resource type="Script" path="res://scripts/midori_activity_grounds.gd" id="activity_grounds"]
 
 [node name="MidoriParkSizeBlockout" type="Node3D"]
 script = ExtResource("1")
@@ -102,3 +108,15 @@ script = ExtResource("civic_lighting")
 
 [node name="MidoriAftermath" type="Node3D" parent="."]
 script = ExtResource("aftermath")
+
+[node name="MidoriBasketballCourt" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, -0.07, -138)
+script = ExtResource("basketball_court")
+yaw_degrees = 180.0
+
+[node name="MidoriKidsPlayground" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -144, -0.06, 90)
+script = ExtResource("kids_playground")
+
+[node name="MidoriActivityGrounds" type="Node3D" parent="."]
+script = ExtResource("activity_grounds")

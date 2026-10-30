@@ -130,7 +130,7 @@ func raw_height(p: Vector2) -> float:
 	# Fade to the existing entry and boundary datum over 18 m. Activity pads and
 	# complete bridge landing footprints retain a level apron, with gentle joins.
 	var clearance := minf(220.0-absf(p.x),180.0-absf(p.y)) - 7.0
-	for rect in [Rect2(-133,-66,14,18),Rect2(-166,-108,52,44),Rect2(-180,58,72,64),Rect2(123,105,85,63),Rect2(127,-167,50,42)]:
+	for rect in [Rect2(-133,-66,14,18),Rect2(-166,-108,52,44),Rect2(-108,-150,36,24),Rect2(-180,58,72,64),Rect2(123,105,85,63),Rect2(127,-167,50,42)]:
 		var q := p.clamp(rect.position,rect.end)
 		clearance = minf(clearance,p.distance_to(q))
 	# Bounds are deliberately conservative and avoid scanning hundreds of tiny

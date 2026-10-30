@@ -250,6 +250,8 @@ static func _geometry(root: Node3D) -> Dictionary:
 		var visual := node as MeshInstance3D
 		result.mesh_instances += 1
 		for surface: int in range(visual.mesh.get_surface_count()):
-			var indices: int = visual.mesh.surface_get_array_index_len(surface)
-			result.triangles += int((indices if indices > 0 else visual.mesh.surface_get_array_len(surface))/3)
+			# surface_get_arrays also works for primitive meshes such as CylinderMesh.
+			var arrays: Array = visual.mesh.surface_get_arrays(surface)
+			var indices: Variant = arrays[Mesh.ARRAY_INDEX]
+			result.triangles += int((indices.size() if indices != null else arrays[Mesh.ARRAY_VERTEX].size())/3)
 	return result

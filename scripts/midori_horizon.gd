@@ -5,7 +5,7 @@ extends Node3D
 const StartupTrace = preload("res://scripts/startup_trace.gd")
 
 const SEA_RADIUS_M := 3900.0
-const SEA_Y := 0.06
+const SEA_Y := -0.2 # Below the level activity pads, which sit at datum 0.
 const NEAR_HILL_RADIUS_M := 1900.0
 const FAR_HILL_RADIUS_M := 3100.0
 const CITY_DIRECTION_DEG := 118.0 # Roughly south-east, across the water.
