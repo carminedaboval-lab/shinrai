@@ -112,7 +112,7 @@ void fragment() {
 	NORMAL = normalize((VIEW_MATRIX*vec4(world_normal,0.0)).xyz);
 	ROUGHNESS = clamp(mix(rough,0.94,repair*0.4)+0.03,0.78,1.0);
 	SPECULAR = 0.20;
-	// Rain film at night: damp everywhere, near-mirror standing water in low spots.
+	// Rain film: damp everywhere, near-mirror standing water in low spots.
 	float puddle = smoothstep(0.4,0.56,edge_noise(p*0.42)*0.75+edge_noise(p*1.9)*0.25);
 	float film = wetness*(0.6+0.4*puddle);
 	ALBEDO *= 1.0-0.62*film;

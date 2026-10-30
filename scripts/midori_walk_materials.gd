@@ -16,6 +16,7 @@ uniform float path_width=5.0;
 uniform float marker_period=18.0;
 uniform float wayfinding_strength=0.0;
 uniform float night_emission=0.0;
+uniform float wetness=0.0;
 varying vec3 world_position;
 varying vec3 world_normal;
 void vertex(){
@@ -63,6 +64,13 @@ void fragment(){
   n=normalize(n*max(detail.z,.6)+relief);
  }
  NORMAL=normalize((VIEW_MATRIX*vec4(n,0.0)).xyz);
+ // Rain film: broad damp stone with shallow standing water.
+ float pool=smoothstep(.34,.52,texture(stone_albedo,p/31.0+vec2(.17,.63)).r+texture(stone_albedo,p/9.0).r*.25);
+ float film=wetness*(.55+.45*pool);
+ ALBEDO*=1.0-.5*film;
+ ROUGHNESS=mix(ROUGHNESS,mix(.3,.06,pool),film);
+ SPECULAR=mix(SPECULAR,.58,film);
+ NORMAL=normalize(mix(NORMAL,(VIEW_MATRIX*vec4(0.0,1.0,0.0,0.0)).xyz,wetness*pool*.85));
 }
 """
 	var mat:=ShaderMaterial.new();mat.shader=shader

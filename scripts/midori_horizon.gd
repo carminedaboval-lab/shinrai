@@ -23,8 +23,8 @@ func _ready() -> void:
 func _build() -> void:
 	var tick := StartupTrace.begin()
 	_build_sea()
-	_build_hill_ring("FarHills", FAR_HILL_RADIUS_M, 260.0, 620.0, 96, 7, Color("#45536a"))
-	_build_hill_ring("NearHills", NEAR_HILL_RADIUS_M, 70.0, 230.0, 112, 11, Color("#33472f"))
+	_build_hill_ring("FarHills", FAR_HILL_RADIUS_M, 260.0, 620.0, 384, 28, Color("#45536a"))
+	_build_hill_ring("NearHills", NEAR_HILL_RADIUS_M, 70.0, 230.0, 448, 44, Color("#33472f"))
 	var city := Node3D.new()
 	city.name = "NeonCity"
 	city.set_script(preload("res://scripts/midori_neon_city.gd"))
@@ -95,6 +95,7 @@ func _build_hill_ring(ring_name: String, radius: float, min_height: float, max_h
 	noise.fractal_octaves = 3
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(0)
 	var city_angle := deg_to_rad(CITY_DIRECTION_DEG)
 	var depth := radius * 0.22
 	var profile: Array[float] = []
@@ -104,6 +105,9 @@ func _build_hill_ring(ring_name: String, radius: float, min_height: float, max_h
 		var gap := absf(angle_difference(a, city_angle)) < (float(gap_segments) / float(segments)) * PI
 		var h := lerpf(min_height, max_height, clampf((noise.get_noise_1d(t * 40.0) * 0.5 + 0.5) * 1.3 - 0.1, 0.0, 1.0))
 		h += noise.get_noise_1d(t * 160.0 + 7.0) * (max_height - min_height) * 0.18
+		# Sharp secondary ridges and fine scree break up the long smooth facets.
+		h += (1.0 - absf(noise.get_noise_1d(t * 420.0 + 3.0)) * 2.0) * (max_height - min_height) * 0.07
+		h += noise.get_noise_1d(t * 1500.0 + 11.0) * (max_height - min_height) * 0.022
 		if gap:
 			h = min_height * 0.25
 		profile.append(h)

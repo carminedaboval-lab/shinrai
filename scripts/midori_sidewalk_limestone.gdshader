@@ -117,7 +117,7 @@ void fragment() {
 	AO = mix(1.0, orm.r, 0.55);
 	METALLIC = 0.0;
 	SPECULAR = 0.24;
-	// Rain film at night. Paving drains better than the road, so it stays satin.
+	// Rain film. Paving drains better than the road, so it stays satin.
 	float puddle = smoothstep(0.56, 0.7, mineral_noise(p * 0.5 + vec2(7.0, 3.0)));
 	float film = wetness * (0.5 + 0.5 * puddle);
 	ALBEDO *= 1.0 - 0.42 * film;

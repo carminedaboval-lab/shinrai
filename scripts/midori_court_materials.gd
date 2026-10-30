@@ -12,6 +12,7 @@ uniform sampler2D stone_normal : hint_normal, repeat_enable, filter_linear_mipma
 uniform sampler2D stone_orm : repeat_enable, filter_linear_mipmap_anisotropic;
 uniform vec3 stone_tint = vec3(1.28,1.23,1.12);
 uniform vec2 slab_size = vec2(1.2,.6);
+uniform float wetness = 0.0;
 varying vec3 world_position;
 varying vec3 world_normal;
 float slab_hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
@@ -41,6 +42,13 @@ void fragment() {
   n=normalize(n*max(detail.z,.6)+relief);
  }
  NORMAL=normalize((VIEW_MATRIX*vec4(n,0.0)).xyz);
+ // Rain film: the open plaza holds the most water in the park.
+ float pool=smoothstep(.34,.5,texture(stone_albedo,p/37.0+vec2(.41,.23)).r+texture(stone_albedo,p/11.0).r*.25);
+ float film=wetness*(.6+.4*pool);
+ ALBEDO*=1.0-.55*film;
+ ROUGHNESS=mix(ROUGHNESS,mix(.24,.04,pool),film);
+ SPECULAR=mix(SPECULAR,.62,film);
+ NORMAL=normalize(mix(NORMAL,(VIEW_MATRIX*vec4(0.0,1.0,0.0,0.0)).xyz,wetness*pool*.9));
 }
 """
  var mat := ShaderMaterial.new()

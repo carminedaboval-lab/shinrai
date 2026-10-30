@@ -1,11 +1,10 @@
 extends Node3D
-## 2050 retrofit of the south street: wet surfaces, signs fitted to each business,
+## 2050 retrofit of the south street: signs fitted to each business,
 ## LED screens, utility cabling and rooftop plant, plus the coloured night air.
 ## Shop facades sit at local Z 0 and face local -Z. Signs stay in the band between
 ## the awning (Y 2.95) and the balcony soffit (Y 3.7), never across a balcony.
 const Kit = preload("res://scripts/midori_park_kit.gd")
 const Retrofit = preload("res://scripts/midori_street_retrofit.gd")
-const WET_SHADERS := ["midori_surface_readability.gdshader","midori_paving_readability.gdshader","midori_sidewalk_limestone.gdshader"]
 const WASH := {"UedaBooks":Color("#2fd4ff"), "MoriCoffee":Color("#ff3d82"), "HinataDaily":Color("#ffb03a"), "YakitoriShop":Color("#ff6a2a")}
 const POLES: Array[Vector3] = [Vector3(-16.5,.09,190.9), Vector3(3.4,.09,190.9), Vector3(13.6,.09,190.9)]
 
@@ -47,7 +46,6 @@ var park: Node3D
 var street: Node
 var _glows: Array[StandardMaterial3D] = []
 var _lights: Array[OmniLight3D] = []
-var _wet: Array[ShaderMaterial] = []
 var _screens: Array[ShaderMaterial] = []
 var _font: SystemFont
 var _steel: StandardMaterial3D
@@ -73,17 +71,14 @@ func _ready() -> void:
 	_dress_yakitori(_shop_root("YakitoriShop"))
 	_build_utility_lines()
 	print("MIDORI_STREET_RETROFIT: ", JSON.stringify(Retrofit.build(self)))
-	_collect_wet_materials()
 	installed = true
 	set_night_mode(park.get("is_night_mode") == true)
 
 func set_night_mode(value: bool) -> void:
-	for material: ShaderMaterial in _wet:
-		material.set_shader_parameter("wetness", 1.0 if value else 0.0)
 	for material: StandardMaterial3D in _glows:
 		material.emission_energy_multiplier = 2.6 if value else .08
 	for material: ShaderMaterial in _screens:
-		material.set_shader_parameter("power", 2.0 if value else .55)
+		material.set_shader_parameter("power", 1.3 if value else .55)
 	for light: OmniLight3D in _lights:
 		light.visible = value
 	if value: call_deferred("_apply_night_air")
@@ -101,26 +96,6 @@ func _apply_night_air() -> void:
 	var sky := environment.sky.sky_material as ProceduralSkyMaterial
 	sky.sky_horizon_color = Color("#3a2a5e")
 	sky.ground_horizon_color = Color("#241d3a")
-	if RenderingServer.get_current_rendering_method() == "forward_plus":
-		# Neon reflected in the wet road is what sells the look.
-		environment.ssr_enabled = true
-		environment.ssr_max_steps = 32
-		environment.ssr_depth_tolerance = .2
-
-func _collect_wet_materials() -> void:
-	# Batching moved most materials onto mesh surfaces, and passes duplicate them.
-	var found := {}
-	for node: Node in street.find_children("*", "MeshInstance3D", true, false):
-		var visual := node as MeshInstance3D
-		if visual.mesh == null: continue
-		found[visual.material_override] = true
-		for surface: int in range(visual.mesh.get_surface_count()):
-			found[visual.mesh.surface_get_material(surface)] = true
-	for material: Variant in found:
-		var shader_material := material as ShaderMaterial
-		if shader_material == null or shader_material.shader == null: continue
-		if shader_material.shader.resource_path.get_file() in WET_SHADERS:
-			_wet.append(shader_material)
 
 func _shop_root(shop_name: String) -> Node3D:
 	var root := Node3D.new()

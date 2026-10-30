@@ -64,8 +64,10 @@ void fragment(){
 	float dist = length(world - CAMERA_POSITION_WORLD);
 	float haze = 1.0 - exp(-dist * mix(0.00085, 0.00022, night));
 	vec3 hazed = mix(day * mix(1.0, 0.14, night), mix(haze_day, haze_night, night), haze);
-	ALBEDO = night > 0.5 ? vec3(0.0) : hazed;
-	EMISSION = (night > 0.5 ? hazed * 0.35 : vec3(0.0)) + emission * night * mix(1.0, 0.62, haze);
+	// Day light and haze are both emitted: a lit dark face must not read as a cutout.
+	float sunlit = 0.55 + 0.45 * max(dot(normalize(vec3(-0.5, 0.5, 0.6)), normalize(local_normal)), 0.0);
+	ALBEDO = vec3(0.0);
+	EMISSION = (night > 0.5 ? hazed * 0.35 : mix(day * sunlit * 1.6, vec3(0.6, 0.64, 0.7), haze * 0.7) * 0.86) + emission * night * mix(1.0, 0.62, haze);
 	ROUGHNESS = 0.6;
 	METALLIC = 0.0;
 	SPECULAR = 0.2;
@@ -92,6 +94,7 @@ uniform float night = 0.0;
 varying float phase;
 void vertex(){ phase = INSTANCE_CUSTOM.x; }
 void fragment(){
+	if (night < 0.5) discard;
 	float blink = step(0.72, fract(TIME * 0.45 + phase));
 	ALBEDO = vec3(0.0);
 	EMISSION = vec3(1.0, 0.1, 0.06) * blink * night * 6.0;
@@ -129,7 +132,7 @@ func _build() -> void:
 	var towers: Array[Dictionary] = []
 	var beacons: Array[Dictionary] = []
 	var ground := StandardMaterial3D.new()
-	ground.albedo_color = Color("#10131a")
+	ground.albedo_color = Color("#2a2f38")
 	ground.roughness = 1.0
 	ground.disable_fog = true
 	for district: Dictionary in DISTRICTS:
