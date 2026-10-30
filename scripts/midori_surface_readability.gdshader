@@ -12,6 +12,7 @@ uniform sampler2D worn_roughness : filter_linear_mipmap_anisotropic, repeat_enab
 uniform float aggregate_gain = 4.2;
 uniform vec3 worn_gain = vec3(0.410004,0.348344,0.229495);
 uniform float paint_surface = 0.0;
+uniform float wetness = 0.0;
 varying vec3 world_position;
 
 float hash21(vec2 p) {
@@ -111,4 +112,11 @@ void fragment() {
 	NORMAL = normalize((VIEW_MATRIX*vec4(world_normal,0.0)).xyz);
 	ROUGHNESS = clamp(mix(rough,0.94,repair*0.4)+0.03,0.78,1.0);
 	SPECULAR = 0.20;
+	// Rain film at night: damp everywhere, near-mirror standing water in low spots.
+	float puddle = smoothstep(0.4,0.56,edge_noise(p*0.42)*0.75+edge_noise(p*1.9)*0.25);
+	float film = wetness*(0.6+0.4*puddle);
+	ALBEDO *= 1.0-0.62*film;
+	ROUGHNESS = mix(ROUGHNESS,mix(0.26,0.03,puddle),min(film*1.5,1.0));
+	SPECULAR = mix(SPECULAR,0.62,film);
+	NORMAL = normalize(mix(NORMAL,(VIEW_MATRIX*vec4(0.0,1.0,0.0,0.0)).xyz,wetness*puddle*0.9));
 }

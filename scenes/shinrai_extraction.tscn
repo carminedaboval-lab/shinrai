@@ -1,4 +1,4 @@
-[gd_scene load_steps=25 format=3]
+[gd_scene load_steps=26 format=3]
 
 [ext_resource type="Script" path="res://scripts/extraction_park.gd" id="1"]
 
@@ -46,6 +46,8 @@
 [ext_resource type="Script" path="res://scripts/midori_kids_playground.gd" id="kids_playground"]
 
 [ext_resource type="Script" path="res://scripts/midori_activity_grounds.gd" id="activity_grounds"]
+
+[ext_resource type="Script" path="res://scripts/midori_neon_street.gd" id="neon_street"]
 
 [node name="MidoriParkSizeBlockout" type="Node3D"]
 script = ExtResource("1")
@@ -120,3 +122,6 @@ script = ExtResource("kids_playground")
 
 [node name="MidoriActivityGrounds" type="Node3D" parent="."]
 script = ExtResource("activity_grounds")
+
+[node name="MidoriNeonStreet" type="Node3D" parent="."]
+script = ExtResource("neon_street")

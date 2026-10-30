@@ -14,7 +14,6 @@ const RNG_SEED := 20261029
 
 var _night := false
 var _sea_material: ShaderMaterial
-var _city_window_material: StandardMaterial3D
 var _hill_materials: Array[ShaderMaterial] = []
 
 func _ready() -> void:
@@ -26,7 +25,10 @@ func _build() -> void:
 	_build_sea()
 	_build_hill_ring("FarHills", FAR_HILL_RADIUS_M, 260.0, 620.0, 96, 7, Color("#45536a"))
 	_build_hill_ring("NearHills", NEAR_HILL_RADIUS_M, 70.0, 230.0, 112, 11, Color("#33472f"))
-	_build_city()
+	var city := Node3D.new()
+	city.name = "NeonCity"
+	city.set_script(preload("res://scripts/midori_neon_city.gd"))
+	add_child(city)
 	var park := get_parent()
 	if park != null and park.get("is_night_mode") != null:
 		set_night_mode(bool(park.get("is_night_mode")))
@@ -34,8 +36,6 @@ func _build() -> void:
 
 func set_night_mode(value: bool) -> void:
 	_night = value
-	if _city_window_material != null:
-		_city_window_material.emission_energy_multiplier = 2.6 if value else 0.0
 	if _sea_material != null:
 		_sea_material.set_shader_parameter("night", 1.0 if value else 0.0)
 
@@ -174,76 +174,3 @@ void fragment(){
 func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	st.add_vertex(a); st.add_vertex(b); st.add_vertex(c)
 	st.add_vertex(a); st.add_vertex(c); st.add_vertex(d)
-
-# --------------------------------------------------------------- city
-
-func _build_city() -> void:
-	# A cluster of tower blocks on a low spit of land across the water. Boxes
-	# only: at 1.6 km they read as silhouette and lit windows, nothing more.
-	var rng := RandomNumberGenerator.new()
-	rng.seed = RNG_SEED + 77
-	var root := Node3D.new()
-	root.name = "DistantCity"
-	var angle := deg_to_rad(CITY_DIRECTION_DEG)
-	root.position = Vector3(cos(angle) * CITY_DISTANCE_M, 0.0, sin(angle) * CITY_DISTANCE_M)
-	root.rotation.y = -angle
-	add_child(root)
-	var ground := BoxMesh.new()
-	ground.size = Vector3(1500.0, 10.0, 420.0)
-	var land := MeshInstance3D.new()
-	land.name = "CitySpit"
-	land.mesh = ground
-	var land_material := StandardMaterial3D.new()
-	land_material.albedo_color = Color("#3a4350")
-	land_material.roughness = 1.0
-	land.material_override = land_material
-	land.position = Vector3(0.0, -2.0, 0.0)
-	land.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(land)
-
-	var body_material := StandardMaterial3D.new()
-	body_material.resource_name = "SHINRAI_CityBlock"
-	body_material.albedo_color = Color("#6b7684")
-	body_material.roughness = 0.85
-	_city_window_material = StandardMaterial3D.new()
-	_city_window_material.resource_name = "SHINRAI_CityWindows"
-	_city_window_material.albedo_color = Color("#2a313b")
-	_city_window_material.emission_enabled = true
-	_city_window_material.emission = Color("#ffc98a")
-	_city_window_material.emission_energy_multiplier = 0.0
-	_city_window_material.roughness = 0.6
-
-	var blocks := MultiMesh.new()
-	blocks.transform_format = MultiMesh.TRANSFORM_3D
-	blocks.mesh = BoxMesh.new()
-	var windows := MultiMesh.new()
-	windows.transform_format = MultiMesh.TRANSFORM_3D
-	windows.mesh = BoxMesh.new()
-	var count := 64
-	blocks.instance_count = count
-	windows.instance_count = count
-	for i in range(count):
-		# Taller toward the middle of the cluster, like a real CBD.
-		var x := rng.randf_range(-620.0, 620.0)
-		var z := rng.randf_range(-150.0, 150.0)
-		var centre := 1.0 - clampf(absf(x) / 620.0, 0.0, 1.0)
-		var h := rng.randf_range(40.0, 90.0) + centre * centre * rng.randf_range(80.0, 260.0)
-		var w := rng.randf_range(28.0, 60.0)
-		var d := rng.randf_range(28.0, 60.0)
-		var basis := Basis(Vector3.UP, rng.randf_range(-0.12, 0.12)).scaled(Vector3(w, h, d))
-		blocks.set_instance_transform(i, Transform3D(basis, Vector3(x, h * 0.5, z)))
-		# Window band: a slightly smaller box inset on the lit faces.
-		var wb := Basis(basis.get_rotation_quaternion()).scaled(Vector3(w * 1.02, h * 0.92, d * 0.985))
-		windows.set_instance_transform(i, Transform3D(wb, Vector3(x, h * 0.5, z)))
-	var block_instance := MultiMeshInstance3D.new()
-	block_instance.name = "CityBlocks"
-	block_instance.multimesh = blocks
-	block_instance.material_override = body_material
-	block_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(block_instance)
-	var window_instance := MultiMeshInstance3D.new()
-	window_instance.name = "CityWindows"
-	window_instance.multimesh = windows
-	window_instance.material_override = _city_window_material
-	window_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(window_instance)

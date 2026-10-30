@@ -19,6 +19,7 @@ uniform float texture_neutral_luma = 0.136050;
 uniform float texture_repeats_per_metre = 0.85;
 uniform float texture_color_strength : hint_range(0.0, 1.0) = 0.50;
 uniform float texture_normal_strength : hint_range(0.0, 1.0) = 0.38;
+uniform float wetness = 0.0;
 varying vec3 world_position;
 varying vec3 world_normal;
 
@@ -122,4 +123,10 @@ void fragment() {
 	AO = mix(1.0, orm.r, 0.55);
 	METALLIC = 0.0;
 	SPECULAR = 0.24;
+	// Rain film at night. Paving drains better than the road, so it stays satin.
+	float puddle = smoothstep(0.56, 0.7, mineral_noise(world_position.xz * 0.5 + vec2(7.0, 3.0)));
+	float film = wetness * (0.5 + 0.5 * puddle);
+	ALBEDO *= 1.0 - 0.42 * film;
+	ROUGHNESS = mix(ROUGHNESS, mix(0.34, 0.1, puddle), film);
+	SPECULAR = mix(SPECULAR, 0.55, film);
 }
