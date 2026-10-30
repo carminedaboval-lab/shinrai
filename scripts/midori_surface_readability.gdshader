@@ -82,9 +82,9 @@ void fragment() {
 	// Three coherent maintenance areas. Their edge is part of the same opaque
 	// asphalt, so patches cannot float, overlap or carry a raised black outline.
 	// Small maintenance cuts sit against existing iron drain frames.
-	float crossing = repair_distance(p,vec2(-12.0,-.66),vec2(.64,.22));
-	float service = repair_distance(p,vec2(12.0,5.66),vec2(.64,.22));
-	float older = repair_distance(p,vec2(25.0,-.66),vec2(.62,.22));
+	float crossing = repair_distance(p,vec2(-12.0,-.60),vec2(.64,.22));
+	float service = repair_distance(p,vec2(12.0,5.60),vec2(.64,.22));
+	float older = repair_distance(p,vec2(25.0,-.60),vec2(.62,.22));
 	// Rear lane: resurfacing directly meets the existing dropped crossing ramp.
 	float rear = repair_distance(p,vec2(0.0,36.78),vec2(1.58,.24));
 	float cut_distance = min(rear,min(crossing,min(service,older)));
@@ -99,7 +99,7 @@ void fragment() {
 	// Exposed binder between aggregates is narrow and broken at the cut.
 	float edge = (1.0-smoothstep(0.015,0.075,abs(cut_distance)))*(0.25+0.75*edge_noise(p*70.0));
 	road *= 1.0-edge*0.045;
-	float gutter_distance = world_position.z>210.0 ? min(abs(world_position.z-220.62),abs(world_position.z-226.38)) : min(abs(world_position.z-183.17),abs(world_position.z-189.83));
+	float gutter_distance = world_position.z>210.0 ? min(abs(world_position.z-220.62),abs(world_position.z-226.38)) : min(abs(world_position.z-183.11),abs(world_position.z-189.89));
 	float gutter = 1.0-smoothstep(0.04,0.38,gutter_distance);
 	road *= 1.0-gutter*(0.06+0.08*edge_noise(p*5.0));
 	road = mix(road,vec3(dot(road,vec3(0.2126,0.7152,0.0722))),0.75);

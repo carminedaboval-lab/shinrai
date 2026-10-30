@@ -95,7 +95,7 @@ void fragment() {
 	// Exposed binder between aggregates is narrow and broken at the cut.
 	float edge = (1.0-smoothstep(0.015,0.075,abs(cut_distance)))*(0.25+0.75*edge_noise(p*70.0));
 	road *= 1.0-edge*0.045;
-	float gutter_distance = min(abs(p.y-0.17),abs(p.y-5.83));
+	float gutter_distance = min(abs(p.y-0.11),abs(p.y-5.89));
 	float gutter = 1.0-smoothstep(0.04,0.38,gutter_distance);
 	road *= 1.0-gutter*(0.06+0.08*edge_noise(p*5.0));
 	road = mix(road,vec3(dot(road,vec3(0.2126,0.7152,0.0722))),0.75);

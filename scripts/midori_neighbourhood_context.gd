@@ -59,7 +59,7 @@ static func build(street: Node3D, landscape: Dictionary, neighbourhood: Dictiona
 			_curb(street,root,side*32.44,span.x,span.y)
 		# Flush outer edge permits easy access to the broad pedestrian strip.
 		for span: Vector2 in [Vector2(183,220.5),Vector2(226.5,228)]:
-			_part(street,root,"FlushRoadGutter",Vector3(side*38.4,.025,(span.x+span.y)*.5),Vector3(.18,.01,span.y-span.x),"land_gutter",false)
+			_gutter_run(street,root,side*38.4,span.x,span.y)
 		# Quiet lane now terminates in a connected north-south street, with a
 		# modest planted parcel beyond the road instead of a dead-end barrier.
 		_part(street,root,"NorthParcelReturn",Vector3(side*45.5,.18,174.15),Vector3(12.8,.44,.22),"land_curb",true)
@@ -87,6 +87,15 @@ static func _part(street: Node3D,parent: Node3D,label: String,pos: Vector3,size:
 static func _surface(street: Node3D,parent: Node3D,label: String,rect: Rect2,top: float,key: String,supports: Array[Dictionary]) -> void:
 	_part(street,parent,label,Vector3(rect.get_center().x,top-.025,rect.get_center().y),Vector3(rect.size.x,.05,rect.size.y),key,true)
 	supports.append({"rect":rect,"top_y":top,"role":key})
+
+## Precast flush gutter laid in 0.9m units with 8mm joints, instead of one
+## 37.5m box whose stretched texture read as an elongated drain.
+static func _gutter_run(street: Node3D,parent: Node3D,x: float,z0: float,z1: float) -> void:
+	var z := z0
+	while z < z1-.001:
+		var length := minf(.9,z1-z)
+		_part(street,parent,"FlushGutterUnit",Vector3(x,.025,z+length*.5),Vector3(.18,.01,length-.008),"land_gutter",false)
+		z += length
 
 static func _curb(street: Node3D,parent: Node3D,x: float,z0: float,z1: float) -> void:
 	var z := z0

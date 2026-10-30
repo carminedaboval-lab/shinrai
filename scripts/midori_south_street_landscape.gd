@@ -34,8 +34,8 @@ static func build(street: Node3D) -> Dictionary:
 			_b(street,ground,"HewnCurb",Vector3(side*17.75,.066,z),Vector3(29.5,.132,.14),"land_curb",true)
 		for z: float in [183.17,189.83]:
 			_b(street,ground,"StoneGutter",Vector3(side*17.75,.022,z),Vector3(29.5,.012,.22),"land_gutter")
-		for z: float in [183.30,189.70]:
-			_b(street,ground,"DrainageChannel",Vector3(side*17.75,.026,z),Vector3(29.5,.006,.055),"land_channel")
+		# The former 29.5m "DrainageChannel" strip read as one stretched drain; the
+		# gutter units and jointed gullies from StreetEdge/_drain carry the drainage now.
 		for z: float in [183.55,189.45]:
 			_b(street,ground,"QuietRoadEdge",Vector3(side*16.75,.024,z),Vector3(21.5,.004,.065),"land_paint")
 	for i: int in range(8):
@@ -46,12 +46,17 @@ static func build(street: Node3D) -> Dictionary:
 			_b(street,ground,"TwoWayCentreMark",Vector3(side*(6.0+float(i)*4.0),.027,186.5),Vector3(1.5,.004,.10),"land_paint")
 	_tactile(street,ground,181.68)
 	_tactile(street,ground,191.32)
-	# Narrow approach gutters also continue across the dropped kerbs.
-	for z: float in [183.17,189.83]:
+	# Narrow approach gutters also continue across the dropped kerbs. The gutter
+	# dish meets the curb face (Z183.00/190.00), so its centre line is 0.11m out.
+	for z: float in [183.11,189.89]:
 		_b(street,ground,"CrossingGutter",Vector3(0,.021,z),Vector3(6,.005,.22),"land_gutter")
 	for x: float in [-25,-12,-3.55,3.55,12,25]:
-		_drain(street,ground,Vector3(x,0,189.83))
-		_drain(street,ground,Vector3(x,0,183.17))
+		_drain(street,ground,Vector3(x,0,189.89))
+		_drain(street,ground,Vector3(x,0,183.11))
+	# Two sewer covers in the carriageway, clear of the crossing, centre marks and
+	# the shader's photographed fracture regions.
+	for pos: Vector3 in [Vector3(-16.0,0,185.0),Vector3(13.0,0,188.1)]:
+		_manhole(street,ground,pos)
 	# Extend real support under the new planted courtyard, not a floating backdrop.
 	_b(street,ground,"CourtyardExtensionFoundation",Vector3(0,-.17,212.5),Vector3(28,.3,15),"land_joint",true)
 	_b(street,ground,"CourtyardExtensionSoil",Vector3(0,.005,212.5),Vector3(28,.05,15),"land_soil",true)
@@ -90,12 +95,30 @@ static func _materials(street: Node3D) -> void:
 	_mineral_material(street,"land_gutter",Color("#929489"),.95,.085,105.0)
 	for row: Array in [["land_joint",Color("#615f55"),.98,"",1.0],
 		["land_channel",Color("#3e4943"),.98,"",1.0],
+		["land_void",Color("#0a0c0b"),1.0,"",1.0],
 		["land_soil",Color("#3e3c30"),1.0,"concrete_detail.png",2.8],
 		["land_pot",Color("#747c70"),.94,"concrete_detail.png",1.6],
-		["land_tactile",Color("#b8aa7b"),.88,"concrete_detail.png",2.0],
-		["land_iron",Color("#35403a"),.72,"",1.0]]:
+		["land_tactile",Color("#b8aa7b"),.88,"concrete_detail.png",2.0]]:
 		street.call("_material",row[0],row[1],row[2],row[3],row[4])
+	_iron_and_cover_materials(street)
 	_scanned_earth(street)
+
+## Gully gratings and inlet lintels use the street's cast-iron shader (the same
+## finish as the pavement inspection cover) instead of a flat tinted material.
+## The sewer covers reuse the project's unused SHINRAI manhole PBR sets.
+static func _iron_and_cover_materials(street: Node3D) -> void:
+	var mats: Dictionary = street.get("materials")
+	var iron := ShaderMaterial.new()
+	iron.resource_name = "SouthStreet_land_iron"
+	iron.shader = preload("res://scripts/midori_street_iron.gdshader")
+	iron.set_shader_parameter("iron_color",Color("#3a413d"))
+	iron.set_shader_parameter("base_roughness",.82)
+	iron.set_shader_parameter("metalness",.42)
+	mats.land_iron = iron
+	var repairs := "res://assets/environment/roads/shinrai_road/repairs/"
+	for pair: Array in [["road_manhole_cover","M_SHINRAI_ManholeCover.tres"],["road_manhole_cut","M_SHINRAI_ManholeCut.tres"]]:
+		if ResourceLoader.exists(repairs+pair[1]):
+			mats[pair[0]] = load(repairs+pair[1])
 
 ## The wide foundation and courtyard soil beds were flat tinted boxes. Dress
 ## them in the park's scanned compacted earth (world triplanar) so the ground
@@ -195,6 +218,13 @@ static func _paving(street: Node3D,parent: Node3D,rect: Rect2,seed_value: int) -
 			count += 1
 		z += dz
 		row += 1
+	# Sealed expansion joints every eight 0.6m courses (4.8m) across long walks:
+	# a 14mm bitumen-filled joint 1mm proud, cut straight through the running bond.
+	if rect.size.x > 6.0:
+		var joint_x := rect.position.x + 4.8
+		while joint_x < rect.end.x - 1.2:
+			_b(street,parent,"PavingExpansionJoint",Vector3(joint_x,.0895,centre.y),Vector3(.014,.003,rect.size.y),"land_channel")
+			joint_x += 4.8
 	return count
 
 static func _paver_cutouts(tile: Rect2) -> Array[PackedVector2Array]:
@@ -216,6 +246,8 @@ static func _paver_cutouts(tile: Rect2) -> Array[PackedVector2Array]:
 
 static func _paver_piece(street: Node3D,parent: Node3D,outline: PackedVector2Array,tile: Rect2,key: String,walk_triangles: Array[PackedVector3Array]=[]) -> void:
 	var points := PackedVector3Array()
+	# Pavers stay dead flat at the walking plane: sub-millimetre lips were tried and
+	# cast long shadow stripes under the low sun that read as dirt, not bedding.
 	for point: Vector2 in outline:
 		var y := PAVEMENT_Y if walk_triangles.is_empty() else _walk_height(point,walk_triangles)+.014
 		if not is_finite(y): return
@@ -347,12 +379,74 @@ static func _tactile(street: Node3D,parent: Node3D,z: float) -> void:
 			dot.position = Vector3(-2.89+column*.17,.0965,z-.17+row*.17)
 			parent.add_child(dot)
 
+## Cast-iron gully set into the gutter dish, centred on the dish (pos.z).
+## 600x240mm frame bedded on a concrete haunch, 6mm proud of the gutter lips
+## (y.028 -> .034) like a real bedded casting; 13 bars with 20mm slots over a
+## black sump so the slots read as depth; a curb inlet above it catches sheet flow.
 static func _drain(street: Node3D,parent: Node3D,pos: Vector3) -> void:
-	_b(street,parent,"DrainRecess",pos+Vector3(0,.03,0),Vector3(.78,.004,.25),"land_channel")
-	for z: float in [-.115,.115]:
-		_b(street,parent,"DrainIronFrame",pos+Vector3(0,.035,z),Vector3(.8,.007,.02),"land_iron")
-	for i: int in range(11):
-		_b(street,parent,"DrainIronRib",pos+Vector3(-.36+i*.072,.035,0),Vector3(.025,.007,.22),"land_iron")
+	var toward_curb: float = -1.0 if pos.z < 187.0 else 1.0
+	_b(street,parent,"GullyBed",pos+Vector3(0,.024,0),Vector3(.64,.008,.26),"land_gutter")
+	_b(street,parent,"GullySump",pos+Vector3(0,.0275,0),Vector3(.56,.003,.20),"land_void")
+	for z: float in [-.105,.105]:
+		_b(street,parent,"GullyFrameSide",pos+Vector3(0,.031,z),Vector3(.60,.006,.03),"land_iron")
+	for x: float in [-.285,.285]:
+		_b(street,parent,"GullyFrameEnd",pos+Vector3(x,.031,0),Vector3(.03,.006,.24),"land_iron")
+	for i: int in range(13):
+		_b(street,parent,"GullyBar",pos+Vector3(-.252+float(i)*.042,.030,0),Vector3(.022,.004,.18),"land_iron")
+	for z: float in [-.03,.03]:
+		_b(street,parent,"GullyTie",pos+Vector3(0,.0305,z),Vector3(.54,.003,.012),"land_iron")
+	# Inlet opening through the curb face (Z183.00/190.00), 460x56mm, with a
+	# cast lintel at the curb's chamfer line.
+	var face_z: float = pos.z+toward_curb*.112
+	_b(street,parent,"CurbInletOpening",Vector3(pos.x,.062,face_z),Vector3(.46,.056,.008),"land_void")
+	_b(street,parent,"CurbInletLintel",Vector3(pos.x,.094,face_z+toward_curb*(-.003)),Vector3(.50,.008,.014),"land_iron")
+
+## Round sewer cover in the carriageway: a 1.0m square asphalt cut (its own
+## sourced texture, 1mm proud) and a 600mm cast lid 2.5mm proud of the road.
+static func _manhole(street: Node3D,parent: Node3D,pos: Vector3) -> void:
+	var mats: Dictionary = street.get("materials")
+	if not mats.has("road_manhole_cover") or not mats.has("road_manhole_cut"): return
+	var cut := SurfaceTool.new()
+	cut.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners := [Vector2(-.5,-.5),Vector2(.5,-.5),Vector2(.5,.5),Vector2(-.5,.5)]
+	for index: int in [0,1,2,0,2,3]:
+		var corner: Vector2 = corners[index]
+		cut.set_normal(Vector3.UP)
+		cut.set_uv(corner+Vector2(.5,.5))
+		cut.add_vertex(Vector3(corner.x,0,corner.y))
+	_fitted(street,parent,"ManholeAsphaltCut",cut.commit(),pos+Vector3(0,ROAD_Y+.001,0),"road_manhole_cut")
+	var lid := SurfaceTool.new()
+	lid.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var radius := .30
+	var segments := 28
+	for i: int in range(segments):
+		var a := TAU*float(i)/float(segments)
+		var b := TAU*float(i+1)/float(segments)
+		# Godot front faces wind clockwise seen from outside (cross product opposite the normal).
+		for point: Vector2 in [Vector2.ZERO,Vector2(cos(a),sin(a))*radius,Vector2(cos(b),sin(b))*radius]:
+			lid.set_normal(Vector3.UP)
+			lid.set_uv(Vector2(.5,.5)+point/(radius*2.0))
+			lid.add_vertex(Vector3(point.x,0,point.y))
+	# A short rim face so the lid reads as a solid casting from low angles.
+	for i: int in range(segments):
+		var a := TAU*float(i)/float(segments)
+		var b := TAU*float(i+1)/float(segments)
+		var pa := Vector3(cos(a),0,sin(a))*radius
+		var pb := Vector3(cos(b),0,sin(b))*radius
+		for vertex: Vector3 in [pa,pb+Vector3.DOWN*.004,pb,pa,pa+Vector3.DOWN*.004,pb+Vector3.DOWN*.004]:
+			lid.set_normal((vertex*Vector3(1,0,1)).normalized())
+			lid.set_uv(Vector2(.5,.5))
+			lid.add_vertex(vertex)
+	_fitted(street,parent,"ManholeCastLid",lid.commit(),pos+Vector3(0,ROAD_Y+.0025,0),"road_manhole_cover")
+
+static func _fitted(street: Node3D,parent: Node3D,label: String,mesh: Mesh,pos: Vector3,key: String) -> void:
+	var visual := MeshInstance3D.new()
+	visual.name = label
+	visual.mesh = mesh
+	visual.position = pos
+	var mats: Dictionary = street.get("materials")
+	visual.material_override = mats[key]
+	parent.add_child(visual)
 
 static func _approach_paving(street: Node3D,parent: Node3D) -> Dictionary:
 	# The visible entrance apron is ABOVE the route mesh: MainSouthEntrance top

@@ -103,7 +103,7 @@ void fragment() {
 	// Abrasion follows the actual central pedestrian crossing/approach.
 	float pedestrian = (1.0-smoothstep(1.15,2.1,abs(world_position.x))) * (1.0-smoothstep(205.0,218.0,world_position.z));
 	float weather = stone_weather * (edge_soil + stone_stain * 0.040 - arris * (0.025+pedestrian*.02));
-	float gutter_distance = min(abs(world_position.z - 184.17), abs(world_position.z - 189.83));
+	float gutter_distance = min(abs(world_position.z - 183.11), abs(world_position.z - 189.89));
 	float gutter_dirt = (1.0 - smoothstep(0.05, 0.42, gutter_distance)) * (0.04 + 0.09 * mineral_noise(p * 4.5));
 	vec2 wear_uv = p * 34.0;
 	float wear_visibility = 1.0 - smoothstep(0.6, 1.7, max(length(dFdx(wear_uv)), length(dFdy(wear_uv))));

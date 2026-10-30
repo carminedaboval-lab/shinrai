@@ -26,9 +26,14 @@ static func build(street: Node3D) -> Dictionary:
 				unit_bounds.append(AABB(Vector3(x-length*.5,0,z-.07),Vector3(length,.132,.14)))
 				curb_count+=1
 				# Dish-shaped modular roadside channel: shallow invert, raised lips.
+				# Its curb-side lip meets the curb face (centre .07+.11 out), so no
+				# asphalt sliver shows between curb and channel.
 				var dish:=PackedVector2Array([Vector2(-.11,0),Vector2(.11,0),Vector2(.11,.012),Vector2(.08,.012),Vector2(0,.006),Vector2(-.08,.012),Vector2(-.11,.012)])
-				_add(street,ground,"ConstructedGutter_%d"%gutter_count,_extrude_x(dish,length),Vector3(x,.016,z+toward_road*.24),"land_gutter")
+				_add(street,ground,"ConstructedGutter_%d"%gutter_count,_extrude_x(dish,length),Vector3(x,.016,z+toward_road*.18),"land_gutter")
 				gutter_count+=1
+				# Dark sealed joint between precast gutter units, flush with the lips.
+				if i<count-1:
+					_box(street,ground,"GutterJointSeal",Vector3(x+pitch*.5,.0215,z+toward_road*.18),Vector3(.005,.013,.22),"land_void")
 	var planter_reports: Array[Dictionary]=[]
 	for root: Node in street.get_children():
 		if not root is Node3D or not str(root.name).begins_with("StorefrontTree"):continue
