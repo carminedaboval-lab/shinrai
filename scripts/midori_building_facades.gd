@@ -95,8 +95,7 @@ static func dress_homes(neon: Node3D, street: Node3D) -> int:
 		if house == null: continue
 		var root := Node3D.new()
 		root.name = String(house.name) + "Exterior"
-		neon.add_child(root)
-		root.global_transform = house.global_transform.orthonormalized()
+		house.add_child(root)
 		var dims: Dictionary = row.dimensions
 		_dress_shell(root, dims, plinth, band)
 		var first := true

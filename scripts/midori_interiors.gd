@@ -24,7 +24,8 @@ static func build(neon: Node3D) -> Dictionary:
 		var house := street.get_node_or_null(NodePath(str(row.root_path))) as Node3D
 		if house == null: house = neon.get_node(NodePath(str(row.root_path))) as Node3D
 		var dims: Dictionary = row.dimensions
-		var root := _root(neon, house)
+		var root := _root(house)
+		_room_ambient(neon, root, dims)
 		if SHOP_LIGHT.has(str(row.id)):
 			_light_shop(neon, root, str(row.id), dims)
 			shops += 1
@@ -34,18 +35,50 @@ static func build(neon: Node3D) -> Dictionary:
 		_finish(street, root)
 	var kado := street.find_child(KADO, true, false) as Node3D
 	if kado != null:
-		var root := _root(neon, kado)
+		var root := _root(kado)
+		_room_ambient(neon, root, {"width_m":9.0, "depth_m":9.0, "front_z_m":-4.5, "height_m":4.1})
 		_lamp(neon, root, Vector3(0, 3.1, 0), Color("#ffe0bc"), 1.1, 2.6, 8.0)
-		Kit.box(root, "BenchLightBar", Vector3(2.0, .03, .08), Vector3(1.8, 2.05, 3.5), neon._glow(Color("#fff0d8")))
+		Kit.box(root, "BenchLightBar", Vector3(2.0, .03, .08), Vector3(1.8, 2.05, 3.35), neon._glow(Color("#fff0d8")))
+		var clay := Kit.mat(Color("#a8866a"), .9)
+		var glaze := Kit.mat(Color("#2f5a63"), .35)
+		for x: float in [1.0, 2.6]:
+			Kit.tube(root, "LightCord", Vector3(x, 2.06, 3.35), Vector3(x, 3.9, 3.35), .006, clay)
+		# A potter's bench: drying ware along the top, finished pieces on the wall.
+		for i: int in range(6):
+			var at := Vector3(.9 + float(i) * .36, .92 + .07, 3.35 + (.14 if i % 2 == 0 else -.14))
+			Kit.disc(root, "DryingPot", .07 + float(i % 3) * .018, .14, at, clay if i % 3 > 0 else glaze)
+		var board := Kit.mat(Color("#5b4331"), .7)
+		for y: float in [1.3, 1.75]:
+			Kit.box(root, "WallShelf", Vector3(2.6, .04, .24), Vector3(-1.5, y, 4.12), board)
+			for i: int in range(5):
+				Kit.disc(root, "FinishedPot", .08, .17, Vector3(-2.5 + float(i) * .5, y + .105, 4.12), glaze if (i + int(y * 4.0)) % 2 == 0 else clay)
 		_finish(street, root)
 	return {"homes":homes, "shops":shops, "lights":(neon.get("_interior_lights") as Array).size()}
 
-static func _root(neon: Node3D, building: Node3D) -> Node3D:
+static func _root(building: Node3D) -> Node3D:
+	# Children of the building, so Creator Mode moves them together.
 	var root := Node3D.new()
 	root.name = String(building.name) + "Interior"
-	neon.add_child(root)
-	root.global_transform = building.global_transform.orthonormalized()
+	building.add_child(root)
 	return root
+
+static func _room_ambient(neon: Node3D, root: Node3D, dims: Dictionary) -> void:
+	# Base light for everything inside, which the outdoor sky cannot reach. Empty
+	# capture mask: this probe exists only for its ambient colour, so it stays cheap.
+	var d := float(dims.depth_m)
+	var height := float(dims.height_m)
+	var probe := ReflectionProbe.new()
+	probe.name = "RoomAmbient"
+	probe.size = Vector3(float(dims.width_m) - .3, height, d - .3)
+	probe.position = Vector3(0, height * .5, float(dims.front_z_m) + d * .5)
+	probe.interior = true
+	probe.intensity = 0.0
+	probe.cull_mask = 0
+	probe.ambient_mode = ReflectionProbe.AMBIENT_COLOR
+	probe.ambient_color = Color("#d9c8b4")
+	probe.update_mode = ReflectionProbe.UPDATE_ONCE
+	root.add_child(probe)
+	(neon.get("_interior_lights") as Array).append([probe, .22, .3])
 
 static func _finish(street: Node3D, root: Node3D) -> void:
 	street.call("_batch_direct_geometry", root)
@@ -73,7 +106,6 @@ static func _light_shop(neon: Node3D, root: Node3D, id: String, dims: Dictionary
 	var w := float(dims.width_m)
 	_lamp(neon, root, Vector3(0, 2.5, 5.6), SHOP_LIGHT[id], 1.0, 2.8, 9.0)
 	_lamp(neon, root, Vector3(0, 2.5, 2.2), SHOP_LIGHT[id], .7, 1.6, 7.0)
-	_lamp(neon, root, Vector3(0, .5, 4.0), SHOP_LIGHT[id], .4, .8, 6.5)
 	Kit.box(root, "BackCove", Vector3(w * .8, .03, .04), Vector3(0, 2.72, 7.55), neon._glow(SHOP_COVE[id]))
 
 static func _pendant(neon: Node3D, root: Node3D, at: Vector3, drop: float, shade: Material, lamp: Color) -> void:
@@ -112,8 +144,6 @@ static func _furnish_home(neon: Node3D, root: Node3D, dims: Dictionary, style: D
 	_lamp(neon, root, Vector3(table.x, g + 2.0, table.z), lamp, .8, 2.4, 7.5)
 	_lamp(neon, root, Vector3(w * .25, g + 2.2, f + d - 1.7), lamp.lerp(Color.WHITE, .3), .5, 1.5, 5.5)
 	_lamp(neon, root, Vector3(0, u + 1.9, f + d * .6), lamp, .7, 2.0, 7.0)
-	# Stands in for light bouncing off the floor, so furniture sides are not black.
-	_lamp(neon, root, Vector3(.6, g + .5, f + d * .5), lamp, .5, .9, 6.5)
 	Kit.disc(root, "UpperCeilingLight", .3, .03, Vector3(0, h - .24, f + d * .6), neon._glow(lamp))
 	# Living area: rug, chairs and a sofa shell fitted over the colliding base.
 	Kit.box(root, "RugBorder", Vector3(3.3, .012, 2.3), table + Vector3(.1, .008, .1), accent)

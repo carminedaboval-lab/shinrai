@@ -50,6 +50,7 @@ var _glows: Array[StandardMaterial3D] = []
 var _lights: Array[OmniLight3D] = []
 var _screens: Array[ShaderMaterial] = []
 var _interior_lights: Array = []
+var shop_roots := {}
 var _font: SystemFont
 var _steel: StandardMaterial3D
 var _concrete: StandardMaterial3D
@@ -87,7 +88,9 @@ func set_night_mode(value: bool) -> void:
 	for light: OmniLight3D in _lights:
 		light.visible = value
 	for row: Array in _interior_lights:
-		(row[0] as OmniLight3D).light_energy = row[2] if value else row[1]
+		var level: float = row[2] if value else row[1]
+		if row[0] is ReflectionProbe: (row[0] as ReflectionProbe).ambient_color_energy = level
+		else: (row[0] as OmniLight3D).light_energy = level
 	if value: call_deferred("_apply_night_air")
 
 func _apply_night_air() -> void:
@@ -107,11 +110,11 @@ func _apply_night_air() -> void:
 	sky.ground_horizon_color = Color("#241d3a")
 
 func _shop_root(shop_name: String) -> Node3D:
+	# Children of the shop, so Creator Mode moves them with the building.
 	var root := Node3D.new()
 	root.name = shop_name + "Retrofit"
-	add_child(root)
-	var shop := street.get_node_or_null(NodePath(shop_name)) as Node3D
-	if shop != null: root.global_transform = shop.global_transform.orthonormalized()
+	street.get_node(NodePath(shop_name)).add_child(root)
+	shop_roots[shop_name] = root
 	var light := OmniLight3D.new()
 	light.name = "ShopNeonWash"
 	light.position = Vector3(0, 2.4, -2.0)

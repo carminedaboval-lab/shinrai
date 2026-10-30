@@ -29,7 +29,9 @@ func _ready() -> void:
 	if neon == null or terrain == null: return
 	while neon.get("installed") != true or terrain.get("installed") != true:
 		await get_tree().process_frame
+	# The corporate district only builds in a raid, never in Creator Mode.
 	var corporate := park.get_node_or_null("MidoriCorporateDistrict")
+	if park.get("creator_ready") != null: corporate = null
 	while corporate != null and corporate.get("installed") != true:
 		await get_tree().process_frame
 	_night_root = Node3D.new()

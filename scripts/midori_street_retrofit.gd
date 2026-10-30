@@ -44,7 +44,7 @@ static func build(neon: Node3D) -> Dictionary:
 	var report := {"materials":_restyle_materials(neon)}
 	var cable := Kit.mat(Color("#14171a"), .6, .4)
 	for shop_name: String in SHOPS:
-		var root := neon.get_node_or_null(shop_name + "Retrofit") as Node3D
+		var root: Node3D = neon.shop_roots.get(shop_name)
 		if root == null: continue
 		_dress_exterior(neon, root, shop_name, cable)
 	_side_plant(neon)
@@ -133,8 +133,8 @@ static func _dress_exterior(neon: Node3D, root: Node3D, shop_name: String, cable
 
 static func _side_plant(neon: Node3D) -> void:
 	# Stacked outdoor units on the blank gables, below the LED walls.
-	var ueda := neon.get_node_or_null("UedaBooksRetrofit") as Node3D
-	var hinata := neon.get_node_or_null("HinataDailyRetrofit") as Node3D
+	var ueda: Node3D = neon.shop_roots.get("UedaBooks")
+	var hinata: Node3D = neon.shop_roots.get("HinataDaily")
 	for i: int in range(6):
 		var row := i % 2
 		var column := i / 2
@@ -142,7 +142,7 @@ static func _side_plant(neon: Node3D) -> void:
 		if hinata != null: neon._air_conditioner(hinata, Vector3(-5.2, .6 + float(row) * .72, 1.4 + float(column) * 1.1), PI * .5)
 
 static func _mori_billboard(neon: Node3D) -> void:
-	var root := neon.get_node_or_null("MoriCoffeeRetrofit") as Node3D
+	var root: Node3D = neon.shop_roots.get("MoriCoffee")
 	if root == null: return
 	var steel := Kit.mat(Color("#25282c"), .5, .7)
 	var roof := 7.0
