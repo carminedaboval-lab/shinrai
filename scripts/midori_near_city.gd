@@ -27,8 +27,9 @@ const Hero := preload("res://scripts/midori_near_city_hero.gd")
 const GyozaShop := preload("res://scripts/midori_near_city_gyoza.gd")
 const PencilBuilding := preload("res://scripts/midori_near_city_pencil.gd")
 const KonbiniBlock := preload("res://scripts/midori_near_city_konbini.gd")
+const ZakkyoTower := preload("res://scripts/midori_near_city_zakkyo.gd")
 # Lots given over to hand-modelled buildings, by a point inside each.
-const HANDMADE: Array[Array] = [[Vector2(33.5, -210.75), GyozaShop], [Vector2(40.5, -210.9), PencilBuilding], [Vector2(49.0, -211.0), KonbiniBlock]]
+const HANDMADE: Array[Array] = [[Vector2(33.5, -210.75), GyozaShop], [Vector2(40.5, -210.9), PencilBuilding], [Vector2(49.0, -211.0), KonbiniBlock], [Vector2(25.0, -211.0), ZakkyoTower]]
 const HERO_RANGE := 130.0 # Buildings this close to the park get full real shells.
 const SHELL_RANGE := 300.0 # Out to here shells stay real but drop their finest parts.
 const PALETTE: Array[Color] = [Color(.96,.92,.84), Color(.9,.84,.74), Color(.97,.96,.93), Color(.84,.84,.83), Color(.8,.72,.62), Color(.62,.36,.26), Color(.48,.24,.2), Color(.15,.16,.17),

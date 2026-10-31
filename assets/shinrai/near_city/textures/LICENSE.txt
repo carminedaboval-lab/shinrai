@@ -1,3 +1,4 @@
 Textures from Poly Haven (polyhaven.com), CC0 1.0 Universal.
 Gyoza shop sign lettering baked from Yuji Boku, Klee One and Shippori Mincho B1 (SIL Open Font License 1.1).
-The ヨリミチ and コーポ松風 signs in konbini_atlas.png are baked from M PLUS Rounded 1c and Zen Kaku Gothic New (SIL OFL).
+The signs in konbini_atlas.png and zakkyo_atlas.png are baked from M PLUS Rounded 1c, Zen Kaku Gothic New, Yuji Boku and Shippori Mincho B1 (SIL OFL).
+Food, reef, watch, gold and bun photos in zakkyo_floors.png, gyoza_atlas.png and konbini_atlas.png are CC0 from Wikimedia Commons: Hamamatsu Gyōza 001.jpg; Ramen Jump 002.jpg; Yakitori 001.jpg; Chicken karaage 001.jpg; French Fries.JPG; Takoyaki dish.jpg; Edamame in a tray.jpg; Cream Soda 20220801.jpg; Coral Davis Reef 20230712.jpg; Scuffed vintage wristwatch (Unsplash).jpg; Gold bullion bars.jpg; Baozi Chengdu.JPG.

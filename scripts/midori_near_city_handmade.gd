@@ -34,7 +34,8 @@ func _look(texture: String, tile: float, rough: float, metal := 0.0) -> ShaderMa
 	if texture != "":
 		look.set_shader_parameter("albedo_map", load(TEXTURES + texture + "_diff.jpg"))
 		look.set_shader_parameter("normal_map", load(TEXTURES + texture + "_nor.jpg"))
-		look.set_shader_parameter("rough_map", load(TEXTURES + texture + "_rough.jpg"))
+		if ResourceLoader.exists(TEXTURES + texture + "_rough.jpg"):
+			look.set_shader_parameter("rough_map", load(TEXTURES + texture + "_rough.jpg"))
 	return look
 
 func _shared_looks() -> void:

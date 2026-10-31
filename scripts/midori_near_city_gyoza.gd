@@ -173,6 +173,7 @@ func _shopfront() -> void:
 	for x: float in [3.95, 5.4]:
 		_kit.beam("metal", f * Vector3(x, .78, 0.0), f * Vector3(x, .97, .24), .02, .02, Vector3.BACK, Color("#6f6f6c"))
 	_kit.atlas("display", f * Vector3(3.92, 1.3, -.04), f * Vector3(3.92, 1.74, -.04), f * Vector3(4.8, 1.74, -.04), f * Vector3(4.8, 1.3, -.04), _cell(0, 1024, 400, 200))
+	_kit.atlas("display", f * Vector3(4.92, 1.06, -.04), f * Vector3(4.92, 2.0, -.04), f * Vector3(5.53, 2.0, -.04), f * Vector3(5.53, 1.06, -.04), _cell(720, 1024, 340, 520))
 	_noren()
 	# Drinks poster on the post, gone pale in the sun.
 	_kit.atlas("cloth", f * Vector3(3.76, 2.3, .005), f * Vector3(3.76, 2.76, .005), f * Vector3(4.09, 2.76, .005), f * Vector3(4.09, 2.3, .005), _cell(408, 1024, 300, 420), Color(.92, .9, .84), .8)
