@@ -108,7 +108,8 @@ void fragment() {
 	vec2 wear_uv = p * 34.0;
 	float wear_visibility = 1.0 - smoothstep(0.6, 1.7, max(length(dFdx(wear_uv)), length(dFdy(wear_uv))));
 	float wear = mix(0.12, smoothstep(0.63, 0.88, mineral_noise(wear_uv)), wear_visibility) * paint_wear;
-	ALBEDO = mineral_color.rgb * stone_luminance * source_detail * (1.0 + grain) * (1.0 - weather - road_weather * gutter_dirt - wear * 0.20);
+	// COLOR is white unless a mesh carries per-stone shades in its vertex colours.
+	ALBEDO = mineral_color.rgb * COLOR.rgb * stone_luminance * source_detail * (1.0 + grain) * (1.0 - weather - road_weather * gutter_dirt - wear * 0.20);
 	// Retain the original submillimetre tangentless surface-gradient microrelief.
 	float relief = ((fine - 0.5) * 0.55 + (aggregate - 0.5)) * grain_strength * 0.004;
 	vec3 view_position = (VIEW_MATRIX * vec4(world_position, 1.0)).xyz;
