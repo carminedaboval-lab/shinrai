@@ -4,15 +4,17 @@ const WALK_Y := 0.09
 const ROAD_Y := 0.02
 const SUPPORTED_RECTS: Array[Rect2] = [Rect2(32.5,180.5,144.5,17),Rect2(158.5,197.5,20,8.7)]
 var report: Dictionary = {}
+var asphalt: Material
+var paint: Material
 var _lamps: Array[OmniLight3D] = []
 var _lamp_material: StandardMaterial3D
 
 func _ready() -> void:
 	add_to_group("corporate_road_connection")
-	var asphalt := mat(Color("515c61"),0.94)
+	asphalt = mat(Color("515c61"),0.94)
 	var paving := mat(Color("969f99"),0.91)
 	var subgrade := mat(Color("505b58"),0.95)
-	var paint := mat(Color("e2dfca"),0.8)
+	paint = mat(Color("e2dfca"),0.8)
 	var metal := mat(Color("334344"),0.65)
 	_lamp_material = mat(Color("d9e3d5"),0.5,0.0)
 	# Exact supported ground is narrow and remains completely outside park Z<=180.
@@ -38,8 +40,15 @@ func _ready() -> void:
 	ramp("EastDistrictWalkTransition",Vector3(175.75,WALK_Y,204),Vector3(175.75,0,206.2),2.5,paving)
 	ramp("WestDistrictWalkTransition",Vector3(160.5,WALK_Y,204),Vector3(160.5,0,206.2),4,paving)
 	# The road remains open at both junctions. Thin markings are visual only.
-	for x in range(56,148,8):
+	for x in range(56,156,8):
 		box("ConnectorCentreDash",Vector3(3.1,.012,.12),Vector3(x,ROAD_Y+.008,186.5),paint,false)
+	# The centre line follows the bend toward the district road.
+	for degrees in [15.0,45.0,75.0]:
+		var bend := deg_to_rad(degrees)
+		var dash := box("ConnectorCentreDash",Vector3(3.1,.012,.12),Vector3(160.5+8.0*sin(bend),ROAD_Y+.008,194.5-8.0*cos(bend)),paint,false)
+		dash.rotation.y = -bend
+	for z in [183.45,189.55]:
+		box("ConnectorEdgeLine",Vector3(107,.012,.1),Vector3(96,ROAD_Y+.008,z),paint,false)
 	for i in range(7):
 		box("ExistingWalkCrossing",Vector3(2.2,.012,.38),Vector3(39.5,ROAD_Y+.008,183.5+i*.9),paint,false)
 	for x in [62.0,95.0,128.0,172.0]:

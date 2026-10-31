@@ -45,6 +45,12 @@ func _ready() -> void:
 	connector.name = "CorporateRoadConnection"
 	add_child(connector)
 	await Budget.checkpoint(park)
+	# Every road here wears the main street's real asphalt and paint.
+	var street_mats: Dictionary = street.get("materials")
+	_replace_material(district,district.get("asphalt"),street_mats.land_asphalt)
+	district.set("asphalt",street_mats.land_asphalt)
+	_replace_material(connector,connector.get("asphalt"),street_mats.land_asphalt)
+	_replace_material(connector,connector.get("paint"),street_mats.land_paint)
 	# Curbs, gutters and gullies along the district streets and the connector,
 	# in the main street's precast finish.
 	var street_edges: Dictionary = StreetEdges.build(self, street, parcel)
@@ -73,6 +79,12 @@ func _ready() -> void:
 	installed = true
 	add_to_group("midori_corporate_district")
 	print("MIDORI_CORPORATE_DISTRICT_READY origin=",ORIGIN," scale=1 garage_levels=3 police=1 road_connected=true")
+
+func _replace_material(node: Node,from: Material,to: Material) -> void:
+	if node is GeometryInstance3D and node.material_override == from:
+		node.material_override = to
+	for child: Node in node.get_children():
+		_replace_material(child,from,to)
 
 func contains_world_point(point: Vector3) -> bool:
 	if not installed or not point.is_finite(): return false

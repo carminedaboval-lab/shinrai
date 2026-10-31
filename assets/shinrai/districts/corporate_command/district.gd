@@ -1,7 +1,7 @@
 extends "district_geometry.gd"
 ## A bounded, walkable district around the existing Cantilever Command tower.
 var pavement:StandardMaterial3D
-var asphalt:StandardMaterial3D
+var asphalt:Material
 var pale:StandardMaterial3D
 var dark:StandardMaterial3D
 var white:StandardMaterial3D
@@ -100,8 +100,8 @@ func _build_plazas() -> void:
 		for z in [41.5,-40.0]:
 			box("TowerTreePlanter",Vector3(5,.35,3),Vector3(x,.17,z),dark)
 			tree(Vector3(x,.36,z),1.35)
-	_direction_sign(Vector3(30,0,35.5),"POLICE  <     COMMAND     >  PARKING")
-	_direction_sign(Vector3(-30,0,35.5),"POLICE  <     PUBLIC WALK     >  P")
+	_direction_sign(Vector3(30,0,35.5),"POLICE  <     COMMAND     >  PARKING","PARKING  <     COMMAND     >  POLICE")
+	_direction_sign(Vector3(-30,0,35.5),"POLICE  <     PUBLIC WALK     >  P","P  <     PUBLIC WALK     >  POLICE")
 
 func _build_neighbourhood() -> void:
 	# Modest neighbours keep the 55m cantilever as the district landmark.
@@ -222,10 +222,12 @@ func _bench(at:Vector3,yaw:float) -> void:
 	seat.rotation.y=yaw
 	for dx in [-1.0,1.0]: box("BenchLeg",Vector3(.15,.42,.5),at+Vector3(dx,.21,0),dark,false)
 
-func _direction_sign(at:Vector3,text:String) -> void:
-	box("WayfindingPost",Vector3(.12,2.6,.12),at+Vector3.UP*1.3,dark,false)
-	box("WayfindingBoard",Vector3(6,.55,.13),at+Vector3.UP*2.4,dark,false)
-	sign_text(text,at+Vector3(0,2.4,.09),0,5.65,Color("c7eee8"))
+func _direction_sign(at:Vector3,text:String,back_text:String) -> void:
+	for dx in [-2.2,2.2]:
+		box("WayfindingPost",Vector3(.08,2.7,.08),at+Vector3(dx,1.35,0),pale,false)
+	box("WayfindingBoard",Vector3(4.9,.48,.05),at+Vector3.UP*2.42,dark,false)
+	sign_text(text,at+Vector3(0,2.42,.035),0,4.6,Color("c7eee8"))
+	sign_text(back_text,at+Vector3(0,2.42,-.035),PI,4.6,Color("c7eee8"))
 
 func _junction_sign(at:Vector3) -> void:
 	box("JunctionPole",Vector3(.1,3.3,.1),at+Vector3.UP*1.65,dark,false)

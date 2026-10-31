@@ -5,14 +5,20 @@ extends RefCounted
 ## signs with painted stop lines at both side-street junctions, and guards and
 ## plates on the utility poles. Everything sits on the pavements or the curb
 ## line; nothing enters the carriageway except the painted stop lines.
-## Props with collision use layer 1, so the enemy navigation capsule sweeps see
-## them and route around (extraction_navigation.gd marks those cells solid).
+## Props with collision use layer 1. The enemy navigation grid stops short of
+## this street, so they block the player but enemies do not path around them.
 const Kit = preload("res://scripts/midori_park_kit.gd")
 const BOLLARD := "res://assets/shinrai/parks/midori_park/models/furniture/ambient/entrance_bollards/sunpole_pa114sk_installed.glb"
 const CYCLE_RACK := "res://assets/shinrai/parks/midori_park/models/furniture/ambient/bicycle_rack/midori_bicycle_rack.glb"
 const RECYCLING := "res://assets/shinrai/parks/midori_park/models/furniture/ambient/recycling_station/recycling_cyberpunk.glb"
 const PAVEMENT_Y := 0.09
 const ROAD_Y := 0.02
+const RAIL_HEIGHT := .31
+const RAIL_DEPTH := .083
+const RAIL_SPACER := .075
+const RAIL_POST_RADIUS := .0445
+const RAIL_BEND_LENGTH := .7
+const RAIL_BEND_RADIUS := .7
 # Utility poles as built by midori_neon_street.gd (radius 0.13).
 const POLES: Array[Vector3] = [Vector3(-16.5,.09,190.9), Vector3(3.4,.09,190.9), Vector3(13.6,.09,190.9)]
 
@@ -40,9 +46,13 @@ static func _materials() -> Dictionary:
 	sign_red.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var sign_white := Kit.mat(Color("#f1f1ec"), .45)
 	sign_white.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var rail_panel := Kit.mat(Color("#e2e3dd"), .46, .2)
+	rail_panel.cull_mode = BaseMaterial3D.CULL_DISABLED
+	rail_panel.vertex_color_use_as_albedo = true
 	return {
-		"rail_white": Kit.mat(Color("#e6e8e2"), .42, .25),
-		"rail_valley": Kit.mat(Color("#b8bbb4"), .5, .25),
+		"rail_panel": rail_panel,
+		"rail_post": Kit.mat(Color("#cfd0ca"), .55, .15),
+		"rail_grout": Kit.mat(Color("#6f6d68"), .95),
 		"galvanised": Kit.mat(Color("#9ea3a6"), .48, .65),
 		"orange": Kit.mat(Color("#f0641e"), .5),
 		"mirror": mirror,
@@ -56,33 +66,112 @@ static func _materials() -> Dictionary:
 		"valve_lid": Kit.mat(Color("#2c5a9c"), .65, .4),
 	}
 
-## White W-beam guard rail along the park-side curb, 0.80 m high, posts every
-## 2 m, orange reflectors on each post, open at the crossing and the junctions.
+## White W-beam guard rail along the park-side curb, 0.80 m high: lapped 4 m
+## corrugated panels facing the road, bent back at both ends, on slim steel
+## posts behind them with spacer blocks, bolts, caps and grouted feet. A round
+## reflector on every second post. Open at the crossing and the junctions.
 static func _guard_rail(street: Node3D, root: Node3D, mats: Dictionary) -> Dictionary:
 	var posts := 0
 	var runs: Array[Vector2] = [Vector2(-31.5,-4.4), Vector2(4.4,31.5)]
-	var beam_z := 182.52
+	var beam_z := 182.60
+	var post_z := beam_z - RAIL_SPACER - RAIL_POST_RADIUS
 	var top := PAVEMENT_Y + .80
+	var centre_y := top - RAIL_HEIGHT * .5
 	for run: Vector2 in runs:
 		var length := run.y - run.x
 		var cx := (run.x + run.y) * .5
-		Kit.box(root, "GuardRailBeam", Vector3(length, .35, .05), Vector3(cx, top - .175, beam_z), mats.rail_white)
-		Kit.box(root, "GuardRailValley", Vector3(length + .002, .05, .014), Vector3(cx, top - .175, beam_z - .024), mats.rail_valley)
-		# Rounded-off terminal plates at each end of the run.
-		for end: float in [run.x, run.y]:
-			Kit.box(root, "GuardRailTerminal", Vector3(.06, .37, .07), Vector3(end, top - .175, beam_z), mats.rail_white)
-		var xs: Array[float] = [run.x + .25]
-		var x := run.x + 2.0
-		while x < run.y - 1.0:
+		var rail := MeshInstance3D.new()
+		rail.name = "GuardRailBeam"
+		rail.mesh = _rail_mesh(run, beam_z, centre_y, mats.rail_panel)
+		root.add_child(rail)
+		var xs: Array[float] = []
+		var x := run.x + RAIL_BEND_LENGTH
+		while x < run.y - RAIL_BEND_LENGTH + .1:
 			xs.append(x)
 			x += 2.0
-		xs.append(run.y - .25)
-		for px: float in xs:
-			Kit.tube(root, "GuardRailPost", Vector3(px, PAVEMENT_Y, beam_z + .09), Vector3(px, top - .03, beam_z + .09), .057, mats.rail_white)
-			Kit.box(root, "GuardRailReflector", Vector3(.09, .09, .012), Vector3(px, top - .175, beam_z - .031), mats.orange)
+		for i: int in range(xs.size()):
+			_rail_post(root, Vector3(xs[i], PAVEMENT_Y, post_z), top, centre_y, i % 2 == 0, mats)
 			posts += 1
-		street.call("_solid", root, "GuardRailBlock", Vector3(cx, PAVEMENT_Y + .42, beam_z + .03), Vector3(length, .84, .17))
+		street.call("_solid", root, "GuardRailBlock", Vector3(cx, PAVEMENT_Y + .42, beam_z - .04), Vector3(length, .84, .30))
 	return {"runs":runs.size(), "posts":posts, "height_m":.80, "z":beam_z}
+
+## Painted steel post with its spacer, bolts and foot. The road is toward +z.
+static func _rail_post(root: Node3D, foot: Vector3, top: float, centre_y: float, reflector: bool, mats: Dictionary) -> void:
+	Kit.disc(root, "GuardRailPostFoot", RAIL_POST_RADIUS + .035, .012, foot + Vector3(0, .006, 0), mats.rail_grout)
+	Kit.tube(root, "GuardRailPost", foot, Vector3(foot.x, top - .004, foot.z), RAIL_POST_RADIUS, mats.rail_post)
+	Kit.disc(root, "GuardRailPostCap", RAIL_POST_RADIUS + .003, .014, Vector3(foot.x, top, foot.z), mats.rail_post)
+	Kit.disc(root, "GuardRailPostCapTop", RAIL_POST_RADIUS - .012, .008, Vector3(foot.x, top + .01, foot.z), mats.rail_post)
+	var beam_z := foot.z + RAIL_POST_RADIUS + RAIL_SPACER
+	Kit.box(root, "GuardRailSpacer", Vector3(.07, .14, RAIL_SPACER), Vector3(foot.x, centre_y, beam_z - RAIL_SPACER * .5), mats.galvanised)
+	for dy: float in [-.045, .045]:
+		var bolt := Kit.disc(root, "GuardRailBolt", .014, .012, Vector3(foot.x, centre_y + dy, beam_z + .007), mats.galvanised)
+		bolt.rotation.x = PI * .5
+	if reflector:
+		var disc := Kit.disc(root, "GuardRailReflector", .045, .008, Vector3(foot.x, centre_y + .235, beam_z + .012), mats.orange)
+		disc.rotation.x = PI * .5
+		Kit.box(root, "GuardRailReflectorStem", Vector3(.02, .10, .004), Vector3(foot.x, centre_y + .19, beam_z + .006), mats.galvanised)
+
+## The corrugated sheet as one mesh: a panel every 4 m, each lapped over the next,
+## swept along the run so the ends curve away from the road.
+static func _rail_mesh(run: Vector2, beam_z: float, centre_y: float, material: Material) -> ArrayMesh:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	tool.set_material(material)
+	var length := run.y - run.x
+	var panels := maxi(1, roundi(length / 4.0))
+	var panel_length := length / float(panels)
+	for panel: int in range(panels):
+		var from := float(panel) * panel_length
+		var to := minf(length, from + panel_length + .16)
+		var tint := .94 + .06 * absf(sin(float(panel) * 2.7 + run.x))
+		var stations: Array[float] = []
+		var s := from
+		while s < to:
+			stations.append(s)
+			s += .25
+		stations.append(to)
+		for i: int in range(stations.size() - 1):
+			_rail_segment(tool, stations[i], stations[i + 1], run, beam_z, centre_y, .004 * float(panel % 2), tint)
+	return tool.commit()
+
+static func _rail_segment(tool: SurfaceTool, s0: float, s1: float, run: Vector2, beam_z: float, centre_y: float, lift: float, tint: float) -> void:
+	var a := _rail_frame(s0, run)
+	var b := _rail_frame(s1, run)
+	var rows := 16
+	for row: int in range(rows):
+		var t0 := float(row) / float(rows)
+		var t1 := float(row + 1) / float(rows)
+		for spec: Array in [[a, t0, s0], [b, t1, s1], [b, t0, s1], [a, t0, s0], [a, t1, s0], [b, t1, s1]]:
+			_rail_vertex(tool, spec[0], spec[1], spec[2], beam_z, centre_y, lift, tint)
+
+## Position and road-facing direction along the run, in the xz plane.
+static func _rail_frame(s: float, run: Vector2) -> Array[Vector2]:
+	var length := run.y - run.x
+	var bend := RAIL_BEND_LENGTH
+	var from_end := minf(s, length - s)
+	var west := s < length * .5
+	if from_end >= bend:
+		return [Vector2(run.x + s, 0.0), Vector2(0.0, 1.0)]
+	var angle := (bend - from_end) / RAIL_BEND_RADIUS
+	var along := bend - RAIL_BEND_RADIUS * sin(angle)
+	var back := -RAIL_BEND_RADIUS * (1.0 - cos(angle))
+	if west:
+		return [Vector2(run.x + along, back), Vector2(-sin(angle), cos(angle))]
+	return [Vector2(run.y - along, back), Vector2(sin(angle), cos(angle))]
+
+## t runs bottom to top across the 310 mm section: two ridges toward the road,
+## one valley between them.
+static func _rail_vertex(tool: SurfaceTool, frame: Array[Vector2], t: float, s: float, beam_z: float, centre_y: float, lift: float, tint: float) -> void:
+	var along: Vector2 = frame[0]
+	var out: Vector2 = frame[1]
+	var depth := RAIL_DEPTH * (.5 - .5 * cos(TAU * 2.0 * (t - .5))) + lift
+	var slope := RAIL_DEPTH * PI * 2.0 * sin(TAU * 2.0 * (t - .5)) / RAIL_HEIGHT
+	var normal := Vector3(out.x, -slope, out.y).normalized()
+	# Road film gathers low on the sheet and in faint vertical runs.
+	var grime := pow(1.0 - t, 2.2) * .24 + .05 * absf(sin(s * 3.1) * sin(s * 7.3))
+	tool.set_normal(normal)
+	tool.set_color(Color(tint, tint, tint).lerp(Color(.42, .39, .35), grime))
+	tool.add_vertex(Vector3(along.x, centre_y + (t - .5) * RAIL_HEIGHT, beam_z + along.y) + Vector3(out.x, 0, out.y) * depth)
 
 ## Sunpole bollards flanking the dropped curbs, before the tactile strips.
 static func _bollards(street: Node3D, root: Node3D) -> Dictionary:
