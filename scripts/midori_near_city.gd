@@ -21,6 +21,12 @@ const SHOP_FLOOR := 4.2
 const CLUSTERS: Array[Vector2] = [Vector2(-470, -420), Vector2(470, -250)]
 const CLUSTER_RADIUS := 150.0
 const BUILDING_SHADER := preload("res://scripts/midori_near_city_building.gdshader")
+const SHELL_SHADER := preload("res://scripts/midori_near_city_shell.gdshader")
+const GLASS_SHADER := preload("res://scripts/midori_near_city_glass.gdshader")
+const Hero := preload("res://scripts/midori_near_city_hero.gd")
+const HERO_RANGE := 120.0 # Buildings this close to the park get real shells.
+const PALETTE: Array[Color] = [Color(.96,.92,.84), Color(.9,.84,.74), Color(.97,.96,.93), Color(.84,.84,.83), Color(.8,.72,.62), Color(.62,.36,.26), Color(.48,.24,.2), Color(.15,.16,.17),
+	Color(.08,.08,.09), Color(.28,.36,.44), Color(.3,.48,.46), Color(.56,.62,.52), Color(.72,.58,.3), Color(.78,.56,.48), Color(.42,.42,.42), Color(.56,.55,.53)]
 const TEXTURES := "res://assets/shinrai/near_city/textures/"
 const SIGN_ATLAS := "res://assets/shinrai/near_city/signs_atlas.png"
 const ROAD_ALBEDO := "res://assets/environment/roads/shinrai_road/textures/SHINRAI_Road_FineAggregate_BaseColor_2K.png"
@@ -209,6 +215,7 @@ var _materials: Array[ShaderMaterial] = []
 var _rng := RandomNumberGenerator.new()
 var _rows := {"bodies":{}, "trim":{}, "signs":{}, "tanks":{}, "roofs":{}, "slabs":{}, "wedges":{}}
 var _count := 0
+var _hero := Hero.new()
 var _deck: Array[int] = []
 var _dealt := 0
 
@@ -277,8 +284,11 @@ func _commit_layers() -> void:
 	var sign_look := _material(SIGN_SHADER, "SHINRAI_NearCitySigns")
 	sign_look.set_shader_parameter("atlas", ImageTexture.create_from_image(_mipped(SIGN_ATLAS)))
 	var body_look := _shader_material(BUILDING_SHADER, "SHINRAI_NearCityBuildings")
-	body_look.set_shader_parameter("wall_maps", _wall_array("diff"))
-	body_look.set_shader_parameter("wall_normals", _wall_array("nor"))
+	var wall_maps := _wall_array("diff")
+	var wall_normals := _wall_array("nor")
+	body_look.set_shader_parameter("wall_maps", wall_maps)
+	body_look.set_shader_parameter("wall_normals", wall_normals)
+	_commit_hero(wall_maps, wall_normals)
 	var tank := CylinderMesh.new()
 	tank.radial_segments = 10
 	tank.rings = 1
@@ -295,6 +305,87 @@ func _commit_layers() -> void:
 	wedge.left_to_right = 0.0
 	_commit_layer("wedges", wedge, trim_look, true)
 	_rows.clear()
+
+func _commit_hero(wall_maps: Texture2DArray, wall_normals: Texture2DArray) -> void:
+	var shell_look := _shader_material(SHELL_SHADER, "SHINRAI_NearCityShell")
+	shell_look.set_shader_parameter("wall_maps", wall_maps)
+	shell_look.set_shader_parameter("wall_normals", wall_normals)
+	var glass_look := _shader_material(GLASS_SHADER, "SHINRAI_NearCityGlass")
+	var walls: Dictionary = _hero.walls()
+	var panes: Dictionary = _hero.glass()
+	for key: int in walls:
+		_commit_part("NearCityShell_%d" % key, Hero.mesh_of(walls[key]), shell_look, true)
+		if panes.has(key) and not panes[key].v.is_empty():
+			_commit_part("NearCityPanes_%d" % key, Hero.mesh_of(panes[key]), glass_look, false)
+	_hero = null
+
+func _commit_part(label: String, mesh: Mesh, material: Material, shadows: bool) -> void:
+	var instance := MeshInstance3D.new()
+	instance.name = label
+	instance.mesh = mesh
+	instance.material_override = material
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	add_child(instance)
+
+func _hero_spec(kind: int, seed_value: float, storey: float, ground: float) -> Dictionary:
+	# A building's look follows from one seed, so its parts all agree.
+	var pick := fposmod(seed_value * 97.0, 1.0)
+	var index := int(fposmod(seed_value * 23.0, 1.0) * 16.0)
+	var pale := fposmod(seed_value * 7.3, 1.0)
+	var layer: int = 6 if pale < .3 else (7 if pale < .5 else (8 if pale < .68 else (0 if pale < .84 else 3)))
+	var spec := {"seed":seed_value, "storey":storey, "ground":ground, "mansion":kind == Kind.MANSION, "metal":Color(.5, .52, .54, 1.0),
+		"radius":.06, "bay":3.2, "pane_x":.3, "pane_y":.8, "sill":.5, "recess":.2}
+	if fposmod(seed_value * 151.0, 1.0) < .3: spec.radius = 1.0 + fposmod(seed_value * 211.0, 1.0) * 1.4
+	if kind == Kind.MANSION:
+		spec.bay = 3.0 + fposmod(seed_value * 13.0, 1.0)
+		spec.pane_x = .42
+		spec.pane_y = 1.12
+		spec.sill = .42
+		spec.recess = .16
+		spec.radius = .06
+	elif pick < .2:
+		spec.bay = 1.7
+		spec.pane_x = .46
+		spec.pane_y = .72
+		spec.recess = .12
+	elif pick < .36:
+		spec.bay = 2.8
+		spec.pane_x = .42
+		spec.pane_y = storey * .4
+		spec.recess = .7
+		layer = 3
+		index = 15
+	elif pick < .5:
+		spec.bay = 1.9
+		spec.pane_x = .12
+		spec.pane_y = storey * .42
+		spec.recess = .26
+		layer = 4 if pick < .43 else 2
+		index = 7 if pick < .43 else 8
+		spec.metal = Color(.1, .1, .11, 1.0)
+	elif pick < .66:
+		spec.bay = 5.0
+		spec.pane_x = .38
+		spec.pane_y = 1.05
+	elif pick < .82:
+		spec.bay = 2.2
+		spec.pane_x = .3
+		spec.pane_y = .62
+	var tint: Color = PALETTE[index]
+	tint.a = float(layer) / 8.0
+	spec["tint"] = tint
+	return spec
+
+func _place_body(centre: Vector2, base: float, size: Vector3, kind: int, front: int, seed_value: float, storey: float, ground: float, distance: float) -> bool:
+	# True when the body became a real shell rather than a shader box.
+	var eligible := kind == Kind.ZAKKYO or kind == Kind.OFFICE or kind == Kind.MANSION or kind == Kind.UPPER
+	if distance > HERO_RANGE or not eligible:
+		_box_body(centre, base, size, kind, front, seed_value)
+		return false
+	var key := int((centre.x + HALF_EXTENT) / CHUNK) + 100 * int((centre.y + HALF_EXTENT) / CHUNK)
+	_hero.add(centre, base, size, front, key, _hero_spec(kind, seed_value, storey, ground))
+	return true
 
 func _commit_layer(layer: String, mesh: Mesh, material: Material, shadows: bool) -> void:
 	var table: Dictionary = _rows[layer]
@@ -514,6 +605,11 @@ func _add_building(lot: Rect2, block: Rect2, kind: int, floors: int) -> Dictiona
 	var centre := lot.get_center()
 	var gaps: Array[float] = [block.end.x - lot.end.x, lot.position.x - block.position.x, block.end.y - lot.end.y, lot.position.y - block.position.y]
 	var front := gaps.find(gaps.min())
+	# Where a lot touches the park road, its front addresses the park.
+	var edge := centre.abs() - PARK.size * .5
+	if maxf(edge.x, edge.y) < 44.0 + maxf(lot.size.x, lot.size.y) * .5:
+		var toward: int = (2 if centre.y > 0.0 else 3) if edge.y > edge.x else (0 if centre.x > 0.0 else 1)
+		if gaps[toward] < 3.0: front = toward
 	var out: Vector3 = [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD][front]
 	var shop_floor := kind == Kind.ZAKKYO or kind == Kind.OFFICE or kind == Kind.LOW or kind == Kind.KONBINI
 	var seed_value := _rng.randf() * .998
@@ -525,12 +621,12 @@ func _add_building(lot: Rect2, block: Rect2, kind: int, floors: int) -> Dictiona
 	if floors >= 5 and kind != Kind.GARAGE and kind != Kind.DANCHI and kind != Kind.GLASS and _rng.randf() < .55:
 		upper = _rng.randi_range(1, mini(3, floors - 3))
 	var height := (SHOP_FLOOR if shop_floor else storey) + float(floors - upper - 1) * storey + .9
-	_box_body(centre, 0.0, Vector3(lot.size.x, height, lot.size.y), kind, front, seed_value)
+	var distance := _park_distance(centre)
+	var hero := _place_body(centre, 0.0, Vector3(lot.size.x, height, lot.size.y), kind, front, seed_value, storey, SHOP_FLOOR if shop_floor else 0.0, distance)
 	_count += 1
 	var on_x := absf(out.x) > .5
 	var b := {"pos":centre, "height":height, "kind":kind, "floors":floors, "storey":storey, "front":front, "seed":seed_value, "out":out, "right":Vector3.UP.cross(out),
-		"across":lot.size.y if on_x else lot.size.x, "depth":lot.size.x if on_x else lot.size.y, "size":lot.size}
-	var distance := _park_distance(centre)
+		"across":lot.size.y if on_x else lot.size.x, "depth":lot.size.x if on_x else lot.size.y, "size":lot.size, "hero":hero}
 	var tier := 0 if distance < NEAR_TIER else (1 if distance < MID_TIER else 2)
 	_dress_roof(b, tier)
 	if upper > 0:
@@ -545,8 +641,9 @@ func _add_building(lot: Rect2, block: Rect2, kind: int, floors: int) -> Dictiona
 			var rake := Basis(out * (float(b.depth)), Vector3.UP * top_height, b.right * -float(b.across))
 			_put("wedges", rake_at, Transform3D(rake, rake_at), Color(Pattern.ROOF_TILE, 0, 0, 0), TONES[int(fposmod(seed_value * 23.0, 1.0) * 16.0)].darkened(.2))
 		else:
-			_box_body(centre + shift, height - .9, Vector3(top_size.x, top_height, top_size.y), top_kind, front, seed_value)
+			var crown_hero := _place_body(centre + shift, height - .9, Vector3(top_size.x, top_height, top_size.y), top_kind, front, seed_value, storey, 0.0, distance)
 			var crown := b.duplicate()
+			crown.hero = crown_hero
 			crown.pos = centre + shift
 			crown.size = top_size
 			crown.height = height - .9 + top_height
@@ -614,14 +711,16 @@ func _dress_roof(b: Dictionary, tier: int) -> void:
 		var scale_size := Vector3(size.y if along_x else size.x, rise, size.x if along_x else size.y) + Vector3(1.0, 0, .8)
 		_put("roofs", at, Transform3D(basis * Basis.from_scale(scale_size), at), Color(Pattern.ROOF_TILE, 0, 0, 0), KAWARA[_rng.randi_range(0, KAWARA.size() - 1)])
 		return
-	# Parapet ring.
+	# Parapet ring; rounded shells run their own wall up to the roof line instead.
 	var wall := TONES[int(fposmod(float(b.seed) * 23.0, 1.0) * 16.0)].darkened(.06)
 	var y := top + .3
 	var key := Vector3(pos.x, 0, pos.y)
-	_put("trim", key, _xform(Vector3(pos.x, y, pos.y - size.y * .5 + .1), Vector3(size.x, .9, .2)), Color(), wall)
-	_put("trim", key, _xform(Vector3(pos.x, y, pos.y + size.y * .5 - .1), Vector3(size.x, .9, .2)), Color(), wall)
-	_put("trim", key, _xform(Vector3(pos.x - size.x * .5 + .1, y, pos.y), Vector3(.2, .9, size.y)), Color(), wall)
-	_put("trim", key, _xform(Vector3(pos.x + size.x * .5 - .1, y, pos.y), Vector3(.2, .9, size.y)), Color(), wall)
+	var ringed: bool = not b.get("hero", false)
+	if ringed:
+		_put("trim", key, _xform(Vector3(pos.x, y, pos.y - size.y * .5 + .1), Vector3(size.x, .9, .2)), Color(), wall)
+		_put("trim", key, _xform(Vector3(pos.x, y, pos.y + size.y * .5 - .1), Vector3(size.x, .9, .2)), Color(), wall)
+		_put("trim", key, _xform(Vector3(pos.x - size.x * .5 + .1, y, pos.y), Vector3(.2, .9, size.y)), Color(), wall)
+		_put("trim", key, _xform(Vector3(pos.x + size.x * .5 - .1, y, pos.y), Vector3(.2, .9, size.y)), Color(), wall)
 	# Lift overrun and stair head.
 	if _rng.randf() < .75:
 		var hut := Vector3(_rng.randf_range(2.4, 3.6), _rng.randf_range(2.4, 3.4), _rng.randf_range(2.6, 4.2))
