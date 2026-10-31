@@ -16,6 +16,13 @@ const COLUMNAR := .55  # crown width of the Musashino zelkova against a spreadin
 const TREE_RANGE := 155.0  # measured to the middle of a garden; the other garden drops out
 const HEDGE_RANGE := 110.0
 
+const Blossom = preload("res://scripts/midori_corporate_blossom.gdshader")
+const BLOSSOM_TEXTURE := "res://assets/shinrai/vegetation/sakura/jogoss_sakura_01/Sakura_RGBA.png"
+const BLOSSOMS_PER_TREE := 2000
+const BLOSSOM_CARD := .62  # metres tall; a spray of some ten flowers
+const BLOOM_FROM := .34  # share of the tree's height where the flowering branches begin
+const TRUNK_CORE_TOP := .72  # below this height, a column around the trunk stays bare
+const TRUNK_CORE_RADIUS := .16  # as a share of the tree's width
 const RNG_SEED := 20261031
 
 static func plant(district: Node3D) -> Dictionary:
@@ -36,7 +43,8 @@ static func plant(district: Node3D) -> Dictionary:
 		for species: String in beds:
 			if prototypes[species] == null: continue
 			var spots: Array = beds[species]
-			_mass(root, species, prototypes[species], spots)
+			var placements := _mass(root, species, prototypes[species], spots)
+			if species == "sakura": _bloom(root, prototypes[species], placements)
 			counts[species] = counts.get(species, 0) + spots.size()
 			if species in ["canopy", "sakura"]:
 				for spot: Vector4 in spots:
@@ -53,8 +61,8 @@ static func _layout(garden: Rect2, walk_z: float, cherries: int, rng: RandomNumb
 	# Cherry promenade, clear of the benches on the south side of the walk.
 	var x := garden.position.x + 4.0
 	while x < garden.end.x - 3.0:
-		if absf(x - Lawn.STREAM_X) > 3.0: beds.sakura.append(Vector4(x, y, walk_z - 4.4, rng.randf_range(6.4, 7.6)))
-		if not _near_bench(x) and absf(x + 4.0 - Lawn.STREAM_X) > 6.0: beds.sakura.append(Vector4(x + 4.0, y, walk_z + 4.2, rng.randf_range(6.4, 7.6)))
+		if absf(x - Lawn.STREAM_X) > 3.0: beds.sakura.append(Vector4(x, y, walk_z - 4.4, rng.randf_range(7.6, 9.2)))
+		if not _near_bench(x) and absf(x + 4.0 - Lawn.STREAM_X) > 6.0: beds.sakura.append(Vector4(x + 4.0, y, walk_z + 4.2, rng.randf_range(7.6, 9.2)))
 		x += 5.5
 	beds.sakura = beds.sakura.slice(0, cherries)
 	# Tall canopy along the two long edges, leaving the lawn open between them.
@@ -86,8 +94,8 @@ static func _near_bench(x: float) -> bool:
 	return false
 
 ## One MultiMesh for each mesh of the model, with a random yaw on every plant.
-static func _mass(root: Node3D, species: String, prototype: Node3D, spots: Array) -> void:
-	if spots.is_empty(): return
+static func _mass(root: Node3D, species: String, prototype: Node3D, spots: Array) -> Array[Transform3D]:
+	if spots.is_empty(): return []
 	var bounds: AABB = prototype.get_meta("source_bounds")
 	var pivot := Vector3(bounds.get_center().x, bounds.position.y, bounds.get_center().z)
 	var rng := RandomNumberGenerator.new()
@@ -119,3 +127,70 @@ static func _mass(root: Node3D, species: String, prototype: Node3D, spots: Array
 			group.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			group.visibility_range_end = HEDGE_RANGE
 		root.add_child(group)
+	return placements
+
+## A full canopy of blossom sprays. They root only on the model's branch-attached
+## canopy mesh, never the trunk, keep clear of the trunk's core, and grow outward
+## and slightly down from their twig. The model's own flowers are far too sparse.
+static func _bloom(root: Node3D, prototype: Node3D, placements: Array[Transform3D]) -> void:
+	if placements.is_empty(): return
+	var bounds: AABB = prototype.get_meta("source_bounds")
+	var crown := bounds.get_center() + Vector3(0, bounds.size.y * .1, 0)
+	var floor_y := bounds.position.y + bounds.size.y * BLOOM_FROM
+	var core_top := bounds.position.y + bounds.size.y * TRUNK_CORE_TOP
+	var core := Vector2(bounds.get_center().x, bounds.get_center().z)
+	var core_radius := bounds.size.x * TRUNK_CORE_RADIUS
+	for visual: MeshInstance3D in prototype.get_children():
+		if str(visual.name).contains("Trunk"):
+			var trunk: Vector3 = visual.transform * visual.mesh.get_aabb().get_center()
+			core = Vector2(trunk.x, trunk.z)
+	var branches := PackedVector3Array()
+	for visual: MeshInstance3D in prototype.get_children():
+		if not str(visual.name).contains("Canopy"): continue
+		for surface: int in range(visual.mesh.get_surface_count()):
+			var points: PackedVector3Array = visual.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+			for point: Vector3 in points:
+				var at: Vector3 = visual.transform * point
+				if at.y < floor_y: continue
+				if at.y < core_top and Vector2(at.x, at.z).distance_to(core) < core_radius: continue
+				branches.append(at)
+	if branches.is_empty(): return
+	var card := QuadMesh.new()
+	card.size = Vector2(BLOSSOM_CARD * .5, BLOSSOM_CARD)
+	var material := ShaderMaterial.new()
+	material.resource_name = "CorporateCherryBlossom"
+	material.shader = Blossom
+	material.set_shader_parameter("blossom", load(BLOSSOM_TEXTURE))
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_colors = true
+	multimesh.use_custom_data = true
+	multimesh.mesh = card
+	multimesh.instance_count = placements.size() * BLOSSOMS_PER_TREE
+	var rng := RandomNumberGenerator.new()
+	rng.seed = RNG_SEED
+	var index := 0
+	for placement: Transform3D in placements:
+		for i: int in range(BLOSSOMS_PER_TREE):
+			var at: Vector3 = branches[rng.randi_range(0, branches.size() - 1)]
+			var out := ((at - crown) * Vector3(1, 1.3, 1)).normalized()
+			var turned := (placement.basis.orthonormalized() * out).normalized()
+			var noise := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * .4
+			var grows := (turned + Vector3(0, -.3, 0) + noise).normalized()
+			var side := grows.cross(Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1))).normalized()
+			var size := rng.randf_range(.8, 1.25)
+			var basis := Basis(side, grows, side.cross(grows).normalized()).scaled(Vector3.ONE * size)
+			# The card's foot sits on the twig, so the spray grows from it.
+			var foot := placement * at
+			multimesh.set_instance_transform(index, Transform3D(basis, foot + grows * BLOSSOM_CARD * .5 * size))
+			var pale := rng.randf()
+			multimesh.set_instance_color(index, Color(1, .9 + pale * .1, .91 + pale * .09) * rng.randf_range(.9, 1.1))
+			multimesh.set_instance_custom_data(index, Color(turned.x * .5 + .5, turned.y * .5 + .5, turned.z * .5 + .5, rng.randf()))
+			index += 1
+	var group := MultiMeshInstance3D.new()
+	group.name = "CherryBlossom"
+	group.multimesh = multimesh
+	group.material_override = material
+	group.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	group.visibility_range_end = TREE_RANGE
+	root.add_child(group)
