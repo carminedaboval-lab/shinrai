@@ -19,7 +19,7 @@ static func build(district: Node3D) -> Dictionary:
 	root.set_meta("creator_protected", true)
 	district.add_child(root)
 	var mats := {
-		"buff":_surface(1, BUFF), "black":_surface(1, BLACK), "water":_surface(2, WATER), "path":_surface(0, PATH),
+		"buff":_surface(1, BUFF), "black":_surface(1, BLACK), "water":_surface(2, WATER), "path":_surface(0, PATH), "foam":_surface(3, WATER),
 		"ipe":district.call("mat", IPE, .62),
 		"steel":_steel(),
 	}
@@ -29,8 +29,8 @@ static func build(district: Node3D) -> Dictionary:
 	for i: int in range(Lawn.GARDENS.size()):
 		var garden: Rect2 = Lawn.GARDENS[i]
 		var walk_z: float = Lawn.WALK_Z[i]
-		_stream(root, Lawn.channel(garden, walk_z), mats)
-		_pools(root, Lawn.pools(walk_z), mats)
+		_stream(district, root, Lawn.channel(garden, walk_z), mats)
+		_pools(district, root, Lawn.pools(walk_z), mats)
 		_bridge(root, walk_z, mats)
 		for x: float in SEAT_WALLS:
 			_seat_wall(district, Vector3(x, 0, walk_z - 2.7), mats)
@@ -65,28 +65,49 @@ static func _box(parent: Node3D, label: String, size: Vector3, at: Vector3, mate
 	parent.add_child(node)
 	return node
 
-static func _stream(root: Node3D, rect: Rect2, mats: Dictionary) -> void:
+static func _stream(district: Node3D, root: Node3D, rect: Rect2, mats: Dictionary) -> void:
 	var centre := rect.get_center()
+	# Low enough to step across, so the player does not wade through the rims.
+	var solid: Node3D = district.call("box", "StreamBlock", Vector3(rect.size.x, .16, rect.size.y), Vector3(centre.x, .08, centre.y), null, true)
+	solid.visible = false
 	_box(root, "StreamBed", Vector3(rect.size.x, .06, rect.size.y), Vector3(centre.x, .01, centre.y), mats.black)
 	_box(root, "StreamWater", Vector3(rect.size.x - .3, .02, rect.size.y), Vector3(centre.x, .07, centre.y), mats.water)
 	for side: float in [-1.0, 1.0]:
 		_box(root, "StreamRim", Vector3(.15, .16, rect.size.y), Vector3(centre.x + side * (rect.size.x * .5 - .075), .08, centre.y), mats.buff)
 
-## Three pools stepping down away from the path, each spilling over a buff weir.
-static func _pools(root: Node3D, pools: Array[Rect2], mats: Dictionary) -> void:
+## Three terraced pools stepping down a metre toward the walk, each spilling white
+## over a buff weir. Jets feed the top pool. Midtown's stream falls 30 m; this site
+## is flat, so the fall is built up in stone. The solid block stops the player.
+static func _pools(district: Node3D, root: Node3D, pools: Array[Rect2], mats: Dictionary) -> void:
 	for i: int in range(pools.size()):
 		var rect := pools[i]
 		var centre := rect.get_center()
-		var top := .46 - float(i) * .13
-		_box(root, "PoolFloor", Vector3(rect.size.x, .04, rect.size.y), Vector3(centre.x, .03, centre.y), mats.black)
-		_box(root, "PoolWater", Vector3(rect.size.x - .5, .02, rect.size.y - .5), Vector3(centre.x, top - .05, centre.y), mats.water)
+		var top := .36 + float(i) * .3
+		var below := .08 if i == 0 else .36 + float(i - 1) * .3 - .05
+		var solid: Node3D = district.call("box", "PoolBlock", Vector3(rect.size.x, top, rect.size.y), Vector3(centre.x, top * .5, centre.y), null, true)
+		solid.visible = false
+		_box(root, "PoolFloor", Vector3(rect.size.x, .04, rect.size.y), Vector3(centre.x, top - .2, centre.y), mats.black)
+		_box(root, "PoolWater", Vector3(rect.size.x - .4, .02, rect.size.y - .4), Vector3(centre.x, top - .05, centre.y), mats.water)
 		for side: float in [-1.0, 1.0]:
-			_box(root, "PoolWall", Vector3(.25, top, rect.size.y), Vector3(centre.x + side * (rect.size.x * .5 - .125), top * .5, centre.y), mats.black)
-		_box(root, "PoolWall", Vector3(rect.size.x - .5, top, .25), Vector3(centre.x, top * .5, rect.position.y + .125), mats.black)
-		_box(root, "PoolWeir", Vector3(rect.size.x - .5, top - .07, .25), Vector3(centre.x, (top - .07) * .5, rect.end.y - .125), mats.buff)
-		if i < pools.size() - 1:
-			var sheet := _box(root, "WeirSheet", Vector3(rect.size.x - .7, .015, .22), Vector3(centre.x, top - .1, rect.end.y + .02), mats.water)
-			sheet.rotation.x = -1.1
+			_box(root, "PoolWall", Vector3(.2, top, rect.size.y), Vector3(centre.x + side * (rect.size.x * .5 - .1), top * .5, centre.y), mats.black)
+		_box(root, "PoolWall", Vector3(rect.size.x - .4, top, .2), Vector3(centre.x, top * .5, rect.end.y - .1), mats.black)
+		_box(root, "PoolWeir", Vector3(rect.size.x - .4, top - .07, .2), Vector3(centre.x, (top - .07) * .5, rect.position.y + .1), mats.buff)
+		var drop := top - .05 - below
+		_box(root, "WeirFall", Vector3(rect.size.x - .5, drop, .03), Vector3(centre.x, below + drop * .5, rect.position.y - .02), mats.foam)
+		_box(root, "WeirFoam", Vector3(rect.size.x - .5, .025, .3), Vector3(centre.x, below + .015, rect.position.y - .17), mats.foam)
+	var head := pools[pools.size() - 1]
+	for i: int in range(5):
+		var jet := MeshInstance3D.new()
+		jet.name = "PoolJet"
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = .008
+		mesh.bottom_radius = .03
+		mesh.height = .55
+		mesh.radial_segments = 8
+		jet.mesh = mesh
+		jet.material_override = mats.foam
+		jet.position = Vector3(head.position.x + 1.0 + float(i), .96 + .275, head.end.y - .7)
+		root.add_child(jet)
 
 static func _bridge(root: Node3D, walk_z: float, mats: Dictionary) -> void:
 	var width := 3.0
@@ -108,6 +129,7 @@ static func _trust_monument(district: Node3D, at: Vector3, mats: Dictionary) -> 
 	for side: float in [-1.0, 1.0]:
 		var slab: Node3D = district.call("box", "TrustSlab", Vector3(1.5, 8.0, .42), at + Vector3(side * 1.12, 4.1, 0), mats.black, true)
 		slab.rotation.z = side * .1
+	district.call("box", "TrustTablet", Vector3(2.6, .9, .14), at + Vector3(0, .79, 1.92), mats.buff, true)
 	var font := SystemFont.new()
 	font.font_names = PackedStringArray(["Yu Gothic", "Meiryo", "Noto Sans CJK JP", "sans-serif"])
 	font.font_weight = 500
@@ -118,8 +140,8 @@ static func _trust_monument(district: Node3D, at: Vector3, mats: Dictionary) -> 
 	plaque.font_size = 72
 	plaque.pixel_size = .008
 	plaque.outline_size = 0
-	plaque.modulate = Color(.86, .83, .74)
-	plaque.position = at + Vector3(0, .17, 2.32)
+	plaque.modulate = Color(.1, .1, .11)
+	plaque.position = at + Vector3(0, .85, 2.0)
 	plaque.double_sided = false
 	district.add_child(plaque)
 

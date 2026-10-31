@@ -2,7 +2,7 @@ shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
 // World-space stone for the gardens. kind 0 is poured permeable path, kind 1 is
-// granite, kind 2 is moving water.
+// granite, kind 2 is still water, kind 3 is falling white water.
 uniform int kind = 0;
 uniform vec4 tone : source_color = vec4(0.62, 0.56, 0.46, 1.0);
 varying vec3 world_position;
@@ -30,7 +30,13 @@ void vertex() {
 void fragment() {
 	vec2 p = abs(world_normal.y) > 0.5 ? world_position.xz : abs(world_normal.x) > 0.5 ? world_position.zy : world_position.xy;
 	float fine = 1.0 - smoothstep(0.01, 0.06, fwidth(p.x));
-	if (kind == 2) {
+	if (kind == 3) {
+		vec2 fall = vec2(p.x * 9.0, p.y * 3.0 + TIME * 2.4);
+		float foam = noise21(fall) * 0.6 + noise21(fall * 2.7) * 0.4;
+		ALBEDO = mix(vec3(0.42, 0.55, 0.6), vec3(0.92, 0.95, 0.96), smoothstep(0.32, 0.62, foam));
+		ROUGHNESS = 0.3;
+		SPECULAR = 0.5;
+	} else if (kind == 2) {
 		vec2 flow = vec2(0.0, TIME * 0.35);
 		float ripple_a = noise21((p + flow) * 13.0) - 0.5;
 		float ripple_b = noise21((p - flow * 0.6) * 29.0) - 0.5;

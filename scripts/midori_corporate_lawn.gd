@@ -13,9 +13,9 @@ const WALK_HALF := 2.0
 const GROUND_Y := .015
 const STREAM_X := 15.5
 const CHANNEL_WIDTH := 1.8
-const POOL_SIZE := Vector2(8.0, 4.4)
+const POOL_SIZE := Vector2(6.0, 3.4)
 const HEATHER_HEIGHT := .3
-const HEATHER_SHELLS := 9
+const HEATHER_SHELLS := 18
 const GRASS_HEIGHT := .11
 const SHELLS := 21
 const CHUNK := 16.0
@@ -28,7 +28,7 @@ static func channel(garden: Rect2, walk_z: float) -> Rect2:
 	var start := garden.position.y + 5.5
 	return Rect2(STREAM_X - CHANNEL_WIDTH * .5, start, CHANNEL_WIDTH, walk_z - WALK_HALF - start)
 
-## The three terraced pools south of the walk.
+## The three terraced pools south of the walk, the highest furthest from it.
 static func pools(walk_z: float) -> Array[Rect2]:
 	var result: Array[Rect2] = []
 	for i: int in range(3):
@@ -89,12 +89,12 @@ static func _heather_material() -> ShaderMaterial:
 	material.resource_name = "CorporateBellHeather"
 	material.shader = Shell
 	material.set_shader_parameter("grass_height", HEATHER_HEIGHT)
-	material.set_shader_parameter("blades_per_m", 60.0)
+	material.set_shader_parameter("blades_per_m", 110.0)
 	material.set_shader_parameter("root_color", Color(.08, .12, .06))
 	material.set_shader_parameter("tip_color", Color(.24, .34, .17))
-	material.set_shader_parameter("dry_color", Color(.62, .40, .52))
-	material.set_shader_parameter("dry_amount", .6)
-	material.set_shader_parameter("swell", .6)
+	material.set_shader_parameter("dry_amount", 0.0)
+	material.set_shader_parameter("swell", .55)
+	material.set_shader_parameter("flower_amount", .3)
 	return material
 
 ## Unit square stacked in height. A chunk scales it in x and z.

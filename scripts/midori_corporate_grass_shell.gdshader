@@ -10,6 +10,8 @@ uniform vec3 dry_color : source_color = vec3(0.42, 0.55, 0.21);
 uniform float blades_per_m = 150.0;
 uniform float dry_amount = 0.45;
 uniform float swell = 0.22;  // how far the plant's height drifts across the bed
+uniform vec3 flower_color : source_color = vec3(0.86, 0.5, 0.72);
+uniform float flower_amount = 0.0;  // share of blades that carry a flower at the tip
 varying vec3 world_position;
 varying float layer;
 
@@ -61,7 +63,7 @@ void fragment() {
 	step_down += hash21(q * 97.0) < level - step_down ? 1.0 : 0.0;
 	float scale = blades_per_m / pow(2.0, step_down);
 	// Far away, each layer shifts a little so stacked blades cannot line up along the view.
-	q += (vec2(hash21(vec2(h, 3.1)), hash21(vec2(h, 7.7))) - 0.5) * smoothstep(0.5, 2.0, level) * 2.0 / scale;
+	q += (vec2(hash21(vec2(h, 3.1)), hash21(vec2(h, 7.7))) - 0.5) * smoothstep(0.0, 0.8, level) * 2.6 / scale;
 	float value = blade(q * scale, h, reach);
 	if (value < 0.0) value = blade(q * scale * 1.6 + vec2(19.0, 7.0), h * 1.08, reach);
 	if (value < 0.0) discard;
@@ -69,6 +71,7 @@ void fragment() {
 	float age = noise21(p * 0.13 + vec2(4.0, 9.0)) * 0.7 + value * 0.3;
 	vec3 tip = mix(tip_color, dry_color, smoothstep(0.5, 0.85, age) * dry_amount);
 	vec3 colour = mix(root_color, tip, smoothstep(0.1, 0.95, rise));
+	colour = mix(colour, flower_color, step(1.0 - flower_amount, value) * smoothstep(0.5, 0.75, rise));
 	colour *= mix(0.72, 1.18, value) * mix(0.82, 1.12, noise21(p * 0.09) * 0.6 + noise21(p * 0.31) * 0.4);
 	ALBEDO = colour;
 	// A gentle tilt only: under a low sun a stronger one reads as dark blotches.
