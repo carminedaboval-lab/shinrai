@@ -1,8 +1,9 @@
 extends RefCounted
 ## Garden planting after Tokyo Midtown Garden in Roppongi: an open lawn framed by
 ## massed planting, a cherry promenade along the path and tall canopy trees at the
-## edge, the role camphor and zelkova play in Tokyo's corporate plazas. The edge
-## hedges are visual only. Trees get an invisible trunk collision. Each species
+## edge as Musashino columnar zelkova, the species Midtown preserved. 25 cherries
+## in all, as there. The edge hedges are visual only. Trees get an invisible trunk
+## collision. Each species
 ## is one MultiMesh per garden. Coordinates are district space.
 const Landscape = preload("res://scripts/midori_south_street_landscape.gd")
 const Lawn = preload("res://scripts/midori_corporate_lawn.gd")
@@ -10,6 +11,8 @@ const VEGETATION := "res://assets/shinrai/parks/midori_park/models/vegetation/"
 const CANOPY_NAME := "Tree EZTree1.Large001"
 const BENCH_X: Array[float] = [-23.0, -9.0, 9.0, 23.0]  # GardenWalk benches sit at walk z + 5
 const WALK_GAP := 4.5
+const CHERRIES: Array[int] = [13, 12]  # 25 in all, by garden
+const COLUMNAR := .55  # crown width of the Musashino zelkova against a spreading tree
 const TREE_RANGE := 320.0
 const HEDGE_RANGE := 160.0
 const RNG_SEED := 20261031
@@ -28,7 +31,7 @@ static func plant(district: Node3D) -> Dictionary:
 	rng.seed = RNG_SEED
 	var counts := {}
 	for i: int in range(Lawn.GARDENS.size()):
-		var beds := _layout(Lawn.GARDENS[i], Lawn.WALK_Z[i], rng)
+		var beds := _layout(Lawn.GARDENS[i], Lawn.WALK_Z[i], CHERRIES[i], rng)
 		for species: String in beds:
 			if prototypes[species] == null: continue
 			var spots: Array = beds[species]
@@ -43,15 +46,16 @@ static func plant(district: Node3D) -> Dictionary:
 	return counts
 
 ## {species: [Vector4(x, ground y, z, height)]}
-static func _layout(garden: Rect2, walk_z: float, rng: RandomNumberGenerator) -> Dictionary:
+static func _layout(garden: Rect2, walk_z: float, cherries: int, rng: RandomNumberGenerator) -> Dictionary:
 	var beds := {"canopy":[], "sakura":[], "hedge":[]}
 	var y := Lawn.GROUND_Y
 	# Cherry promenade, clear of the benches on the south side of the walk.
 	var x := garden.position.x + 4.0
 	while x < garden.end.x - 3.0:
-		beds.sakura.append(Vector4(x, y, walk_z - 4.4, rng.randf_range(6.4, 7.6)))
-		if not _near_bench(x): beds.sakura.append(Vector4(x + 4.0, y, walk_z + 4.2, rng.randf_range(6.4, 7.6)))
-		x += 8.0
+		if absf(x - Lawn.STREAM_X) > 3.0: beds.sakura.append(Vector4(x, y, walk_z - 4.4, rng.randf_range(6.4, 7.6)))
+		if not _near_bench(x) and absf(x + 4.0 - Lawn.STREAM_X) > 6.0: beds.sakura.append(Vector4(x + 4.0, y, walk_z + 4.2, rng.randf_range(6.4, 7.6)))
+		x += 5.5
+	beds.sakura = beds.sakura.slice(0, cherries)
 	# Tall canopy along the two long edges, leaving the lawn open between them.
 	x = garden.position.x + 2.5
 	while x < garden.end.x:
@@ -90,7 +94,8 @@ static func _mass(root: Node3D, species: String, prototype: Node3D, spots: Array
 	var placements: Array[Transform3D] = []
 	for spot: Vector4 in spots:
 		var factor: float = spot.w / maxf(bounds.size.y, .001)
-		var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * factor)
+		var narrow := COLUMNAR if species == "canopy" else 1.0
+		var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(narrow, 1.0, narrow) * factor)
 		placements.append(Transform3D(basis, Vector3(spot.x, spot.y, spot.z) - basis * pivot))
 	for visual: MeshInstance3D in prototype.get_children():
 		var mesh: Mesh = visual.mesh.duplicate()

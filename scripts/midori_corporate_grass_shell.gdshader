@@ -7,7 +7,9 @@ uniform float grass_height = 0.08;
 uniform vec3 root_color : source_color = vec3(0.09, 0.17, 0.06);
 uniform vec3 tip_color : source_color = vec3(0.33, 0.52, 0.19);
 uniform vec3 dry_color : source_color = vec3(0.42, 0.55, 0.21);
-const float BLADES_PER_M = 150.0;
+uniform float blades_per_m = 150.0;
+uniform float dry_amount = 0.45;
+uniform float swell = 0.22;  // how far the plant's height drifts across the bed
 varying vec3 world_position;
 varying float layer;
 
@@ -51,19 +53,21 @@ void fragment() {
 	// Turned off the world axes, so the blade grid never shows as rows.
 	vec2 q = mat2(vec2(0.857, 0.515), vec2(-0.515, 0.857)) * (p + lean * 0.016 * h * h);
 	// Soft unmown swells, so the surface is full and uneven rather than cut flat.
-	float reach = mix(0.78, 1.0, noise21(p * 0.8) * 0.45 + noise21(p * 3.1) * 0.35 + noise21(p * 11.0) * 0.2);
+	float reach = mix(1.0 - swell, 1.0, noise21(p * 0.8) * 0.45 + noise21(p * 3.1) * 0.35 + noise21(p * 11.0) * 0.2);
 	// Blade size doubles in steps as they shrink below a pixel, dithered between steps.
 	float pixel = sqrt(max(length(dFdx(p)) * length(dFdy(p)), 0.00000001));
-	float level = clamp(log2(max(pixel * BLADES_PER_M * 1.3, 1.0)), 0.0, 5.0);
+	float level = clamp(log2(max(pixel * blades_per_m * 1.3, 1.0)), 0.0, 5.0);
 	float step_down = floor(level);
 	step_down += hash21(q * 97.0) < level - step_down ? 1.0 : 0.0;
-	float scale = BLADES_PER_M / pow(2.0, step_down);
+	float scale = blades_per_m / pow(2.0, step_down);
+	// Far away, each layer shifts a little so stacked blades cannot line up along the view.
+	q += (vec2(hash21(vec2(h, 3.1)), hash21(vec2(h, 7.7))) - 0.5) * smoothstep(0.5, 2.0, level) * 2.0 / scale;
 	float value = blade(q * scale, h, reach);
 	if (value < 0.0) value = blade(q * scale * 1.6 + vec2(19.0, 7.0), h * 1.08, reach);
 	if (value < 0.0) discard;
 	float rise = h / reach;
 	float age = noise21(p * 0.13 + vec2(4.0, 9.0)) * 0.7 + value * 0.3;
-	vec3 tip = mix(tip_color, dry_color, smoothstep(0.5, 0.85, age) * 0.45);
+	vec3 tip = mix(tip_color, dry_color, smoothstep(0.5, 0.85, age) * dry_amount);
 	vec3 colour = mix(root_color, tip, smoothstep(0.1, 0.95, rise));
 	colour *= mix(0.72, 1.18, value) * mix(0.82, 1.12, noise21(p * 0.09) * 0.6 + noise21(p * 0.31) * 0.4);
 	ALBEDO = colour;

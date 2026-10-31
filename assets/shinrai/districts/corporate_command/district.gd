@@ -92,12 +92,7 @@ func _build_plazas() -> void:
 		var path_z:float=area.position.y+area.size.y*.5
 		slab("GardenWalk",-35,35,path_z-2,path_z+2,.025,pavement,.06)
 		for x in [-23.0,-9.0,9.0,23.0]: _bench(Vector3(x,.03,path_z+5),PI)
-	# Low water table and sculptural fins in the southern lunch garden.
-	slab("GardenWaterBasin",-6,6,98,105,.08,dark,.18)
-	slab("StillWater",-5.7,5.7,98.3,104.7,.12,mat(Color("315768"),.12),.03)
-	for x in [-2.0,0.0,2.0]:
-		var fin := box("GardenSculpture",Vector3(.25,4.2,1.1),Vector3(x,2.2,101.5),pale,false)
-		fin.rotation.z=.24
+
 	for x in [-34.0,34.0]:
 		for z in [41.5,-40.0]:
 			box("TowerTreePlanter",Vector3(5,.35,3),Vector3(x,.17,z),dark)
@@ -222,9 +217,12 @@ func _street_lamp(at:Vector3) -> void:
 	_street_lights.append(light(at+Vector3.UP*5.85,Color("cadde4"),3.5,14,false))
 
 func _bench(at:Vector3,yaw:float) -> void:
-	var seat := box("PublicBench",Vector3(2.6,.15,.65),at+Vector3.UP*.49,mat(Color("8b7151"),.9))
+	# Ipe slats on granite legs, as at Tokyo Midtown.
+	var seat := box("PublicBench",Vector3(2.6,.05,.65),at+Vector3.UP*.45,mat(Color("2e2118"),.8))
 	seat.rotation.y=yaw
-	for dx in [-1.0,1.0]: box("BenchLeg",Vector3(.15,.42,.5),at+Vector3(dx,.21,0),dark,false)
+	var ipe := mat(Color("5b3a26"),.6)
+	for i in range(5): box("BenchSlat",Vector3(2.7,.05,.11),at+Vector3(0,.5,-.26+i*.13),ipe,false)
+	for dx in [-1.0,1.0]: box("BenchLeg",Vector3(.2,.45,.6),at+Vector3(dx,.22,0),pale,false)
 
 func _direction_sign(at:Vector3,text:String,back_text:String) -> void:
 	for dx in [-2.2,2.2]:

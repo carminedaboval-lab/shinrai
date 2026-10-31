@@ -62,8 +62,6 @@ static func _district_runs() -> Array:
 	# The pedestrian spine between the three sites, stopping at the walks it joins.
 	for span: Vector2 in [Vector2(-113, -61.4), Vector2(-41.6, 41.6), Vector2(61.4, 114)]:
 		runs.append([Rect2(span.x, 30, span.y - span.x, 8), 0.0])
-	for path_z: float in [92.0, -89.5]:
-		runs.append([Rect2(-35, path_z - 2.0, 70, 4), .025])
 	return runs
 
 ## World metres. Road-side edges stop at the curb back from the street edge pass.
