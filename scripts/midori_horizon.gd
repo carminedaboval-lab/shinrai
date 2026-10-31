@@ -29,6 +29,10 @@ func _build() -> void:
 	city.name = "NeonCity"
 	city.set_script(preload("res://scripts/midori_neon_city.gd"))
 	add_child(city)
+	var near_city := Node3D.new()
+	near_city.name = "NearCity"
+	near_city.set_script(preload("res://scripts/midori_near_city.gd"))
+	add_child(near_city)
 	var park := get_parent()
 	if park != null and park.get("is_night_mode") != null:
 		set_night_mode(bool(park.get("is_night_mode")))
