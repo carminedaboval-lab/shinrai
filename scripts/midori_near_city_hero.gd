@@ -38,10 +38,41 @@ func add(centre: Vector2, base: float, size: Vector3, front: int, key: int, spec
 				var p1 := pivot + n1 * radius
 				var p2 := pivot + n2 * radius
 				_quad(p1, p1 + Vector3.UP * size.y, p2 + Vector3.UP * size.y, p2, n1, n2, spec.tint, 0.0, 0.0)
-	# Roof, floored in dark membrane.
-	var y := base + size.y
+	_roof(middle, size, radius, spec)
+
+func _outline(middle: Vector3, half: Vector2, radius: float, steps: int) -> PackedVector3Array:
+	# Plan outline, clockwise from above, with each corner swept.
+	var points := PackedVector3Array()
+	for corner: Vector2 in [Vector2(1, 1), Vector2(1, -1), Vector2(-1, -1), Vector2(-1, 1)]:
+		var pivot := Vector3(corner.x * (half.x - radius), 0, corner.y * (half.y - radius))
+		for step: int in range(steps + 1):
+			var a := float(step) / float(steps) * PI * .5
+			var turn := Vector3(corner.x * cos(a), 0, corner.y * sin(a)) if corner.x * corner.y < 0.0 else Vector3(corner.x * sin(a), 0, corner.y * cos(a))
+			points.append(middle + pivot + turn * radius)
+	return points
+
+func _roof(middle: Vector3, size: Vector3, radius: float, spec: Dictionary) -> void:
+	# Membrane roof inside a parapet that follows the corners, capped with coping.
+	var top := Vector3.UP * size.y
 	var half := Vector2(size.x, size.z) * .5
-	_quad(Vector3(centre.x - half.x, y, centre.y - half.y), Vector3(centre.x - half.x, y, centre.y + half.y), Vector3(centre.x + half.x, y, centre.y + half.y), Vector3(centre.x + half.x, y, centre.y - half.y), Vector3.UP, Vector3.UP, Color(.36, .36, .36, 3.0 / 8.0), 0.0, 0.0)
+	var wall: float = spec.get("parapet", .9)
+	# Both rings need the same point count, so the inner one follows the outer steps.
+	var steps := CORNER_STEPS if radius > .3 else 1
+	var outer := _outline(middle + top, half, radius, steps)
+	var inner := _outline(middle + top, half - Vector2(.22, .22), maxf(radius - .22, .02), steps)
+	var membrane := Color(.3, .3, .31, 3.0 / 8.0)
+	var coping := Color(.62, .61, .58, 3.0 / 8.0)
+	var count := outer.size()
+	var lift := Vector3.UP * wall
+	var mid := middle + top
+	for i: int in range(count):
+		var next := (i + 1) % count
+		var n := (outer[i] + outer[next] - inner[i] - inner[next]).normalized()
+		_quad(mid, inner[i], inner[next], inner[next], Vector3.UP, Vector3.UP, membrane, 0.0, 0.0)
+		if wall < .05: continue
+		_quad(outer[i], outer[i] + lift, outer[next] + lift, outer[next], n, n, spec.tint, 0.0, .3)
+		_quad(inner[next], inner[next] + lift, inner[i] + lift, inner[i], -n, -n, spec.tint, 0.0, 0.0)
+		_quad(outer[i] + lift, inner[i] + lift, inner[next] + lift, outer[next] + lift, Vector3.UP, Vector3.UP, coping, 0.0, 0.0)
 
 func walls() -> Dictionary:
 	return _walls
@@ -62,68 +93,151 @@ func _face(origin: Vector3, n: Vector3, width: float, height: float, role: int, 
 	var bay: float = width / maxf(1.0, floorf(width / float(spec.bay) + .5))
 	var pane := Vector2(bay * float(spec.pane_x), float(spec.pane_y))
 	if role == 1 and spec.mansion: pane = Vector2(.5, .62)
+	var plain: bool = spec.get("deck", false)
 	var y := 0.0
+	var floor_index := 0
 	if ground > 0.0:
 		if role == 0:
 			var units := maxf(1.0, floorf(width / SHOP_UNIT + .5))
 			var unit := width / units
-			var openings: Array[float] = []
-			for i: int in range(int(units)): openings.append(-width * .5 + unit * (float(i) + .5))
-			_row(origin, n, t, run, 0.0, ground, .12, 3.05, openings, unit * .45, .14, spec, glass, 1.0)
+			var entry := 0 if fposmod(float(spec.seed) * 19.0, 1.0) < .5 else int(units) - 1
+			var openings: Array[Vector3] = []
+			for i: int in range(int(units)):
+				var u := -width * .5 + unit * (float(i) + .5)
+				# One bay is the deep stair lobby for the tenants upstairs.
+				if i == entry and spec.get("lobby", false): openings.append(Vector3(u, minf(.95, unit * .3), 1.2))
+				else: openings.append(Vector3(u, unit * .45, .14))
+			_row(origin, n, t, run, 0.0, ground, .12, 3.05, openings, spec, glass, 1.0)
+			if spec.get("lobby", false):
+				_box(origin + t * openings[entry].x + Vector3.UP * 3.0 + n * .55, t, n, Vector2(2.4, 1.1), .1, Color(.34, .35, .37, 1.0))
 		else:
 			_quad_flat(origin, n, t, -run, run, 0.0, ground, spec.tint, 0.0, 0.0)
 		y = ground
-	var floor_index := 0
+	elif spec.get("undercroft", false) and role != 2:
+		# Flats raised over open parking: columns every other bay, dark behind.
+		var openings: Array[Vector3] = []
+		var span := bay * 2.0
+		var cells := int(floorf(width / span))
+		for i: int in range(cells): openings.append(Vector3(-width * .5 + span * (float(i) + .5), span * .5 - .3, 4.0))
+		_row(origin, n, t, run, 0.0, storey, .02, storey - .5, openings, spec, glass, -1.0)
+		y = storey
+		floor_index = 1
 	while y + storey <= height - .3:
-		var openings: Array[float] = []
-		var half_pane := pane.x
+		var openings: Array[Vector3] = []
 		var tall := pane.y
-		if role == 2:
+		var recess: float = spec.recess
+		if plain:
+			openings.append(Vector3(0.0, run - .35, recess))
+		elif role == 2:
 			# Party walls stay blank, bar the odd stair or bathroom window.
-			half_pane = .36
 			tall = .5
-			if floor_index % 3 == 1: openings.append(sin(float(spec.seed) * 90.0) * run * .5)
+			if floor_index % 3 == 1: openings.append(Vector3(sin(float(spec.seed) * 90.0) * run * .5, .36, .1))
 		else:
 			var cells := int(floorf(width / bay + .5))
-			for i: int in range(cells): openings.append(-width * .5 + bay * (float(i) + .5))
+			for i: int in range(cells): openings.append(Vector3(-width * .5 + bay * (float(i) + .5), pane.x, recess))
 		var centre_y: float = y + storey * float(spec.sill)
-		_row(origin, n, t, run, y, y + storey, centre_y - tall, centre_y + tall, openings, half_pane, spec.recess, spec, glass, 0.0)
+		_row(origin, n, t, run, y, y + storey, centre_y - tall, centre_y + tall, openings, spec, glass, 0.0)
 		if role != 2 or floor_index % 2 == 0: _ledge(origin, n, t, run, y, spec.tint)
 		y += storey
 		floor_index += 1
-	if y < height: _quad_flat(origin, n, t, -run, run, y, height, spec.tint, 0.0, 0.0)
+	if y < height: _quad_flat(origin, n, t, -run, run, y, height, spec.get("band", spec.tint), 0.0, 0.0)
+	if ground <= 0.0 and not spec.get("undercroft", false): _plinth(origin, n, t, run)
+	if role != 2 and spec.parapet > .1: _cornice(origin, n, t, run, height, spec.tint)
+	if role == 0 and int(spec.detail) == 0 and spec.get("quoin", false) and (bay * .5 - pane.x) > .8:
+		for side: float in [-1.0, 1.0]:
+			var mid := side * (run - .4)
+			_box(origin + t * mid + Vector3.UP * (ground + height) * .5, t, n, Vector2(.8, .14), height - ground, spec.tint.darkened(.08))
+
+func _plinth(origin: Vector3, n: Vector3, t: Vector3, run: float) -> void:
+	# Polished stone skirting, where a wall meets the pavement.
+	var stone := Color(.34, .34, .36, 1.0 / 8.0)
+	_quad_flat(origin + n * .04, n, t, -run, run, 0.0, .72, stone, 0.0, 0.0)
+	_quad(origin + n * .04 + t * -run + Vector3.UP * .72, origin + t * -run + Vector3.UP * .72, origin + t * run + Vector3.UP * .72, origin + n * .04 + t * run + Vector3.UP * .72, Vector3.UP, Vector3.UP, stone, 0.0, 0.0)
+
+func _cornice(origin: Vector3, n: Vector3, t: Vector3, run: float, y: float, tint: Color) -> void:
+	var band := tint.lightened(.08)
+	var proud := n * .16
+	var low := Vector3.UP * (y - .34)
+	var high := Vector3.UP * y
+	_quad(origin + proud + t * -run + low, origin + proud + t * -run + high, origin + proud + t * run + high, origin + proud + t * run + low, n, n, band, 0.0, .2)
+	_quad(origin + t * -run + low, origin + proud + t * -run + low, origin + proud + t * run + low, origin + t * run + low, Vector3.DOWN, Vector3.DOWN, tint.darkened(.25), 0.0, 0.0)
+	_quad(origin + proud + t * -run + high, origin + t * -run + high, origin + t * run + high, origin + proud + t * run + high, Vector3.UP, Vector3.UP, band, 0.0, 0.0)
+
+func _box(at: Vector3, t: Vector3, n: Vector3, plan: Vector2, tall: float, tint: Color) -> void:
+	# Plain block in the shell: plan.x along the wall, plan.y out from it.
+	var half := Vector3.UP * tall * .5
+	var x := t * plan.x * .5
+	var z := n * plan.y * .5
+	_quad(at - x + z - half, at - x + z + half, at + x + z + half, at + x + z - half, n, n, tint, 0.0, 0.0)
+	_quad(at - x - z - half, at - x - z + half, at - x + z + half, at - x + z - half, -t, -t, tint, 0.0, 0.0)
+	_quad(at + x + z - half, at + x + z + half, at + x - z + half, at + x - z - half, t, t, tint, 0.0, 0.0)
+	_quad(at - x - z + half, at + x - z + half, at + x + z + half, at - x + z + half, Vector3.UP, Vector3.UP, tint, 0.0, 0.0)
+	_quad(at - x - z - half, at - x + z - half, at + x + z - half, at + x - z - half, Vector3.DOWN, Vector3.DOWN, tint, 0.0, 0.0)
+
+func _at(origin: Vector3, t: Vector3, n: Vector3, x: float, y: float, d: float) -> Vector3:
+	return origin + t * x + Vector3.UP * y - n * d
+
+func _pane(origin: Vector3, t: Vector3, n: Vector3, u: float, left: float, right: float, sill: float, head: float, half: float, recess: float, spec: Dictionary, glass: Dictionary, shop: float) -> void:
+	# UV is metres from the pane centre, for the room behind.
+	var cell := fposmod(float(spec.seed) * 37.0 + u * .73 + sill * 1.31, 1.0)
+	var extent := Vector2(half, (head - sill) * .5)
+	var info := Vector2(cell + shop * 2.0, floorf(extent.x * 100.0) + extent.y * .1)
+	var saved := _part
+	_part = glass
+	_vertex(_at(origin, t, n, left, sill, recess), n, Color.WHITE, Vector2(-extent.x, -extent.y), info)
+	_vertex(_at(origin, t, n, left, head, recess), n, Color.WHITE, Vector2(-extent.x, extent.y), info)
+	_vertex(_at(origin, t, n, right, head, recess), n, Color.WHITE, Vector2(extent.x, extent.y), info)
+	_vertex(_at(origin, t, n, left, sill, recess), n, Color.WHITE, Vector2(-extent.x, -extent.y), info)
+	_vertex(_at(origin, t, n, right, head, recess), n, Color.WHITE, Vector2(extent.x, extent.y), info)
+	_vertex(_at(origin, t, n, right, sill, recess), n, Color.WHITE, Vector2(extent.x, -extent.y), info)
+	_part = saved
 
 func _ledge(origin: Vector3, n: Vector3, t: Vector3, run: float, y: float, tint: Color) -> void:
 	# A slab edge standing just proud of the wall, so each floor throws a real shadow.
 	var band := tint.darkened(.06)
 	var proud := n * .07
+	if y < .1: return
 	_quad(origin + proud + t * -run + Vector3.UP * (y - .09), origin + proud + t * -run + Vector3.UP * (y + .09), origin + proud + t * run + Vector3.UP * (y + .09), origin + proud + t * run + Vector3.UP * (y - .09), n, n, band, 0.0, .2)
 	_quad(origin + proud + t * -run + Vector3.UP * (y + .09), origin + t * -run + Vector3.UP * (y + .09), origin + t * run + Vector3.UP * (y + .09), origin + proud + t * run + Vector3.UP * (y + .09), Vector3.UP, Vector3.UP, band, 0.0, 0.0)
 	_quad(origin + t * -run + Vector3.UP * (y - .09), origin + proud + t * -run + Vector3.UP * (y - .09), origin + proud + t * run + Vector3.UP * (y - .09), origin + t * run + Vector3.UP * (y - .09), Vector3.DOWN, Vector3.DOWN, band, 0.0, 0.0)
 
-func _row(origin: Vector3, n: Vector3, t: Vector3, run: float, y0: float, y1: float, sill: float, head: float, openings: Array[float], half: float, recess: float, spec: Dictionary, glass: Dictionary, shop: float) -> void:
+func _row(origin: Vector3, n: Vector3, t: Vector3, run: float, y0: float, y1: float, sill: float, head: float, openings: Array[Vector3], spec: Dictionary, glass: Dictionary, shop: float) -> void:
 	var tint: Color = spec.tint
+	var band: Color = spec.get("band", tint)
 	var metal: Color = spec.metal
-	_quad_flat(origin, n, t, -run, run, y0, sill, tint, 0.0, .3)
-	_quad_flat(origin, n, t, -run, run, head, y1, tint, 0.0, 0.0)
+	var pier := Color(.3, .3, .32, 1.0 / 8.0) if shop > .5 else tint
+	var hollow: bool = shop < -.5 or spec.get("deck", false)
+	_quad_flat(origin, n, t, -run, run, y0, sill, band, 0.0, .3)
+	_quad_flat(origin, n, t, -run, run, head, y1, band, 0.0, 0.0)
 	var previous := -run
-	for u: float in openings:
+	for opening: Vector3 in openings:
+		var u := opening.x
+		var half := opening.y
+		var recess := opening.z
 		if absf(u) + half > run - .08:
 			continue
-		_quad_flat(origin, n, t, previous, u - half, sill, head, tint, .1, .1)
+		_quad_flat(origin, n, t, previous, u - half, sill, head, pier, .1, .1)
 		previous = u + half
 		var left := u - half
 		var right := u + half
-		var reveal := tint.darkened(.08)
-		var at := func(x: float, y: float, d: float) -> Vector3: return origin + t * x + Vector3.UP * y - n * d
-		_quad(at.call(left, sill, 0.0), at.call(left, head, 0.0), at.call(left, head, recess), at.call(left, sill, recess), t, t, reveal, 0.0, 0.0)
-		_quad(at.call(right, sill, recess), at.call(right, head, recess), at.call(right, head, 0.0), at.call(right, sill, 0.0), -t, -t, reveal, 0.0, 0.0)
-		_quad(at.call(left, head, 0.0), at.call(left, head, recess), at.call(right, head, recess), at.call(right, head, 0.0), Vector3.DOWN, Vector3.DOWN, reveal, 0.0, 0.0)
-		_quad(at.call(left, sill, recess), at.call(left, sill, 0.0), at.call(right, sill, 0.0), at.call(right, sill, recess), Vector3.UP, Vector3.UP, reveal, 0.0, 0.0)
-		# Pre-cast sill proud of the wall.
-		var ledge := tint.lightened(.12)
-		_quad(at.call(left - .05, sill - .07, -.06), at.call(left - .05, sill, -.06), at.call(right + .05, sill, -.06), at.call(right + .05, sill - .07, -.06), n, n, ledge, 0.0, 0.0)
-		_quad(at.call(left - .05, sill, -.06), at.call(left - .05, sill, 0.0), at.call(right + .05, sill, 0.0), at.call(right + .05, sill, -.06), Vector3.UP, Vector3.UP, ledge, 0.0, 0.0)
+		var reveal := pier.darkened(.08)
+		_quad(_at(origin, t, n, left, sill, 0.0), _at(origin, t, n, left, head, 0.0), _at(origin, t, n, left, head, recess), _at(origin, t, n, left, sill, recess), t, t, reveal, 0.0, 0.0)
+		_quad(_at(origin, t, n, right, sill, recess), _at(origin, t, n, right, head, recess), _at(origin, t, n, right, head, 0.0), _at(origin, t, n, right, sill, 0.0), -t, -t, reveal, 0.0, 0.0)
+		_quad(_at(origin, t, n, left, head, 0.0), _at(origin, t, n, left, head, recess), _at(origin, t, n, right, head, recess), _at(origin, t, n, right, head, 0.0), Vector3.DOWN, Vector3.DOWN, reveal, 0.0, 0.0)
+		_quad(_at(origin, t, n, left, sill, recess), _at(origin, t, n, left, sill, 0.0), _at(origin, t, n, right, sill, 0.0), _at(origin, t, n, right, sill, recess), Vector3.UP, Vector3.UP, reveal, 0.0, 0.0)
+		if hollow:
+			# Open deck or undercroft: dark void behind, a guard rail on parking decks.
+			_quad_flat(origin - n * recess, n, t, left, right, sill, head, Color(.03, .03, .035, 3.0 / 8.0), 0.0, 0.0)
+			if shop > -.5: _quad_flat(origin - n * .2, n, t, left, right, sill + .5, sill + .62, metal, 0.0, 0.0)
+			continue
+		if int(spec.detail) > 0:
+			_pane(origin, t, n, u, left, right, sill, head, half, recess, spec, glass, shop)
+			continue
+		if shop < .5:
+			# Pre-cast sill proud of the wall.
+			var ledge := tint.lightened(.12)
+			_quad(_at(origin, t, n, left - .05, sill - .07, -.06), _at(origin, t, n, left - .05, sill, -.06), _at(origin, t, n, right + .05, sill, -.06), _at(origin, t, n, right + .05, sill - .07, -.06), n, n, ledge, 0.0, 0.0)
+			_quad(_at(origin, t, n, left - .05, sill, -.06), _at(origin, t, n, left - .05, sill, 0.0), _at(origin, t, n, right + .05, sill, 0.0), _at(origin, t, n, right + .05, sill, -.06), Vector3.UP, Vector3.UP, ledge, 0.0, 0.0)
 		# Aluminium frame and the central meeting stile of a sliding sash.
 		var plane := recess - .06
 		_quad_flat(origin - n * plane, n, t, left, right, head - FRAME, head, metal, 0.0, 0.0)
@@ -131,22 +245,16 @@ func _row(origin: Vector3, n: Vector3, t: Vector3, run: float, y0: float, y1: fl
 		_quad_flat(origin - n * plane, n, t, left, left + FRAME, sill, head, metal, 0.0, 0.0)
 		_quad_flat(origin - n * plane, n, t, right - FRAME, right, sill, head, metal, 0.0, 0.0)
 		if shop < .5: _quad_flat(origin - n * plane, n, t, u - FRAME * .5, u + FRAME * .5, sill, head, metal, 0.0, 0.0)
-		# The pane itself; its UV is metres from the pane centre, for the room behind.
-		var cell := fposmod(float(spec.seed) * 37.0 + u * .73 + sill * 1.31, 1.0)
-		var middle := (sill + head) * .5
-		var extent := Vector2(half, (head - sill) * .5)
-		var info := Vector2(cell + shop * 2.0, floorf(extent.x * 100.0) + extent.y * .1)
-		var saved := _part
-		_part = glass
-		_vertex(at.call(left, sill, recess), n, Color.WHITE, Vector2(-extent.x, -extent.y), info)
-		_vertex(at.call(left, head, recess), n, Color.WHITE, Vector2(-extent.x, extent.y), info)
-		_vertex(at.call(right, head, recess), n, Color.WHITE, Vector2(extent.x, extent.y), info)
-		_vertex(at.call(left, sill, recess), n, Color.WHITE, Vector2(-extent.x, -extent.y), info)
-		_vertex(at.call(right, head, recess), n, Color.WHITE, Vector2(extent.x, extent.y), info)
-		_vertex(at.call(right, sill, recess), n, Color.WHITE, Vector2(extent.x, -extent.y), info)
-		_part = saved
-		if middle < 0.0: push_error("pane below ground")
-	_quad_flat(origin, n, t, previous, run, sill, head, tint, .1, .1)
+		_pane(origin, t, n, u, left, right, sill, head, half, recess, spec, glass, shop)
+		# Security grille over small or low windows, standard on Japanese stairs and baths.
+		if shop < .5 and (half < .4 or y0 < .1) and recess < .25:
+			var rods := int(half * 2.0 / .14)
+			for rod: int in range(1, rods):
+				var at_x := left + float(rod) * half * 2.0 / float(rods)
+				_quad_flat(origin + n * .03, n, t, at_x - .012, at_x + .012, sill - .04, head + .04, metal, 0.0, 0.0)
+			_quad_flat(origin + n * .03, n, t, left - .03, right + .03, head + .01, head + .05, metal, 0.0, 0.0)
+			_quad_flat(origin + n * .03, n, t, left - .03, right + .03, sill - .05, sill - .01, metal, 0.0, 0.0)
+	_quad_flat(origin, n, t, previous, run, sill, head, pier, .1, .1)
 
 func _quad_flat(origin: Vector3, n: Vector3, t: Vector3, u0: float, u1: float, y0: float, y1: float, tint: Color, grime_low: float, grime_high: float) -> void:
 	if u1 - u0 < .001 or y1 - y0 < .001: return

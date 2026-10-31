@@ -24,7 +24,8 @@ const BUILDING_SHADER := preload("res://scripts/midori_near_city_building.gdshad
 const SHELL_SHADER := preload("res://scripts/midori_near_city_shell.gdshader")
 const GLASS_SHADER := preload("res://scripts/midori_near_city_glass.gdshader")
 const Hero := preload("res://scripts/midori_near_city_hero.gd")
-const HERO_RANGE := 120.0 # Buildings this close to the park get real shells.
+const HERO_RANGE := 130.0 # Buildings this close to the park get full real shells.
+const SHELL_RANGE := 300.0 # Out to here shells stay real but drop their finest parts.
 const PALETTE: Array[Color] = [Color(.96,.92,.84), Color(.9,.84,.74), Color(.97,.96,.93), Color(.84,.84,.83), Color(.8,.72,.62), Color(.62,.36,.26), Color(.48,.24,.2), Color(.15,.16,.17),
 	Color(.08,.08,.09), Color(.28,.36,.44), Color(.3,.48,.46), Color(.56,.62,.52), Color(.72,.58,.3), Color(.78,.56,.48), Color(.42,.42,.42), Color(.56,.55,.53)]
 const TEXTURES := "res://assets/shinrai/near_city/textures/"
@@ -41,7 +42,7 @@ const TOWER_SITE := Vector2(548, -92)
 const TOWER_HEIGHT := 262.0
 const TOWER_LEVELS := 15
 const KONBINI_STRIPES: Array[Array] = [[Color("#1c7f4b"), Color("#f2f2ee")], [Color("#1d55a8"), Color("#f2f2ee")], [Color("#d9561c"), Color("#2a7a4a")]]
-enum Pattern { SOLID, BARS, LOUVRE, FROSTED, SOLAR, ROOF_TILE }
+enum Pattern { SOLID, BARS, LOUVRE, FROSTED, SOLAR, ROOF_TILE, AC_UNIT, RIBBED, AWNING }
 # The shader's PALETTE at wall brightness, so trim matches the building it sits on.
 const TONES: Array[Color] = [Color(.54,.52,.47), Color(.5,.47,.41), Color(.54,.54,.52), Color(.47,.47,.46), Color(.45,.4,.35), Color(.35,.2,.15), Color(.27,.13,.11), Color(.08,.09,.1),
 	Color(.05,.05,.05), Color(.16,.2,.25), Color(.17,.27,.26), Color(.31,.35,.29), Color(.4,.32,.17), Color(.44,.31,.27), Color(.24,.24,.24), Color(.31,.31,.3)]
@@ -101,6 +102,12 @@ void fragment(){
 	float bar_x = step(road + 0.5, g.y) * step(g.y, road + 3.4) * step(g.x, road - 0.5) * step(0.5, fract(p.x / 1.5));
 	float bar_z = step(road + 0.5, g.x) * step(g.x, road + 3.4) * step(g.y, road - 0.5) * step(0.5, fract(p.y / 1.5));
 	if (!on_ring) c = mix(c, vec3(0.6, 0.6, 0.57), max(bar_x, bar_z) * (0.65 + 0.35 * tone));
+	// Concrete gutter along the kerb, and the yellow tactile guide strip for the blind.
+	if (ring > 14.0 && ring < 14.55) c = mix(c, vec3(0.34, 0.33, 0.31), 0.85);
+	if (ring > 16.7 && ring < 17.0) {
+		vec2 stud = abs(fract(vec2(p.x + p.y, ring) / 0.075) - 0.5);
+		c = vec3(0.62, 0.5, 0.1) * (0.82 + 0.26 * step(length(stud), 0.3));
+	}
 	ALBEDO = c;
 	ROUGHNESS = mix(0.85, 0.7, road_mask);
 	SPECULAR = 0.3;
@@ -184,6 +191,19 @@ void fragment(){
 		float tile = hsh(vec2(floor(world.y / 0.2), floor((world.x + world.z) / 0.3)));
 		c *= (0.62 + 0.38 * smoothstep(0.0, 0.3, course)) * (0.88 + 0.2 * tile);
 		rough = 0.5;
+	} else if (p == 6) {
+		// Outdoor unit: louvred casing with a round fan guard on the face.
+		vec2 face = box.xy * span - vec2(span.x * 0.14, 0.0);
+		float ring = length(face);
+		c = COLOR.rgb * (0.82 + 0.18 * step(0.3, fract((box.x + box.y * 0.02) * span.x / 0.05)));
+		if (box_normal.z > 0.5 && ring < span.y * 0.4) c = vec3(0.04) + vec3(0.2) * step(0.5, fract(ring / 0.045)) * step(0.05, ring);
+		rough = 0.5;
+	} else if (p == 7) {
+		// Riveted tank bands.
+		c *= 0.8 + 0.2 * step(0.1, fract(world.y / 0.55));
+		rough = 0.45;
+	} else if (p == 8) {
+		c = mix(c, vec3(0.86, 0.84, 0.78), step(0.5, fract(at.x / 0.6)));
 	} else if (p == 3) {
 		c = mix(c, vec3(0.5, 0.56, 0.6), 0.6);
 		rough = 0.22;
@@ -213,9 +233,10 @@ void fragment(){ ALBEDO = mix(vec3(0.05, 0.055, 0.06), mix(vec3(0.5), vec3(1.0, 
 
 var _materials: Array[ShaderMaterial] = []
 var _rng := RandomNumberGenerator.new()
-var _rows := {"bodies":{}, "trim":{}, "signs":{}, "tanks":{}, "roofs":{}, "slabs":{}, "wedges":{}}
+var _rows := {"bodies":{}, "trim":{}, "signs":{}, "tanks":{}, "roofs":{}, "slabs":{}, "wedges":{}, "detail":{}, "domes":{}}
 var _count := 0
 var _hero := Hero.new()
+var _trim_layer := "trim"
 var _deck: Array[int] = []
 var _dealt := 0
 
@@ -290,13 +311,20 @@ func _commit_layers() -> void:
 	body_look.set_shader_parameter("wall_normals", wall_normals)
 	_commit_hero(wall_maps, wall_normals)
 	var tank := CylinderMesh.new()
-	tank.radial_segments = 10
+	tank.radial_segments = 14
 	tank.rings = 1
 	tank.top_radius = .5
 	tank.bottom_radius = .5
 	tank.height = 1.0
 	_commit_layer("bodies", BoxMesh.new(), body_look, true)
 	_commit_layer("trim", BoxMesh.new(), trim_look, false)
+	_commit_layer("detail", BoxMesh.new(), trim_look, true)
+	var dome := SphereMesh.new()
+	dome.radial_segments = 12
+	dome.rings = 5
+	dome.radius = .5
+	dome.height = 1.0
+	_commit_layer("domes", dome, trim_look, false)
 	_commit_layer("signs", BoxMesh.new(), sign_look, false)
 	_commit_layer("tanks", tank, trim_look, false)
 	_commit_layer("roofs", PrismMesh.new(), trim_look, true)
@@ -335,10 +363,32 @@ func _hero_spec(kind: int, seed_value: float, storey: float, ground: float) -> D
 	var pale := fposmod(seed_value * 7.3, 1.0)
 	var layer: int = 6 if pale < .3 else (7 if pale < .5 else (8 if pale < .68 else (0 if pale < .84 else 3)))
 	var spec := {"seed":seed_value, "storey":storey, "ground":ground, "mansion":kind == Kind.MANSION, "metal":Color(.5, .52, .54, 1.0),
-		"radius":.06, "bay":3.2, "pane_x":.3, "pane_y":.8, "sill":.5, "recess":.2}
+		"radius":.06, "bay":3.2, "pane_x":.3, "pane_y":.8, "sill":.5, "recess":.2, "detail":0}
 	if fposmod(seed_value * 151.0, 1.0) < .3: spec.radius = 1.0 + fposmod(seed_value * 211.0, 1.0) * 1.4
-	if kind == Kind.MANSION:
+	if kind == Kind.LOW:
+		spec.bay = 2.6 + fposmod(seed_value * 13.0, 1.0)
+		spec.pane_x = .22
+		spec.pane_y = .58
+		spec.sill = .55
+		spec.recess = .08
+		layer = 2 if pale < .5 else (7 if pale < .82 else 4)
+	elif kind == Kind.KONBINI:
+		layer = 7
+		index = 2
+		spec.parapet = .3
+	elif kind == Kind.GARAGE:
+		spec.deck = true
+		spec.pane_y = .62
+		spec.sill = .6
+		spec.recess = .9
+		layer = 3
+		index = 15
+	elif kind == Kind.MANSION or kind == Kind.DANCHI:
 		spec.bay = 3.0 + fposmod(seed_value * 13.0, 1.0)
+		spec.mansion = true
+		if kind == Kind.DANCHI:
+			layer = 7
+			index = 2
 		spec.pane_x = .42
 		spec.pane_y = 1.12
 		spec.sill = .42
@@ -375,16 +425,29 @@ func _hero_spec(kind: int, seed_value: float, storey: float, ground: float) -> D
 	var tint: Color = PALETTE[index]
 	tint.a = float(layer) / 8.0
 	spec["tint"] = tint
+	spec.lobby = kind == Kind.ZAKKYO or kind == Kind.OFFICE
+	spec.quoin = fposmod(seed_value * 127.0, 1.0) < .35
+	spec.undercroft = (kind == Kind.MANSION or kind == Kind.DANCHI) and fposmod(seed_value * 53.0, 1.0) < .45
+	if kind != Kind.MANSION and kind != Kind.DANCHI and (pick < .2 or (pick >= .66 and pick < .82)):
+		# Spandrels in their own finish: dark panel on pale, or pale on dark.
+		var contrast: Color = PALETTE[14] if tint.get_luminance() > .5 else PALETTE[3]
+		contrast.a = 1.0 / 8.0 if tint.get_luminance() > .5 else 7.0 / 8.0
+		spec.band = contrast
 	return spec
 
-func _place_body(centre: Vector2, base: float, size: Vector3, kind: int, front: int, seed_value: float, storey: float, ground: float, distance: float) -> bool:
+func _place_body(centre: Vector2, base: float, size: Vector3, kind: int, front: int, seed_value: float, storey: float, ground: float, distance: float, flat_roof := true) -> bool:
 	# True when the body became a real shell rather than a shader box.
-	var eligible := kind == Kind.ZAKKYO or kind == Kind.OFFICE or kind == Kind.MANSION or kind == Kind.UPPER
-	if distance > HERO_RANGE or not eligible:
+	var eligible := kind != Kind.GLASS and kind != Kind.CORE
+	if distance > SHELL_RANGE or not eligible:
 		_box_body(centre, base, size, kind, front, seed_value)
 		return false
 	var key := int((centre.x + HALF_EXTENT) / CHUNK) + 100 * int((centre.y + HALF_EXTENT) / CHUNK)
-	_hero.add(centre, base, size, front, key, _hero_spec(kind, seed_value, storey, ground))
+	var spec := _hero_spec(kind, seed_value, storey, ground)
+	spec.detail = 0 if distance < HERO_RANGE else 1
+	# A rounded corner must stay a corner, never turn a slim building into a drum.
+	spec.radius = minf(spec.radius, minf(size.x, size.z) * .16)
+	spec.parapet = spec.get("parapet", .9) if flat_roof else 0.0
+	_hero.add(centre, base, size, front, key, spec)
 	return true
 
 func _commit_layer(layer: String, mesh: Mesh, material: Material, shadows: bool) -> void:
@@ -488,7 +551,7 @@ func _pole_line(a: Vector2, b: Vector2, outward: Vector2) -> void:
 	for i: int in range(steps + 1):
 		var p := a.lerp(b, float(i) / float(steps)) - outward * .35
 		var top := Vector3(p.x, 10.0, p.y)
-		_put("trim", top, _xform(Vector3(p.x, 5.0, p.y), Vector3(.28, 10.0, .28)), Color(), Color("#6f6e68"))
+		_put("tanks", top, _xform(Vector3(p.x, 5.0, p.y), Vector3(.3, 10.0, .3)), Color(), Color("#6f6e68"))
 		_put("trim", top, Transform3D(Basis(bar * 1.5, Vector3.UP * .09, Vector3.UP.cross(bar) * .09), top - Vector3.UP * .5), Color(), Color("#3a3a38"))
 		if i % 2 == 0: _put("tanks", top, _xform(top - Vector3(0, 2.0, 0) + bar * .3, Vector3(.5, .95, .5)), Color(), Color("#6f7472"))
 		if i > 0:
@@ -544,7 +607,7 @@ func _add_house(lot: Rect2, block: Rect2) -> void:
 	var plot := lot
 	var house := lot.grow(-1.0)
 	if house.size.x < 5.0 or house.size.y < 5.0: house = lot
-	var b := _add_building(house, block, Kind.LOW, 2)
+	var b := _add_building(house, block, Kind.LOW, 2, true)
 	var pos: Vector2 = b.pos
 	var key := Vector3(pos.x, 0, pos.y)
 	var fence := Color("#77766f")
@@ -601,7 +664,7 @@ func _bay(width: float, seed_value: float) -> float:
 	var base := 3.0 + fposmod(seed_value * 13.0, 1.0)
 	return width / maxf(1.0, floorf(width / base + .5))
 
-func _add_building(lot: Rect2, block: Rect2, kind: int, floors: int) -> Dictionary:
+func _add_building(lot: Rect2, block: Rect2, kind: int, floors: int, house := false) -> Dictionary:
 	var centre := lot.get_center()
 	var gaps: Array[float] = [block.end.x - lot.end.x, lot.position.x - block.position.x, block.end.y - lot.end.y, lot.position.y - block.position.y]
 	var front := gaps.find(gaps.min())
@@ -622,12 +685,18 @@ func _add_building(lot: Rect2, block: Rect2, kind: int, floors: int) -> Dictiona
 		upper = _rng.randi_range(1, mini(3, floors - 3))
 	var height := (SHOP_FLOOR if shop_floor else storey) + float(floors - upper - 1) * storey + .9
 	var distance := _park_distance(centre)
-	var hero := _place_body(centre, 0.0, Vector3(lot.size.x, height, lot.size.y), kind, front, seed_value, storey, SHOP_FLOOR if shop_floor else 0.0, distance)
+	if house: height = storey * 2.0 + .9
+	var pitched := kind == Kind.LOW and (house or _rng.randf() < .7)
+	var ground := SHOP_FLOOR if shop_floor and not house else 0.0
+	if kind == Kind.LOW and fposmod(seed_value * 5.0, 1.0) < .3: ground = 0.0
+	var hero := _place_body(centre, 0.0, Vector3(lot.size.x, height - (.9 if pitched else 0.0), lot.size.y), kind, front, seed_value, storey, ground, distance, not pitched)
 	_count += 1
 	var on_x := absf(out.x) > .5
 	var b := {"pos":centre, "height":height, "kind":kind, "floors":floors, "storey":storey, "front":front, "seed":seed_value, "out":out, "right":Vector3.UP.cross(out),
-		"across":lot.size.y if on_x else lot.size.x, "depth":lot.size.x if on_x else lot.size.y, "size":lot.size, "hero":hero}
+		"across":lot.size.y if on_x else lot.size.x, "depth":lot.size.x if on_x else lot.size.y, "size":lot.size, "hero":hero, "pitched":pitched}
 	var tier := 0 if distance < NEAR_TIER else (1 if distance < MID_TIER else 2)
+	# Close-range parts catch and cast real shadows; further out they stay cheap.
+	_trim_layer = "detail" if distance < HERO_RANGE else "trim"
 	_dress_roof(b, tier)
 	if upper > 0:
 		var cut := float(b.depth) * _rng.randf_range(.22, .38)
@@ -644,6 +713,7 @@ func _add_building(lot: Rect2, block: Rect2, kind: int, floors: int) -> Dictiona
 			var crown_hero := _place_body(centre + shift, height - .9, Vector3(top_size.x, top_height, top_size.y), top_kind, front, seed_value, storey, 0.0, distance)
 			var crown := b.duplicate()
 			crown.hero = crown_hero
+			crown.pitched = false
 			crown.pos = centre + shift
 			crown.size = top_size
 			crown.height = height - .9 + top_height
@@ -686,7 +756,11 @@ func _front_at(b: Dictionary, along: float, y: float, proud: float) -> Vector3:
 
 func _trim(b: Dictionary, along: float, y: float, proud: float, size: Vector3, color: Color, pattern := 0) -> void:
 	var at := _front_at(b, along, y, proud)
-	_put("trim", at, Transform3D(Basis(b.right * size.x, Vector3.UP * size.y, b.out * size.z), at), Color(float(pattern), size.x, size.y, 0), color)
+	_put(_trim_layer, at, Transform3D(Basis(b.right * size.x, Vector3.UP * size.y, b.out * size.z), at), Color(float(pattern), size.x, size.y, 0), color)
+
+func _pipe(b: Dictionary, along: float, proud: float, height: float, color: Color) -> void:
+	var at := _front_at(b, along, height * .5, proud)
+	_put("tanks", at, _xform(at, Vector3(.1, height, .1)), Color(), color)
 
 func _flat_sign(b: Dictionary, along: float, y: float, proud: float, size: Vector3, cell: int) -> void:
 	var at := _front_at(b, along, y, proud)
@@ -702,8 +776,8 @@ func _dress_roof(b: Dictionary, tier: int) -> void:
 	var size: Vector2 = b.size
 	var top := float(b.height)
 	var kind: int = b.kind
-	if kind == Kind.LOW and _rng.randf() < .7:
-		# Pitched sheet roof, ridge along the longer side.
+	if b.get("pitched", false):
+		# Pitched roof, ridge along the longer side.
 		var rise := _rng.randf_range(1.2, 2.4)
 		var along_x := size.x > size.y
 		var basis := Basis(Vector3.UP, PI * .5) if along_x else Basis.IDENTITY
@@ -748,13 +822,23 @@ func _dress_roof(b: Dictionary, tier: int) -> void:
 		var spot := Vector2(_rng.randf_range(-.3, .3) * size.x, _rng.randf_range(-.3, .3) * size.y)
 		var height := _rng.randf_range(1.6, 2.6)
 		var at := Vector3(pos.x + spot.x, top + 1.5 + height * .5, pos.y + spot.y)
-		_put("tanks", at, _xform(at, Vector3(1.9, height, 1.9)), Color(), Color("#9aa09f") if _rng.randf() < .6 else Color("#4f6f8a"))
-		for corner: Vector2 in [Vector2(-.7, -.7), Vector2(.7, -.7), Vector2(-.7, .7), Vector2(.7, .7)]:
-			_put("trim", key, _xform(Vector3(at.x + corner.x, top + .75, at.z + corner.y), Vector3(.1, 1.5, .1)), Color(), STEEL)
+		var tank_paint := Color("#9aa09f") if _rng.randf() < .6 else Color("#4f6f8a")
+		_put("tanks", at, _xform(at, Vector3(1.9, height, 1.9)), Color(Pattern.RIBBED, 0, 0, 0), tank_paint)
+		var cap := at + Vector3.UP * height * .5
+		_put("domes", cap, _xform(cap, Vector3(1.9, .5, 1.9)), Color(), tank_paint)
+		var stand: Array[Vector2] = [Vector2(-.7, -.7), Vector2(.7, -.7), Vector2(.7, .7), Vector2(-.7, .7)]
+		for i: int in range(4):
+			var foot := Vector3(at.x + stand[i].x, top, at.z + stand[i].y)
+			var other := Vector3(at.x + stand[(i + 1) % 4].x, top + 1.5, at.z + stand[(i + 1) % 4].y)
+			_put("trim", key, _xform(foot + Vector3.UP * .75, Vector3(.1, 1.5, .1)), Color(), STEEL)
+			if tier == 0: _beam(foot, other, .03, STEEL)
+		if tier == 0:
+			# Inlet pipe and access ladder.
+			_put("tanks", at, _xform(Vector3(at.x + .98, top + 1.5, at.z), Vector3(.07, 3.0, .07)), Color(), Color("#6c6f70"))
 	if tier == 0:
 		for i: int in range(_rng.randi_range(2, 6)):
 			var unit := Vector2(_rng.randf_range(-.4, .4) * size.x, _rng.randf_range(-.4, .4) * size.y)
-			_put("trim", key, _xform(Vector3(pos.x + unit.x, top + .45, pos.y + unit.y), Vector3(.95, .85, .4)), Color(), Color("#b4b4ae"))
+			_put("detail" if tier == 0 else "trim", key, _xform(Vector3(pos.x + unit.x, top + .35, pos.y + unit.y), Vector3(.9, .66, .32)), Color(Pattern.AC_UNIT, .9, .66, 0), Color("#c0c0b8"))
 		if _rng.randf() < .4:
 			_put("trim", key, _xform(Vector3(pos.x, top + 3.0, pos.y), Vector3(.07, 6.0, .07)), Color(), STEEL)
 	var near_edge := _park_distance(pos) < 90.0 and (kind == Kind.ZAKKYO or kind == Kind.OFFICE)
@@ -811,7 +895,9 @@ func _dress_side_walls(b: Dictionary) -> void:
 		_put("trim", back, Transform3D(Basis(right * 2.6, Vector3.UP * .08, out * 1.1), back + Vector3.UP * y), Color(), Color("#3d4043"))
 		_put("trim", back, Transform3D(Basis(right * 2.6, Vector3.UP * .9, out * .05), back + Vector3.UP * (y + .5) - out * .54), Color(), Color("#2e3033"))
 		var rise := Basis(out, .85) * Basis(right * 3.6, Vector3.UP * .08, out * .8)
-		_put("trim", back, Transform3D(rise, back + Vector3.UP * (y + STOREY * .5)), Color(), Color("#35383a"))
+		_put("detail", back, Transform3D(rise, back + Vector3.UP * (y + STOREY * .5)), Color(), Color("#35383a"))
+		var guard := Basis(out, .85) * Basis(right * 3.6, Vector3.UP * .9, out * .04)
+		_put("detail", back, Transform3D(guard, back + Vector3.UP * (y + STOREY * .5 + .45) - out * .42), Color(Pattern.BARS, 3.6, .9, 0), Color("#2e3033"))
 		y += STOREY
 
 func _dress_balconies(b: Dictionary, tier: int) -> void:
@@ -828,6 +914,9 @@ func _dress_balconies(b: Dictionary, tier: int) -> void:
 		else: _trim(b, 0.0, y + .58, 1.2, Vector3(width, 1.12, .07), Color("#6d7f8a") if glass_front else pale, Pattern.FROSTED if glass_front else Pattern.SOLID)
 		if tier > 0: continue
 		_trim(b, 0.0, y + 1.16, 1.2, Vector3(width, .05, .1), STEEL)
+		_trim(b, 0.0, y - .16, 1.2, Vector3(width, .05, .08), pale.darkened(.3))
+		# Drying poles strung across the bay, on brackets from the slab above.
+		_trim(b, 0.0, y + 2.25, .92, Vector3(width, .03, .03), Color("#b9bab6"))
 		for i: int in range(int(round(width / bay)) + 1):
 			var along := -width * .5 + bay * float(i)
 			# Exposed frame: full columns at each end and every other bay, thin party fins between.
@@ -837,7 +926,8 @@ func _dress_balconies(b: Dictionary, tier: int) -> void:
 			var roll := _rng.randf()
 			var mid := along + bay * .5
 			if roll < .4:
-				_trim(b, mid + bay * .28, y + .42, .9, Vector3(.76, .6, .28), Color("#b8b8b0"), Pattern.LOUVRE)
+				_trim(b, mid + bay * .28, y + .39, .9, Vector3(.8, .58, .28), Color("#c4c4bc"), Pattern.AC_UNIT)
+				_trim(b, mid + bay * .28 + .46, y + .9, .2, Vector3(.05, 1.3, .05), Color("#d6d4cc"))
 			elif roll < .6:
 				# Washing hung over the rail.
 				_trim(b, mid - bay * .1, y + .95, 1.26, Vector3(bay * .4, .72, .03), [Color("#d8d4cb"), Color("#7f93a8"), Color("#a86a62")][_rng.randi_range(0, 2)])
@@ -855,7 +945,7 @@ func _dress_signs(b: Dictionary, tier: int) -> void:
 	var side := -1.0 if fposmod(float(b.seed) * 61.0, 1.0) < .5 else 1.0
 	var along := side * (width * .5 - .35)
 	if tier == 0:
-		_trim(b, -along, float(b.height) * .5, .07, Vector3(.1, float(b.height), .1), Color("#6c6f70"))
+		_pipe(b, -along, .09, float(b.height), Color("#6c6f70"))
 		_trim(b, -side * width * .32, float(b.height) * .5, .05, Vector3(.05, float(b.height), .05), Color("#1f2022"))
 		for i: int in range(count):
 			if _rng.randf() < .35:
@@ -901,7 +991,8 @@ func _dress_shopfront(b: Dictionary) -> void:
 			var color: Color = AWNINGS[_rng.randi_range(0, AWNINGS.size() - 1)]
 			var at := _front_at(b, along, 3.0, .7)
 			var slope := Basis(b.right, .34) * Basis(b.right * (bay - .3), Vector3.UP * .05, b.out * 1.5)
-			_put("trim", at, Transform3D(slope, at), Color(), color)
+			_put("detail", at, Transform3D(slope, at), Color(Pattern.AWNING, bay - .3, .05, 0), color)
+		_trim(b, along, 3.22, .12, Vector3(bay - .4, .26, .24), Color("#7d7f80"))
 
 func _build_ring_street() -> void:
 	var half := PARK.size * .5 + Vector2(16.0, 16.0)
@@ -917,12 +1008,18 @@ func _build_ring_street() -> void:
 		for i: int in range(steps + 1):
 			var p := a.lerp(b, float(i) / float(steps))
 			var at := Vector3(p.x, 3.5, p.y)
-			lamp_rows.append([_xform(at, Vector3(.16, 7.0, .16)), Color(), Color.WHITE])
-			lamp_rows.append([_xform(Vector3(p.x, 7.0, p.y), Vector3(.9, .14, .9)), Color(1, 0, 0, 0), Color.WHITE])
+			_put("tanks", at, _xform(Vector3(p.x, 4.0, p.y), Vector3(.18, 8.0, .18)), Color(), Color("#5e6366"))
+			var reach := Vector3(-outward.x, 0, -outward.y)
+			var bend := Vector3(p.x, 8.0, p.y)
+			var tip := bend + reach * 2.4 + Vector3.UP * .55
+			_beam(bend, bend + reach * 1.1 + Vector3.UP * .42, .05, Color("#5e6366"))
+			_beam(bend + reach * 1.1 + Vector3.UP * .42, tip, .05, Color("#5e6366"))
+			var head_size := Vector3(.26 + absf(reach.x) * .6, .09, .26 + absf(reach.z) * .6)
+			lamp_rows.append([_xform(tip, head_size), Color(1, 0, 0, 0), Color.WHITE])
 			# Concrete utility pole on the outer kerb, with sagging lines to the next.
 			var pole := p + outward * 3.0 + (b - a).normalized() * 12.0
 			var top := Vector3(pole.x, 10.5, pole.y)
-			_put("trim", top, _xform(Vector3(pole.x, 5.25, pole.y), Vector3(.3, 10.5, .3)), Color(), Color("#77766f"))
+			_put("tanks", top, _xform(Vector3(pole.x, 5.25, pole.y), Vector3(.32, 10.5, .32)), Color(), Color("#77766f"))
 			var bar := Vector3((b - a).normalized().y, 0, -(b - a).normalized().x)
 			_put("trim", top, Transform3D(Basis(bar * 1.9, Vector3.UP * .1, Vector3.UP.cross(bar) * .1), top - Vector3.UP * .5), Color(), Color("#3a3a38"))
 			_put("tanks", top, _xform(top - Vector3(0, 2.0, 0) + bar * .35, Vector3(.55, 1.0, .55)), Color(), Color("#6f7472"))
@@ -932,11 +1029,15 @@ func _build_ring_street() -> void:
 			# Pedestrian guard rail along the park road.
 			if i < steps:
 				var run := (b - a).normalized()
-				var rail := p + run * 16.0 + outward * -1.6
-				var rail_at := Vector3(rail.x, .42, rail.y)
-				var rail_basis := Basis(Vector3(run.x, 0, run.y) * 24.0, Vector3.UP * .8, Vector3(-run.y, 0, run.x) * .05)
-				if rail_basis.determinant() < 0.0: rail_basis.z = -rail_basis.z
-				_put("trim", rail_at, Transform3D(rail_basis, rail_at), Color(Pattern.BARS, 24.0, .8, 0), Color("#b9bcb8"))
+				# Rails run in short sections and stop at the mouths of side roads.
+				for section: float in [5.5, 16.0, 26.5]:
+					var rail := p + run * section + outward * -1.6
+					var along_road := rail.x if absf(run.x) > .5 else rail.y
+					if absf(fposmod(along_road + BLOCK * .5, BLOCK) - BLOCK * .5) < ROAD + 7.0: continue
+					var rail_at := Vector3(rail.x, .42, rail.y)
+					var rail_basis := Basis(Vector3(run.x, 0, run.y) * 10.0, Vector3.UP * .8, Vector3(-run.y, 0, run.x) * .05)
+					if rail_basis.determinant() < 0.0: rail_basis.z = -rail_basis.z
+					_put("trim", rail_at, Transform3D(rail_basis, rail_at), Color(Pattern.BARS, 10.0, .8, 0), Color("#b9bcb8"))
 			previous = top
 	_rows["lamps"] = {0:lamp_rows}
 	_commit_layer("lamps", BoxMesh.new(), _material(LAMP_SHADER, "SHINRAI_NearCityLamps"), false)
@@ -958,7 +1059,14 @@ func _build_expressway() -> void:
 		var key := Vector3(x, 0, EXPRESSWAY_Z)
 		var deck := Vector3(x + 16.0, EXPRESSWAY_Y, EXPRESSWAY_Z)
 		_put("trim", deck, _xform(deck, Vector3(32.0, .9, half * 2.0)), Color(), Color("#3a3a3a"))
-		_put("trim", deck, _xform(deck - Vector3(0, 1.0, 0), Vector3(32.0, 1.2, half * 1.5)), Color(), concrete.darkened(.15))
+		_put("trim", deck, _xform(deck - Vector3(0, .65, 0), Vector3(32.0, .4, half * 1.9)), Color(), concrete.darkened(.1))
+		# Exposed steel girders and cross-frames, as seen from the road below.
+		for girder: float in [-6.0, -3.0, 0.0, 3.0, 6.0]:
+			var run := deck + Vector3(0, -1.5, girder)
+			_put("trim", run, _xform(run, Vector3(32.0, 1.3, .36)), Color(), concrete.darkened(.22))
+		for frame: float in [-8.0, 0.0, 8.0]:
+			var cross := deck + Vector3(frame, -1.4, 0)
+			_put("trim", cross, _xform(cross, Vector3(.3, .9, half * 1.5)), Color(), concrete.darkened(.3))
 		for side: float in [-1.0, 1.0]:
 			var edge := deck + Vector3(0, 1.0, side * half)
 			_put("trim", edge, _xform(edge, Vector3(32.0, 1.2, .3)), Color(), parapet)

@@ -27,6 +27,9 @@ void fragment(){
 		depth = 0.0;
 	} else {
 		float layer = floor(COLOR.a * 8.0 + 0.5);
+		// Glazed tile and polished stone catch the sky; render and concrete do not.
+		if (layer == 6.0 || layer == 8.0 || layer == 0.0) rough = 0.5;
+		else if (layer == 1.0) rough = 0.34;
 		vec2 uv = metres / SCALE[int(layer)];
 		color = texture(wall_maps, vec3(uv, layer)).rgb;
 		vec3 mean = textureLod(wall_maps, vec3(uv, layer), 9.0).rgb;

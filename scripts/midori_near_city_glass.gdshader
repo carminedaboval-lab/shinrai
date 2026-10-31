@@ -72,6 +72,13 @@ void fragment(){
 		ROUGHNESS = 0.55;
 		EMISSION = vec3(0.0);
 	}
+	// Frame and meeting stile; close shells also carry these as real geometry.
+	vec2 edge = half_size - abs(UV);
+	float frame = 1.0 - smoothstep(0.04, 0.08, min(edge.x, edge.y));
+	if (!shop) frame = max(frame, 1.0 - smoothstep(0.02, 0.04, abs(UV.x)));
+	ALBEDO = mix(ALBEDO, vec3(0.32, 0.33, 0.34) * mix(1.0, 0.4, night), frame);
+	EMISSION *= 1.0 - frame;
+	ROUGHNESS = mix(ROUGHNESS, 0.45, frame);
 	float haze = 1.0 - exp(-length(world - CAMERA_POSITION_WORLD) * mix(0.00105, 0.00075, night));
 	FOG = vec4(mix(vec3(0.66, 0.69, 0.74), vec3(0.035, 0.03, 0.055), night), haze);
 }
