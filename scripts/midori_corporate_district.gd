@@ -62,7 +62,8 @@ func _ready() -> void:
 	var trees: Dictionary = Trees.plant(district)
 	await Budget.checkpoint(park)
 	_replace_material(district,district.get("leaf"),Lawn.surface())
-	Lawn.grow(park,district)
+	var lawn: Dictionary = Lawn.grow(district)
+	await Budget.checkpoint(park)
 	interactions = load(PACKAGE+"shinrai_interactions.gd").new()
 	interactions.name = "CorporateTraversalInteractions"
 	# Children receive input before their raid parent, so Escape closes this
@@ -83,6 +84,7 @@ func _ready() -> void:
 	report["street_edges"] = street_edges
 	report["walk_paving"] = walk_paving
 	report["trees"] = trees
+	report["lawn"] = lawn
 	installed = true
 	add_to_group("midori_corporate_district")
 	print("MIDORI_CORPORATE_DISTRICT_READY origin=",ORIGIN," scale=1 garage_levels=3 police=1 road_connected=true")

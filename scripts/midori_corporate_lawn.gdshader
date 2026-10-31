@@ -7,7 +7,7 @@ uniform sampler2D turf_albedo : source_color, filter_linear_mipmap_anisotropic, 
 uniform sampler2D turf_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D turf_roughness : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D soil_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform vec3 turf_tint : source_color = vec3(0.30, 0.42, 0.19);
+uniform vec3 turf_tint : source_color = vec3(0.20, 0.30, 0.13);
 varying vec3 world_position;
 
 float hash21(vec2 p) {
