@@ -4,9 +4,9 @@ render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 // One layer of a stacked lawn. Every layer cuts the same field of fine blades at
 // its own height, so together they read as one continuous carpet of grass.
 uniform float grass_height = 0.08;
-uniform vec3 root_color : source_color = vec3(0.13, 0.20, 0.08);
-uniform vec3 tip_color : source_color = vec3(0.34, 0.45, 0.21);
-uniform vec3 dry_color : source_color = vec3(0.52, 0.52, 0.29);
+uniform vec3 root_color : source_color = vec3(0.09, 0.17, 0.06);
+uniform vec3 tip_color : source_color = vec3(0.33, 0.52, 0.19);
+uniform vec3 dry_color : source_color = vec3(0.42, 0.55, 0.21);
 const float BLADES_PER_M = 150.0;
 varying vec3 world_position;
 varying float layer;
@@ -50,7 +50,8 @@ void fragment() {
 	vec2 lean = vec2(cos(bend), sin(bend));
 	// Turned off the world axes, so the blade grid never shows as rows.
 	vec2 q = mat2(vec2(0.857, 0.515), vec2(-0.515, 0.857)) * (p + lean * 0.016 * h * h);
-	float reach = mix(0.9, 1.0, noise21(p * 0.8) * 0.6 + noise21(p * 4.0) * 0.4);
+	// Soft unmown swells, so the surface is full and uneven rather than cut flat.
+	float reach = mix(0.78, 1.0, noise21(p * 0.8) * 0.45 + noise21(p * 3.1) * 0.35 + noise21(p * 11.0) * 0.2);
 	// Blade size doubles in steps as they shrink below a pixel, dithered between steps.
 	float pixel = sqrt(max(length(dFdx(p)) * length(dFdy(p)), 0.00000001));
 	float level = clamp(log2(max(pixel * BLADES_PER_M * 1.3, 1.0)), 0.0, 5.0);

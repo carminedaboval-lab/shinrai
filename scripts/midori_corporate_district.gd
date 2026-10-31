@@ -6,6 +6,7 @@ const StreetEdges = preload("res://scripts/midori_corporate_street_edges.gd")
 const WalkPaving = preload("res://scripts/midori_corporate_paving.gd")
 const Trees = preload("res://scripts/midori_corporate_trees.gd")
 const Lawn = preload("res://scripts/midori_corporate_lawn.gd")
+const Planting = preload("res://scripts/midori_corporate_planting.gd")
 const PACKAGE := "res://assets/shinrai/districts/corporate_command/"
 const ORIGIN := Vector3(220,0,330)
 const DISTRICT_FOOTPRINT := Rect2(60,190,320,280)
@@ -64,6 +65,8 @@ func _ready() -> void:
 	_replace_material(district,district.get("leaf"),Lawn.surface())
 	var lawn: Dictionary = Lawn.grow(district)
 	await Budget.checkpoint(park)
+	var planting: Dictionary = Planting.plant(district)
+	await Budget.checkpoint(park)
 	interactions = load(PACKAGE+"shinrai_interactions.gd").new()
 	interactions.name = "CorporateTraversalInteractions"
 	# Children receive input before their raid parent, so Escape closes this
@@ -85,6 +88,7 @@ func _ready() -> void:
 	report["walk_paving"] = walk_paving
 	report["trees"] = trees
 	report["lawn"] = lawn
+	report["planting"] = planting
 	installed = true
 	add_to_group("midori_corporate_district")
 	print("MIDORI_CORPORATE_DISTRICT_READY origin=",ORIGIN," scale=1 garage_levels=3 police=1 road_connected=true")

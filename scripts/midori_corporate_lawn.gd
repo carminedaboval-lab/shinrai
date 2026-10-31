@@ -12,8 +12,8 @@ const WALK_Z: Array[float] = [92.0, -89.5]
 const WALK_HALF := 2.0
 const WATER_BASIN := Rect2(-6.0, 98.0, 12.0, 7.0)
 const GROUND_Y := .015
-const GRASS_HEIGHT := .08
-const SHELLS := 18
+const GRASS_HEIGHT := .11
+const SHELLS := 21
 const CHUNK := 16.0
 # Layers are shared out across three meshes, so distance drops every third layer
 # while the lawn keeps its full height. [first layer of the three, draw range].
