@@ -24,6 +24,11 @@ const BUILDING_SHADER := preload("res://scripts/midori_near_city_building.gdshad
 const SHELL_SHADER := preload("res://scripts/midori_near_city_shell.gdshader")
 const GLASS_SHADER := preload("res://scripts/midori_near_city_glass.gdshader")
 const Hero := preload("res://scripts/midori_near_city_hero.gd")
+const GyozaShop := preload("res://scripts/midori_near_city_gyoza.gd")
+const PencilBuilding := preload("res://scripts/midori_near_city_pencil.gd")
+const KonbiniBlock := preload("res://scripts/midori_near_city_konbini.gd")
+# Lots given over to hand-modelled buildings, by a point inside each.
+const HANDMADE: Array[Array] = [[Vector2(33.5, -210.75), GyozaShop], [Vector2(40.5, -210.9), PencilBuilding], [Vector2(49.0, -211.0), KonbiniBlock]]
 const HERO_RANGE := 130.0 # Buildings this close to the park get full real shells.
 const SHELL_RANGE := 300.0 # Out to here shells stay real but drop their finest parts.
 const PALETTE: Array[Color] = [Color(.96,.92,.84), Color(.9,.84,.74), Color(.97,.96,.93), Color(.84,.84,.83), Color(.8,.72,.62), Color(.62,.36,.26), Color(.48,.24,.2), Color(.15,.16,.17),
@@ -239,6 +244,8 @@ var _hero := Hero.new()
 var _trim_layer := "trim"
 var _deck: Array[int] = []
 var _dealt := 0
+var _muted := false # Lays a lot out unseen, so the rest of the city keeps its random sequence.
+var _handmade: Array[Node3D] = []
 
 func _ready() -> void:
 	add_to_group("midori_horizon")
@@ -259,6 +266,8 @@ func _ready() -> void:
 func set_night_mode(value: bool) -> void:
 	for material: ShaderMaterial in _materials:
 		material.set_shader_parameter("night", 1.0 if value else 0.0)
+	for building: Node3D in _handmade:
+		building.set_night_mode(value)
 
 func _material(code: String, label: String) -> ShaderMaterial:
 	var shader := Shader.new()
@@ -288,6 +297,7 @@ func _wall_array(suffix: String) -> Texture2DArray:
 	return array
 
 func _put(layer: String, at: Vector3, xform: Transform3D, custom := Color(), color := Color.WHITE) -> void:
+	if _muted: return
 	var key := int((at.x + HALF_EXTENT) / CHUNK) + 100 * int((at.z + HALF_EXTENT) / CHUNK)
 	var table: Dictionary = _rows[layer]
 	if not table.has(key): table[key] = []
@@ -447,7 +457,7 @@ func _place_body(centre: Vector2, base: float, size: Vector3, kind: int, front: 
 	# A rounded corner must stay a corner, never turn a slim building into a drum.
 	spec.radius = minf(spec.radius, minf(size.x, size.z) * .16)
 	spec.parapet = spec.get("parapet", .9) if flat_roof else 0.0
-	_hero.add(centre, base, size, front, key, spec)
+	if not _muted: _hero.add(centre, base, size, front, key, spec)
 	return true
 
 func _commit_layer(layer: String, mesh: Mesh, material: Material, shadows: bool) -> void:
@@ -567,7 +577,15 @@ func _pole_line(a: Vector2, b: Vector2, outward: Vector2) -> void:
 func _split(rect: Rect2, block: Rect2, commercial: bool) -> void:
 	var limit := _rng.randf_range(6.5, 12.0) if commercial else _rng.randf_range(8.0, 15.0)
 	if rect.size.x <= limit and rect.size.y <= limit * 1.7:
+		var design := _design_for(rect)
+		_muted = design != null
 		_lot(rect, block, commercial)
+		_muted = false
+		if design != null:
+			var building: Node3D = design.new()
+			building.position = Vector3(rect.get_center().x, .08, rect.end.y)
+			add_child(building)
+			_handmade.append(building)
 		return
 	var cut := _rng.randf_range(.38, .62)
 	var alley := _rng.randf_range(.3, 1.4) * .5
@@ -579,6 +597,11 @@ func _split(rect: Rect2, block: Rect2, commercial: bool) -> void:
 		var at := rect.size.y * cut
 		_split(Rect2(rect.position, Vector2(rect.size.x, at - alley)), block, commercial)
 		_split(Rect2(rect.position + Vector2(0, at + alley), Vector2(rect.size.x, rect.size.y - at - alley)), block, commercial)
+
+func _design_for(rect: Rect2) -> GDScript:
+	for row: Array in HANDMADE:
+		if rect.has_point(row[0]): return row[1]
+	return null
 
 func _lot(lot: Rect2, block: Rect2, commercial: bool) -> void:
 	if lot.size.x < MIN_LOT or lot.size.y < MIN_LOT or not _clear_of_reserved(lot): return
