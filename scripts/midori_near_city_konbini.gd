@@ -24,7 +24,7 @@ const ROOM_DEEP := 7.2
 const FLOOD := .62 # How high the 2044 water stood.
 const BROWN := Color(.5, .33, .24)
 const CREAM := Color(.98, .93, .82)
-const PALE := Color(.9, .86, .76)
+const PALE := Color(1.04, 1.0, .9)
 const SHELF := Color(.86, .88, .89)
 const WHITE_GOODS := Color("#e4e6e4")
 const CORAL := Color("#ee5a3f")
@@ -68,15 +68,15 @@ func _build_looks() -> void:
 	_looks.hall.set_shader_parameter("glow", .34)
 	_looks.hall.set_shader_parameter("day_glow", .08)
 	_looks.shop = _look("", 1.0, .6)
-	_looks.shop.set_shader_parameter("glow", .46)
+	_looks.shop.set_shader_parameter("glow", .3)
 	_looks.shop.set_shader_parameter("day_glow", .26)
 	_looks.floor = _look("", 1.0, .1)
 	_looks.floor.set_shader_parameter("tile_size", Vector2(.3, .3))
-	_looks.floor.set_shader_parameter("glow", .2)
+	_looks.floor.set_shader_parameter("glow", .12)
 	_looks.floor.set_shader_parameter("day_glow", .14)
 	_looks.goods = _look("", 1.0, .5)
 	_looks.goods.set_shader_parameter("albedo_map", signs)
-	_looks.goods.set_shader_parameter("glow", .6)
+	_looks.goods.set_shader_parameter("glow", .48)
 	_looks.goods.set_shader_parameter("day_glow", .3)
 	_looks.fascia = _look("", 1.0, .35)
 	_looks.fascia.set_shader_parameter("albedo_map", signs)
@@ -559,7 +559,7 @@ func _east_side() -> void:
 		var y := GROUND + float(floor_index) * STOREY
 		holes.append(Rect2(2.5, y + .95, 1.2, 1.1))
 		holes.append(Rect2(6.4, y + 1.25, .7, .8))
-	_render_wall(e, DEEP, PARAPET, GROUND, STOREY, PALE, holes)
+	_render_wall(e, DEEP, PARAPET, GROUND, STOREY, PALE, holes, .4)
 	_bar("render", e, DEEP * .5, PARAPET + .05, -.05, Vector3(DEEP + .1, .1, .3), CREAM, .7, 1.0)
 	_brown(e, .34, 3.54, 0.0, .42, .005, .7, .9, .2)
 	_reveal(e, glass, .12, ALUMINIUM)
@@ -669,6 +669,14 @@ func _street_things() -> void:
 	_panel("display", f, mid - .5, mid + .5, .04, 1.86, .802, _cell(0, 1560, 280, 488))
 	_bar("metal", f, mid, 1.92, .46, Vector3(1.08, .06, .92), Color("#c6c8c6"))
 	_bar("metal", f, mid, .03, .4, Vector3(1.02, .06, .8), Color("#2a2c2e"))
+	# Curved glass over the dummy cans, a coin plate and a real flap for the drink.
+	_kit.quad("front", f * Vector3(mid - .47, .86, .812), f * Vector3(mid - .47, 1.84, .812), f * Vector3(mid + .47, 1.84, .812), f * Vector3(mid + .47, .86, .812), Color.WHITE)
+	for x: float in [mid - .49, mid + .49]:
+		_bar("metal", f, x, 1.35, .81, Vector3(.03, 1.02, .03), Color("#c6c8c6"))
+	_bar("metal", f, mid, .84, .81, Vector3(1.0, .03, .03), Color("#c6c8c6"))
+	_bar("metal", f, mid + .34, .62, .815, Vector3(.2, .16, .03), Color("#8d9092"))
+	_bar("bottle", f, mid, .24, .808, Vector3(.66, .2, .02), Color("#050608"))
+	_bar("metal", f, mid, .35, .82, Vector3(.7, .02, .04), Color("#a8abac"))
 	var tints: Array[Color] = [Color("#3f7a4c"), Color("#2f5f9c"), Color("#c9c5b8")]
 	for i: int in range(3):
 		var x := 5.72 + float(i) * .4

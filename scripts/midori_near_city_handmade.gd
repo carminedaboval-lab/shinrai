@@ -129,7 +129,7 @@ func _window(face: Transform3D, r: Rect2, cell: float, grille: bool) -> void:
 		for y: float in [y0 - .02, y1 + .02]:
 			_bar("metal", face, (x0 + x1) * .5, y, .05, Vector3(r.size.x + .1, .03, .03), alu)
 
-func _render_wall(face: Transform3D, length: float, height: float, first: float, lift: float, paint: Color, holes: Array[Rect2]) -> void:
+func _render_wall(face: Transform3D, length: float, height: float, first: float, lift: float, paint: Color, holes: Array[Rect2], streak := .9) -> void:
 	# Painted render in lifts, a storey at a time, so each pour shows its own weathering.
 	var y := .0
 	var top := first
@@ -142,7 +142,7 @@ func _render_wall(face: Transform3D, length: float, height: float, first: float,
 			var uv := Vector2(_rng.randf() * 4.0, _rng.randf() * 4.0)
 			for piece: Rect2 in _minus(Rect2(bay, y, run, minf(top, height) - y), holes):
 				var at := uv + Vector2(piece.position.x - bay, y - piece.position.y)
-				_kit.quad("render", face * Vector3(piece.position.x, piece.position.y, 0), face * Vector3(piece.position.x, piece.end.y, 0), face * Vector3(piece.end.x, piece.end.y, 0), face * Vector3(piece.end.x, piece.position.y, 0), tint, .92, 1.0, .9, at)
+				_kit.quad("render", face * Vector3(piece.position.x, piece.position.y, 0), face * Vector3(piece.position.x, piece.end.y, 0), face * Vector3(piece.end.x, piece.end.y, 0), face * Vector3(piece.end.x, piece.position.y, 0), tint, .92, 1.0, streak, at)
 			bay += run
 		y = top
 		top += lift

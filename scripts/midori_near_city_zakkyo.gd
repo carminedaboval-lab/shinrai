@@ -207,6 +207,12 @@ func _neuro_front(base: float, x0: float, x1: float) -> void:
 	_tenant_room(2, x0, x1, base)
 	_opening(r, Color("#d8dcdb"), 3)
 	_panel("notice", f, x0 + .04, x1 - .04, base + .2, base + 1.44, GLASS + .012, _cell(0, 1160, 1024, 228))
+	# Window box the receptionist keeps alive, the one green thing on the tower.
+	_bar("plain", f, (x0 + x1) * .5, base + .3, .12, Vector3(x1 - x0 - .4, .28, .26), Color("#dfe3e0"), .85, 1.0)
+	var at := x0 + .4
+	while at < x1 - .3:
+		_plant(f * Vector3(at, base + .42, .12), _rng.randf_range(.35, .6), Color("#3f7a4a"))
+		at += .46
 
 func _dive_front(base: float, x0: float, x1: float) -> void:
 	# Black panels and a lit image the whole width of the floor: you are already under.
@@ -274,6 +280,13 @@ func _detective_front(base: float, x0: float, x1: float) -> void:
 	_venetian(near, .5)
 	_venetian(far, 1.0)
 	_panel("notice", _front, near.position.x + .22, near.end.x - .22, near.position.y + .22, near.position.y + .56, SPAN - .05, _cell(1350, 1520, 420, 110))
+	# Forty years of alterations: conduit, an alarm box, a sign bracket that outlived its sign.
+	var f := _front
+	_kit.tube("metal", [f * Vector3(x0 + .2, base + 3.1, SPAN + .03), f * Vector3(x0 + .2, base + .5, SPAN + .03), f * Vector3(x0 + 3.0, base + .5, SPAN + .03), f * Vector3(x0 + 3.0, base + .2, SPAN + .03)], .018, Color("#8a8b84"), 5)
+	_bar("metal", f, x0 + 2.8, base + 2.86, SPAN + .05, Vector3(.3, .26, .1), Color("#c9402a"), .85, 1.0)
+	_bar("metal", f, x0 + 2.8, base + 1.6, SPAN + .14, Vector3(.05, .05, .3), STEEL)
+	_bar("metal", f, x0 + 2.8, base + 2.2, SPAN + .14, Vector3(.05, .05, .3), STEEL)
+	_kit.block("plain", _at(f, x0 + 2.8, base + 1.3, SPAN + .012), Vector3(.04, .6, .004), Color("#6a4a30"), 1.0, 1.0, .9)
 
 func _venetian(r: Rect2, drop: float) -> void:
 	var f := _front
@@ -464,7 +477,11 @@ func _gacha_bank() -> void:
 		for row: int in range(2):
 			var y := .12 + float(row) * .68
 			_bar("plain", f, x, y + .33, .3, Vector3(.44, .66, .44), Color("#d3d7da"), .85, 1.0)
-			_panel("arcade", f, x - .21, x + .21, y + .02, y + .64, .524, _cell(1544, 1370, 240, 360), cards[(column * 2 + row * 3) % 5])
+			var kind := (column * 2 + row * 3) % 4
+			if kind == 3:
+				_panel("arcade", f, x - .21, x + .21, y + .02, y + .64, .524, _cell(1544, 1370, 240, 360), cards[column])
+			else:
+				_panel("poster", f, x - .21, x + .21, y + .02, y + .64, .524, _cell(float(kind) * 250.0, 1650, 240, 360))
 		_bar("metal", f, x, .06, .3, Vector3(.45, .12, .46), Color("#2a2c2e"))
 
 func _lift_lobby() -> void:
