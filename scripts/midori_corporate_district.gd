@@ -2,6 +2,7 @@ extends Node3D
 ## Corporate expansion in world metres; never parent this to the 2x park layout.
 const Budget = preload("res://scripts/shinrai_loading_budget.gd")
 const Geometry = preload("res://assets/shinrai/districts/corporate_command/district_geometry.gd")
+const StreetEdges = preload("res://scripts/midori_corporate_street_edges.gd")
 const PACKAGE := "res://assets/shinrai/districts/corporate_command/"
 const ORIGIN := Vector3(220,0,330)
 const DISTRICT_FOOTPRINT := Rect2(60,190,320,280)
@@ -43,6 +44,10 @@ func _ready() -> void:
 	connector.name = "CorporateRoadConnection"
 	add_child(connector)
 	await Budget.checkpoint(park)
+	# Curbs, gutters and gullies along the district streets and the connector,
+	# in the main street's precast finish.
+	var street_edges: Dictionary = StreetEdges.build(self, street, parcel)
+	await Budget.checkpoint(park)
 	interactions = load(PACKAGE+"shinrai_interactions.gd").new()
 	interactions.name = "CorporateTraversalInteractions"
 	# Children receive input before their raid parent, so Escape closes this
@@ -60,6 +65,7 @@ func _ready() -> void:
 		"tower_floors":8,"garage_levels":3,"police_station":true,
 		"context_buildings":12,"source_revision":5,"player_access":true,
 		"enemy_navigation_extended":false}
+	report["street_edges"] = street_edges
 	installed = true
 	add_to_group("midori_corporate_district")
 	print("MIDORI_CORPORATE_DISTRICT_READY origin=",ORIGIN," scale=1 garage_levels=3 police=1 road_connected=true")
