@@ -12,6 +12,10 @@ const WATER := Color(.20, .31, .36)
 const PATH := Color(.84, .79, .69)
 const IPE := Color("5b3a26")
 const SEAT_WALLS: Array[float] = [-23.0, -3.0]
+const CYCLE_RACK := "res://assets/shinrai/parks/midori_park/models/furniture/ambient/bicycle_rack/midori_bicycle_rack.glb"
+const RECYCLING := "res://assets/shinrai/parks/midori_park/models/furniture/ambient/recycling_station/recycling_cyberpunk.glb"
+const CYCLE_HOOPS: Array[float] = [19.0, 20.2, 21.4, 22.6, 23.8]
+const BINS: Array[float] = [-27.0, 28.0]
 
 static func build(district: Node3D) -> Dictionary:
 	var root := Node3D.new()
@@ -36,6 +40,7 @@ static func build(district: Node3D) -> Dictionary:
 			_seat_wall(district, Vector3(x, 0, walk_z - 2.7), mats)
 		for x: float in [-31.0, 31.0]:
 			_bamboo_planter(district, root, Vector3(x, 0, walk_z + 9.0), bamboo, mats)
+	_street_furniture(district, root)
 	_trust_monument(district, Vector3(-12, 0, Lawn.WALK_Z[0] + 11.0), mats)
 	_ring_monument(district, Vector3(-12, 0, Lawn.WALK_Z[1] + 10.0), mats)
 	return {"streams":Lawn.GARDENS.size(), "monuments":2}
@@ -53,6 +58,24 @@ static func _steel() -> StandardMaterial3D:
 	steel.metallic = .95
 	steel.roughness = .2
 	return steel
+
+## The park's real cycle hoops and recycling stations, in place of the old boxes.
+static func _street_furniture(district: Node3D, root: Node3D) -> void:
+	var rack := load(CYCLE_RACK) as PackedScene
+	if rack != null:
+		for x: float in CYCLE_HOOPS:
+			var hoop := rack.instantiate() as Node3D
+			hoop.position = Vector3(x, .02, 40.25)
+			root.add_child(hoop)
+	var recycling := load(RECYCLING) as PackedScene
+	if recycling != null:
+		for x: float in BINS:
+			var station := recycling.instantiate() as Node3D
+			# The model's origin is at mid height (bounds min y -0.354).
+			station.position = Vector3(x, .354, 39.5)
+			root.add_child(station)
+			var block: Node3D = district.call("box", "RecyclingBlock", Vector3(1.2, 1.28, .78), Vector3(x, .64, 39.5), null, true)
+			block.visible = false
 
 static func _box(parent: Node3D, label: String, size: Vector3, at: Vector3, material: Material) -> MeshInstance3D:
 	var node := MeshInstance3D.new()

@@ -13,8 +13,9 @@ const BENCH_X: Array[float] = [-23.0, -9.0, 9.0, 23.0]  # GardenWalk benches sit
 const WALK_GAP := 4.5
 const CHERRIES: Array[int] = [13, 12]  # 25 in all, by garden
 const COLUMNAR := .55  # crown width of the Musashino zelkova against a spreading tree
-const TREE_RANGE := 320.0
-const HEDGE_RANGE := 160.0
+const TREE_RANGE := 155.0  # measured to the middle of a garden; the other garden drops out
+const HEDGE_RANGE := 110.0
+
 const RNG_SEED := 20261031
 
 static func plant(district: Node3D) -> Dictionary:

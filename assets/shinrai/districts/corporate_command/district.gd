@@ -194,12 +194,7 @@ func _build_street_details() -> void:
 			tree(Vector3(x,.45,z),1.1)
 	# Bus shelter, cycle parking and utility details sit beyond the crossing spine.
 	_bus_stop(Vector3(15,0,65))
-	for x in [19.0,20.2,21.4,22.6,23.8]:
-		beam("CycleStand",Vector3(x,.02,39.5),Vector3(x,.85,39.5),.06,dark)
-		beam("CycleStand",Vector3(x,.85,39.5),Vector3(x,.85,41),.06,dark)
-		beam("CycleStand",Vector3(x,.85,41),Vector3(x,.02,41),.06,dark)
-	for x in [-27.0,28.0]:
-		box("PublicBin",Vector3(.65,1,.65),Vector3(x,.5,39.5),dark)
+	# The cycle hoops and recycling stations are placed by midori_corporate_garden_features.gd.
 	for at in [Vector3(-112,0,47),Vector3(112,0,-42),Vector3(-32,0,-60)]:
 		box("StreetUtility",Vector3(1.2,1.5,.6),at+Vector3.UP*.75,pale)
 	# Static street vehicles suggest daily use without implying traffic simulation.
