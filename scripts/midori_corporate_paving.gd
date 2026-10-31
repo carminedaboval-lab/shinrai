@@ -18,6 +18,9 @@ const DRAW_RANGE := 170.0
 const SHADES: Array[Color] = [Color("#b7b2a4"), Color("#b9b2a1"), Color("#aeaca1"), Color("#bbb6a9"), Color("#b3b1a6")]
 const LUMINANCE: Array[float] = [.97, 1.025, .955, 1.04, .985]
 const BED := Color("#2b2a26")
+# The connector's trapezoid where the road widens, world x/z.
+const WIDENING_WALK: Array[Vector2] = [Vector2(150, 190), Vector2(162.5, 195), Vector2(160, 197.5), Vector2(150, 192.5)]
+const ROAD_END_LIFT := .004  # ramps finish almost flush where they meet a road
 
 static func build(corporate: Node3D, street: Node3D, parcel: Node3D, district: Node3D) -> Dictionary:
 	var totals := {"chunks":0, "unique_meshes":0, "stones":0, "junction_patches":0}
@@ -36,6 +39,9 @@ static func build(corporate: Node3D, street: Node3D, parcel: Node3D, district: N
 	corporate.add_child(world)
 	for run: Array in _connector_runs():
 		_lay(world, run[0], run[1], material, cache, totals)
+	_lay_polygon(world, PackedVector2Array(WIDENING_WALK), .09, material, totals)
+	for ramp: Array in _connector_ramps():
+		_lay_ramp(world, ramp[0], ramp[1], ramp[2], material, totals)
 	_resurface_junctions(local, district.get("asphalt") as Material, totals)
 	return totals
 
@@ -71,6 +77,16 @@ static func _connector_runs() -> Array:
 		[Rect2(158.5, 197.5, 4, 6.5), .09],
 		[Rect2(38.5, 191, 2, 1.5), .09],
 		[Rect2(40.5, 190.14, 109.5, 2.36), .09],
+	]
+
+## [Rect2 running along z, stone top at the rect's near z, stone top at its far z].
+## The two drops meet the road, so the stones finish nearly flush with it.
+static func _connector_ramps() -> Array:
+	return [
+		[Rect2(38.5, 182, 2, 1), .09 + LIFT, .02 + ROAD_END_LIFT],
+		[Rect2(38.5, 190, 2, 1), .02 + ROAD_END_LIFT, .09 + LIFT],
+		[Rect2(174.5, 204, 2.5, 2.2), .09 + LIFT, LIFT],
+		[Rect2(158.5, 204, 4, 2.2), .09 + LIFT, LIFT],
 	]
 
 static func _material(street: Node3D) -> ShaderMaterial:
@@ -120,28 +136,41 @@ static func _chunk(length: float, width: float, variant: int, cache: Dictionary,
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var colors := PackedColorArray()
-	var half := Vector2(length, width) * .5
+	_fill_rect(verts, normals, uvs, colors, Rect2(Vector2(length, width) * -.5, Vector2(length, width)), variant, totals)
+	var mesh := _commit(verts, normals, uvs, colors)
+	cache[key] = mesh
+	totals.unique_meshes += 1
+	return mesh
+
+## Bed plus running-bond stones over a rect, with stone tops at y 0.
+static func _fill_rect(verts: PackedVector3Array, normals: PackedVector3Array, uvs: PackedVector2Array, colors: PackedColorArray, rect: Rect2, variant: int, totals: Dictionary) -> void:
 	var bed_y := -BED_BELOW
+	var low := rect.position
+	var high := rect.end
 	# Dark bed shows through every joint.
-	_quad(verts, normals, uvs, colors, [Vector3(-half.x, bed_y, -half.y), Vector3(half.x, bed_y, -half.y), Vector3(half.x, bed_y, half.y), Vector3(-half.x, bed_y, half.y)], Vector3.UP, [Vector2(.5, .5), Vector2(.5, .5), Vector2(.5, .5), Vector2(.5, .5)], BED.srgb_to_linear())
-	var z := -half.y
+	_quad(verts, normals, uvs, colors, [Vector3(low.x, bed_y, low.y), Vector3(high.x, bed_y, low.y), Vector3(high.x, bed_y, high.y), Vector3(low.x, bed_y, high.y)], Vector3.UP, [Vector2(.5, .5), Vector2(.5, .5), Vector2(.5, .5), Vector2(.5, .5)], BED.srgb_to_linear())
+	var z := low.y
 	var row := 0
-	while z < half.y - .001:
-		var dz := minf(STONE.y, half.y - z)
-		var x := -half.x
+	while z < high.y - .001:
+		var dz := minf(STONE.y, high.y - z)
+		var x := low.x
 		var column := 0
-		while x < half.x - .001:
-			var dx := minf(STONE.x if column > 0 or row % 2 == 0 else STONE.x * .5, half.x - x)
+		while x < high.x - .001:
+			var dx := minf(STONE.x if column > 0 or row % 2 == 0 else STONE.x * .5, high.x - x)
 			if dx > JOINT * 3.0 and dz > JOINT * 3.0:
-				var shade := posmod((variant * 37 + row * 71 + column * 127) ^ (row * column * 31), 5)
-				var tint := SHADES[shade].srgb_to_linear()
-				tint = Color(tint.r * LUMINANCE[shade], tint.g * LUMINANCE[shade], tint.b * LUMINANCE[shade])
-				_stone(verts, normals, uvs, colors, Rect2(x + JOINT * .5, z + JOINT * .5, dx - JOINT, dz - JOINT), tint)
+				_stone(verts, normals, uvs, colors, Rect2(x + JOINT * .5, z + JOINT * .5, dx - JOINT, dz - JOINT), _tint(variant, row, column))
 				totals.stones += 1
 			x += dx
 			column += 1
 		z += dz
 		row += 1
+
+static func _tint(variant: int, row: int, column: int) -> Color:
+	var shade := posmod((variant * 37 + row * 71 + column * 127) ^ (row * column * 31), 5)
+	var tint := SHADES[shade].srgb_to_linear()
+	return Color(tint.r * LUMINANCE[shade], tint.g * LUMINANCE[shade], tint.b * LUMINANCE[shade])
+
+static func _commit(verts: PackedVector3Array, normals: PackedVector3Array, uvs: PackedVector2Array, colors: PackedColorArray) -> ArrayMesh:
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -150,9 +179,94 @@ static func _chunk(length: float, width: float, variant: int, cache: Dictionary,
 	arrays[Mesh.ARRAY_COLOR] = colors
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	cache[key] = mesh
-	totals.unique_meshes += 1
 	return mesh
+
+static func _place(parent: Node3D, mesh: ArrayMesh, position: Vector3, material: Material, totals: Dictionary) -> void:
+	var chunk := MeshInstance3D.new()
+	chunk.name = "WalkStones"
+	chunk.mesh = mesh
+	chunk.material_override = material
+	chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	chunk.visibility_range_end = DRAW_RANGE
+	chunk.position = position
+	parent.add_child(chunk)
+	totals.chunks += 1
+	totals.unique_meshes += 1
+
+## Sloped stones: lays the flat pattern, then shears every vertex onto the ramp
+## so joints stay square to the slope and the ramp's collision stays untouched.
+static func _lay_ramp(parent: Node3D, rect: Rect2, top_near: float, top_far: float, material: Material, totals: Dictionary) -> void:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var colors := PackedColorArray()
+	_fill_rect(verts, normals, uvs, colors, rect, 1, totals)
+	var slope := Vector3(0, 1, (top_near - top_far) / rect.size.y).normalized()
+	for i: int in range(verts.size()):
+		var vertex := verts[i]
+		vertex.y += lerpf(top_near, top_far, (vertex.z - rect.position.y) / rect.size.y)
+		verts[i] = vertex
+		if normals[i].y > .5: normals[i] = slope
+	_place(parent, _commit(verts, normals, uvs, colors), Vector3.ZERO, material, totals)
+
+## Stones cut to an angled outline, as a mason cuts them to a boundary.
+static func _lay_polygon(parent: Node3D, outline: PackedVector2Array, top: float, material: Material, totals: Dictionary) -> void:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var colors := PackedColorArray()
+	var bounds := Rect2(outline[0], Vector2.ZERO)
+	for point: Vector2 in outline: bounds = bounds.expand(point)
+	var bed := BED.srgb_to_linear()
+	for index: int in Geometry2D.triangulate_polygon(outline):
+		verts.append(Vector3(outline[index].x, -BED_BELOW, outline[index].y))
+		normals.append(Vector3.UP)
+		uvs.append(Vector2(.5, .5))
+		colors.append(bed)
+	var z := bounds.position.y
+	var row := 0
+	while z < bounds.end.y - .001:
+		var x := bounds.position.x
+		var column := 0
+		while x < bounds.end.x - .001:
+			var dx: float = STONE.x if column > 0 or row % 2 == 0 else STONE.x * .5
+			var tile := Rect2(x + JOINT * .5, z + JOINT * .5, dx - JOINT, STONE.y - JOINT)
+			var square := PackedVector2Array([tile.position, Vector2(tile.end.x, tile.position.y), tile.end, Vector2(tile.position.x, tile.end.y)])
+			for clipped: PackedVector2Array in Geometry2D.intersect_polygons(square, outline):
+				if _area(clipped) < .004: continue
+				_cut_stone(verts, normals, uvs, colors, clipped, tile, _tint(2, row, column))
+				totals.stones += 1
+			x += dx
+			column += 1
+		z += STONE.y
+		row += 1
+	_place(parent, _commit(verts, normals, uvs, colors), Vector3(0, top + LIFT, 0), material, totals)
+
+static func _area(polygon: PackedVector2Array) -> float:
+	var total := 0.0
+	for i: int in range(polygon.size()):
+		total += polygon[i].cross(polygon[(i + 1) % polygon.size()])
+	return absf(total) * .5
+
+static func _cut_stone(verts: PackedVector3Array, normals: PackedVector3Array, uvs: PackedVector2Array, colors: PackedColorArray, piece: PackedVector2Array, tile: Rect2, tint: Color) -> void:
+	var outline := piece.duplicate()
+	if Geometry2D.is_polygon_clockwise(outline): outline.reverse()
+	for index: int in Geometry2D.triangulate_polygon(outline):
+		verts.append(Vector3(outline[index].x, 0, outline[index].y))
+		normals.append(Vector3.UP)
+		uvs.append((outline[index] - tile.position) / tile.size)
+		colors.append(tint)
+	var drop := Vector3.DOWN * (BED_BELOW + .001)
+	for i: int in range(outline.size()):
+		var p: Vector2 = outline[i]
+		var q: Vector2 = outline[(i + 1) % outline.size()]
+		var a := Vector3(p.x, 0, p.y)
+		var b := Vector3(q.x, 0, q.y)
+		var edge := b - a
+		if edge.length_squared() < .000001: continue
+		var uv_a := (p - tile.position) / tile.size
+		var uv_b := (q - tile.position) / tile.size
+		_quad(verts, normals, uvs, colors, [a, b, b + drop, a + drop], Vector3(edge.z, 0, -edge.x).normalized(), [uv_a, uv_b, uv_b, uv_a], tint * .8)
 
 ## Top face plus four short sides. UVs run 0..1 across each stone, which is what
 ## the paving shader reads for edge soil and the worn arris.

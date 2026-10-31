@@ -22,6 +22,7 @@ class Edge:
 	var curb_top: float
 	var gaps: Array[Vector2] = []
 	var gully_phase := 8.0
+	var gutter := true      # false where the road falls away on a ramp
 	func _init(p_axis: int, p_fixed: float, p_from: float, p_to: float, p_toward: float, p_road_y: float, p_top: float) -> void:
 		axis = p_axis; fixed = p_fixed; from = p_from; to = p_to
 		toward_road = p_toward; road_y = p_road_y; curb_top = p_top
@@ -41,6 +42,8 @@ static func build(corporate: Node3D, street: Node3D, parcel: Node3D) -> Dictiona
 	corporate.add_child(connector_root)
 	for edge: Edge in _connector_edges():
 		_build_edge(connector_root, edge, mats, totals)
+	# The road widens across the south walk on a diagonal.
+	_angled_curb(connector_root, Vector2(150, 190), Vector2(162.5, 195), .02, .132, mats, totals)
 	district_root.set_meta("street_edges", totals)
 	return totals
 
@@ -69,9 +72,16 @@ static func _district_edges() -> Array[Edge]:
 	return edges
 
 ## The main-road continuation east of the shops, world metres: walks at .09
-## either side of a 7 m road at .02, from the parcel opening to the widening.
+## either side of a 7 m road at .02, then round the turn into the district.
+## The road falls away on its ramp south of z 195, so those curbs start below
+## it and carry no gutter.
 static func _connector_edges() -> Array[Edge]:
-	return [Edge.new(0, 182.93, 52.6, 150.0, 1.0, .02, .132), Edge.new(0, 190.07, 52.6, 150.0, -1.0, .02, .132)]
+	var east_ramp := Edge.new(2, 174.57, 195.0, 204.0, -1.0, -.02, .132)
+	east_ramp.gutter = false
+	var west_ramp := Edge.new(2, 162.43, 197.5, 204.0, 1.0, -.02, .132)
+	west_ramp.gutter = false
+	return [Edge.new(0, 182.93, 52.6, 174.5, 1.0, .02, .132), Edge.new(0, 190.07, 52.6, 150.0, -1.0, .02, .132),
+		Edge.new(2, 174.57, 182.86, 195.0, -1.0, .02, .132), east_ramp, west_ramp]
 
 static func _materials(street: Node3D) -> Dictionary:
 	var source: Dictionary = street.get("materials") if street != null else {}
@@ -89,13 +99,9 @@ static func _build_edge(root: Node3D, edge: Edge, mats: Dictionary, totals: Dict
 	var along := Vector3.RIGHT if edge.axis == 0 else Vector3.BACK
 	var across := (Vector3.BACK if edge.axis == 0 else Vector3.RIGHT) * edge.toward_road
 	var h := edge.curb_top - edge.road_y
-	var curb_profile: Array[Vector2] = [Vector2(-.07, 0), Vector2(.07, 0), Vector2(.07, h - .013), Vector2(.057, h), Vector2(-.057, h), Vector2(-.07, h - .013)]
-	var dish: Array[Vector2] = [Vector2(-.11, 0), Vector2(.11, 0), Vector2(.11, .012), Vector2(.08, .012), Vector2(0, .006), Vector2(-.08, .012), Vector2(-.11, .012)]
-	var tools := {}
-	for key: String in ["curb", "gutter", "seal", "bed", "iron", "void"]:
-		var tool := SurfaceTool.new()
-		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-		tools[key] = tool
+	var curb_profile := _curb_profile(h)
+	var dish := _dish_profile()
+	var tools := _new_tools()
 	var runs := 0
 	for seg: Vector2 in _segments(edge.from, edge.to, edge.gaps):
 		var length := seg.y - seg.x
@@ -106,20 +112,62 @@ static func _build_edge(root: Node3D, edge: Edge, mats: Dictionary, totals: Dict
 			var centre := seg.x + (float(i) + .5) * pitch
 			var base := _point(edge, centre, edge.fixed, edge.road_y)
 			_extrude(tools.curb, curb_profile, base, along, across, pitch - JOINT)
-			_extrude(tools.gutter, dish, base + across * .18 + Vector3.DOWN * .004, along, across, pitch - JOINT)
-			if i < n - 1:
-				_box_into(tools.seal, _size(edge, .005, .013, .22), _point(edge, seg.x + float(i + 1) * pitch, edge.fixed + edge.toward_road * .18, edge.road_y + .0025))
+			if edge.gutter:
+				_extrude(tools.gutter, dish, base + across * .18 + Vector3.DOWN * .004, along, across, pitch - JOINT)
+				if i < n - 1:
+					_box_into(tools.seal, _size(edge, .005, .013, .22), _point(edge, seg.x + float(i + 1) * pitch, edge.fixed + edge.toward_road * .18, edge.road_y + .0025))
 			totals.curb_units += 1
 		_solid(root, "CurbRun", _point(edge, (seg.x + seg.y) * .5, edge.fixed, (edge.road_y + edge.curb_top) * .5), _size(edge, length, h, .14))
 		runs += 1
 		var g := edge.from + edge.gully_phase
-		while g < edge.to:
+		while edge.gutter and g < edge.to:
 			if g > seg.x + 1.2 and g < seg.y - 1.2:
 				_gully(tools, edge, g, h)
 				totals.gullies += 1
 			g += GULLY_EVERY
 	totals.collision_runs += runs
 	totals.edges += 1
+	_commit_tools(root, tools, mats, totals)
+
+static func _curb_profile(h: float) -> Array[Vector2]:
+	return [Vector2(-.07, 0), Vector2(.07, 0), Vector2(.07, h - .013), Vector2(.057, h), Vector2(-.057, h), Vector2(-.07, h - .013)]
+
+static func _dish_profile() -> Array[Vector2]:
+	return [Vector2(-.11, 0), Vector2(.11, 0), Vector2(.11, .012), Vector2(.08, .012), Vector2(0, .006), Vector2(-.08, .012), Vector2(-.11, .012)]
+
+static func _new_tools() -> Dictionary:
+	var tools := {}
+	for key: String in ["curb", "gutter", "seal", "bed", "iron", "void"]:
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		tools[key] = tool
+	return tools
+
+## A curb along any road edge a -> b, with the walk on the left of that direction.
+static func _angled_curb(root: Node3D, a: Vector2, b: Vector2, road_y: float, curb_top: float, mats: Dictionary, totals: Dictionary) -> void:
+	var flat := (b - a).normalized()
+	var length := a.distance_to(b)
+	var along := Vector3(flat.x, 0, flat.y)
+	var toward_walk := Vector3(-flat.y, 0, flat.x)
+	var across := -toward_walk
+	var h := curb_top - road_y
+	var tools := _new_tools()
+	var n := maxi(1, int(round(length / UNIT)))
+	var pitch := length / float(n)
+	var start := Vector3(a.x, road_y, a.y) + toward_walk * .07
+	for i: int in range(n):
+		var base := start + along * ((float(i) + .5) * pitch)
+		_extrude(tools.curb, _curb_profile(h), base, along, across, pitch - JOINT)
+		_extrude(tools.gutter, _dish_profile(), base + across * .18 + Vector3.DOWN * .004, along, across, pitch - JOINT)
+		totals.curb_units += 1
+	_commit_tools(root, tools, mats, totals)
+	var centre := start + along * (length * .5) + Vector3.UP * (h * .5)
+	var body := _solid(root, "CurbRun", centre, Vector3(length, h, .14))
+	body.rotation.y = atan2(-flat.y, flat.x)
+	totals.collision_runs += 1
+	totals.edges += 1
+
+static func _commit_tools(root: Node3D, tools: Dictionary, mats: Dictionary, totals: Dictionary) -> void:
 	for pair: Array in [["curb", mats.land_curb, true], ["gutter", mats.land_gutter, false], ["seal", mats.land_void, false], ["bed", mats.land_gutter, false], ["iron", mats.land_iron, false], ["void", mats.land_void, false]]:
 		var mesh: ArrayMesh = (tools[pair[0]] as SurfaceTool).commit()
 		if mesh == null or mesh.get_surface_count() == 0: continue
@@ -210,7 +258,7 @@ static func _tri(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, normal: 
 		tool.set_normal(normal)
 		tool.add_vertex(vertex)
 
-static func _solid(parent: Node3D, label: String, centre: Vector3, size: Vector3) -> void:
+static func _solid(parent: Node3D, label: String, centre: Vector3, size: Vector3) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = label
 	body.position = centre
@@ -222,3 +270,4 @@ static func _solid(parent: Node3D, label: String, centre: Vector3, size: Vector3
 	shape.shape = box
 	body.add_child(shape)
 	parent.add_child(body)
+	return body
