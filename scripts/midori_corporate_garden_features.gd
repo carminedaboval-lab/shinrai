@@ -138,7 +138,7 @@ static func _trust_monument(district: Node3D, at: Vector3, mats: Dictionary) -> 
 	plaque.text = "信頼\nTRUST CITY"
 	plaque.font = font
 	plaque.font_size = 72
-	plaque.pixel_size = .008
+	plaque.pixel_size = .0052
 	plaque.outline_size = 0
 	plaque.modulate = Color(.1, .1, .11)
 	plaque.position = at + Vector3(0, .85, 2.0)

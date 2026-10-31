@@ -71,7 +71,9 @@ void fragment() {
 	float age = noise21(p * 0.13 + vec2(4.0, 9.0)) * 0.7 + value * 0.3;
 	vec3 tip = mix(tip_color, dry_color, smoothstep(0.5, 0.85, age) * dry_amount);
 	vec3 colour = mix(root_color, tip, smoothstep(0.1, 0.95, rise));
-	colour = mix(colour, flower_color, step(1.0 - flower_amount, value) * smoothstep(0.5, 0.75, rise));
+	// Flower sprays are fixed to the ground, so every layer agrees where they are.
+	float spray = noise21(p * 7.0) * 0.55 + noise21(p * 23.0) * 0.45;
+	colour = mix(colour, flower_color, step(0.62 - flower_amount * 0.3, spray) * step(0.001, flower_amount) * smoothstep(0.45, 0.7, rise));
 	colour *= mix(0.72, 1.18, value) * mix(0.82, 1.12, noise21(p * 0.09) * 0.6 + noise21(p * 0.31) * 0.4);
 	ALBEDO = colour;
 	// A gentle tilt only: under a low sun a stronger one reads as dark blotches.
