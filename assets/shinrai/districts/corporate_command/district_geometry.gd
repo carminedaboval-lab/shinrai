@@ -2,6 +2,7 @@ extends Node3D
 ## Shared metre-scale modelling helpers for the corporate district.
 var geometry_count := 0
 var collider_count := 0
+var tree_spots: Array[Vector4] = []
 
 func mat(color:Color,roughness:float=.8,emission:float=0.0) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -108,12 +109,7 @@ func parked_car(at:Vector3,color:Color,yaw:float=0.0) -> Node3D:
 	return car
 
 func tree(at:Vector3,scale_m:float=1.0) -> void:
-	var bark := mat(Color("4d4942"),.95)
-	var leaf := mat(Color("436653"),.92)
-	box("TreeTrunk",Vector3(.25,3.1,.25)*scale_m,at+Vector3.UP*1.55*scale_m,bark,true)
-	for i in range(3):
-		var crown := MeshInstance3D.new()
-		var mesh := SphereMesh.new(); mesh.radius=1.25*scale_m; mesh.height=2.3*scale_m; mesh.radial_segments=12; mesh.rings=6
-		crown.mesh=mesh; crown.material_override=leaf
-		crown.position=at+Vector3(sin(i*2.1)*.55,3.1+i*.42,cos(i*2.1)*.55)*scale_m
-		add_child(crown); geometry_count+=1
+	# midori_corporate_trees.gd plants the visible tree. Only the trunk collision lives here.
+	tree_spots.append(Vector4(at.x,at.y,at.z,scale_m))
+	var trunk := box("TreeTrunk",Vector3(.25,3.1,.25)*scale_m,at+Vector3.UP*1.55*scale_m,mat(Color("4d4942"),.95),true)
+	trunk.visible=false

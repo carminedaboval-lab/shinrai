@@ -8,6 +8,7 @@ var white:StandardMaterial3D
 var cyan:StandardMaterial3D
 var amber:StandardMaterial3D
 var leaf:StandardMaterial3D
+var soil:StandardMaterial3D
 var garage:Node3D
 var police:Node3D
 var context_buildings := 0
@@ -23,6 +24,7 @@ func _ready() -> void:
 	cyan=mat(Color("64e3f4"),.45,1.3)
 	amber=mat(Color("f9bd69"),.6,.65)
 	leaf=mat(Color("354d40"),.95)
+	soil=mat(Color("2e241b"),.97)
 	_build_streets()
 	_build_plazas()
 	_build_neighbourhood()
@@ -99,6 +101,7 @@ func _build_plazas() -> void:
 	for x in [-34.0,34.0]:
 		for z in [41.5,-40.0]:
 			box("TowerTreePlanter",Vector3(5,.35,3),Vector3(x,.17,z),dark)
+			box("PlanterSoil",Vector3(4.6,.03,2.6),Vector3(x,.36,z),soil,false)
 			tree(Vector3(x,.36,z),1.35)
 	_direction_sign(Vector3(30,0,35.5),"POLICE  <     COMMAND     >  PARKING","PARKING  <     COMMAND     >  POLICE")
 	_direction_sign(Vector3(-30,0,35.5),"POLICE  <     PUBLIC WALK     >  P","P  <     PUBLIC WALK     >  POLICE")
@@ -192,6 +195,7 @@ func _build_street_details() -> void:
 	for x in [-113.0,115.0]:
 		for z in [-30.0,-13.0,5.0,22.0,42.0]:
 			box("StreetPlanter",Vector3(2.5,.45,2.5),Vector3(x,.2,z),dark)
+			box("PlanterSoil",Vector3(2.2,.03,2.2),Vector3(x,.435,z),soil,false)
 			tree(Vector3(x,.45,z),1.1)
 	# Bus shelter, cycle parking and utility details sit beyond the crossing spine.
 	_bus_stop(Vector3(15,0,65))

@@ -4,6 +4,7 @@ const Budget = preload("res://scripts/shinrai_loading_budget.gd")
 const Geometry = preload("res://assets/shinrai/districts/corporate_command/district_geometry.gd")
 const StreetEdges = preload("res://scripts/midori_corporate_street_edges.gd")
 const WalkPaving = preload("res://scripts/midori_corporate_paving.gd")
+const Trees = preload("res://scripts/midori_corporate_trees.gd")
 const PACKAGE := "res://assets/shinrai/districts/corporate_command/"
 const ORIGIN := Vector3(220,0,330)
 const DISTRICT_FOOTPRINT := Rect2(60,190,320,280)
@@ -57,6 +58,8 @@ func _ready() -> void:
 	await Budget.checkpoint(park)
 	var walk_paving: Dictionary = WalkPaving.build(self, street, parcel, district)
 	await Budget.checkpoint(park)
+	var trees: Dictionary = Trees.plant(district)
+	await Budget.checkpoint(park)
 	interactions = load(PACKAGE+"shinrai_interactions.gd").new()
 	interactions.name = "CorporateTraversalInteractions"
 	# Children receive input before their raid parent, so Escape closes this
@@ -76,6 +79,7 @@ func _ready() -> void:
 		"enemy_navigation_extended":false}
 	report["street_edges"] = street_edges
 	report["walk_paving"] = walk_paving
+	report["trees"] = trees
 	installed = true
 	add_to_group("midori_corporate_district")
 	print("MIDORI_CORPORATE_DISTRICT_READY origin=",ORIGIN," scale=1 garage_levels=3 police=1 road_connected=true")
