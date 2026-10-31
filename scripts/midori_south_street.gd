@@ -35,6 +35,7 @@ const MaterialFinish = preload("res://scripts/building_access/material_finish.gd
 const ReferenceDetails = preload("res://scripts/building_access/reference_details.gd")
 const HousePersonality = preload("res://scripts/midori_house_personality.gd")
 const ResidentParking = preload("res://scripts/midori_resident_parking.gd")
+const StreetFurniture = preload("res://scripts/midori_street_furniture.gd")
 const TEXTURES := "res://assets/procedural_textures/"
 const FACADE_PROPS := "res://assets/shinrai/streets/midori_facade/"
 const MARKET_STALL := "res://assets/shinrai/streets/midori_market_stall/market_stall_lod0.glb"
@@ -196,6 +197,10 @@ func _ready() -> void:
 	_st = StartupTrace.finish("south_street._build_street_lights", _st)
 	await Budget.checkpoint(park)
 	_st = StartupTrace.begin()
+	var street_furniture: Dictionary = StreetFurniture.build(self)
+	_st = StartupTrace.finish("south_street.StreetFurniture", _st)
+	await Budget.checkpoint(park)
+	_st = StartupTrace.begin()
 	_build_shop_lighting()
 	_st = StartupTrace.finish("south_street._build_shop_lighting", _st)
 	await Budget.checkpoint(park)
@@ -245,6 +250,7 @@ func _ready() -> void:
 		"court_buildings":court_buildings,"court_ground":court_ground,"ceramics_gallery":gallery_report,"court_art":court_art,"court_lighting":court_lighting,"court_lamps":court_lighting.courtyard_lamps,"gallery_lights":court_lighting.gallery_lights,"court_added_buildings":4,
 		"reused_meshy_stalls":1,"meshy_roof_ornaments":ornament_count,"new_asset_jobs":1,"coordinates":"world_metres","enemy_navigation_changed":false}
 	report["street_completion"] = street_completion
+	report["street_furniture"] = street_furniture
 	report["kobayashi_frontage"] = kobayashi_frontage
 	report["surface_readability"] = surface_readability
 	report["window_readability"] = window_readability
