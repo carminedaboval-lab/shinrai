@@ -164,6 +164,22 @@ func _plant(base: Vector3, tall: float, tint: Color) -> void:
 		_kit.quad("leaf", base - side, tip - side * .3, tip + side * .3, base + side, tone, .7, 1.0)
 		_kit.quad("leaf", base + side, tip + side * .3, tip - side * .3, base - side, tone, .6, .9)
 
+func _parked_bicycle(at: Vector3, tint: Color) -> void:
+	# Runs along z: parked nose to the rail, or down the side of a lane.
+	var black := Color("#1b1c1e")
+	for z: float in [-.5, .5]:
+		var hub := at + Vector3(0, .33, z)
+		var points: Array[Vector3] = []
+		for i: int in range(13):
+			var angle := TAU * float(i) / 12.0
+			points.append(hub + Vector3(0, sin(angle), cos(angle)) * .31)
+		_kit.tube("metal", points, .012, black, 3)
+	var seat := at + Vector3(0, .88, .26)
+	var bars := at + Vector3(0, .98, -.34)
+	_kit.tube("metal", [at + Vector3(0, .33, .5), seat, bars, at + Vector3(0, .33, -.5)], .016, tint, 4)
+	_kit.tube("metal", [at + Vector3(0, .33, .5), at + Vector3(0, .33, 0), bars], .014, tint, 4)
+	_kit.tube("metal", [bars + Vector3(-.24, 0, 0), bars + Vector3(.24, 0, 0)], .012, black, 3)
+
 func _outdoor_unit(face: Transform3D, x: float, y: float, z: float) -> void:
 	# Air-conditioner condenser: cased box, round fan guard, and a slatted side.
 	var casing := Color("#c2c2b8")
