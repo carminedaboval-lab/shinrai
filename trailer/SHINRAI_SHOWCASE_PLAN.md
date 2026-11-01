@@ -321,6 +321,7 @@ Generators that take an image and a motion prompt and hold the frame well: Runwa
 1. `trailer\RENDER_TRAILER_SHOTS.cmd` → check stills, adjust camera positions in `tests/trailer_capture.gd`, repeat until every ENGINE shot frames well.
 2. `trailer\RENDER_TRAILER_SHOTS.cmd clips` → `frames\<shot>\*.jpg`, then `clips\*.mp4` (one per shot, 1920x1080, 30 fps, no audio: the trailer's sound is built separately).
 2b. `trailer\RENDER_TRAILER_SHOTS.cmd staged` → check the first-person stills, HQ stills and plates; adjust positions in `tests/trailer_staged_capture.gd`; then `staged clips` for the frame dumps and MP4s.
+2c. `powershell -ExecutionPolicy Bypass -File trailer\make_vo.ps1` then `python trailer\build_trailer.py` → `trailer\build\SHINRAI_showcase_assembly.mp4`: the full assembly cut with placeholder narration (Windows SAPI), every ENGINE and STAGED shot in place, HUD plates composited, title cards, the transit-map billboard composite, a temp low pulse under beats 4 to 5b, and a labelled seed-still placeholder wherever an AI shot goes. Replace `build\vo\*.wav` with the recorded VO and drop finished AI clips in as `clip` rows in `BEATS` to upgrade it shot by shot; `--reuse` keeps already-rendered segments.
 3. Generate AI stills from the seeds in `stills\`, animate, export 1080p.
 4. Resolve (free) timeline at 1920x1080 30 fps: lay VO first, then cut pictures to the VO, then music.
 5. HUD plates as a top track on STAGED and first-person AI shots. Match the HUD state to the narration (relay count, timer, extraction bar).

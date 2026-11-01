@@ -15,3 +15,5 @@ profile_startup.flag
 
 # Trailer engine captures (copied from the Godot user folder; regenerate with trailer/RENDER_TRAILER_SHOTS.cmd)
 trailer/engine/
+# Trailer assembly output (regenerate with trailer/build_trailer.py)
+trailer/build/
