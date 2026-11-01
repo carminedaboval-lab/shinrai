@@ -12,3 +12,6 @@
 *.exe
 startup_profile*.log
 profile_startup.flag
+
+# Trailer engine captures (copied from the Godot user folder; regenerate with trailer/RENDER_TRAILER_SHOTS.cmd)
+trailer/engine/
