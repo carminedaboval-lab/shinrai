@@ -311,30 +311,6 @@ func _kerbside() -> void:
 	_kit.atlas("poster", board * Vector3(-.34, .1, .12), board * Vector3(-.34, 1.08, -.08), board * Vector3(.34, 1.08, -.08), board * Vector3(.34, .1, .12), _cell(310, 1600, 300, 420))
 	_kit.quad("plain", board * Vector3(.34, 0, -.3), board * Vector3(.34, 1.08, -.1), board * Vector3(-.34, 1.08, -.1), board * Vector3(-.34, 0, -.3), Color("#2c2e30"))
 
-func _ball(at: Vector3, size: Vector3, tint: Color) -> void:
-	var profile: Array[Vector2] = []
-	var rings := 20
-	for i: int in range(rings + 1):
-		var a := -PI * .5 + PI * float(i) / float(rings)
-		profile.append(Vector2(maxf(cos(a), .001), sin(a)))
-	# The lathe is round, so an egg is a stack of its own rings: scale them here instead.
-	var sides := 32
-	for r: int in range(rings):
-		for s: int in range(sides):
-			var a0 := -TAU * float(s) / float(sides)
-			var a1 := -TAU * float(s + 1) / float(sides)
-			var p0 := profile[r]
-			var p1 := profile[r + 1]
-			var low_left := at + Vector3(cos(a0) * p0.x * size.x, p0.y * size.y, sin(a0) * p0.x * size.z)
-			var top_left := at + Vector3(cos(a0) * p1.x * size.x, p1.y * size.y, sin(a0) * p1.x * size.z)
-			var top_right := at + Vector3(cos(a1) * p1.x * size.x, p1.y * size.y, sin(a1) * p1.x * size.z)
-			var low_right := at + Vector3(cos(a1) * p0.x * size.x, p0.y * size.y, sin(a1) * p0.x * size.z)
-			var n0 := Vector3(cos(a0) * p0.x, p0.y, sin(a0) * p0.x)
-			var n1 := Vector3(cos(a0) * p1.x, p1.y, sin(a0) * p1.x)
-			var n2 := Vector3(cos(a1) * p1.x, p1.y, sin(a1) * p1.x)
-			var n3 := Vector3(cos(a1) * p0.x, p0.y, sin(a1) * p0.x)
-			_kit.smooth("plain", low_left, top_left, top_right, low_right, n0, n1, n2, n3, tint)
-
 func _flag(foot: Vector3, turn: float, column: float) -> void:
 	var spin := Basis(Vector3.UP, turn)
 	_kit.lathe("metal", foot, [Vector2(.16, 0), Vector2(.16, .1), Vector2(.03, .14)], Color("#3a3d40"), 10)

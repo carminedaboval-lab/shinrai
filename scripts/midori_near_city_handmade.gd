@@ -164,17 +164,40 @@ func _plant(base: Vector3, tall: float, tint: Color) -> void:
 		_kit.quad("leaf", base - side, tip - side * .3, tip + side * .3, base + side, tone, .7, 1.0)
 		_kit.quad("leaf", base + side, tip + side * .3, tip - side * .3, base - side, tone, .6, .9)
 
+func _ball(at: Vector3, size: Vector3, tint: Color, part := "plain", rings := 20, sides := 32, axes := Basis.IDENTITY) -> void:
+	var profile: Array[Vector2] = []
+	for i: int in range(rings + 1):
+		var a := -PI * .5 + PI * float(i) / float(rings)
+		profile.append(Vector2(maxf(cos(a), .001), sin(a)))
+	# The lathe is round, so an egg is a stack of its own rings: scale them here instead.
+	for r: int in range(rings):
+		for s: int in range(sides):
+			var a0 := -TAU * float(s) / float(sides)
+			var a1 := -TAU * float(s + 1) / float(sides)
+			var p0 := profile[r]
+			var p1 := profile[r + 1]
+			var low_left := at + axes * Vector3(cos(a0) * p0.x * size.x, p0.y * size.y, sin(a0) * p0.x * size.z)
+			var top_left := at + axes * Vector3(cos(a0) * p1.x * size.x, p1.y * size.y, sin(a0) * p1.x * size.z)
+			var top_right := at + axes * Vector3(cos(a1) * p1.x * size.x, p1.y * size.y, sin(a1) * p1.x * size.z)
+			var low_right := at + axes * Vector3(cos(a1) * p0.x * size.x, p0.y * size.y, sin(a1) * p0.x * size.z)
+			var n0 := axes * Vector3(cos(a0) * p0.x, p0.y, sin(a0) * p0.x)
+			var n1 := axes * Vector3(cos(a0) * p1.x, p1.y, sin(a0) * p1.x)
+			var n2 := axes * Vector3(cos(a1) * p1.x, p1.y, sin(a1) * p1.x)
+			var n3 := axes * Vector3(cos(a1) * p0.x, p0.y, sin(a1) * p0.x)
+			_kit.smooth(part, low_left, top_left, top_right, low_right, n0, n1, n2, n3, tint)
+
 func _parked_bicycle(at: Vector3, tint: Color) -> void:
 	# Runs along z: parked nose to the rail, or down the side of a lane.
 	var black := Color("#1b1c1e")
 	for z: float in [-.5, .5]:
 		var hub := at + Vector3(0, .33, z)
 		var points: Array[Vector3] = []
-		for i: int in range(13):
-			var angle := TAU * float(i) / 12.0
+		for i: int in range(29):
+			var angle := TAU * float(i) / 28.0
 			points.append(hub + Vector3(0, sin(angle), cos(angle)) * .31)
-		_kit.tube("metal", points, .012, black, 3)
+		_kit.tube("metal", points, .014, black, 5)
 	var seat := at + Vector3(0, .88, .26)
+	_kit.block("plain", Transform3D(Basis.IDENTITY, seat + Vector3.UP * .03), Vector3(.1, .05, .24), black)
 	var bars := at + Vector3(0, .98, -.34)
 	_kit.tube("metal", [at + Vector3(0, .33, .5), seat, bars, at + Vector3(0, .33, -.5)], .016, tint, 4)
 	_kit.tube("metal", [at + Vector3(0, .33, .5), at + Vector3(0, .33, 0), bars], .014, tint, 4)
