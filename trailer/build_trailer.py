@@ -115,6 +115,29 @@ def make_platform_card(path: str) -> None:
     img.save(path)
 
 
+def make_kinetic_card(path: str, text: str) -> None:
+    """A hard typographic beat between sections, E3 style: one line, big, left-set."""
+    img = card_base()
+    d = ImageDraw.Draw(img)
+    f = title_font(170)
+    lines = text.split("\n")
+    y = H / 2 - 95 * len(lines)
+    for line in lines:
+        d.text((140, y), line, font=f, fill=PAPER)
+        y += 190
+    d.rectangle((140, y + 10, 420, y + 16), fill=MINT)
+    img.save(path)
+
+
+KINETIC = {
+    "k_relays": "THREE RELAYS.\nONE WAY OUT.",
+    "k_move": "MOVE LIKE\nIT MATTERS.",
+    "k_contact": "CONTACT.",
+    "k_carry": "THEY WANT\nWHAT YOU CARRY.",
+    "k_train": "CATCH THE\nLAST TRAIN.",
+}
+
+
 def make_black(path: str) -> None:
     Image.new("RGB", (W, H), (0, 0, 0)).save(path)
 
@@ -272,6 +295,8 @@ def build_graphics() -> None:
     make_title_card(os.path.join(GFX, "title.png"))
     make_title_card(os.path.join(GFX, "logo_tagline.png"), tagline="Catch the last train.")
     make_platform_card(os.path.join(GFX, "platforms.png"))
+    for name, text in KINETIC.items():
+        make_kinetic_card(os.path.join(GFX, name + ".png"), text)
     for name, kind in [("SHIGURE  S-9", "submachine gun · auto"), ("RAIDEN  R-56", "assault rifle · auto"),
                        ("HAYATE  H-7", "sniper rifle · bolt action")]:
         make_weapon_card(os.path.join(GFX, "weapon_%s.png" % name.split()[0].lower()), name, kind)
@@ -336,6 +361,7 @@ BEATS = [
         {"kind": "clip", "src": "s08_west_exfil_hud", "dur": 4.0, "offset": 1.0},
     ]),
     ("b2", [
+        {"kind": "card", "src": "k_relays", "dur": 1.6, "kinetic": True},
         {"kind": "clip", "src": "d05_sakura_grove", "dur": 6.0},
         {"kind": "clip", "src": "d08_playground_pan", "dur": 4.0},
         {"kind": "clip", "src": "d09_pavilion_east", "dur": 3.0},
@@ -343,9 +369,11 @@ BEATS = [
         {"kind": "clip", "src": "n01_gate_smashed", "dur": 6.0},
     ]),
     ("b3", [
+        {"kind": "card", "src": "k_move", "dur": 1.6, "kinetic": True},
         {"kind": "clip", "src": "s02_sprint_stop", "dur": 5.0},
         {"kind": "clip", "src": "s03_mantle_aim", "dur": 4.2},
         {"kind": "clip", "src": "s04_corner_lean", "dur": 4.5},
+        {"kind": "clip", "src": "c04_mag_check", "dur": 3.4, "offset": 0.6, "fallback": None},
         {"kind": "ai", "src": "05", "dur": 4.0},
         {"kind": "ai", "src": "06", "dur": 3.5, "plate": "p01_start_0of3"},
         {"kind": "clip", "src": "s05_jump_ads", "dur": 3.7},
@@ -355,28 +383,37 @@ BEATS = [
         {"kind": "clip", "src": "s06_door_push", "dur": 5.6},
         {"kind": "ai", "src": "04c", "dur": 3.5},
         {"kind": "ai", "src": "04d", "dur": 3.0},
-        {"kind": "clip", "src": "s06b_clubhouse_door", "dur": 4.0, "offset": 1.8, "plate": "p06_loot_prompt"},
+        {"kind": "clip", "src": "c05_bench_search", "dur": 4.0, "offset": 0.8,
+         "fallback": {"kind": "clip", "src": "s06b_clubhouse_door", "dur": 4.0, "offset": 1.8, "plate": "p06_loot_prompt"}},
     ]),
     ("b4", [
-        {"kind": "clip", "src": "d03_torii_plaza", "dur": 3.2, "grade": "dusk"},
-        {"kind": "ai", "src": "08", "dur": 3.2},
-        {"kind": "clip", "src": "s07_relay_approach", "dur": 3.8, "offset": 1.0},
+        {"kind": "card", "src": "k_contact", "dur": 1.4, "kinetic": True},
+        {"kind": "clip", "src": "d03_torii_plaza", "dur": 3.0, "grade": "dusk"},
+        {"kind": "ai", "src": "08", "dur": 3.0},
+        {"kind": "clip", "src": "s07_relay_approach", "dur": 3.4, "offset": 1.0},
         {"kind": "ai", "src": "08a", "dur": 2.4},
-        {"kind": "ai", "src": "08b", "dur": 2.8},
-        {"kind": "ai", "src": "09", "dur": 2.8, "plate": "p01_start_0of3", "music": True},
-        {"kind": "clip", "src": "d06_drone_patrol", "dur": 2.6, "offset": 2.0, "grade": "dusk"},
-        {"kind": "ai", "src": "09b", "dur": 2.2},
+        {"kind": "clip", "src": "c01_scav_contact", "dur": 4.6, "offset": 0.5, "music": True,
+         "fallback": {"kind": "ai", "src": "09", "dur": 2.8, "plate": "p01_start_0of3", "music": True}},
+        {"kind": "clip", "src": "c03_reload_under_fire", "dur": 4.0, "offset": 1.4,
+         "fallback": {"kind": "ai", "src": "08b", "dur": 2.8}},
+        {"kind": "clip", "src": "d06_drone_patrol", "dur": 2.4, "offset": 2.0, "grade": "dusk"},
+        {"kind": "clip", "src": "c06_drone_fight", "dur": 4.2, "offset": 0.8,
+         "fallback": {"kind": "ai", "src": "09b", "dur": 2.2}},
         {"kind": "ai", "src": "09c", "dur": 2.8},
-        {"kind": "clip", "src": "s09_drone_searchlight", "dur": 4.0, "offset": 1.0},
+        {"kind": "clip", "src": "s09_drone_searchlight", "dur": 3.4, "offset": 1.0},
+        {"kind": "clip", "src": "c02_hit_and_heal", "dur": 5.6, "offset": 1.4, "fallback": None},
     ]),
     ("b5", [
+        {"kind": "card", "src": "k_carry", "dur": 1.6, "kinetic": True},
         {"kind": "ai", "src": "10", "dur": 4.0},
-        {"kind": "ai", "src": "11", "dur": 3.5, "plate": "p02_relay_1of3"},
+        {"kind": "clip", "src": "c07_drone_stun", "dur": 3.5, "offset": 2.5, "plate": "p02_relay_1of3",
+         "fallback": {"kind": "ai", "src": "11", "dur": 3.5, "plate": "p02_relay_1of3"}},
         {"kind": "clip", "src": "n02_torii_neon", "dur": 3.5},
         {"kind": "ai", "src": "13", "dur": 3.5},
         {"kind": "clip", "src": "n05_lake_lamps", "dur": 4.0, "plate": "p04_next_train"},
     ]),
     ("b5b", [
+        {"kind": "card", "src": "k_train", "dur": 1.6, "kinetic": True},
         {"kind": "still", "src": os.path.join(STILLS, "n08_billboard_street.png"), "dur": 1.2, "zoom": 1.04},
         {"kind": "still", "src": os.path.join(GFX, "billboard_map.png"), "dur": 3.0, "zoom": 2.3, "focus": (660, 420)},
         {"kind": "cards", "src": ["map_0", "map_1", "map_2"], "dur": 2.4},
@@ -404,6 +441,16 @@ BEATS = [
 
 VO_PAD = 0.7
 GRADES = {"dusk": "eq=brightness=-0.10:saturation=0.85,colorbalance=bs=0.10:bm=0.03:rs=-0.04:gs=-0.02"}
+
+
+def resolve_row(row: dict) -> dict | None:
+    """A clip row that has not been rendered yet falls back to its placeholder (or is dropped)."""
+    if row["kind"] == "clip" and not os.path.exists(os.path.join(CLIPS, row["src"] + ".mp4")):
+        if "fallback" in row:
+            print(f"  (no clip {row['src']}: using fallback)")
+            return row["fallback"]
+        raise SystemExit(f"missing clip {row['src']}")
+    return row
 
 
 def wav_seconds(path: str) -> float:
@@ -497,13 +544,17 @@ def build_timeline() -> tuple[list[dict], list[dict]]:
     t = 0.0
     prev_vo_end = 0.0
     for beat, rows in BEATS:
+        rows = [resolve_row(r) for r in rows]
+        rows = [r for r in rows if r is not None]
         vo_path = os.path.join(VO, beat + ".wav")
         vo_len = wav_seconds(vo_path) if os.path.exists(vo_path) else 0.0
         planned = sum(r["dur"] for r in rows)
         target = max(planned, vo_len + VO_PAD)
         scale = target / planned
-        # Lines never overlap: a beat's narration waits for the previous one to finish.
-        vo_start = max(t + (0.4 if beat != "b0" else 2.0), prev_vo_end + 0.6)
+        # Lines never overlap: a beat's narration waits for the previous one to finish,
+        # and a kinetic card at the head of a beat plays clean before the line starts.
+        lead = 2.0 if beat == "b0" else (rows[0]["dur"] * scale + 0.2 if rows[0].get("kinetic") else 0.4)
+        vo_start = max(t + lead, prev_vo_end + 0.6)
         prev_vo_end = vo_start + vo_len
         vo_out.append({"beat": beat, "start": vo_start, "path": vo_path, "seconds": vo_len})
         for i, r in enumerate(rows):
@@ -577,8 +628,19 @@ def main(argv: list[str]) -> int:
     music_start = next(r["start"] for r in rows if r.get("music"))
     music_end = next(r["start"] + r["seconds"] for r in rows if r.get("music_end"))
     build_audio(vo, total, audio, music_start, music_end)
-    print("mux...")
-    run(["-i", video, "-i", audio, "-vf", f"fade=t=in:d=1.0,fade=t=out:st={total - 1.2:.2f}:d=1.2",
+    print("mux + look...")
+    # One grade over everything so engine, stills and placeholders read as a single capture:
+    # soft bloom on the highlights, a touch more contrast, cool shadows / warm highlights,
+    # a vignette and fine grain.
+    look = ("[0:v]split[base][hi];"
+            "[hi]lutyuv=y='clip((val-150)*2.2,0,255)',gblur=sigma=24[glow];"
+            "[base][glow]blend=c0_mode=screen:c0_opacity=0.24:c1_mode=normal:c1_opacity=1:c2_mode=normal:c2_opacity=1,"
+            "eq=contrast=1.06:saturation=1.14,"
+            "colorbalance=rs=-0.03:bs=0.05:rh=0.05:bh=-0.04,"
+            "vignette=angle=PI/5.6,"
+            "noise=alls=5:allf=t+u,"
+            f"fade=t=in:d=1.0,fade=t=out:st={total - 1.2:.2f}:d=1.2[v]")
+    run(["-i", video, "-i", audio, "-filter_complex", look, "-map", "[v]", "-map", "1:a",
          "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", "-c:a", "copy",
          "-movflags", "+faststart", "-shortest", OUTPUT])
     print("->", OUTPUT, f"{os.path.getsize(OUTPUT) / 1e6:.1f} MB")

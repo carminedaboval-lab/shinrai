@@ -242,6 +242,15 @@ Rendered by `trailer\RENDER_TRAILER_SHOTS.cmd staged` (stills) or `RENDER_TRAILE
 | s07_relay_approach | day | walk toward the south garden relay, crouch, hold | 1:48 |
 | s08_west_exfil_hud | night | west exfil path with one relay banked | 0:37, 2:11 |
 | s09_drone_searchlight | night | the south-garden drone group sweeping toward camera | 2:11 |
+| c01_scav_contact | day | UZI bursts at the scav crew on the south street, "SCAV: Taking fire!" | Beat 4 |
+| c03_reload_under_fire | day | magazine run dry, reload while the crew shoots back | Beat 4 |
+| c04_mag_check | day | the field-handling press check on the plaza | Beat 3 |
+| c05_bench_search | day | the loot panel opening on a real bench cache | Beat 3b |
+| c02_hit_and_heal | day | a scripted thorax hit, break contact, medkit sequence on the HUD | Beat 4 |
+| c06_drone_fight | night | UZI against the drone group under the lamps, dispatch call on the HUD | Beat 4 |
+| c07_drone_stun | night | the tazer hit: stun timer, empty mag, heal prompt | Beat 5 |
+
+The `--combat` mode of the harness grants the UZI with a loaded magazine, stands the player a set distance from the nearest live scav or drone, lets the hostiles run for that take, pulses the trigger in bursts, and can script a wound. Every take starts at full health and the harness skips a take if the player is down.
 
 HUD plates land in `plates\` as 1920x1080 PNGs with alpha, one per narrated state: `p01_start_0of3`, `p02_relay_1of3`, `p03_extraction_bar`, `p04_next_train` (the NEXT TRAIN line is a trailer mock added by the harness, not game UI), `p05_urgent` (timer under 90 s goes red), `p06_loot_prompt`, `p07_locked`. Drop them as a top track over AI first-person shots; no keying needed. HQ captures: `hq01_field_operations.png`, `hq02_buy_sequence` (a 3.6 s clip: cargo upgrade then medkit), `hq02_after_purchase.png`, `hq03_loadout_inventory.png`, from a staged mid-career profile (1,840 credits, 7 of 11 runs extracted, one pack upgrade).
 

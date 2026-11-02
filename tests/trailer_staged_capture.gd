@@ -23,6 +23,7 @@ const FRAME_DIR := "user://trailer/frames"
 const PLATE_DIR := "user://trailer/plates"
 const FRAME_QUALITY := 0.93
 const GameInput := preload("res://scripts/shinrai_input.gd")
+const WeaponState := preload("res://scripts/extraction_weapon_state.gd")
 
 ## A staged shot is a list of steps run in order. Step keys:
 ##   teleport: Vector3   yaw: deg   pitch: deg      place the player (yaw 0 faces -Z)
@@ -105,6 +106,65 @@ const NIGHT_SHOTS: Array[Dictionary] = [
 		{"wait":1.5}]},
 ]
 
+## Combat and survival shots (--combat [--night]). Extra step keys:
+##   weapon: "uzi"              grant and equip a weapon with a loaded magazine
+##   face_group: "enemies"      stand `distance` m from the nearest live member of
+##   anchor: Vector3            that group to `anchor`, facing it
+##   hostiles: true/false       let scav crews and drone weapons run for this shot
+##   damage: float              hit the player (thorax) at the start of the step
+##   bursts: [on, off]          pulse sr_fire with that on/off pattern (seconds)
+##   cache: Vector3             stand at the undiscovered cache nearest this point
+const COMBAT_DAY: Array[Dictionary] = [
+	# Opening contact: SMG bursts at the scav crew on the south street.
+	{"name":"c01_scav_contact","steps":[
+		{"weapon":"uzi","face_group":"enemies","anchor":Vector3(0,0,190),"distance":11.0,"yaw_offset":5.0,"hostiles":true,"record":false,"wait":0.8},
+		{"hold":["aim"],"seconds":0.9},
+		{"hold":["aim"],"bursts":[0.35,0.4],"seconds":3.6},
+		{"hold":["aim"],"seconds":0.8},
+		{"wait":0.6}]},
+	# Run the magazine dry and reload while the crew keeps shooting.
+	{"name":"c03_reload_under_fire","steps":[
+		{"weapon":"uzi","face_group":"enemies","anchor":Vector3(0,0,190),"distance":18.0,"hostiles":true,"record":false,"wait":0.8},
+		{"hold":["aim"],"bursts":[0.6,0.2],"seconds":3.0},
+		{"press":["reload"],"seconds":2.6},
+		{"hold":["aim"],"seconds":1.0}]},
+	# Press-check the pistol on the plaza (the field-handling inspect).
+	{"name":"c04_mag_check","steps":[
+		{"teleport":Vector3(146,0.3,160),"yaw":-50,"pitch":-8,"record":false,"wait":0.6},
+		{"wait":0.4},
+		{"press":["mag_check"],"seconds":3.2},
+		{"wait":0.8}]},
+	# Search a bench cache: the loot panel opens on the real site.
+	{"name":"c05_bench_search","steps":[
+		{"cache":Vector3(150,0,160),"record":false,"wait":0.6},
+		{"wait":0.5},
+		{"hold":["interact"],"seconds":2.2},
+		{"wait":2.6}]},
+	# Take a hit, break contact, patch up. The wound is scripted so the take cannot
+	# end in an elimination; the crew is frozen for it. Runs last for the same reason.
+	{"name":"c02_hit_and_heal","steps":[
+		{"weapon":"uzi","face_group":"enemies","anchor":Vector3(0,0,190),"distance":14.0,"hostiles":false,"record":false,"wait":0.8},
+		{"hold":["aim"],"seconds":1.0},
+		{"damage":60.0,"damage_part":"left_arm","hold":["aim"],"seconds":0.9},
+		{"look_to":{"yaw_delta":150,"pitch":-6},"hold":["move_back"],"seconds":1.0},
+		{"hold":["heal"],"seconds":3.6},
+		{"wait":0.8}]},
+]
+
+const COMBAT_NIGHT: Array[Dictionary] = [
+	# Firefight with the south-garden drone group under the lamps.
+	{"name":"c06_drone_fight","steps":[
+		{"weapon":"uzi","face_group":"police_spider_drones","anchor":Vector3(-152,0,144),"distance":15.0,"hostiles":true,"record":false,"wait":0.8},
+		{"hold":["aim"],"seconds":0.8},
+		{"hold":["aim"],"bursts":[0.4,0.3],"seconds":4.0},
+		{"look_to":{"yaw_delta":-25,"pitch":2},"hold":["aim"],"seconds":1.2},
+		{"wait":0.8}]},
+	# Let the drones close in: identification beam, stun, face latch.
+	{"name":"c07_drone_stun","steps":[
+		{"face_group":"police_spider_drones","anchor":Vector3(-152,0,144),"distance":7.0,"hostiles":true,"record":false,"wait":0.4},
+		{"wait":7.0}]},
+]
+
 ## HUD plates: name, raid fields, optional extra line (trailer mock, not game UI).
 const PLATES: Array[Dictionary] = [
 	{"name":"p01_start_0of3","relays":0,"remaining":7200.0},
@@ -129,7 +189,7 @@ func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	night = "--night" in args
 	dump_frames = "--frames" in args
-	for flag: String in ["--probe","--hq","--plates","--shots"]:
+	for flag: String in ["--probe","--hq","--plates","--shots","--combat"]:
 		if flag in args: mode = flag.trim_prefix("--")
 	if mode.is_empty(): mode = "shots"
 	for arg: String in args:
@@ -181,6 +241,7 @@ func run() -> void:
 		"probe": write_probe()
 		"plates": await capture_plates()
 		"shots": await capture_shots()
+		"combat": await capture_shots(COMBAT_NIGHT if night else COMBAT_DAY, "combat")
 	quit()
 
 # ---------------------------------------------------------------- probe
@@ -298,14 +359,16 @@ func capture_plates() -> void:
 
 # ---------------------------------------------------------------- staged shots
 
-func capture_shots() -> void:
+func capture_shots(shots: Array[Dictionary] = [], label: String = "staged") -> void:
 	_quiet_hostiles(true)
-	var shots: Array[Dictionary] = NIGHT_SHOTS if night else DAY_SHOTS
+	if shots.is_empty():
+		shots = NIGHT_SHOTS if night else DAY_SHOTS
 	for shot: Dictionary in shots:
 		if not only_shots.is_empty() and not only_shots.has(shot["name"]):
 			continue
 		await play_shot(shot)
-	var record_path := "user://trailer/staged_%s.json" % ("night" if night else "day")
+		_quiet_hostiles(true)
+	var record_path := "user://trailer/%s_%s.json" % [label, "night" if night else "day"]
 	var file := FileAccess.open(record_path, FileAccess.WRITE)
 	file.store_string(JSON.stringify({"fps": FPS, "shots": shots_record}, "\t"))
 	file.close()
@@ -313,6 +376,10 @@ func capture_shots() -> void:
 
 func play_shot(shot: Dictionary) -> void:
 	var name: String = shot["name"]
+	if not bool(player.alive) or raid.phase != raid.Phase.RAID:
+		push_warning("Staged capture: player is down, skipping " + name)
+		print("TRAILER_STAGED_SKIP: " + name)
+		return
 	var frame_dir := "%s/%s" % [FRAME_DIR, name]
 	if dump_frames: DirAccess.make_dir_recursive_absolute(frame_dir)
 	var index := 0
@@ -324,10 +391,17 @@ func play_shot(shot: Dictionary) -> void:
 	for step: Dictionary in shot["steps"]:
 		if step.has("relays"): raid.relays = int(step.relays)
 		if step.has("drones"): _quiet_hostiles(not bool(step.drones))
+		if step.has("hostiles"): _quiet_hostiles(not bool(step.hostiles))
 		if step.has("teleport"): _place(step.teleport, float(step.get("yaw", 0.0)), float(step.get("pitch", 0.0)))
+		if step.has("face_group"): _face_group(str(step.face_group), step.get("anchor", Vector3.ZERO), float(step.get("distance", 15.0)), float(step.get("yaw_offset", 0.0)))
+		if step.has("cache"): _stand_at_cache(step.cache)
+		if step.has("weapon"): _grant_weapon(str(step.weapon))
+		if step.has("damage"): player.take_damage(float(step.damage), str(step.get("damage_part", "left_arm")))
 		var seconds := float(step.get("seconds", step.get("wait", 0.0)))
 		var frames := int(round(seconds * FPS))
 		var held: Array = step.get("hold", [])
+		var bursts: Array = step.get("bursts", [])
+		var fire_down := false
 		var record := bool(step.get("record", true))
 		var yaw0: float = player.rotation.y
 		var head: Node3D = player.head
@@ -342,6 +416,12 @@ func play_shot(shot: Dictionary) -> void:
 			if frame == 3:
 				for action: String in step.get("press", []):
 					_send_action(action, false)
+			if not bursts.is_empty():
+				var period := float(bursts[0]) + float(bursts[1])
+				var want := fmod(frame / FPS, period) < float(bursts[0])
+				if want != fire_down:
+					_send_action("fire", want)
+					fire_down = want
 			if not look.is_empty():
 				var t := float(frame) / float(maxi(frames - 1, 1))
 				var eased := t * t * (3.0 - 2.0 * t)
@@ -360,6 +440,7 @@ func play_shot(shot: Dictionary) -> void:
 			index += 1
 		for action: String in held:
 			_send_action(action, false)
+		if fire_down: _send_action("fire", false)
 	shots_record.append({"name": name, "frames": index, "seconds": index / FPS})
 	print("TRAILER_STAGED_SHOT: %s %d frames" % [name, index])
 
@@ -380,6 +461,74 @@ func _place(position: Vector3, yaw_deg: float, pitch_deg: float) -> void:
 	head.rotation.x = deg_to_rad(pitch_deg)
 	if player.has_method("reset_controller_intents"): player.reset_controller_intents()
 	raid.last_damage_at = -100.0
+	# Every shot starts healthy so a hard take never carries damage into the next.
+	var medical: Variant = player.get("medical")
+	if medical != null and medical.has_method("reset"):
+		medical.reset()
+		player.health = medical.effective_hp()
+	raid.medkits = maxi(int(raid.medkits), 2)
+
+func _nearest_in_group(group: String, anchor: Vector3) -> Node3D:
+	var best: Node3D = null
+	var best_distance := INF
+	for node: Node in get_nodes_in_group(group):
+		if not (node is Node3D) or not node.is_inside_tree(): continue
+		if bool(node.get("dead")): continue
+		var distance: float = (node as Node3D).global_position.distance_to(anchor)
+		if distance < best_distance:
+			best_distance = distance
+			best = node
+	return best
+
+func _face_group(group: String, anchor: Vector3, distance: float, yaw_offset: float = 0.0) -> void:
+	var target := _nearest_in_group(group, anchor)
+	if target == null:
+		push_warning("Staged capture: nobody in group " + group)
+		_place(anchor, 0.0, 0.0)
+		return
+	var at := target.global_position
+	# Stand `distance` metres back toward the anchor side, eyes on the target.
+	var away := (anchor - at)
+	away.y = 0.0
+	if away.length() < 1.0: away = Vector3(0, 0, 1)
+	var stand := at + away.normalized() * distance
+	var forward := (at - stand).normalized()
+	var yaw := rad_to_deg(atan2(-forward.x, -forward.z)) + yaw_offset
+	_place(Vector3(stand.x, at.y + 0.3, stand.z), yaw, -2.0)
+
+func _stand_at_cache(anchor: Vector3) -> void:
+	var best: Dictionary = {}
+	var best_distance := INF
+	for site: Dictionary in raid.sites:
+		if site.kind != "cache" or bool(site.get("done", false)): continue
+		var distance: float = Vector2(site.position.x, site.position.z).distance_to(Vector2(anchor.x, anchor.z))
+		if distance < best_distance:
+			best_distance = distance
+			best = site
+	if best.is_empty():
+		push_warning("Staged capture: no cache near " + str(anchor))
+		return
+	var at: Vector3 = best.position
+	var stand := at + Vector3(0, 0, 1.6)
+	_place(Vector3(stand.x, at.y + 0.3, stand.z), 0.0, -14.0)
+
+func _grant_weapon(id: String) -> void:
+	if player.weapon_id == id: return
+	var state: Dictionary = raid.active_weapon_loadout()
+	var record: Dictionary = WeaponState.recovered_weapon(id)
+	if record.is_empty(): return
+	record.ammo = 30
+	record.reserve = 120
+	record.chambered = true
+	record.magazine_inserted = true
+	# Loose reserve rounds, so a reload on camera does not need a packed magazine in cargo.
+	record.physical_magazines = false
+	if player.apply_weapon_loadout(id, record):
+		state.weapons[id] = record
+		state.equipped = id
+		state.revision += 1
+	else:
+		push_warning("Staged capture: could not equip " + id)
 
 func _quiet_hostiles(quiet: bool) -> void:
 	# Scav crews and drone weapons stay out of the staged movement shots so the
