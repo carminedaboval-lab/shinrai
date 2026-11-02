@@ -1376,6 +1376,8 @@ func _inside_playable_area(point: Vector3) -> bool:
 	if not is_instance_valid(park):return false
 	var corporate: Node=park.get_node_or_null("MidoriCorporateDistrict")
 	if corporate != null and corporate.has_method("contains_world_point") and corporate.contains_world_point(point):return true
+	for building: Node in get_tree().get_nodes_in_group("playable_buildings"):
+		if building.contains_world_point(point):return true
 	var street: Node=park.get_node_or_null("MidoriSouthStreet")
 	if street==null or street.get("installed")!=true:return false
 	var data: Variant=street.get("report")

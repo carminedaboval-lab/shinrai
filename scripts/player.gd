@@ -72,7 +72,11 @@ const AIR_STEERING_ACCELERATION := 2.0
 const JUMP_GROUND_SETTLE := 0.075
 const LANDING_JUMP_LOCK := 0.26
 const STEP_HEIGHT := 0.32
+const CORNER_LOCK_TICKS := 3
+const CORNER_LOCK_TRAVEL := 0.0002
+const CORNER_LOCK_NUDGE := 0.02
 
+var _corner_lock_ticks := 0
 var _ground_contact_time := 0.0
 var _landing_recovery := 0.0
 var _jump_recovery := 0.0
@@ -1566,7 +1570,9 @@ func _advance_ground_movement(delta: float, input_vec: Vector2, sprint_requested
             if wish.length_squared() > 0.01:
                 _try_step_up(Vector3(velocity.x, 0.0, velocity.z) * delta)
     var impact_speed := maxf(0.0, -velocity.y)
+    var moved_from := global_position
     move_and_slide()
+    _free_corner_lock(wish, moved_from)
     if grounded and Vector2(velocity.x, velocity.z).length_squared() < 0.01:
         # Holding sprint into a wall must not spend stamina or keep the weapon in
         # its sprint pose. Preserve pre-frame recovery state when no sprint occurred.
@@ -1586,6 +1592,33 @@ func _advance_ground_movement(delta: float, input_vec: Vector2, sprint_requested
     _movement_was_grounded = grounded
     jump_was_down = jump_down
     return false
+
+## A capsule square to a box's upright corner can lock solid in the motion test,
+## stopped dead with nothing in the way. The nudge lands only where the whole
+## capsule fits, so a wall the player is simply walking into never gives way.
+func _free_corner_lock(wish: Vector3, moved_from: Vector3) -> void:
+    if wish.length_squared() < 0.01 or global_position.distance_to(moved_from) > CORNER_LOCK_TRAVEL:
+        _corner_lock_ticks = 0
+        return
+    _corner_lock_ticks += 1
+    if _corner_lock_ticks < CORNER_LOCK_TICKS:
+        return
+    _corner_lock_ticks = 0
+    for turn: float in [0.0, -PI * 0.25, PI * 0.25]:
+        var at := global_position + wish.normalized().rotated(Vector3.UP, turn) * CORNER_LOCK_NUDGE
+        if _body_capsule_clear(at):
+            global_position = at
+            return
+
+func _body_capsule_clear(at: Vector3) -> bool:
+    var query := PhysicsShapeQueryParameters3D.new()
+    query.shape = body_capsule
+    # The same 5 mm allowance as the stance checks, so the floor doesn't count.
+    query.transform = Transform3D(global_transform.basis, at + Vector3.UP * 0.005) * body_collision.transform
+    query.collision_mask = collision_mask
+    query.exclude = [get_rid()]
+    query.margin = 0.001
+    return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 func _directional_speed_multiplier(input_vec: Vector2) -> float:
     if input_vec.length_squared() < 0.0001:

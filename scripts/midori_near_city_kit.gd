@@ -56,6 +56,17 @@ func smooth(part: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, na: Ve
 	for row: Array in [[a, na], [b, nb], [c, nc], [a, na], [c, nc], [d, nd]]:
 		_emit(target, row[0], row[1], tangent, shaded, Vector2((row[0] as Vector3).x + (row[0] as Vector3).z, (row[0] as Vector3).y), Vector2.ZERO)
 
+func mapped(part: String, points: Array[Vector3], normals: Array[Vector3], prints: Array[Vector2], marks: Array[float], tint: Color, ao := 1.0) -> void:
+	# As smooth, with an atlas position and a shader weight (UV2.x) at each of the four corners.
+	var order: Array[int] = [0, 1, 2, 0, 2, 3]
+	if (points[3] - points[0]).cross(points[1] - points[0]).dot(normals[0] + normals[1] + normals[2] + normals[3]) < 0.0:
+		order = [0, 3, 2, 0, 2, 1]
+	var target := _part(part)
+	var tangent := (points[3] - points[0]).normalized()
+	var shaded := _shaded(tint, ao)
+	for i: int in order:
+		_emit(target, points[i], normals[i], tangent, shaded, prints[i], Vector2(marks[i], 0))
+
 func atlas(part: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, rect: Rect2, tint := Color.WHITE, ao := 1.0, streak := 0.0) -> void:
 	# A quad showing one panel of an atlas; rect is in 0-1 texture space.
 	var target := _part(part)
