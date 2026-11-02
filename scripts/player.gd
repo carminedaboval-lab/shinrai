@@ -75,6 +75,8 @@ const STEP_HEIGHT := 0.32
 const CORNER_LOCK_TICKS := 3
 const CORNER_LOCK_TRAVEL := 0.0002
 const CORNER_LOCK_NUDGE := 0.02
+const CORNER_LOCK_SPEED := 0.25
+const HEADROOM_RADIUS := 0.35 # Under the body's 0.36: a wall touching your shoulder is not a low ceiling.
 
 var _corner_lock_ticks := 0
 var _ground_contact_time := 0.0
@@ -1460,7 +1462,7 @@ func _standing_capsule_clear(at: Vector3) -> bool:
     if not is_inside_tree():
         return false
     var shape := CapsuleShape3D.new()
-    shape.radius = 0.36
+    shape.radius = HEADROOM_RADIUS
     shape.height = STANDING_CAPSULE_HEIGHT
     var query := PhysicsShapeQueryParameters3D.new()
     query.shape = shape
@@ -1604,9 +1606,19 @@ func _free_corner_lock(wish: Vector3, moved_from: Vector3) -> void:
     if _corner_lock_ticks < CORNER_LOCK_TICKS:
         return
     _corner_lock_ticks = 0
-    for turn: float in [0.0, -PI * 0.25, PI * 0.25]:
+    # A wall takes the speed away; a locked capsule keeps it and goes nowhere.
+    var locked := Vector2(velocity.x, velocity.z).length() > CORNER_LOCK_SPEED
+    var turns: Array[float] = [0.0, -PI * 0.25, PI * 0.25]
+    if locked:
+        turns.append_array([-PI * 0.5, PI * 0.5, -PI * 0.75, PI * 0.75, PI])
+    for turn: float in turns:
         var at := global_position + wish.normalized().rotated(Vector3.UP, turn) * CORNER_LOCK_NUDGE
         if _body_capsule_clear(at):
+            global_position = at
+            return
+        # On a ramp the way up only fits lifted; floor snap takes it straight back down.
+        at += Vector3.UP * CORNER_LOCK_NUDGE
+        if locked and _body_capsule_clear(at):
             global_position = at
             return
 

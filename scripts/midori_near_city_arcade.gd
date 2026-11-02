@@ -2530,8 +2530,8 @@ func _motion_chair(at: Vector3) -> void:
 	var vinyl := Color("#141518")
 	var rod := Color("#9a9ea4")
 	_bar("steel_in", seat, 0, .05, -.06, Vector3(.76, .1, .84), Color("#24262c"))
-	for i: int in range(8):
-		_bar("paint", seat, -.33 + float(i) * .094, .102, .34, Vector3(.05, .004, .05), Color("#b89a20") if i % 2 == 0 else Color("#101012"))
+	for i: int in range(12): # The hazard edge, along the front of the plate where a foot finds it.
+		_bar("paint", seat, -.5 + float(i) * .0909, .002, .6, Vector3(.0909, .004, .05), Color("#b89a20") if i % 2 == 0 else Color("#101012"))
 	_kit.lathe("steel_in", at + Vector3.UP * .1, [Vector2(.13, 0), Vector2(.13, .03), Vector2(.08, .06), Vector2(.08, .3)], steel, 20)
 	for side: float in [-1.0, 1.0]:
 		_kit.tube("steel_in", [seat * Vector3(side * .26, .1, -.34), seat * Vector3(side * .23, .28, -.24)], .034, steel, 10)
