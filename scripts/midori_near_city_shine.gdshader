@@ -8,6 +8,8 @@ uniform float machine_top = 2.32;
 uniform vec2 lamp_first = vec2(0.0); // Nearest batten, x and z.
 uniform vec2 lamp_step = vec2(1.0);
 uniform vec2 lamp_half = vec2(0.59, 0.07);
+uniform vec2 lamp_count = vec2(2.0, 1.0); // Lamps after the first, across and along.
+uniform vec3 tint = vec3(0.97, 0.97, 1.0);
 uniform vec4 feet[5]; // Machine footprints: x0, z0, x1, z1.
 uniform float lamp_level = 11.0;
 uniform float board_level = 0.5;
@@ -29,7 +31,7 @@ void fragment(){
 	vec2 worn = vec2(nz(here.xz * 2.3), nz(here.zx * 2.9 + 4.0)) - 0.5;
 	vec2 hit = here.xz + ray.xz * reach + worn * 0.014 * reach;
 	vec2 cell = hit - lamp_first;
-	cell = abs(cell - lamp_step * clamp(round(cell / lamp_step), vec2(0.0), vec2(2.0, 1.0)));
+	cell = abs(cell - lamp_step * clamp(round(cell / lamp_step), vec2(0.0), lamp_count));
 	float blur = 0.03 + 0.03 * reach;
 	vec2 edge = 1.0 - smoothstep(lamp_half - blur, lamp_half + blur, cell);
 	float lamp = edge.x * edge.y;
@@ -48,5 +50,5 @@ void fragment(){
 	}
 	float fresnel = 0.05 + 0.95 * pow(1.0 - facing, 5.0);
 	float wear = mix(0.8, 1.05, nz(here.xz * 1.4 + 9.0));
-	ALBEDO = vec3(0.97, 0.97, 1.0) * (lamp * lamp_level + board_level) * fresnel * open * wear;
+	ALBEDO = tint * (lamp * lamp_level + board_level) * fresnel * open * wear;
 }

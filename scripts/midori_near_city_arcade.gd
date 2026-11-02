@@ -34,7 +34,7 @@ const VR_TANUKI := Rect2(0, 24.0 / 1024.0, 512.0 / 1536.0, 972.0 / 1024.0)
 const VR_TITLE := Rect2(512.0 / 1536.0, 0, 1024.0 / 1536.0, 300.0 / 1024.0)
 const MEDALS: Array[Vector2] = [Vector2(572, 38), Vector2(630, 49), Vector2(672, 98), Vector2(735, 77), Vector2(816, 73), Vector2(787, 110), Vector2(852, 116), Vector2(909, 98), Vector2(905, 38), Vector2(583, 133), Vector2(631, 165), Vector2(696, 157), Vector2(819, 165), Vector2(882, 180), Vector2(748, 189), Vector2(677, 213), Vector2(805, 226), Vector2(990, 208), Vector2(965, 132), Vector2(941, 226), Vector2(803, 30)] # Whole coins lying on top in the photograph.
 const MOTION_TURN := PI + .25 # Square to the door, near enough, as an installer would leave it.
-const QUIET: Array[String] = ["front", "wash", "lamp", "panel", "led", "room", "sign", "poster", "art", "screen", "gold", "goods", "cut", "prize", "carpet", "crane_lit", "crane_sign", "crane_screen", "floor_print", "floor_lit", "floor_screen", "print_screen", "photo_print", "photo_lit", "case_lamp", "shade", "shine", "orb", "vanity", "pool", "spill", "sign_in", "led_low", "wash_in", "lamp_in", "led_in", "neon_in", "photo_in", "coin", "steel_in", "vinyl_in", "cut_vr", "cloth", "wash_vr"]
+const QUIET: Array[String] = ["front", "wash", "lamp", "panel", "led", "room", "sign", "poster", "art", "screen", "gold", "goods", "cut", "prize", "carpet", "crane_lit", "crane_sign", "crane_screen", "floor_print", "floor_lit", "floor_screen", "print_screen", "photo_print", "photo_lit", "case_lamp", "shade", "shine", "orb", "vanity", "pool", "spill", "shine_hall", "sign_in", "led_low", "wash_in", "lamp_in", "led_in", "neon_in", "photo_in", "coin", "steel_in", "vinyl_in", "cut_vr", "cloth", "wash_vr"]
 const ROOM_TINT := Color(1.0, .98, .95)
 const ROOM_NIGHT_TINT := Color(.65, .79, 1.0) # The shader browns all it lights after dark; this hands it back.
 const ROOM_DAY := 1.2
@@ -103,6 +103,7 @@ var _room_lamps: Array[Light3D] = []
 var _probe: ReflectionProbe = null
 var _mirror_probe: ReflectionProbe = null
 var _vr_probe: ReflectionProbe = null
+var _hall_probe: ReflectionProbe = null
 var _front := Transform3D(Basis.IDENTITY, Vector3(-WIDE * .5, 0, 0))
 var _east := Transform3D(Basis(Vector3.FORWARD, Vector3.UP, Vector3.RIGHT), Vector3(WIDE * .5, 0, 0))
 var _back := Transform3D(Basis(Vector3.LEFT, Vector3.UP, Vector3.FORWARD), Vector3(WIDE * .5, 0, -DEEP))
@@ -186,6 +187,19 @@ func _ready() -> void:
 	_vr_probe.ambient_color_energy = VR_AIR_ENERGY
 	_vr_probe.update_mode = ReflectionProbe.UPDATE_ONCE
 	add_child(_vr_probe)
+	# 3F's terrazzo is polished like the old halls': it only shines if something shows the screens and lamps to it.
+	_hall_probe = ReflectionProbe.new()
+	_hall_probe.name = "ArcadeHall"
+	_hall_probe.position = _front * Vector3(2.59, _storey_base(1) + .34 + ROOM_HIGH * .5, -2.87)
+	_hall_probe.size = Vector3(4.88, ROOM_HIGH + .1, 5.56)
+	_hall_probe.origin_offset = Vector3(0, -.4, 0)
+	_hall_probe.interior = true
+	_hall_probe.box_projection = true
+	_hall_probe.blend_distance = 0.0
+	_hall_probe.max_distance = 8.0
+	_hall_probe.ambient_mode = ReflectionProbe.AMBIENT_DISABLED
+	_hall_probe.update_mode = ReflectionProbe.UPDATE_ONCE
+	add_child(_hall_probe)
 
 func set_night_mode(value: bool) -> void:
 	super(value)
@@ -202,6 +216,7 @@ func set_night_mode(value: bool) -> void:
 		_mirror_probe.update_mode = ReflectionProbe.UPDATE_ONCE
 		_vr_probe.ambient_mode = ReflectionProbe.AMBIENT_DISABLED if value else ReflectionProbe.AMBIENT_COLOR
 		_vr_probe.update_mode = ReflectionProbe.UPDATE_ONCE
+		_hall_probe.update_mode = ReflectionProbe.UPDATE_ONCE
 
 func _build_looks() -> void:
 	_shared_looks()
@@ -256,7 +271,7 @@ func _build_looks() -> void:
 	_looks.stairwall.set_shader_parameter("chroma", .2)
 	_looks.stairwall.set_shader_parameter("glow", .5)
 	_looks.stairwall.set_shader_parameter("day_glow", .4)
-	for row: Array in [["terrazzo", "arcade_terrazzo.jpg", 2.0, .16, .2, .16], ["terrazzo_tan", "arcade_terrazzo.jpg", 1.0, .16, .74, .6], ["lattice", "arcade_lattice.png", .24, .8, .55, .42], ["tile", "arcade_tile.jpg", 1.2, .3, .42, .34], ["mosaic", "arcade_mosaic.jpg", 1.8, .28, .52, .4], ["rug", "arcade_carpet.jpg", .8, .95, .5, .36], ["rug_line", "arcade_carpet_line.png", 1.2, .95, .3, .22], ["speck", "arcade_terrazzo.jpg", 2.0, .6, .35, .3]]:
+	for row: Array in [["terrazzo", "arcade_terrazzo.jpg", 2.0, .16, .2, .16], ["terrazzo_tan", "arcade_terrazzo.jpg", 1.0, .07, .5, .42], ["lattice", "arcade_lattice.png", .24, .8, .55, .42], ["tile", "arcade_tile.jpg", 1.2, .3, .42, .34], ["mosaic", "arcade_mosaic.jpg", 1.8, .28, .52, .4], ["rug", "arcade_carpet.jpg", .8, .95, .5, .36], ["rug_line", "arcade_carpet_line.png", 1.2, .95, .3, .22], ["speck", "arcade_terrazzo.jpg", 2.0, .6, .35, .3]]:
 		var look := _look("", row[2], row[3])
 		look.set_shader_parameter("albedo_map", load(TEXTURES + row[1]))
 		look.set_shader_parameter("glow", row[4])
@@ -373,6 +388,10 @@ func _build_looks() -> void:
 	shine.shader = SHINE_SHADER
 	shine.render_priority = -1 # Under the dark at each machine's foot, not over it.
 	_looks.shine = shine
+	var hall := ShaderMaterial.new() # 3F's terrazzo: the same polish, its own lamps.
+	hall.shader = SHINE_SHADER
+	hall.render_priority = -1
+	_looks.shine_hall = hall
 	var shade := ShaderMaterial.new()
 	shade.shader = SHADE_SHADER
 	_looks.shade = shade
@@ -1123,11 +1142,11 @@ func _exposed_ceiling(top: float, x0: float, x1: float, near: float, far: float)
 		_bar("metal", f, 2.2, top - .05, cross, Vector3(.3, .012, .03), Color("#4a4c52"))
 		cross -= .4
 	# Cable nobody clipped up, each dropped out of the slab and sagging clear under the beam it crosses.
-	# Two end in the same box; the newest one is lit: that run came in with the 2050 network.
+	# Two end in the same box; the newest, blue network cable came in with the 2050 network.
 	var box := Vector2(3.18, -2.78)
 	_bar("plain", f, box.x, top - .04, box.y, Vector3(.14, .08, .14), Color("#2a2c30"))
 	_bar("plain", f, 1.27, top - .04, -4.64, Vector3(.14, .08, .14), Color("#2a2c30")) # Where the lit run goes to ground.
-	for run: Array in [[Vector2(.5, -.66), box, "plain", Color("#17181a")], [Vector2(.7, -4.55), box, "plain", Color("#2a2420")], [Vector2(2.5, -.66), Vector2(1.3, -4.55), "led_low", CYAN]]:
+	for run: Array in [[Vector2(.5, -.66), box, "plain", Color("#17181a")], [Vector2(.7, -4.55), box, "plain", Color("#2a2420")], [Vector2(2.5, -.66), Vector2(1.3, -4.55), "plain", Color("#1d4a86")]]:
 		var from: Vector2 = run[0]
 		var to: Vector2 = run[1]
 		var lead := (to - from).normalized() * .12 # They leave the slab on a slant, as a cable will.
@@ -1316,30 +1335,32 @@ func _game_poster(face: Transform3D, x: float, y: float, game: int, roll: float)
 	_panel("floor_print", t, -.3, .3, -.1725, .2775, 0, _cell(float(game) * 410.0, 0, 400, 300))
 	_panel("floor_print", t, -.3, .3, -.2775, -.1725, 0, _cell(float(game) * 410.0, 310, 400, 70))
 
-func _fabric(x: float, z: float, top: float, tint: Color) -> void:
-	# A length of yellow cloth on a rod and two wires, older than most of the games, hung so long it
-	# has taken a wave: slight at the rod, more at the hem.
+func _curly_lead(from: Vector2, to: Vector2, top: float, tint: Color) -> void:
+	# A coiled extension lead, as in the real halls: hooked to the slab at each end and sagging in
+	# between, its coil stretched open where it hangs lowest.
 	var f := _front
-	var wide := .72
-	var high := top - .1
-	var low := high - .34
-	var folds := 6
-	var wave := func(i: int, reach: float) -> float:
-		return z + sin(float(i) * PI * .85) * reach
-	for i: int in range(folds):
-		var x0 := x - wide * .5 + wide * float(i) / float(folds)
-		var x1 := x0 + wide / float(folds)
-		var a := f * Vector3(x0, low, wave.call(i, .03))
-		var b := f * Vector3(x0, high, wave.call(i, .008))
-		var c := f * Vector3(x1, high, wave.call(i + 1, .008))
-		var d := f * Vector3(x1, low, wave.call(i + 1, .03))
-		var fold: Color = tint * (.86 + .14 * float((i + 1) % 2))
-		_kit.quad("prize", a, b, c, d, fold)
-		_kit.quad("prize", d, c, b, a, fold * .9)
-	_kit.tube("metal", [f * Vector3(x - wide * .5 - .02, high, z), f * Vector3(x + wide * .5 + .02, high, z)], .007, Color("#8a8880"), 5)
-	for side: float in [-.28, .28]:
-		_kit.tube("metal", [f * Vector3(x + side, top, z), f * Vector3(x + side, high, z)], .003, Color("#6a6c70"), 3)
-
+	var run := 140
+	var path: Array[Vector3] = []
+	var span := from.distance_to(to)
+	for i: int in range(run + 1):
+		var u := float(i) / float(run)
+		var at := from.lerp(to, u)
+		path.append(f * Vector3(at.x, top - .06 - .3 * (1.0 - pow(2.0 * u - 1.0, 2.0)), at.y))
+	var coil: Array[Vector3] = []
+	var turns := span / .022
+	var steps := int(turns * 7.0)
+	for i: int in range(steps + 1):
+		var u := float(i) / float(steps)
+		var k := mini(int(u * float(run)), run - 1)
+		var a := path[k].lerp(path[k + 1], u * float(run) - float(k))
+		var along := (path[k + 1] - path[k]).normalized()
+		var side := along.cross(Vector3.UP).normalized()
+		var up := side.cross(along)
+		var spin := TAU * turns * u
+		coil.append(a + (side * cos(spin) + up * sin(spin)) * .011)
+	_kit.tube("plain", coil, .0025, tint, 3)
+	for end: Vector2 in [from, to]:
+		_kit.tube("metal", [f * Vector3(end.x, top, end.y), f * Vector3(end.x, top - .06, end.y)], .003, Color("#6a6c70"), 3)
 func _cab_top(t: Transform3D, cell: Rect2, extra: int) -> void:
 	# Nothing on a real cabinet stays bare: an acrylic stand of how-to cards, and whatever got left.
 	# Nobody squares a POP stand to the row, so no two of them line up.
@@ -1436,6 +1457,25 @@ func _arcade_floor(y: float) -> void:
 	# a wall the foot given stops a reach short of it, or the dark would run on through into the stairs.
 	for foot: Rect2 in [Rect2(1.67, -3.356, 1.2, 2.192), Rect2(4.4, -1.85, .34, 1.3), Rect2(3.75, -5.36, .99, .78), Rect2(1.94, -5.36, 1.72, .77), Rect2(1.25, -5.36, .5, .12)]:
 		_contact(foot, y + .005)
+	# The polish under it all, mirroring the enamel domes down each aisle; the island, the back row and the washers stand dark in it.
+	_kit.quad("shine_hall", f * Vector3(.2, y + .003, -.1), f * Vector3(.2, y + .003, -ROOM), f * Vector3(4.98, y + .003, -ROOM), f * Vector3(4.98, y + .003, -.1), Color.WHITE)
+	var hall_feet := PackedVector4Array()
+	for foot: Rect2 in [Rect2(1.31, -3.356, 1.92, 2.192), Rect2(3.75, -5.6, 1.1, 1.02), Rect2(1.95, -5.6, 1.7, 1.16), Rect2(4.34, -1.85, .64, 1.3), Rect2(1.25, -5.6, .5, .36)]:
+		var a := f * Vector3(foot.position.x, 0, foot.position.y)
+		var b := f * Vector3(foot.end.x, 0, foot.end.y)
+		hall_feet.append(Vector4(a.x, a.z, b.x, b.z))
+	var lamp := f * Vector3(1.15, 0, -.8)
+	var hall: ShaderMaterial = _looks.shine_hall
+	hall.set_shader_parameter("ceiling", y + 1.9)
+	hall.set_shader_parameter("machine_top", y + 1.55)
+	hall.set_shader_parameter("lamp_first", Vector2(lamp.x, lamp.z))
+	hall.set_shader_parameter("lamp_step", Vector2(2.4, -1.7))
+	hall.set_shader_parameter("lamp_count", Vector2(1.0, 2.0))
+	hall.set_shader_parameter("lamp_half", Vector2(.17, .17))
+	hall.set_shader_parameter("lamp_level", 3.2)
+	hall.set_shader_parameter("board_level", .04)
+	hall.set_shader_parameter("tint", Vector3(1.0, .84, .62))
+	hall.set_shader_parameter("feet", hall_feet)
 	# The change machine and the big music games stand along the back, clear of the door.
 	_kiosk(Transform3D(Basis.IDENTITY, f * Vector3(1.5, y, -5.24)), "shell_in")
 	_solid(1.25, 1.75, y, y + 1.7, -5.6, -5.24)
@@ -1457,13 +1497,13 @@ func _arcade_floor(y: float) -> void:
 	_game_poster(west, 4.4, 1.44, 4, -.03)
 	_game_poster(east, 2.85, 1.52, 1, .02)
 	_flyer(east, "floor_print", 3.22, 3.7, 1.26, 1.71, _cell(1020, 1750, 300, 280), -.02)
-	# Over the aisles: posters on wires, and the cloth somebody hung in the nineties.
+	# Over the aisles: posters on wires, and the coiled lead somebody strung across for a fan years ago.
 	var top := y + ROOM_HIGH
 	_hanging_poster(.75, -1.5, top, "floor_print", _cell(1020, 1750, 300, 280), 280.0 / 300.0)
 	_hanging_poster(.75, -3.1, top, "art", _cell(0, 0, 1024, 1200), 1200.0 / 1024.0)
 	_hanging_poster(3.9, -2.3, top, "floor_print", _cell(1020, 1320, 300, 420), 420.0 / 300.0)
 	_hanging_poster(3.9, -3.3, top, "floor_print", _cell(1230, 0, 400, 300), .75, _cell(1230, 310, 400, 70))
-	_fabric(2.35, -2.78, top, Color("#e8d470"))
+	_curly_lead(Vector2(.62, -2.3), Vector2(4.1, -3.6), top, Color("#d8d2c0"))
 	# What a room that is actually run leaves about: the staff's rack, a fan, a bin, drinks.
 	_wire_rack(y)
 	_solid(4.63, 4.98, y, y + 1.7, -3.7, -3.1)
@@ -1950,7 +1990,7 @@ func _pusher(t: Transform3D) -> void:
 		_kit.quad("front", end * Vector3(-.74, .82, -.01), end * Vector3(-.74, 1.52, -.01), end * Vector3(.74, 1.52, -.01), end * Vector3(.74, .82, -.01), Color.WHITE)
 		_kit.atlas("wash_in", end * Vector3(-.34, .86, -.005), end * Vector3(.02, 1.48, -.005), end * Vector3(.2, 1.48, -.005), end * Vector3(-.16, .86, -.005), Rect2(0, .15, 1, .75), Color.WHITE * .06)
 	_bar("shell_in", t, 0, 1.17, 0, Vector3(.1, .72, 2.44), Color("#101014"))
-	_bar("shell_in", t, 0, 1.58, 0, Vector3(1.53, .12, 2.54), Color("#14183a"))
+	_bar("gloss", t, 0, 1.58, 0, Vector3(1.53, .12, 2.54), Color("#0c0c12"))
 	_bar("steel_in", t, 0, 1.52, 0, Vector3(1.55, .02, 2.56), steel)
 	_bar("lamp_in", t, .4, 1.5, 0, Vector3(.05, .012, 2.2), Color(1.0, .95, .85))
 	_bar("lamp_in", t, -.4, 1.5, 0, Vector3(.05, .012, 2.2), Color(1.0, .95, .85))
@@ -1960,10 +2000,10 @@ func _pusher(t: Transform3D) -> void:
 		arch.append(Vector2(cos(a) * .75, 2.0 + sin(a) * .24))
 	arch.append(Vector2(-.75, 2.0))
 	arch.append(Vector2(-.75, 1.64))
-	_extrude("shell_in", t, arch, -.08, .08, Color("#14183a"))
+	_extrude("gloss", t, arch, -.08, .08, Color("#0c0c12"))
 	for corner: Vector2 in [Vector2(-.74, -1.24), Vector2(.74, -1.24), Vector2(-.74, 1.24), Vector2(.74, 1.24)]:
-		_bar("steel_in", t, corner.x, 1.17, corner.y, Vector3(.03, .72, .03), Color("#5e6268"))
-	# Fine bulbs set flat in the fascia, each in a dark bezel, all the way round the roof.
+		_bar("chrome", t, corner.x, 1.17, corner.y, Vector3(.022, .72, .022), Color("#b8bcc2"))
+	# Fine bulbs set flat in the fascia, each in a chrome cup, close set all the way round the roof.
 	for out: Vector3 in [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]:
 		var along := Vector3.UP.cross(out)
 		var long := absf(out.x) > .5
@@ -1973,9 +2013,9 @@ func _pusher(t: Transform3D) -> void:
 		var i := 0
 		while at <= reach + .001:
 			var spot := t * (face + along * at)
-			_kit.disc("plain", spot, t.basis * along, t.basis.y, .022, Color("#08080a"))
-			_kit.disc("lamp_in", spot + t.basis * out * .001, t.basis * along, t.basis.y, .016, _deep([Color(1.0, .7, .2), Color(1.0, .18, .12)][i % 2]) * .5)
-			at += .1
+			_kit.disc("chrome", spot, t.basis * along, t.basis.y, .013, Color("#9a9ea4"))
+			_kit.disc("lamp_in", spot + t.basis * out * .001, t.basis * along, t.basis.y, .009, _deep([Color(1.0, .7, .2), Color(1.0, .18, .12)][i % 2]) * .5)
+			at += .05
 			i += 1
 
 func _deck(x: float) -> float:
@@ -2526,7 +2566,7 @@ func _motion_chair(at: Vector3) -> void:
 	# side, a harness, and nothing a person would need to be hung inside.
 	var seat := Transform3D(Basis(Vector3.UP, MOTION_TURN), at)
 	var steel := Color("#3a3d44")
-	var shell := Color("#26282e")
+	var shell := Color("#18191d")
 	var vinyl := Color("#141518")
 	var rod := Color("#9a9ea4")
 	_bar("steel_in", seat, 0, .05, -.06, Vector3(.76, .1, .84), Color("#24262c"))
@@ -2541,23 +2581,90 @@ func _motion_chair(at: Vector3) -> void:
 	for side: float in [-1.0, 1.0]:
 		_kit.tube("steel_in", [seat * Vector3(side * .16, .42, .2), seat * Vector3(side * .16, .24, .44)], .014, steel, 6)
 	_bar("steel_in", seat, 0, .23, .46, Vector3(.42, .018, .22), Color("#50545a"))
-	# The shell, its padding, and the slot the belts run through.
-	var wing: Array[Vector2] = [Vector2(.29, .45), Vector2(.32, .6), Vector2(.26, .72), Vector2(.03, .7), Vector2(-.02, 1.02), Vector2(-.03, 1.24), Vector2(-.09, 1.3), Vector2(-.21, 1.24), Vector2(-.25, .7), Vector2(-.21, .45)]
-	var pad: Array[Vector2] = [Vector2(.27, .47), Vector2(.29, .55), Vector2(.23, .6), Vector2(.0, .57), Vector2(-.06, 1.02), Vector2(-.08, 1.2), Vector2(-.13, 1.22), Vector2(-.2, 1.14), Vector2(-.22, .6), Vector2(-.18, .47)]
-	_extrude("vinyl_in", seat, wing, -.27, -.235, shell)
-	_extrude("vinyl_in", seat, wing, .235, .27, shell)
-	_extrude("vinyl_in", seat, pad, -.235, .235, vinyl)
-	var back := _slope(seat, Vector2(.0, .57), Vector2(-.06, 1.02))
-	_bar("plain", back, 0, .24, .002, Vector3(.012, .4, .002), Color("#4a1416"))
-	_bar("plain", back, 0, .3, .002, Vector3(.3, .008, .002), Color("#0c0c0e"))
-	var slot := _slope(seat, Vector2(-.06, 1.02), Vector2(-.08, 1.2))
-	_bar("plain", slot, 0, .07, .003, Vector3(.2, .03, .002), Color("#050506"))
+	# The shell: a moulded bucket, wide and deep at the hips, pinched at the shoulders, winged again
+	# round the head; the padding sits inside it, with piping where the two meet.
+	var back_low := Vector2(.0, .5) # (z, y): where the back meets the cushion, then up the spine.
+	var back_high := Vector2(-.09, 1.27)
+	var rise := (back_high - back_low).normalized()
+	var ahead := Vector3(0, -rise.x, rise.y) # Out of the back towards whoever sits in it.
+	var spine := func(t: float) -> Vector3:
+		var p := back_low.lerp(back_high, t)
+		return Vector3(0, p.y, p.x)
+	var wide := func(t: float) -> float:
+		return lerpf(.25, .265, smoothstep(0.0, .35, t)) - .07 * smoothstep(.6, .78, t) + .015 * smoothstep(.85, 1.0, t)
+	var deep := func(t: float) -> float:
+		return lerpf(.15, .08, smoothstep(0.0, .45, t)) - .05 * smoothstep(.55, .75, t) + .06 * smoothstep(.8, .95, t)
+	var outer: Array = []
+	var inner: Array = []
+	for i: int in range(13):
+		var t := float(i) / 12.0
+		var ring_out: Array[Vector3] = []
+		var ring_in: Array[Vector3] = []
+		for j: int in range(15):
+			var phi := lerpf(-PI * .5, PI * .5, float(j) / 14.0)
+			var w: float = wide.call(t)
+			var d: float = deep.call(t)
+			var p: Vector3 = spine.call(t)
+			ring_out.append(seat * (p + Vector3(sin(phi) * (w + .02), 0, 0) + ahead * (d * (1.0 - cos(phi)) - .025)))
+			ring_in.append(seat * (p + Vector3(sin(phi) * (w - .015), 0, 0) + ahead * ((d - .01) * (1.0 - cos(phi)) + .015)))
+		outer.append(ring_out)
+		inner.append(ring_in)
+	_loft("shell_in", outer, shell)
+	_loft("vinyl_in", inner, vinyl)
+	# The cushion, wings rising either side for the thighs.
+	var under: Array = []
+	var cushion: Array = []
+	for i: int in range(7):
+		var t := float(i) / 6.0
+		var z := lerpf(.02, .4, t)
+		var y := lerpf(.5, .47, t)
+		var lip := lerpf(.11, .07, t)
+		var ring_out: Array[Vector3] = []
+		var ring_in: Array[Vector3] = []
+		for j: int in range(15):
+			var phi := lerpf(-PI * .5, PI * .5, float(j) / 14.0)
+			ring_out.append(seat * Vector3(sin(phi) * .285, y - .03 + lip * (1.0 - cos(phi)), z))
+			ring_in.append(seat * Vector3(sin(phi) * .25, y + .015 + (lip - .01) * (1.0 - cos(phi)), z))
+		under.append(ring_out)
+		cushion.append(ring_in)
+	_loft("shell_in", under, shell)
+	_loft("vinyl_in", cushion, vinyl)
+	# Piping round the rim of the shell, and the stitched centre panels in the seat's red.
+	for skin: Array in [outer, under]:
+		for edge: int in [0, 14]:
+			var line: Array[Vector3] = []
+			for ring: Array in skin:
+				line.append(ring[edge])
+			_kit.tube("plain", line, .009, Color("#1a1b20"), 5)
+	var top_line: Array[Vector3] = []
+	for j: int in range(15):
+		top_line.append(outer[12][j])
+	_kit.tube("plain", top_line, .009, Color("#1a1b20"), 5)
+	for side: float in [-.07, .07]:
+		var stitch: Array[Vector3] = []
+		for i: int in range(1, 10):
+			var t := float(i) / 12.0
+			stitch.append(seat * (spine.call(t) + Vector3(side, 0, 0) + ahead * .017))
+		_kit.tube("plain", stitch, .003, Color("#7a1418"), 3)
+	# The belt slots under the head wings.
+	for side: float in [-.08, .08]:
+		var slot_at: Vector3 = spine.call(.8) + Vector3(side, 0, 0) + ahead * .016
+		_kit.quad("plain", seat * (slot_at + Vector3(-.025, -.012, 0)), seat * (slot_at + Vector3(-.025, .012, 0)), seat * (slot_at + Vector3(.025, .012, 0)), seat * (slot_at + Vector3(.025, -.012, 0)), Color("#050506"))
 	# Grips on stalks, and the harness, loose over the empty seat.
 	for side: float in [-1.0, 1.0]:
 		_kit.tube("steel_in", [seat * Vector3(side * .31, .46, .1), seat * Vector3(side * .34, .62, .14), seat * Vector3(side * .34, .78, .16)], .014, steel, 6)
 		_kit.lathe("plain", seat * Vector3(side * .34, .78, .16), [Vector2(.022, 0), Vector2(.024, .02), Vector2(.022, .12), Vector2(.014, .13)], Color("#101012"), 12)
-		_kit.tube("plain", [seat * Vector3(side * .09, 1.12, -.08), seat * Vector3(side * .1, .86, -.02), seat * Vector3(side * .04, .62, .1)], .012, Color("#26272c"), 4)
+		_kit.tube("plain", [seat * Vector3(side * .08, 1.12, -.035), seat * Vector3(side * .1, .86, .03), seat * Vector3(side * .05, .62, .14)], .012, Color("#26272c"), 4)
 	_bar("metal", seat, 0, .62, .1, Vector3(.1, .03, .05), Color("#7a7c82"))
+
+func _loft(part: String, rings: Array, tint: Color) -> void:
+	# A skin through rings of points, faced both ways: a moulded shell is seen from either side.
+	for i: int in range(rings.size() - 1):
+		var low: Array = rings[i]
+		var high: Array = rings[i + 1]
+		for j: int in range(low.size() - 1):
+			_kit.quad(part, low[j], high[j], high[j + 1], low[j + 1], tint)
+			_kit.quad(part, low[j + 1], high[j + 1], high[j], low[j], tint)
 
 func _vr_bay(at: Vector3, top: float, seat: bool) -> void:
 	# A tracked platform with its lit ring; the middle room is the motion seat on a steel plate.
