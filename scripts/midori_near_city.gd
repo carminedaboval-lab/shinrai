@@ -37,9 +37,21 @@ const StardustLane := preload("res://scripts/midori_near_city_lane.gd")
 const KaraokeTower := preload("res://scripts/midori_near_city_karaoke.gd")
 const PoliceBox := preload("res://scripts/midori_near_city_koban.gd")
 const GameCentre := preload("res://scripts/midori_near_city_arcade.gd")
+const RamenShop := preload("res://scripts/midori_near_city_ramen.gd")
+const EstateOffice := preload("res://scripts/midori_near_city_fudosan.gd")
+const FlowerShop := preload("res://scripts/midori_near_city_flower.gd")
+const UsedBooks := preload("res://scripts/midori_near_city_books.gd")
+const PublicBath := preload("res://scripts/midori_near_city_sento.gd")
+const BarberShop := preload("res://scripts/midori_near_city_barber.gd")
+const WagashiShop := preload("res://scripts/midori_near_city_wagashi.gd")
+const BusinessHotel := preload("res://scripts/midori_near_city_hotel.gd")
+const BicycleShop := preload("res://scripts/midori_near_city_cycle.gd")
+const Greengrocer := preload("res://scripts/midori_near_city_yaoya.gd")
+const SnackBuilding := preload("res://scripts/midori_near_city_snack.gd")
+const HandViaduct := preload("res://scripts/midori_near_city_viaduct.gd")
 const ClearedLot := preload("res://scripts/midori_near_city_handmade.gd") # Built over by its neighbour; adds nothing itself.
 # Lots given over to hand-modelled buildings, by a point inside each.
-const HANDMADE: Array[Array] = [[Vector2(33.5, -210.75), GyozaShop], [Vector2(40.5, -210.9), PencilBuilding], [Vector2(49.0, -211.0), KonbiniBlock], [Vector2(25.0, -211.0), ZakkyoTower], [Vector2(12.6, -208.0), CornerChemist], [Vector2(18.5, -209.0), CoinLaundry], [Vector2(12.6, -216.0), FamilyClinic], [Vector2(-19.8, -209.0), CapsuleTower], [Vector2(-13.0, -209.0), ClearedLot], [Vector2(-19.0, -219.0), ClearedLot], [Vector2(-12.5, -219.0), ClearedLot], [Vector2(-26.4, -210.0), PachinkoHall], [Vector2(-31.5, -210.0), ClearedLot], [Vector2(-35.7, -210.0), ClearedLot], [Vector2(-41.8, -210.0), StardustLane], [Vector2(-42.0, -219.0), ClearedLot], [Vector2(-42.0, -229.0), ClearedLot], [Vector2(-42.0, -240.0), ClearedLot], [Vector2(-49.5, -210.0), KaraokeTower], [Vector2(77.0, -210.0), PoliceBox], [Vector2(84.0, -210.0), GameCentre]]
+const HANDMADE: Array[Array] = [[Vector2(33.5, -210.75), GyozaShop], [Vector2(40.5, -210.9), PencilBuilding], [Vector2(49.0, -211.0), KonbiniBlock], [Vector2(25.0, -211.0), ZakkyoTower], [Vector2(12.6, -208.0), CornerChemist], [Vector2(18.5, -209.0), CoinLaundry], [Vector2(12.6, -216.0), FamilyClinic], [Vector2(-19.8, -209.0), CapsuleTower], [Vector2(-13.0, -209.0), ClearedLot], [Vector2(-19.0, -219.0), ClearedLot], [Vector2(-12.5, -219.0), ClearedLot], [Vector2(-26.4, -210.0), PachinkoHall], [Vector2(-31.5, -210.0), ClearedLot], [Vector2(-35.7, -210.0), ClearedLot], [Vector2(-41.8, -210.0), StardustLane], [Vector2(-42.0, -219.0), ClearedLot], [Vector2(-42.0, -229.0), ClearedLot], [Vector2(-42.0, -240.0), ClearedLot], [Vector2(-49.5, -210.0), KaraokeTower], [Vector2(77.0, -210.0), PoliceBox], [Vector2(84.0, -210.0), GameCentre], [Vector2(90.4, -210.0), RamenShop], [Vector2(96.4, -210.0), EstateOffice], [Vector2(102.0, -210.0), FlowerShop], [Vector2(107.3, -210.0), UsedBooks], [Vector2(114.4, -210.0), PublicBath], [Vector2(140.2, -209.0), BarberShop], [Vector2(145.6, -209.0), WagashiShop], [Vector2(153.11, -212.0), BusinessHotel], [Vector2(160.625, -209.0), BicycleShop], [Vector2(169.59, -209.0), Greengrocer], [Vector2(178.635, -209.0), SnackBuilding]]
 const HERO_RANGE := 130.0 # Buildings this close to the park get full real shells.
 const SHELL_RANGE := 300.0 # Out to here shells stay real but drop their finest parts.
 const PALETTE: Array[Color] = [Color(.96,.92,.84), Color(.9,.84,.74), Color(.97,.96,.93), Color(.84,.84,.83), Color(.8,.72,.62), Color(.62,.36,.26), Color(.48,.24,.2), Color(.15,.16,.17),
@@ -257,6 +269,8 @@ var _deck: Array[int] = []
 var _dealt := 0
 var _muted := false # Lays a lot out unseen, so the rest of the city keeps its random sequence.
 var _handmade: Array[Node3D] = []
+## The gaps _split leaves between lots, for the alley dresser to furnish. Read only.
+var alleys: Array[Dictionary] = []
 
 func _ready() -> void:
 	add_to_group("midori_horizon")
@@ -602,10 +616,12 @@ func _split(rect: Rect2, block: Rect2, commercial: bool) -> void:
 	var alley := _rng.randf_range(.3, 1.4) * .5
 	if rect.size.x * 1.25 >= rect.size.y:
 		var at := rect.size.x * cut
+		alleys.append({"rect":Rect2(rect.position.x + at - alley, rect.position.y, alley * 2.0, rect.size.y), "commercial":commercial})
 		_split(Rect2(rect.position, Vector2(at - alley, rect.size.y)), block, commercial)
 		_split(Rect2(rect.position + Vector2(at + alley, 0), Vector2(rect.size.x - at - alley, rect.size.y)), block, commercial)
 	else:
 		var at := rect.size.y * cut
+		alleys.append({"rect":Rect2(rect.position.x, rect.position.y + at - alley, rect.size.x, alley * 2.0), "commercial":commercial})
 		_split(Rect2(rect.position, Vector2(rect.size.x, at - alley)), block, commercial)
 		_split(Rect2(rect.position + Vector2(0, at + alley), Vector2(rect.size.x, rect.size.y - at - alley)), block, commercial)
 
@@ -1122,7 +1138,7 @@ func _build_viaduct() -> void:
 	var concrete := Color("#77736a")
 	var z := -1000.0
 	var count := 0
-	while z < 150.0:
+	while z < HandViaduct.Z_START:
 		var centre := Vector3(VIADUCT_X, VIADUCT_Y, z + 6.0)
 		_put("trim", centre, _xform(centre, Vector3(11.0, .9, 12.0)), Color(), concrete)
 		for side: float in [-1.0, 1.0]:
@@ -1147,6 +1163,10 @@ func _build_viaduct() -> void:
 				_wire(head + Vector3(rail, -1.0, 0), head + Vector3(rail, -1.0, 48.0))
 		z += 12.0
 		count += 1
+	var by_hand: Node3D = HandViaduct.new()
+	by_hand.position = Vector3(VIADUCT_X, 0, 0)
+	add_child(by_hand)
+	_handmade.append(by_hand)
 
 func _build_landmark() -> void:
 	# Fictional lattice broadcast tower, in aviation orange and white bands.

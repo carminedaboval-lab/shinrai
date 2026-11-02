@@ -7,3 +7,12 @@ Real surfaces and photos, CC0 from Wikimedia Commons: arcade_terrazzo.jpg (Terra
 arcade_boards.jpg is Poly Haven's CC0 japanese_cedar_planks, greyed and with its dark planks evened out for this project.
 vr_wall.png is drawn by code for this project; its lettering is baked from M PLUS Rounded 1c and Zen Kaku Gothic New (SIL OFL).
 arcade_mosaic.jpg is drawn by code for this project; its surface grain comes from arcade_tile.jpg (CC0, above).
+ramen_atlas.png re-uses CC0 Wikimedia Commons photos already listed above (Ramen Jump 002.jpg, the Okinawa pork noodle bowl, Hamamatsu Gyōza 001.jpg, Chicken karaage 001.jpg). fudosan_atlas.png adds two CC0 photos as listing thumbnails: Enomoto Mansion 2024-10-30.jpg; Kajima Shiinamachi apartment 01.jpg. Their lettering is baked from M PLUS Rounded 1c, Zen Kaku Gothic New, Yuji Boku, Klee One and Shippori Mincho B1 (SIL OFL).
+flower_atlas.png, books_atlas.png and sento_atlas.png are baked from the same SIL OFL fonts; the book covers in books_atlas.png re-use CC0 Wikimedia Commons photos already listed above.
+viaduct_atlas.png is baked by code from the same SIL OFL fonts and contains no third-party imagery.
+barber_atlas.png is drawn by code for this project from the same SIL OFL fonts and contains no third-party imagery.
+wagashi_atlas.png adds three CC0 Wikimedia Commons photos as sweets on its showcase cards and posters: Sanshoku Dango 001.jpg; Daifuku 001.jpg; Furōgaki, Wagashi.jpg. Its lettering is baked from the same SIL OFL fonts.
+hotel_atlas.png is drawn by code for this project from the same SIL OFL fonts and contains no third-party imagery.
+cycle_atlas.png is drawn by code for this project from the same SIL OFL fonts and contains no third-party imagery.
+yaoya_atlas.png is drawn by code for this project from the same SIL OFL fonts and contains no third-party imagery.
+snack_atlas.png is drawn by code for this project from the same SIL OFL fonts; its menu board re-uses CC0 Wikimedia Commons food photos already listed above.
