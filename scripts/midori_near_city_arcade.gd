@@ -44,6 +44,7 @@ const CLUB_AIR := Color(1.0, .95, .88) # 2F by day: the room's own warm tubes, n
 const CLUB_AIR_ENERGY := .4
 const VR_AIR := Color(.92, .92, .94) # 5F by day: the sky's blue would turn every black in the rooms navy.
 const VR_AIR_ENERGY := .3
+const VR_POOL := 1.1 # How far a room downlight's pool reaches from 2.34 m up.
 const CAB_W := 1.24
 const CAB_D := .95
 const BACK_ROW := -4.4 # Far enough back to leave a clear metre behind the front row.
@@ -144,6 +145,19 @@ func _ready() -> void:
 		lamp.distance_fade_begin = 40.0
 		lamp.distance_fade_length = 10.0
 		_room_lamps.append(lamp)
+	# The motion seat is the one thing on 5F the painted light cannot reach round, so its door-side
+	# downlight is real: narrow enough to stay inside the partitions, which it would light through.
+	var seat_lamp := SpotLight3D.new()
+	seat_lamp.name = "VrSeatLamp"
+	seat_lamp.transform = Transform3D(Basis.looking_at(Vector3(0, -1, .42)), _front * Vector3(2.58, _storey_base(3) + .34 + ROOM_HIGH - .04, -3.85))
+	seat_lamp.light_color = Color(1.0, .95, .88)
+	seat_lamp.light_energy = 1.6
+	seat_lamp.light_specular = .25
+	seat_lamp.spot_range = 3.2
+	seat_lamp.spot_angle = 19.0
+	seat_lamp.spot_angle_attenuation = .7
+	seat_lamp.shadow_enabled = false
+	add_child(seat_lamp)
 	# A polished floor only shines if it has a room to mirror; nothing here adds ambient.
 	_probe = ReflectionProbe.new()
 	_probe.name = "ArcadeShine"
@@ -1300,12 +1314,22 @@ func _fan_string(top: float, x: float, z0: float, z1: float) -> void:
 	var cells: Array[Rect2] = [Rect2(357.0 / 1024.0, 277.0 / 1024.0, 156.0 / 1024.0, 156.0 / 1024.0), Rect2(537.0 / 1024.0, 277.0 / 1024.0, 156.0 / 1024.0, 156.0 / 1024.0)]
 	var i := 0
 	var z := z0
+	# Each is a 5 mm foam board, printed both faces, its cut edge white, hung on a clip and a short hook.
+	var radius := .11
 	while z > z1:
 		var cell: Rect2 = cells[i % 2]
-		var right := Basis(Vector3.UP, .3 if i % 2 == 0 else -.3) * Vector3.RIGHT
-		var at := f * Vector3(x, top - .25, z)
-		_kit.disc("photo_in", at, right, Vector3.UP, .13, Color.WHITE, cell)
-		_kit.disc("photo_in", at, -right, Vector3.UP, .13, Color.WHITE, cell)
+		var wobble := fposmod(float(i) * .618 + x, 1.0) - .5 # Fixed per plaque: the shared dice stay where the rest of the floors expect them.
+		var swing := Basis(Vector3.UP, (.3 if i % 2 == 0 else -.3) + wobble * .16) * Basis(Vector3.BACK, wobble * -.1)
+		var right := swing * Vector3.RIGHT
+		var up := swing * Vector3.UP
+		var out := right.cross(up)
+		var at := f * Vector3(x, top - .118 - .035 - radius, z)
+		_kit.disc("photo_in", at + out * .0026, right, up, radius, Color.WHITE, cell)
+		_kit.disc("photo_in", at - out * .0026, -right, up, radius, Color.WHITE, cell)
+		_turned("plain", at, Basis(right, out, -up).orthonormalized(), [Vector2(radius, -.0026), Vector2(radius, .0026)], Color("#ecebe6"), 28)
+		var lip := at + up * (radius - .012)
+		_bar("metal", Transform3D(swing, lip), 0, 0, 0, Vector3(.016, .02, .009), Color("#b8bcc2")) # The clip, biting the top.
+		_kit.tube("metal", [lip + up * .01, lip + up * .028, f * Vector3(x, top - .118, z)], .0012, Color("#8a8e94"), 3)
 		z -= .42
 		i += 1
 
@@ -1628,13 +1652,23 @@ func _cab(t: Transform3D, game: int) -> void:
 	for side: float in [-1.0, 1.0]:
 		_bar("shell_in", screen, side * .32, .26, .015, Vector3(.04, .5, .03), white)
 	var deck := _slope(t, Vector2(.44, .76), Vector2(.14, .86))
-	_bar("shell_in", deck, 0, .158, .003, Vector3(.62, .2, .006), Color("#8a93a8"))
+	# The panel: a printed sheet under clear acrylic, held by a carriage bolt at each corner, the
+	# game's colour run along its edges. Sticks and 30 mm buttons stand through it, two players' worth.
+	_bar("gloss", deck, 0, .158, .003, Vector3(.62, .2, .006), Color("#16181f"))
+	for y: float in [.064, .252]:
+		_bar("paint", deck, 0, y, .0062, Vector3(.6, .005, .001), crown)
+	for x: float in [-.295, .295]:
+		for y: float in [.072, .244]:
+			_ball(deck * Vector3(x, y, .006), Vector3(.006, .0025, .006), Color("#0c0c0e"), "metal", 2, 8, _turn_axes(deck))
 	_bar("shell_in", t, 0, .72, .432, Vector3(half * 2.0 - .02, .05, .006), white)
-	for player: float in [-.18, .18]:
-		_stick(deck, player - .1, .16, Color("#d81818"))
+	var caps: Array[Color] = [Color("#e01e2c"), Color("#f0c010"), Color("#2a6de0")]
+	for player: float in [-.155, .155]:
+		_stick(deck, player - .075, .15, Color("#d81818"))
 		for i: int in range(6):
-			var at := Vector3(player + float(i % 3) * .05 - .03, .13 + float(i / 3) * .055, .0075)
-			_kit.disc("led_low", deck * at, deck.basis.x, deck.basis.y, .016, [Color("#ff2d4a"), Color("#30d060"), Color("#3a90ff")][i % 3] * .9)
+			var column := i % 3
+			var at := Vector2(player + .005 + float(column) * .039, .118 + float(i / 3) * .044 + (.008 if column == 1 else 0.0)) # Set on an arc, as the hand lies.
+			_button(deck, at, .015, caps[column])
+		_button(deck, Vector2(player + .06, .228), .011, Color("#f2f2ee")) # Start.
 	# The 2050 way to pay, up on the lip by the screen where your hand already is.
 	_bar("gloss", deck, .25, .287, .004, Vector3(.1, .044, .006), Color("#0a0c12"))
 	_kit.disc("led_low", deck * Vector3(.226, .287, .0075), deck.basis.x, deck.basis.y, .017, CYAN)
@@ -1674,10 +1708,46 @@ func _cab_stripe(t: Transform3D, side: float, tint: Color) -> void:
 		_kit.quad("shell_in", edge.call(i, side), edge.call(i, -side), edge.call(i + 1, -side), edge.call(i + 1, side), tint)
 
 func _stick(deck: Transform3D, x: float, y: float, tint: Color) -> void:
-	var foot := deck * Vector3(x, y, .0075) # Clear of the printed panel, whose face is at .006.
-	_kit.disc("plain", foot, deck.basis.x, deck.basis.y, .022, Color("#0c0c10"))
-	_kit.tube("chrome", [foot, foot + deck.basis.z * .05], .005, Color("#d0d4d8"), 6)
-	_ball(foot + deck.basis.z * .062, Vector3.ONE * .016, tint, "gloss", 6, 10)
+	# A Japanese stick: a black dust washer flat on the panel, a short steel shaft, and a 35 mm ball top
+	# with its moulding seam.
+	var axes := _turn_axes(deck)
+	var foot := deck * Vector3(x, y, .006) # The printed panel's face.
+	_turned("plain", foot, axes, [Vector2(.019, 0), Vector2(.019, .0015), Vector2(.012, .0025), Vector2(.0055, .003), Vector2(.0045, .0045)], Color("#0c0c10"), 20)
+	_turned("chrome", foot, axes, [Vector2(.004, .004), Vector2(.004, .03), Vector2(.006, .033)], Color("#c4c8cc"), 10)
+	var top := foot + deck.basis.z * .047
+	_ball(top, Vector3.ONE * .0175, tint, "gloss", 8, 16, axes)
+	_turned("gloss", top, axes, [Vector2(.0177, -.0008), Vector2(.0177, .0008)], tint * .7, 16)
+
+func _button(deck: Transform3D, at: Vector2, radius: float, tint: Color) -> void:
+	# A snap-in push button: a raised bezel ring round a domed plunger, both in the cap's own plastic.
+	var axes := _turn_axes(deck)
+	var foot := deck * Vector3(at.x, at.y, .006)
+	var k := radius / .015
+	_turned("gloss", foot, axes, [Vector2(.0152 * k, 0), Vector2(.0152 * k, .0022), Vector2(.0143 * k, .0032), Vector2(.0131 * k, .0032), Vector2(.0128 * k, .0024)], tint * .82, 20)
+	_turned("gloss", foot, axes, [Vector2(.0122 * k, .0024), Vector2(.0122 * k, .0046), Vector2(.0105 * k, .0058), Vector2(.006 * k, .0064), Vector2(0, .0066)], tint, 20)
+
+func _turn_axes(deck: Transform3D) -> Basis:
+	# Axes for a turned part standing square out of a sloped face: its y is the face's normal.
+	return Basis(deck.basis.x, deck.basis.z, -deck.basis.y)
+
+func _turned(part: String, base: Vector3, axes: Basis, profile: Array[Vector2], tint: Color, sides := 12) -> void:
+	# The kit's lathe, about any axis: profile is radius and height along axes.y.
+	for j: int in range(profile.size() - 1):
+		var p0 := profile[j]
+		var p1 := profile[j + 1]
+		var slope := Vector2(p1.y - p0.y, p0.x - p1.x).normalized()
+		for s: int in range(sides):
+			var a0 := TAU * float(s) / float(sides)
+			var a1 := TAU * float(s + 1) / float(sides)
+			var dir0 := Vector3(cos(a0), 0, sin(a0))
+			var dir1 := Vector3(cos(a1), 0, sin(a1))
+			var n0 := axes * (dir0 * slope.x + Vector3.UP * slope.y).normalized()
+			var n1 := axes * (dir1 * slope.x + Vector3.UP * slope.y).normalized()
+			var a := base + axes * (dir0 * p0.x + Vector3.UP * p0.y)
+			var b := base + axes * (dir0 * p1.x + Vector3.UP * p1.y)
+			var c := base + axes * (dir1 * p1.x + Vector3.UP * p1.y)
+			var d := base + axes * (dir1 * p0.x + Vector3.UP * p0.y)
+			_kit.smooth(part, a, b, c, d, n0, n0, n1, n1, tint)
 
 func _washer(t: Transform3D) -> void:
 	# The round touch-ring music game the Japanese call a washing machine, and so does everyone.
@@ -2508,10 +2578,17 @@ func _vr_floor(y: float) -> void:
 	_panel("cut_vr", Transform3D(Basis(Vector3.BACK, Vector3.UP, Vector3.LEFT), f * Vector3(4.98, y, -5.6)), .15, 1.15, .1, 2.0, .008, VR_TANUKI)
 	var cards: Array[Rect2] = [_cell(1410, 1830, 310, 100), _cell(1410, 1935, 310, 100), _cell(1410, 1830, 310, 100)]
 	var centres: Array[float] = [.97, 2.58, 4.2]
+	var walls: Array[Vector2] = [Vector2(.2, 1.7), Vector2(1.8, 3.35), Vector2(3.45, 4.98)]
 	for i: int in range(3):
 		var x: float = centres[i]
 		var at := f * Vector3(x, y, -2.4)
-		_vr_bay(at, top, i == 1)
+		# Each room's own two downlights, so staff can watch the player. The seat room's front one goes
+		# door-side of the cassette, so the seat's face is lit and some of it gets out under the curtain.
+		var lamps: Array[Vector3] = []
+		for z: float in ([-1.0, -3.85] if i == 1 else [-1.3, -3.3]):
+			_vr_downlight(x, z, y, top, walls[i])
+			lamps.append(f * Vector3(x, y, z))
+		_vr_bay(at, top, i == 1, lamps)
 		if i == 1:
 			_solid(2.08, 3.08, y, y + 1.4, -3.0, -1.9)
 		else:
@@ -2519,6 +2596,20 @@ func _vr_floor(y: float) -> void:
 		_bar("plain", f, x, top - .24, -.62, Vector3(1.24, .4, .05), Color("#060a14"))
 		_panel("sign", f, x - .6, x + .6, top - .43, top - .05, -.592, cards[i])
 		_panel("sign_in", Transform3D(Basis(Vector3.UP, PI), f * Vector3(x, 0, -.648)), -.6, .6, top - .43, top - .05, 0, cards[i])
+
+func _vr_downlight(x: float, z: float, y: float, top: float, walls: Vector2) -> void:
+	# A recessed can in the black grid, its pool on the floor, and the scallop it throws up either wall.
+	var f := _front
+	var white := Color(1.0, .95, .88)
+	_kit.disc("plain", f * Vector3(x, top - .025, z), Vector3.RIGHT, Vector3.BACK, .07, Color("#0c0c0e"))
+	_kit.disc("panel", f * Vector3(x, top - .026, z), Vector3.RIGHT, Vector3.BACK, .05, white)
+	var low := y + .004
+	var half := minf(VR_POOL, minf(x - walls.x, walls.y - x))
+	var near := minf(z + VR_POOL, -.12) # Stopped short of the glass, or the street sees it on the slab edge.
+	_kit.atlas("pool", f * Vector3(x - half, low, near), f * Vector3(x - half, low, z - VR_POOL), f * Vector3(x + half, low, z - VR_POOL), f * Vector3(x + half, low, near), Rect2(.5 - half / (2.0 * VR_POOL), 0, half / VR_POOL, (near - z + VR_POOL) / (2.0 * VR_POOL)), white * .2)
+	var flip := Rect2(0, 1, 1, -1)
+	_panel("wash_vr", Transform3D(Basis(Vector3.FORWARD, Vector3.UP, Vector3.RIGHT), f * Vector3(walls.x, y, z)), -.42, .42, .05, 2.3, .012, flip, white * .2)
+	_panel("wash_vr", Transform3D(Basis(Vector3.BACK, Vector3.UP, Vector3.LEFT), f * Vector3(walls.y, y, z)), -.42, .42, .05, 2.3, .012, flip, white * .2)
 
 func _vr_curtain(x0: float, x1: float, y: float) -> void:
 	# Two drops of heavy matte cloth overlapping at the middle of the door, a good half metre short
@@ -2666,7 +2757,7 @@ func _loft(part: String, rings: Array, tint: Color) -> void:
 			_kit.quad(part, low[j], high[j], high[j + 1], low[j + 1], tint)
 			_kit.quad(part, low[j + 1], high[j + 1], high[j], low[j], tint)
 
-func _vr_bay(at: Vector3, top: float, seat: bool) -> void:
+func _vr_bay(at: Vector3, top: float, seat: bool, lamps: Array[Vector3]) -> void:
 	# A tracked platform with its lit ring; the middle room is the motion seat on a steel plate.
 	if seat:
 		_bar("steel_in", Transform3D(Basis.IDENTITY, at), 0, .02, 0, Vector3(1.14, .04, 1.3), Color("#1c1e22"))
@@ -2674,6 +2765,25 @@ func _vr_bay(at: Vector3, top: float, seat: bool) -> void:
 		_motion_chair(at + Vector3.UP * .04)
 	else:
 		_kit.lathe("plain", at, [Vector2(.7, 0), Vector2(.7, .05), Vector2(.0, .06)], Color("#141416"), 28)
+		# The step stands proud of the floor's pools, so each downlight's pool is laid again on its top,
+		# measured from the same lamp: where the two meet at the edge, the light carries straight on.
+		var target := _kit._part("pool")
+		for lamp: Vector3 in lamps:
+			if Vector2(lamp.x - at.x, lamp.z - at.z).length() > VR_POOL + .7:
+				continue
+			for j: int in range(8):
+				for k: int in range(28):
+					var corners: Array[Vector3] = []
+					for c: Vector2i in [Vector2i(j, k), Vector2i(j + 1, k), Vector2i(j + 1, k + 1), Vector2i(j, k + 1)]:
+						var r := .7 * float(c.x) / 8.0
+						var a := TAU * float(c.y) / 28.0
+						corners.append(at + Vector3(cos(a) * r, .062 - .01 * r / .7, sin(a) * r))
+					for tri: Array in [[corners[0], corners[1], corners[2]], [corners[0], corners[2], corners[3]]]:
+						if ((tri[2] as Vector3) - (tri[0] as Vector3)).cross((tri[1] as Vector3) - (tri[0] as Vector3)).y < 0.0:
+							tri.reverse()
+						for p: Vector3 in tri:
+							var uv := Vector2(.5, .5) + Vector2(p.x - lamp.x, p.z - lamp.z) / (2.0 * VR_POOL)
+							_kit._emit(target, p, Vector3.UP, Vector3.RIGHT, Color(1.0, .95, .88) * .2, uv, Vector2.ZERO)
 		for turn: float in [0.0, PI * .25]: # The platform is a low step, not a picture of one: two squares make its round.
 			_box_solid(Transform3D(Basis(Vector3.UP, turn), at), Vector3(0, .0275, 0), Vector3(1.32, .055, 1.32))
 		var ring: Array[Vector3] = []
