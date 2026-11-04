@@ -31,6 +31,9 @@ var _source: ShaderMaterial
 var _material: ShaderMaterial
 var _reflection: SubViewport
 var _camera: Camera3D
+## The planar reflection redraws the whole world, about a third of a lake view's
+## frame. It renders every other frame; the ripples hide one frame of lag.
+var _reflection_parity := 0
 var _water_y := 0.102
 var _previous_layers := 1
 var _cached_probe: ReflectionProbe
@@ -266,14 +269,17 @@ func _process(_delta: float) -> void:
 		bounds = _reflection_consumer_bounds()
 		active = _reflection_consumers_visible(source) and _reflection_is_visible(source,bounds)
 	_select_reflection_source(active)
-	var update_mode := SubViewport.UPDATE_ALWAYS if active else SubViewport.UPDATE_DISABLED
-	if _reflection.render_target_update_mode != update_mode: _reflection.render_target_update_mode = update_mode
+	_reflection_parity = (_reflection_parity + 1) % 2 if active else 0
+	var render_now := active and _reflection_parity == 0
+	# UPDATE_ONCE drops back to disabled after its render, so set it every time.
+	_reflection.render_target_update_mode = SubViewport.UPDATE_ONCE if render_now else SubViewport.UPDATE_DISABLED
 	var ready_value := 1.0 if active else 0.0
 	if ready_value != _last_reflection_ready:
 		_material.set_shader_parameter("reflection_ready",ready_value)
 		for bank: Dictionary in _shore_banks: bank.film.set_shader_parameter("reflection_ready",ready_value)
 		_last_reflection_ready = ready_value
-	if not active: return
+	# On the off frame keep the last image and the matrices it was rendered with.
+	if not render_now: return
 	var size := get_viewport().get_visible_rect().size
 	var scale := _reflection_target_scale(source,bounds)
 	var lod_threshold := 4.0 if _reflection_resolution_scale==1.0 else 8.0
@@ -381,6 +387,7 @@ func _reflection_consumer_bounds() -> AABB:
 		var film: MeshInstance3D=bank.film_node
 		bounds=bounds.merge(film.global_transform*film.mesh.get_aabb())
 	return bounds.grow(.1)
+var _water_triangles := PackedVector3Array()
 func _reflection_is_visible(source: Camera3D, bounds: AABB = AABB()) -> bool:
 	if bounds.size == Vector3.ZERO: bounds = _reflection_consumer_bounds()
 	var interior:=source.global_position-source.global_basis.z*(source.near+source.far)*.5
@@ -391,7 +398,20 @@ func _reflection_is_visible(source: Camera3D, bounds: AABB = AABB()) -> bool:
 			if sign_inside*plane.distance_to(bounds.get_endpoint(corner))>=-.01:
 				all_outside=false;break
 		if all_outside: return false
-	return true
+	# The lake's box spans most of the park, so the camera often stands inside
+	# it facing away from the water. Test the water's own triangles as well.
+	if _water_triangles.is_empty():
+		for point: Vector3 in _water.mesh.get_faces(): _water_triangles.append(_water.global_transform*point)
+	var planes := source.get_frustum()
+	var signs: Array[float] = []
+	for plane: Plane in planes: signs.append(1.0 if plane.distance_to(interior)>=0 else -1.0)
+	for t in range(0,_water_triangles.size(),3):
+		var culled:=false
+		for p in planes.size():
+			if signs[p]*planes[p].distance_to(_water_triangles[t])<-.01 and signs[p]*planes[p].distance_to(_water_triangles[t+1])<-.01 and signs[p]*planes[p].distance_to(_water_triangles[t+2])<-.01:
+				culled=true;break
+		if not culled: return true
+	return false
 func _reflection_target_scale(source: Camera3D, bounds: AABB = AABB()) -> float:
 	# The output texture keeps one size while walking, so allocation/receiver
 	# changes cannot expose a different texture at the old distance boundary.

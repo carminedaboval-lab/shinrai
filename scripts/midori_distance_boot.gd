@@ -83,6 +83,14 @@ static func install_before_hq(park: Node3D) -> Dictionary:
 	result["partition_ms"] = Time.get_ticks_msec() - ready_at
 	result["before_hq"] = true
 	result["status"] = "native_fallback" if result.has("error") else "installed"
+	# The park's Bush006 shrubs (copied detail cells and the azalea bases under
+	# the Japanese flower beds) become clipped shrubs, as round the homes.
+	var shrubs: Script = load("res://scripts/midori_clipped_shrubs.gd")
+	for owner_name: String in ["MidoriDistanceDetail", "MidoriJapaneseFlowers"]:
+		var owner := park.get_node_or_null(owner_name) as Node3D
+		if owner != null: result["clipped_shrubs_" + owner_name] = shrubs.apply(owner)
+	shrubs.apply_after_boot(park)
+	load("res://scripts/midori_worn_paths.gd").install(park)
 	park.set_meta(RESULT_META, result)
 	return result
 

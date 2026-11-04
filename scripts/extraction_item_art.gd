@@ -29,7 +29,7 @@ static func loot_texture(id: String) -> Texture2D:
 	return null
 
 func _draw() -> void:
-	if item_id in ["hammer","screwdriver","wrench"]:
+	if item_id in ["hammer","screwdriver","wrench","bolt_cutters"]:
 		_draw_maintenance_tool()
 	elif item_id in ["canned_mackerel","canned_mackerel_open","canned_peaches","canned_peaches_open","can_opener"]:
 		_draw_canned_item()
@@ -163,4 +163,13 @@ func _draw_maintenance_tool() -> void:
 			draw_circle(Vector2(31,69),7,metal);draw_circle(Vector2(31,69),3,dark)
 			draw_colored_polygon(PackedVector2Array([Vector2(51,35),Vector2(46,23),Vector2(52,11),Vector2(63,8),Vector2(59,20),Vector2(66,27),Vector2(76,19),Vector2(77,31),Vector2(65,40)]),metal)
 			draw_line(Vector2(52,31),Vector2(64,36),dark,3,true)
+		"bolt_cutters":
+			var handle:=Color("b3402f")
+			draw_line(Vector2(50,32),Vector2(24,72),dark,7,true)
+			draw_line(Vector2(54,32),Vector2(80,72),dark,7,true)
+			draw_line(Vector2(36,54),Vector2(24,72),handle,8,true)
+			draw_line(Vector2(68,54),Vector2(80,72),handle,8,true)
+			draw_colored_polygon(PackedVector2Array([Vector2(44,34),Vector2(49,12),Vector2(52,10),Vector2(51,34)]),metal)
+			draw_colored_polygon(PackedVector2Array([Vector2(60,34),Vector2(55,12),Vector2(52,10),Vector2(53,34)]),metal)
+			draw_circle(Vector2(52,33),6,metal);draw_circle(Vector2(52,33),2.5,dark)
 	draw_set_transform(Vector2.ZERO)

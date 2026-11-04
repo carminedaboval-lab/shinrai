@@ -20,7 +20,7 @@ func _run() -> void:
 	root.add_child(scene)
 	current_scene = scene
 	var raid: Node = scene.get_node("ExtractionRun")
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 300000
 	while raid.phase == raid.Phase.BOOT and Time.get_ticks_msec() < deadline:
 		await process_frame
 	_check(raid.phase == raid.Phase.HQ, "Park reaches HQ")

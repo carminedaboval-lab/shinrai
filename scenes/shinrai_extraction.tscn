@@ -1,4 +1,4 @@
-[gd_scene load_steps=27 format=3]
+[gd_scene load_steps=33 format=3]
 
 [ext_resource type="Script" path="res://scripts/extraction_park.gd" id="1"]
 
@@ -50,6 +50,18 @@
 [ext_resource type="Script" path="res://scripts/midori_neon_street.gd" id="neon_street"]
 
 [ext_resource type="Script" path="res://scripts/midori_neon_park.gd" id="neon_park"]
+
+[ext_resource type="Script" path="res://scripts/midori_park_fence.gd" id="park_fence"]
+
+[ext_resource type="Script" path="res://scripts/midori_park_cover.gd" id="park_cover"]
+
+[ext_resource type="Script" path="res://scripts/midori_park_wildlife.gd" id="park_wildlife"]
+
+[ext_resource type="Script" path="res://scripts/midori_tokyo_roads.gd" id="tokyo_roads"]
+
+[ext_resource type="Script" path="res://scripts/midori_alley_life.gd" id="alley_life"]
+
+[ext_resource type="Script" path="res://scripts/midori_wind_debris.gd" id="wind_debris"]
 
 [node name="MidoriParkSizeBlockout" type="Node3D"]
 script = ExtResource("1")
@@ -130,3 +142,21 @@ script = ExtResource("neon_street")
 
 [node name="MidoriNeonPark" type="Node3D" parent="."]
 script = ExtResource("neon_park")
+
+[node name="MidoriParkFence" type="Node3D" parent="."]
+script = ExtResource("park_fence")
+
+[node name="MidoriParkCover" type="Node3D" parent="."]
+script = ExtResource("park_cover")
+
+[node name="MidoriParkWildlife" type="Node3D" parent="."]
+script = ExtResource("park_wildlife")
+
+[node name="MidoriTokyoRoads" type="Node3D" parent="."]
+script = ExtResource("tokyo_roads")
+
+[node name="MidoriAlleyLife" type="Node3D" parent="."]
+script = ExtResource("alley_life")
+
+[node name="MidoriWindDebris" type="GPUParticles3D" parent="."]
+script = ExtResource("wind_debris")

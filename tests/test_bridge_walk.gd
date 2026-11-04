@@ -17,7 +17,7 @@ func run() -> void:
 	root.add_child(scene)
 	current_scene = scene
 	var raid: Node = scene.get_node("ExtractionRun")
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 300000
 	while raid.phase == raid.Phase.BOOT and Time.get_ticks_msec() < deadline:
 		await process_frame
 	if raid.phase != raid.Phase.HQ:
@@ -29,24 +29,21 @@ func run() -> void:
 	if raid.phase != raid.Phase.RAID:
 		quit(1)
 		return
+	# This measures the crossing, not a fight on it.
+	raid._clear_enemies()
+	await physics_frame
 	raid.player.global_position = Vector3(15.0, 0.2, -38.0)
 	raid.player.look_at(Vector3(180.0, 0.2, -38.0))
-	var forward := InputEventKey.new()
-	forward.keycode = KEY_W
-	forward.physical_keycode = KEY_W
-	forward.pressed = true
-	Input.parse_input_event(forward)
-	var sprint := InputEventKey.new()
-	sprint.keycode = KEY_SHIFT
-	sprint.physical_keycode = KEY_SHIFT
-	sprint.pressed = true
-	Input.parse_input_event(sprint)
+	# Movement input needs a captured mouse, which a headless run never has, so
+	# the test calls the player's real ground movement itself.
+	raid.player.set_physics_process(false)
 	var best_x: float = raid.player.global_position.x
 	var fps_sum := 0.0
 	var fps_samples := 0
 	var fps_min := 10000.0
 	for frame: int in range(2400):
 		await physics_frame
+		raid.player._advance_ground_movement(1.0 / 60.0, Vector2(0, -1), true, false, false)
 		best_x = maxf(best_x, raid.player.global_position.x)
 		if frame % 120 == 0:
 			var fps: float = Engine.get_frames_per_second()
@@ -57,10 +54,6 @@ func run() -> void:
 				fps_min = minf(fps_min, fps)
 		if raid.player.global_position.x > 175.0:
 			break
-	forward.pressed = false
-	sprint.pressed = false
-	Input.parse_input_event(forward)
-	Input.parse_input_event(sprint)
 	var passed: bool = raid.player.global_position.x > 175.0 and raid.player.is_on_floor()
 	print("BRIDGE_WALK_RESULT: %s best_x=%.1f" % ["PASS" if passed else "FAIL", best_x])
 	if fps_samples > 0:

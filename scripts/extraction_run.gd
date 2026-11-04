@@ -18,6 +18,7 @@ const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
 
 const PitchGate = preload("./midori_pitch_gate.gd")
 var pitch_gate: Node3D
+var park_fence: Node3D
 const ClubhouseDoors = preload("./midori_clubhouse_doors.gd")
 var clubhouse_doors: Node3D
 const BuildingAccess = preload("res://scripts/building_access/service.gd")
@@ -62,7 +63,7 @@ const ITEMS := [
 	{"id": "park_map", "title": "Midori park map", "value": 0},
 	{"id":"backpack_regular","title":"Field backpack","value":0},
 	{"id":"backpack_mountain","title":"Mountain backpack","value":0}] + LootContainers.ITEMS + FruitHarvest.ITEMS
-const PRICES := {"hammer":22,"screwdriver":12,"wrench":24,"circuit": 85, "optics": 140, "cell": 60, "archive": 220, "coffee_cup": 12, "pliers":18, "scissors":10, "utility_knife":16, "bottled_water_closed":8, "bottled_water_open":2, "sports_bottle_closed":14, "sports_bottle_open":7, "bandage":15, "tourniquet":35, "splint":25, "ration_bar":12, "garden_mikan":4, "garden_persimmon":5,"canned_mackerel":14,"canned_mackerel_open":6,"canned_peaches":12,"canned_peaches_open":5,"can_opener":9}
+const PRICES := {"bolt_cutters":38,"hammer":22,"screwdriver":12,"wrench":24,"circuit": 85, "optics": 140, "cell": 60, "archive": 220, "coffee_cup": 12, "pliers":18, "scissors":10, "utility_knife":16, "bottled_water_closed":8, "bottled_water_open":2, "sports_bottle_closed":14, "sports_bottle_open":7, "bandage":15, "tourniquet":35, "splint":25, "ration_bar":12, "garden_mikan":4, "garden_persimmon":5,"canned_mackerel":14,"canned_mackerel_open":6,"canned_peaches":12,"canned_peaches_open":5,"can_opener":9}
 const RAID_SECONDS := 7200.0
 enum Phase { BOOT, HQ, RAID, PAUSED, RESULT }
 
@@ -220,6 +221,15 @@ func _prepare_park() -> void:
 	while corporate != null and corporate.get("installed") != true:
 		await get_tree().process_frame
 	_t = StartupTrace.finish("raid.wait_corporate", _t)
+	# Fence, cover and camps are solid, so navigation must sample them.
+	park_fence = park.get_node_or_null("MidoriParkFence")
+	for producer_name: String in ["MidoriParkFence", "MidoriParkCover"]:
+		var producer: Node = park.get_node_or_null(NodePath(producer_name))
+		while producer != null and producer.get("installed") != true:
+			await get_tree().process_frame
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_t = StartupTrace.finish("raid.wait_park_fence_cover", _t)
 	var fruit_garden: Dictionary = preload("./midori_fruit_garden.gd").install(park)
 	if fruit_garden.get("report",{}).has("error"):
 		push_warning("MIDORI_FRUIT_GARDEN: " + str(fruit_garden.report.error))
@@ -586,6 +596,7 @@ func start_run(retry_save: bool = false) -> void:
 	player.velocity = Vector3.ZERO
 	player.position = navigation.nearest(Vector3(0, 0.2, 160))
 	last_safe = player.position
+	if is_instance_valid(park_fence): park_fence.reset_for_raid()
 	player.rotation = Vector3.ZERO
 	player.head.rotation = Vector3.ZERO
 	player.reset_survival()
@@ -841,6 +852,15 @@ func _update_interaction(delta: float) -> void:
 		gate_distance = absf(pitch_gate.to_local(player.global_position).z)
 	var door_prompt := ""
 	var gate_prompt := ""
+	var fence_prompt := ""
+	if is_instance_valid(park_fence):
+		fence_prompt = park_fence.consume_interaction(self,player,minf(access_distance,minf(fruit_distance,minf(site_distance,minf(door_distance,gate_distance)))),eligible,pressed,delta)
+	if not fence_prompt.is_empty():
+		prompt_text = fence_prompt.replace("Hold E",GameInput.hint("E"))
+		hold_progress = 0.0
+		hold_id = ""
+		progress_ratio = park_fence.hold_ratio
+		return
 	# Update both key latches every frame, including when another target wins.
 	if is_instance_valid(clubhouse_doors):
 		door_prompt = clubhouse_doors.consume_interaction(player,minf(access_distance,minf(fruit_distance,minf(site_distance,gate_distance))),eligible,pressed)
@@ -1368,12 +1388,15 @@ func get_path_world(from: Vector3, to: Vector3) -> PackedVector3Array:
 	var route := navigation.path(from, to)
 	if is_instance_valid(pitch_gate) and pitch_gate.blocks_route(from,route): return PackedVector3Array()
 	if is_instance_valid(clubhouse_doors) and clubhouse_doors.blocks_route(from,route): return PackedVector3Array()
+	if is_instance_valid(park_fence) and park_fence.blocks_route(from,route): return PackedVector3Array()
 	return route
 
 func _inside_playable_area(point: Vector3) -> bool:
 	if not point.is_finite() or point.y < -12.0:return false
 	if absf(point.x)<=215.0 and absf(point.z)<=175.0:return true
 	if not is_instance_valid(park):return false
+	# The fence has a real outside now: the pavement strip up to the road kerb.
+	if absf(point.x)<=230.5 and absf(point.z)<=190.5:return true
 	var corporate: Node=park.get_node_or_null("MidoriCorporateDistrict")
 	if corporate != null and corporate.has_method("contains_world_point") and corporate.contains_world_point(point):return true
 	for building: Node in get_tree().get_nodes_in_group("playable_buildings"):

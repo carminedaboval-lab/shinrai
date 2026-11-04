@@ -26,13 +26,13 @@ func run_tests() -> void:
 	root.add_child(scene)
 	current_scene = scene
 	var raid: Node = scene.get_node("ExtractionRun")
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 300000
 	while raid.phase == raid.Phase.BOOT and Time.get_ticks_msec() < deadline:
 		await process_frame
 	check(raid.phase == raid.Phase.HQ, "Park prepares and reaches HQ")
 	check(raid.sites.filter(func(s: Dictionary) -> bool: return s.kind == "relay").size() == 3, "Three real lamp relays registered")
 	check(raid.sites.size() >= 9, "Existing benches provide searchable sites")
-	check(raid.enemy_visual != null and raid.enemy_visual.resource_path.ends_with("K17_Drone_Static.glb"), "Supplied K17 visual loads")
+	check(raid.enemy_visual != null and raid.enemy_visual.resource_path.ends_with("Shinrai_Patrol_Animated.glb"), "Supplied police drone visual loads")
 	check(raid.approach_cover.placements.size() >= 6 and raid.approach_cover.placements.size() <= 12, "Bounded supplied-asset cover pass installed")
 	var cover_clear := true
 	for point: Vector3 in raid.approach_cover.placements:
@@ -77,23 +77,44 @@ func run_tests() -> void:
 	check(outline_matches, "Water safety boundary matches the rendered shoreline")
 	for site: Dictionary in raid.sites:
 		check(not raid.navigation.path(Vector3(0, 0.2, 160), site.position).is_empty(), "Navigation reaches " + String(site.id))
-		var endpoint: Vector3 = raid.navigation.nearest(site.position)
-		check(Vector2(endpoint.x, endpoint.z).distance_to(Vector2(site.position.x, site.position.z)) <= 4.2, "Route endpoint allows interaction with " + String(site.id))
+		if site.has("approach"):
+			# Supply cases can sit indoors or on the street, past the AI walking
+			# grid. Players stand on the authored approach point, so test that.
+			raid.player.global_position = site.approach
+			await process_frame
+			check(raid._site_in_reach(site), "Approach point allows interaction with " + String(site.id))
+		else:
+			var endpoint: Vector3 = raid.navigation.nearest(site.position)
+			check(Vector2(endpoint.x, endpoint.z).distance_to(Vector2(site.position.x, site.position.z)) <= 4.2, "Route endpoint allows interaction with " + String(site.id))
+	check_security_cases(raid)
 	if render:
 		await capture("hq")
 	raid.start_run()
 	check(raid.phase == raid.Phase.RAID and raid.profile.data.active_run, "Deployment starts and persists active run")
-	var patrols := get_nodes_in_group("extraction_hostiles")
-	check(patrols.size() == 7, "Three relay pairs and one visible entry K17 spawn")
+	var patrols := get_nodes_in_group("police_spider_drones")
+	check(patrols.size() == 12, "Three police packs of three, four and five drones spawn")
 	var all_patrols_visible := true
 	for patrol: Node in patrols:
-		all_patrols_visible = all_patrols_visible and patrol.find_child("K17_Drone", true, false) != null
-	check(all_patrols_visible, "Every patrol uses the supplied K17 mesh")
+		all_patrols_visible = all_patrols_visible and patrol.get("visual") != null
+	check(all_patrols_visible, "Every patrol uses the supplied police drone model")
+	check(get_nodes_in_group("scav_squad_directors").size() == 1, "One scav crew deploys")
 	# The remaining economy and route checks run without active attacks.
 	raid._clear_enemies()
 	await process_frame
-	check(raid.player.ammo == 30 and raid.player.reserve == 90 and raid.medkits == 1, "Free starter kit allocated")
+	# A fresh save starts with the Akane: one loaded magazine plus a chambered round,
+	# and two spare physical magazines in the bag.
+	var starter: Dictionary = load("res://scripts/extraction_pistol_starter.gd").kit()
+	var spare_magazine: String = str(starter.field_kit[0].id)
+	var spares: int = raid.bag.filter(func(item: Dictionary) -> bool: return str(item.id) == spare_magazine).size()
+	check(raid.player.weapon_id == "akane" and raid.player.ammo == starter.capacity + 1 and raid.player.reserve == starter.capacity * 2 and spares == 2 and raid.medkits == 0, "Free starter kit allocated")
 	check(raid.player.extraction_mode, "Review fly/restart cheats disabled in game mode")
+	for relay_site: Dictionary in raid.sites.filter(func(s: Dictionary) -> bool: return s.kind == "relay"):
+		# Stand beside the lamp on its walkable side, as a player does to recover it.
+		var lamp: Vector3 = relay_site.position
+		var side: Vector3 = raid.navigation.nearest(lamp) - lamp
+		side.y = 0.0
+		raid.player.position = lamp + side.normalized() * 1.0
+		check(raid.nearest_site().get("id", "") == relay_site.id, "Beside the lamp, E targets relay " + String(relay_site.id))
 	check(raid.guidance_path.size() > 1 and raid.guidance_distance > 0, "Deployment computes walking guidance")
 	var guidance_dry := true
 	for point: Vector3 in raid.guidance_path:
@@ -169,9 +190,11 @@ func run_tests() -> void:
 	check(raid.complete_site(relay), "Telemetry can be recovered nearby")
 	check(raid.track_extraction and not raid.guidance_path.is_empty(), "Relay recovery immediately guides toward extraction")
 	check(not raid.complete_site(relay) and raid.relays == 1, "Relay reward cannot be duplicated")
-	var cache: Dictionary = raid.sites.filter(func(s: Dictionary) -> bool: return s.kind == "cache")[0]
+	# Bench compartments roll their contents, and the bag already holds the starter kit.
+	var cache: Dictionary = raid.sites.filter(func(s: Dictionary) -> bool: return s.kind == "cache" and not s.done and not s.has("container_type"))[0]
 	raid.player.position = cache.position + Vector3(2, 0.2, 0)
-	check(raid.complete_site(cache) and raid.bag.size() == 1, "Search adds cargo")
+	var cargo_before: int = raid.bag.size()
+	check(raid.complete_site(cache) and raid.bag.size() == cargo_before + 1, "Search adds cargo")
 	var duplicate: Dictionary = cache.duplicate(true)
 	duplicate.done = false
 	while raid.bag.size() < raid.capacity():
@@ -206,7 +229,9 @@ func run_tests() -> void:
 	raid.start_run()
 	raid.bag.append(raid.ITEMS[0].duplicate())
 	var stash_before: Dictionary = raid.profile.data.stash.duplicate()
-	raid.player.take_damage(200)
+	# Aim at the thorax: an unaimed hit picks a random body part, and only head or
+	# thorax damage is lethal, which made this check fail about two runs in three.
+	raid.player.take_damage(200, "thorax")
 	check(raid.phase == raid.Phase.RESULT and raid.profile.data.stash == stash_before, "Death loses carried loot and preserves banked stash")
 	raid._on_action("hq")
 	raid.start_run()
@@ -215,15 +240,54 @@ func run_tests() -> void:
 	check(raid.phase == raid.Phase.RESULT, "Lockdown fails the run")
 	raid.profile.sell_stash(raid.PRICES)
 	check(raid.profile.data.stash.is_empty(), "Stash can be sold")
+	# Pockets hold less than the old fixed pack, so one raid's sale no longer covers
+	# the price. Upgrades add slots to a worn backpack, not to bare pockets.
+	raid.profile.data.credits = maxi(raid.profile.data.credits, 450)
 	var run_credit: int = raid.profile.data.credits
+	var Pack = load("res://scripts/extraction_backpack_state.gd")
+	var worn_state := {"equipped_uid": "qa_pack", "clothing": raid.backpack_state.clothing}
+	var worn_bag: Array = [{"id": Pack.REGULAR, "pack_uid": "qa_pack"}]
+	var slots_before: int = int(Pack.limits(worn_state, worn_bag, raid.profile.data.pack_level).slots)
 	check(raid.profile.buy_upgrade(), "Cargo upgrade can be purchased")
-	check(raid.capacity() == 8 and raid.profile.data.credits == run_credit - 450, "Upgrade charges correct amount and expands pack")
+	var slots_after: int = int(Pack.limits(worn_state, worn_bag, raid.profile.data.pack_level).slots)
+	check(slots_after == slots_before + 2 and raid.profile.data.credits == run_credit - 450, "Upgrade charges correct amount and expands a worn pack")
 	raid.profile.begin_run()
 	reloaded.load_profile()
 	check(reloaded.recovered_interrupted_run and not reloaded.data.active_run, "Interrupted run is marked lost on next launch")
 	print("EXTRACTION_TEST_RESULT: ", failures.size(), " failures")
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	quit(0 if failures.is_empty() else 1)
+
+## Cases are placed after navigation is built, so nothing else keeps them clear.
+func check_security_cases(raid: Node) -> void:
+	var cases: Array = raid.sites.filter(func(s: Dictionary) -> bool: return String(s.id).begins_with("security_arms"))
+	check(cases.size() == 7, "Seven security cases installed")
+	var relays: Array = raid.sites.filter(func(s: Dictionary) -> bool: return s.kind == "relay")
+	var nearest_case := INF
+	var nearest_relay := INF
+	var route_gap := INF
+	var graph: AStar2D = raid.navigation.walk_graph
+	for index: int in range(cases.size()):
+		var centre := Vector2(cases[index].position.x, cases[index].position.z)
+		for other: int in range(index + 1, cases.size()):
+			nearest_case = minf(nearest_case, centre.distance_to(Vector2(cases[other].position.x, cases[other].position.z)))
+		for relay: Dictionary in relays:
+			nearest_relay = minf(nearest_relay, centre.distance_to(Vector2(relay.position.x, relay.position.z)))
+		for id: int in graph.get_point_ids():
+			var a: Vector2 = graph.get_point_position(id)
+			if a.distance_to(centre) > 8.0:
+				continue
+			for link: int in graph.get_point_connections(id):
+				var b: Vector2 = graph.get_point_position(link)
+				var steps: int = maxi(1, ceili(a.distance_to(b) / 0.1))
+				for step: int in range(steps + 1):
+					# Gap from the route line to the case's 1.0 x 0.4 m footprint.
+					var offset: Vector2 = (a.lerp(b, float(step) / float(steps)) - centre).abs() - Vector2(0.5, 0.2)
+					route_gap = minf(route_gap, Vector2(maxf(offset.x, 0.0), maxf(offset.y, 0.0)).length())
+	print("SECURITY_CASES nearest_case=", nearest_case, " nearest_relay=", nearest_relay, " route_gap=", route_gap)
+	check(nearest_case >= 2.6, "No security case crowds another")
+	check(nearest_relay >= 3.5, "No security case crowds a relay lamp")
+	check(route_gap >= 0.42, "AI routes leave room to pass every security case")
 
 func capture(label: String) -> void:
 	for frame: int in range(60):

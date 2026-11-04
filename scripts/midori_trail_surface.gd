@@ -10,52 +10,52 @@ func install(park: Node3D, terrain: Node, routes: Array[Dictionary]) -> void:
 	park.add_child(parent)
 	parent.global_transform=Transform3D.IDENTITY
 	var shader:=Shader.new()
+	# Worn earth: packed, darker and less saturated than the forest floor down the
+	# middle, its rim breaking into irregular patches where grass creeps back.
+	# No hard band and no fringe colour: the trail is the ground, trodden.
 	shader.code="""
 shader_type spatial;
 render_mode cull_disabled;
-uniform sampler2D stone : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 uniform sampler2D stone_normal : hint_normal, repeat_enable, filter_linear_mipmap_anisotropic;
-uniform sampler2D stone_orm : repeat_enable, filter_linear_mipmap_anisotropic;
 uniform sampler2D floor_map : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 varying vec3 p;
 varying vec3 world_normal;
+float hsh(vec2 q){ return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 q){ vec2 i = floor(q); vec2 f = fract(q); f = f*f*(3.0-2.0*f);
+	return mix(mix(hsh(i), hsh(i+vec2(1,0)), f.x), mix(hsh(i+vec2(0,1)), hsh(i+vec2(1,1)), f.x), f.y); }
 void vertex(){p=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;world_normal=normalize(MODEL_NORMAL_MATRIX*NORMAL);}
 void fragment(){
  float edge=abs(UV.y*2.0-1.0);
- float waviness=0.035*sin(p.x*6.7+p.z*4.9)+0.025*sin(p.z*16.0-p.x*12.0);
- float speckle=fract(sin(dot(p.xz,vec2(12.9898,78.233)))*43758.5453);
- if(COLOR.g<=.001 || speckle>COLOR.g || edge>0.95+waviness)discard;
- vec3 grain=texture(stone,p.xz/1.35).rgb;
- vec3 floor_color=texture(floor_map,p.xz/2.2).rgb;
- float wear=texture(stone,p.xz/9.3).r;
- vec3 earth=grain*vec3(1.12,0.90,0.64)*(0.90+wear*0.32);
- vec3 soil=mix(earth,floor_color,smoothstep(0.65,1.0,edge)*0.84);
- vec3 mineral=texture(stone,p.xz/1.6).rgb;
- float variation=dot(texture(stone,p.xz/13.7+vec2(.31,.71)).rgb,vec3(.333));
- vec3 paving=mineral*vec3(1.06,1.0,.88)*(.90+.28*variation);
- float blend=smoothstep(.030,.065,COLOR.r);
- ALBEDO=mix(soil,paving,blend);
+ float patches=vn(p.xz*1.7)*0.55+vn(p.xz*5.3)*0.3+vn(p.xz*13.0)*0.15;
+ // Where bare earth gives way to grass: breathes along the trail, closes at the ends.
+ float reach=(0.5+0.42*patches)*COLOR.g;
+ if(edge>reach)discard;
+ vec3 ground=texture(floor_map,p.xz/1.9).rgb;
+ vec3 broad=texture(floor_map,p.xz/11.0).rgb;
+ float grey=dot(ground,vec3(0.333));
+ vec3 packed_earth=mix(vec3(grey)*vec3(0.78,0.7,0.6),ground,0.35)*0.82;
+ float trodden=smoothstep(reach,reach*0.25,edge);
+ vec3 color=mix(ground*vec3(0.92,0.88,0.8),packed_earth,trodden);
+ color*=0.88+0.24*dot(broad,vec3(0.333));
+ ALBEDO=color;
  vec3 n=normalize(world_normal);
  if(n.y<0.0)n=-n;
- vec3 detail=texture(stone_normal,p.xz/1.6).rgb*2.0-1.0;
- vec3 relief=vec3(detail.x*.24,0.0,detail.y*.24)*blend;
- relief-=n*dot(relief,n);
- n=normalize(n*mix(1.0,max(detail.z,.6),blend)+relief);
+ vec3 detail=texture(stone_normal,p.xz/0.9).rgb*2.0-1.0;
+ n=normalize(n+vec3(detail.x,0.0,detail.y)*0.12);
  NORMAL=normalize((VIEW_MATRIX*vec4(n,0.0)).xyz);
- ROUGHNESS=mix(.98,clamp(texture(stone_orm,p.xz/1.6).g*.25+.72,.86,.98),blend); SPECULAR=mix(.12,.18,blend); METALLIC=0.0;
+ ROUGHNESS=0.96; SPECULAR=0.1; METALLIC=0.0;
 }
 """
 	var mat:=ShaderMaterial.new()
 	mat.shader=shader
-	mat.set_shader_parameter("stone",load(Walk.STONE_ROOT+"BaseColor.png"))
 	mat.set_shader_parameter("floor_map",load(FLOOR))
 	mat.set_shader_parameter("stone_normal",load(Walk.STONE_ROOT+"NormalGL.png"))
-	mat.set_shader_parameter("stone_orm",load(Walk.STONE_ROOT+"ORM.png"))
 	for route: Dictionary in routes:
 		var raw: PackedVector2Array=route.points
-		var smooth:=raw.duplicate()
-		# Only round grid corners slightly, staying inside the cleared corridor.
-		for i in range(1,raw.size()-1): smooth[i]=raw[i]*0.6+(raw[i-1]+raw[i+1])*0.2
+		# The route comes off a pathfinding grid in stair steps. Drop the steps,
+		# then round what is left into the easy curves feet actually wear.
+		var smooth:=_simplify(raw,0.9)
+		for pass_index in range(3): smooth=_chaikin(smooth)
 		var points:=PackedVector2Array()
 		for i in range(smooth.size()-1):
 			var steps:=maxi(1,ceili(smooth[i].distance_to(smooth[i+1])/.45))
@@ -69,7 +69,7 @@ void fragment(){
 			lengths.append(length)
 			var direction:Vector2=points[mini(i+1,points.size()-1)]-points[maxi(0,i-1)]
 			var side:=Vector2(-direction.y,direction.x).normalized()
-			var half_width:=.70+.08*sin(length*.47)+.045*cos(length*1.37)
+			var half_width:=.95+.1*sin(length*.31)+.06*cos(length*1.13)
 			var strip:=PackedVector3Array()
 			# Five cross-sections keep the overlay close to the actual terrain.
 			for k in range(5):
@@ -110,3 +110,32 @@ void fragment(){
 func _surface_height(p:Vector2,terrain:Node)->float:
 	# Woodland earth follows the ground; it never ramps onto raised paving.
 	return terrain.height_at(p)+.012
+
+## Ramer-Douglas-Peucker: keep only the points that bend the line by more than `tolerance`.
+func _simplify(points: PackedVector2Array, tolerance: float) -> PackedVector2Array:
+	if points.size() < 3: return points
+	var worst := 0.0
+	var index := 0
+	var a := points[0]
+	var b := points[points.size() - 1]
+	for i in range(1, points.size() - 1):
+		var d := Geometry2D.get_closest_point_to_segment(points[i], a, b).distance_to(points[i])
+		if d > worst:
+			worst = d
+			index = i
+	if worst <= tolerance: return PackedVector2Array([a, b])
+	var left := _simplify(points.slice(0, index + 1), tolerance)
+	var right := _simplify(points.slice(index), tolerance)
+	left.resize(left.size() - 1)
+	left.append_array(right)
+	return left
+
+## One round of Chaikin corner cutting; the ends stay put.
+func _chaikin(points: PackedVector2Array) -> PackedVector2Array:
+	if points.size() < 3: return points
+	var out := PackedVector2Array([points[0]])
+	for i in range(points.size() - 1):
+		out.append(points[i].lerp(points[i + 1], 0.25))
+		out.append(points[i].lerp(points[i + 1], 0.75))
+	out.append(points[points.size() - 1])
+	return out

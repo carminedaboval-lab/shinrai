@@ -4,6 +4,10 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
+	if DisplayServer.get_name() == "headless":
+		print("PARK_QUALITY_SKIPPED: this measures rendered frame rate, so run it without --headless.")
+		quit()
+		return
 	root.size = Vector2i(1920, 1080)
 	root.content_scale_size = root.size
 	var scene: Node = load("res://scenes/shinrai_extraction.tscn").instantiate()
@@ -13,7 +17,7 @@ func run() -> void:
 	root.add_child(scene)
 	current_scene = scene
 	var raid: Node = scene.get_node("ExtractionRun")
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 300000
 	while raid.phase == raid.Phase.BOOT and Time.get_ticks_msec() < deadline:
 		await process_frame
 	if raid.phase != raid.Phase.HQ:

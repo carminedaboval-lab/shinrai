@@ -50,7 +50,8 @@ func _run_tests() -> void:
 	_check(not actor.ads, "active mantle rejects right-click ADS")
 	var overlap := false
 	var completed := false
-	for index: int in range(40):
+	# A mantle takes 0.48 to 0.95 s by ledge height, and up to 1.12 s fully loaded.
+	for index: int in range(72):
 		actor._advance_ground_movement(DT, Vector2.ZERO, false, false, true)
 		await physics_frame
 		if _world_overlap():

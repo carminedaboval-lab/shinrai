@@ -66,6 +66,10 @@ const CROUCH_CAPSULE_HEIGHT := 1.10
 const STANDING_HEAD_HEIGHT := 1.58
 const CROUCH_HEAD_HEIGHT := 0.93
 const CROUCH_SPEED := 2.10
+const PRONE_CAPSULE_HEIGHT := 0.72
+const PRONE_HEAD_HEIGHT := 0.34
+const PRONE_SPEED := 1.05
+const PRONE_PAD_HOLD := 0.45
 const STRAFE_SPEED_MULTIPLIER := 0.88
 const BACKPEDAL_SPEED_MULTIPLIER := 0.72
 const AIR_STEERING_ACCELERATION := 2.0
@@ -91,6 +95,12 @@ var coffee_boost_remaining := 0.0
 var _coffee_base_max := 100.0
 var sprinting := false
 var crouching := false
+## Prone is a lower crouch: crouching stays true, so stealth, recoil and the
+## existing no-sprint, no-jump and no-mantle rules all apply unchanged.
+var prone := false
+var _prone_requested := false
+var _pad_crouch_hold := 0.0
+var _pad_prone_fired := false
 var healing_active := false
 var cargo_load_ratio := 0.0
 var body_collision: CollisionShape3D
@@ -1174,6 +1184,8 @@ func reset_controller_intents() -> void:
     _reset_weapon_feedback()
     _controller_crouch = false
     _controller_sprint = false
+    _pad_crouch_hold = 0.0
+    _pad_prone_fired = false
     _fire_requested = false
     _trigger_was_down = false
     _semi_buffer_remaining = 0.0
@@ -1226,6 +1238,8 @@ func _unhandled_input(event: InputEvent) -> void:
         if ControllerInput.pressed(event,"sprint"):
             _controller_sprint = not _controller_sprint
             if _controller_sprint: _controller_crouch = false
+    if ControllerInput.pressed(event,"prone") and extraction_mode and not is_swimming:
+        _prone_requested = not _prone_requested
     if ControllerInput.pressed(event,"lower_weapon") and extraction_mode and not weapon_input_locked and not reloading:
         set_weapon_lowered(not weapon_lowered)
     if fly_mode: return
@@ -1322,7 +1336,11 @@ func _physics_process(delta: float) -> void:
     if wants_weapon or ads: _controller_sprint = false
     var sprint_requested: bool = gameplay_allowed and not wants_weapon and (Input.is_key_pressed(KEY_SHIFT) or _controller_sprint)
     var crouch_requested: bool = gameplay_allowed and (ControllerInput.down("crouch") if is_swimming else (Input.is_key_pressed(KEY_CTRL) or _controller_crouch))
-    if is_swimming: _controller_crouch = false
+    if is_swimming:
+        _controller_crouch = false
+        _prone_requested = false
+    _tick_pad_prone(delta, gameplay_allowed)
+    if jump_down and not jump_was_down: _prone_requested = false
     if sprint_requested and field_handling.check.active:
         field_handling.cancel(self)
     if _advance_ground_movement(delta, input_vec, sprint_requested, crouch_requested, jump_down):
@@ -1363,6 +1381,8 @@ func reset_survival() -> void:
     stamina = max_stamina
     sprinting = false
     crouching = false
+    prone = false
+    _prone_requested = false
     healing_active = false
     cargo_load_ratio = 0.0
     _stamina_recovery_delay = 0.0
@@ -1434,7 +1454,9 @@ func _spend_stamina(amount: float) -> void:
 func movement_speed() -> float:
     var speed := sprint_speed if sprinting else walk_speed
     if extraction_mode:
-        if crouching:
+        if prone:
+            speed = PRONE_SPEED
+        elif crouching:
             speed = CROUCH_SPEED
         elif sprinting:
             speed *= lerpf(1.0, 0.85, cargo_load_ratio)
@@ -1454,9 +1476,48 @@ func movement_speed() -> float:
 
 func _set_crouch_state(value: bool) -> void:
     crouching = value
-    if body_capsule != null and is_instance_valid(body_collision):
-        body_capsule.height = CROUCH_CAPSULE_HEIGHT if value else STANDING_CAPSULE_HEIGHT
-        body_collision.position.y = 0.575 if value else 0.90
+    if not value: prone = false
+    _apply_stance_capsule()
+
+func _set_prone_state(value: bool) -> void:
+    prone = value
+    if value: crouching = true
+    _apply_stance_capsule()
+
+func _apply_stance_capsule() -> void:
+    if body_capsule == null or not is_instance_valid(body_collision):
+        return
+    var height := PRONE_CAPSULE_HEIGHT if prone else (CROUCH_CAPSULE_HEIGHT if crouching else STANDING_CAPSULE_HEIGHT)
+    body_capsule.height = height
+    # The 25 mm lift matches the standing and crouch capsule offsets.
+    body_collision.position.y = height * 0.5 + 0.025
+
+func _crouch_capsule_clear() -> bool:
+    if not is_inside_tree():
+        return false
+    var shape := CapsuleShape3D.new()
+    shape.radius = HEADROOM_RADIUS
+    shape.height = CROUCH_CAPSULE_HEIGHT
+    var query := PhysicsShapeQueryParameters3D.new()
+    query.shape = shape
+    query.transform = Transform3D(global_transform.basis, global_position + Vector3.UP * 0.005) * Transform3D(Basis.IDENTITY, Vector3(0.0, CROUCH_CAPSULE_HEIGHT * 0.5 + 0.025, 0.0))
+    query.collision_mask = collision_mask
+    query.exclude = [get_rid()]
+    query.margin = 0.001
+    return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+## Controller: tap B crouches, hold it to go prone. The tap toggle has already
+## run on the press, so the hold undoes it to keep both stances independent.
+func _tick_pad_prone(delta: float, gameplay_allowed: bool) -> void:
+    if not extraction_mode or not gameplay_allowed or is_swimming or not ControllerInput.gamepad_active() or not ControllerInput.down("crouch"):
+        _pad_crouch_hold = 0.0
+        _pad_prone_fired = false
+        return
+    _pad_crouch_hold += delta
+    if _pad_crouch_hold >= PRONE_PAD_HOLD and not _pad_prone_fired:
+        _pad_prone_fired = true
+        _controller_crouch = not _controller_crouch
+        _prone_requested = not _prone_requested
 
 func _standing_capsule_clear(at: Vector3) -> bool:
     if not is_inside_tree():
@@ -1497,13 +1558,20 @@ func _standing_capsule_sweep_clear(start: Vector3, finish: Vector3) -> bool:
     return clearance.size() >= 2 and clearance[0] >= 0.999
 
 func _update_stance(delta: float, requested: bool) -> void:
-    if requested:
-        if not crouching:
-            _set_crouch_state(true)
-    elif crouching and _can_stand():
-        _set_crouch_state(false)
+    if _prone_requested:
+        if not prone:
+            _set_prone_state(true)
+    elif prone and _crouch_capsule_clear():
+        # Low cover, such as a fence hole, keeps the player down until clear.
+        _set_prone_state(false)
+    if not prone:
+        if requested:
+            if not crouching:
+                _set_crouch_state(true)
+        elif crouching and _can_stand():
+            _set_crouch_state(false)
     if is_instance_valid(head):
-        var target := CROUCH_HEAD_HEIGHT if crouching else STANDING_HEAD_HEIGHT
+        var target := PRONE_HEAD_HEIGHT if prone else (CROUCH_HEAD_HEIGHT if crouching else STANDING_HEAD_HEIGHT)
         head.position.y = move_toward(head.position.y, target, maxf(delta, 0.0) * 4.40)
 
 func _advance_ground_movement(delta: float, input_vec: Vector2, sprint_requested: bool, crouch_requested: bool, jump_down: bool) -> bool:

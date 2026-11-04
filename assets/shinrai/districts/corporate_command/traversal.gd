@@ -62,7 +62,8 @@ func _slab(label: String,x0:float,x1:float,z0:float,z1:float,top:float,visible_m
 func _rail(a:Vector3,b:Vector3,label:="Guard") -> void:
 	var centre := (a+b)*.5+Vector3.UP*.65
 	var root := _box(label,Vector3(.06,1.3,a.distance_to(b)),centre,rail_material,false)
-	root.look_at_from_position(centre,centre+(b-a),Vector3.UP)
+	# a and b are local: orient in local space (look_at_from_position reads world points).
+	root.transform=Transform3D(Basis.looking_at((b-a).normalized(),Vector3.UP),centre)
 	var top := MeshInstance3D.new()
 	var bar := BoxMesh.new()
 	bar.size=Vector3(.055,.055,a.distance_to(b))

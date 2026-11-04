@@ -449,13 +449,16 @@ void fragment() {
 	float cyan_bias = min(base.g, base.b) - base.r;
 	float cyan_mask = smoothstep(0.08, 0.26, cyan_bias)
 		* smoothstep(0.16, 0.48, high_channel - low_channel);
-	ALBEDO = base * mix(vec3(0.62, 0.59, 0.53), vec3(0.55), cyan_mask);
+	// The supplied modules carry cyan LED inlays; they are painted out as plain
+	// weathered stone (no light, no blue).
+	float luma = dot(base, vec3(0.299, 0.587, 0.114));
+	vec3 stone = mix(base, vec3(luma) * vec3(1.0, 0.97, 0.9), cyan_mask);
+	ALBEDO = stone * vec3(0.62, 0.59, 0.53);
 	NORMAL_MAP = texture(source_normal, UV).rgb;
 	NORMAL_MAP_DEPTH = 0.62;
 	AO = orm.r;
-	ROUGHNESS = mix(clamp(orm.g, 0.58, 0.92), 0.28, cyan_mask);
-	METALLIC = mix(orm.b * 0.18, 0.18, cyan_mask);
-	EMISSION = vec3(0.28, 0.84, 1.0) * cyan_mask * 2.2 * night_emission;
+	ROUGHNESS = clamp(orm.g, 0.58, 0.92);
+	METALLIC = orm.b * 0.18;
 }
 """
 	shader.resource_name = "SHINRAI_MidoriModularPath"
@@ -528,6 +531,12 @@ func _apply_time_of_day() -> void:
 	park_environment.adjustment_brightness = 1.0
 	park_environment.adjustment_contrast = 1.06
 	park_environment.adjustment_saturation = 1.08
+	# Gentle split tone: day has cool shade and warm light, night leans blue
+	# in the shadows so lamp light reads warmer against it.
+	if is_night_mode:
+		park_environment.adjustment_color_correction = _grade_ramp(Color(0.215, 0.245, 0.29), Color(0.765, 0.75, 0.735))
+	else:
+		park_environment.adjustment_color_correction = _grade_ramp(Color(0.235, 0.252, 0.262), Color(0.765, 0.75, 0.725))
 	if is_night_mode:
 		# Moonlit night: deep blue sky, cool silver moon, enough fog for lamps to glow.
 		sky_material.sky_top_color = Color("#070d1c")
@@ -605,6 +614,17 @@ func _apply_time_of_day() -> void:
 	_update_time_label()
 	_queue_reflection_refresh()
 
+static func _grade_ramp(shadow: Color, highlight: Color) -> GradientTexture1D:
+	# Per-channel curve: black and white stay fixed; quarter and three-quarter
+	# tones are nudged to tint shadows and highlights separately.
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.25, 0.75, 1.0])
+	gradient.colors = PackedColorArray([Color.BLACK, shadow, highlight, Color.WHITE])
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = gradient
+	ramp.width = 256
+	return ramp
+
 func _update_time_label() -> void:
 	if time_of_day_label != null:
 		time_of_day_label.text = "N: %s  |  F7: %s graphics  |  Target: 60 FPS" % [
@@ -642,7 +662,10 @@ func _apply_render_quality() -> void:
 	park_environment.ssao_sharpness = 0.98
 	park_environment.ssao_light_affect = 0.0
 	park_environment.ssao_ao_channel_affect = 0.0
-	park_environment.ssil_enabled = false
+	# High adds soft bounce light under canopies and between buildings.
+	park_environment.ssil_enabled = forward_plus and high_render_quality
+	park_environment.ssil_radius = 4.0
+	park_environment.ssil_intensity = 0.7
 	park_environment.ssr_enabled = forward_plus and high_render_quality
 	park_environment.ssr_max_steps = 48
 	park_environment.ssr_depth_tolerance = 0.2
@@ -651,14 +674,27 @@ func _apply_render_quality() -> void:
 	park_environment.glow_hdr_scale = 1.5
 	# Night air: volumetric fog on both presets so lanterns throw visible light
 	# into the haze. Balanced keeps it short and thin; High reaches further.
-	park_environment.volumetric_fog_enabled = forward_plus and is_night_mode
-	park_environment.volumetric_fog_density = 0.018 if high_render_quality else 0.012
+	# High daylight adds a thin, sun-forward haze so low sun rakes through the
+	# trees as visible shafts. Balanced daylight stays fog-free for frame time.
+	park_environment.volumetric_fog_enabled = forward_plus and (is_night_mode or high_render_quality)
+	if is_night_mode:
+		park_environment.volumetric_fog_density = 0.018 if high_render_quality else 0.012
+		park_environment.volumetric_fog_albedo = Color("#6d7f96")
+		park_environment.volumetric_fog_emission_energy = 0.05
+		park_environment.volumetric_fog_anisotropy = 0.45
+	else:
+		park_environment.volumetric_fog_density = 0.0045
+		park_environment.volumetric_fog_albedo = Color("#e3d6c2")
+		park_environment.volumetric_fog_emission_energy = 0.0
+		park_environment.volumetric_fog_anisotropy = 0.72
 	park_environment.volumetric_fog_length = 96.0 if high_render_quality else 64.0
 	park_environment.volumetric_fog_detail_spread = 2.2
 	park_environment.volumetric_fog_temporal_reprojection_enabled = true
 	park_environment.volumetric_fog_temporal_reprojection_amount = 0.92
 	park_directional_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if high_render_quality else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	park_directional_light.directional_shadow_max_distance = 110.0 if high_render_quality else 90.0
+	# Balanced: 60 m saved ~4.6M shadow triangles at the south lawn (35 -> 40 FPS);
+	# tree shadows past that are small on screen and softened by the haze.
+	park_directional_light.directional_shadow_max_distance = 110.0 if high_render_quality else 60.0
 	# Two-map Balanced shadows need less normal offset to retain thin fence/goal casts.
 	# Keep the original High offset and all atlas/split/distance settings.
 	park_directional_light.shadow_normal_bias = 1.0 if high_render_quality else 0.5
@@ -870,17 +906,46 @@ func _add_path_strip_2d(
 		while route.size() > 2 and route[-2].distance_to(route[-1]) < 3.0:
 			route.remove_at(route.size() - 2)
 	var points_3d: Array[Vector3] = []
-	var curved := _rounded_contour(route, route[0].is_equal_approx(route[-1]), _path_curve_radius(node_name), _path_corner_fraction(node_name))
+	var closed := route[0].is_equal_approx(route[-1])
+	# Side walks are flowing, flush gravel; the main walks keep their paving.
+	var secondary := not MAIN_PATH_WIDTHS_M.has(node_name) and node_name != "ContinuousLakePromenade" and not node_name.ends_with("BridgeLink")
+	var curved := _smooth_walk(route, closed) if secondary else _rounded_contour(route, closed, _path_curve_radius(node_name), _path_corner_fraction(node_name))
+	if secondary:
+		y_value = 0.035
+		# Run each open end 1.2 m on, under the raised walk it meets, so the
+		# join is hidden beneath that paving instead of butting it square.
+		if not closed and curved.size() > 1:
+			curved[0] += (curved[0] - curved[1]).normalized() * (1.2 / LAYOUT_SCALE)
+			curved[-1] += (curved[-1] - curved[-2]).normalized() * (1.2 / LAYOUT_SCALE)
 	for point: Vector2 in curved:
 		points_3d.append(Vector3(point.x, y_value, point.y))
 	var world_length := 0.0
 	for i: int in range(points_3d.size()-1):
 		world_length += points_3d[i].distance_to(points_3d[i+1]) * LAYOUT_SCALE
-	var paving_material := WalkMaterials.build(width * LAYOUT_SCALE,world_length,route[0].is_equal_approx(route[-1]))
+	var paving_material := WalkMaterials.build_secondary(width * LAYOUT_SCALE) if secondary else WalkMaterials.build(width * LAYOUT_SCALE,world_length,closed)
 	paving_material.set_shader_parameter("night_emission",1.0 if is_night_mode else 0.0)
 	if not modular_path_emissive_materials.has(paving_material):
 		modular_path_emissive_materials.append(paving_material)
 	_add_path_strip(parent, node_name, points_3d, width, paving_material)
+
+## A side walk as people actually wear it: one flowing curve through the
+## route's anchors (Chaikin corner cutting), with no straight runs or kinks.
+func _smooth_walk(source: Array[Vector2], closed: bool) -> Array[Vector2]:
+	var points: Array[Vector2] = source.duplicate()
+	if closed: points.remove_at(points.size() - 1)
+	for pass_index: int in range(4):
+		var out: Array[Vector2] = []
+		var count := points.size() if closed else points.size() - 1
+		if not closed: out.append(points[0])
+		for i: int in range(count):
+			var a := points[i]
+			var b := points[(i + 1) % points.size()]
+			out.append(a.lerp(b, 0.25))
+			out.append(a.lerp(b, 0.75))
+		if not closed: out.append(points[points.size() - 1])
+		points = out
+	if closed: points.append(points[0])
+	return points
 
 func _build_curved_promenades(parent: Node3D) -> void:
 	var root := Node3D.new()
@@ -909,12 +974,17 @@ func _add_path_strip(parent: Node3D, node_name: String, points: Array[Vector3], 
 	var widths:=PackedFloat32Array()
 	var remaining:=0.0
 	for i:int in range(points.size()-1):remaining+=points[i].distance_to(points[i+1])*LAYOUT_SCALE
+	var total:=remaining
+	# Gravel side walks flare where feet spread onto the walk they join.
+	var flared:=material is ShaderMaterial and String(material.resource_name).begins_with("Midori_MasadoWalk") and not closed
 	for i:int in range(points.size()):
 		if i>0:remaining-=points[i-1].distance_to(points[i])*LAYOUT_SCALE
 		# The north terminus already sits 11 cm from the smoothed shoreline.
 		# Ease its last 24 m into the original bank-safe mouth width.
 		var fraction:=smoothstep(0.0,24.0,remaining) if node_name=="NorthEntranceToLake" else 1.0
-		widths.append(lerpf(3.496,width*LAYOUT_SCALE,fraction))
+		var mouth:=1.0
+		if flared: mouth=1.0+0.7*(1.0-smoothstep(0.0,5.0,minf(total-remaining,remaining)))
+		widths.append(lerpf(3.496,width*LAYOUT_SCALE,fraction)*mouth)
 	var travelled := 0.0
 	for i: int in range(points.size()-1):
 		var length := points[i].distance_to(points[i+1])
@@ -3341,8 +3411,8 @@ func _add_lamp_lights(
 	var slit_light := SpotLight3D.new()
 	slit_light.name = "BlueSlitPathLine_%02d" % (index + 1)
 	slit_light.position = position_value + Vector3(0.0,1.38,0.0) + path_direction * 0.08
-	slit_light.light_color = Color("#62dfff")
-	slit_light.light_energy = 1.80
+	slit_light.light_color = Color("#ffd9ae")
+	slit_light.light_energy = 0.9
 	slit_light.spot_range = 5.5
 	slit_light.spot_angle = 6.0
 	slit_light.shadow_enabled = false
@@ -3358,6 +3428,8 @@ func _add_lamp_path_streak(
 	path_direction: Vector3,
 	projection_y: float = -1.0
 ) -> void:
+	# No blue LED streaks on the walks; the lamps light the path themselves.
+	return
 	var streak := MeshInstance3D.new()
 	streak.name = "BlueSlitProjection_%02d" % (index + 1)
 	var plane := PlaneMesh.new()

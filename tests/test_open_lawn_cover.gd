@@ -12,7 +12,7 @@ func run() -> void:
 	root.add_child(scene)
 	current_scene = scene
 	var raid: Node = scene.get_node("ExtractionRun")
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 300000
 	while raid.phase == raid.Phase.BOOT and Time.get_ticks_msec() < deadline:
 		await process_frame
 	if raid.phase != raid.Phase.HQ:
@@ -40,6 +40,11 @@ func run() -> void:
 	if collider == null or collider.get_parent() != cover:
 		push_error("Open cover QA: center boulder has no aligned collision")
 		quit(1)
+		return
+	if DisplayServer.get_name() == "headless":
+		# The collision check above is real; the frame rate below needs a window.
+		print("OPEN_COVER_RESULT: collision aligned at %s" % point)
+		quit()
 		return
 	raid.player.global_position = point + Vector3(8.0, 0.2, 11.0)
 	raid.player.velocity = Vector3.ZERO

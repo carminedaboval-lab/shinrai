@@ -2,8 +2,8 @@ extends Node
 ## Shared runtime bindings. Gameplay callers use semantic names, without sr_.
 const DEADZONE: float=.20
 const TRIGGER_THRESHOLD: float=.5
-const ACTIONS: Array[String]=["move_left","move_right","move_forward","move_back","look_left","look_right","look_up","look_down","fire","aim","jump","crouch","sprint","reload","weapon_next","interact","eat","heal","lower_weapon","inventory","pause","map","track","inspect","lean_left","lean_right","ui_section_prev","ui_section_next","ui_details","mag_check"]
-const REARM_ACTIONS: Array[String]=["fire","aim","jump","interact","eat","heal","reload","weapon_next","lower_weapon","inspect","crouch","sprint","lean_left","lean_right","mag_check"]
+const ACTIONS: Array[String]=["move_left","move_right","move_forward","move_back","look_left","look_right","look_up","look_down","fire","aim","jump","crouch","prone","sprint","reload","weapon_next","interact","eat","heal","lower_weapon","inventory","pause","map","track","inspect","lean_left","lean_right","ui_section_prev","ui_section_next","ui_details","mag_check"]
+const REARM_ACTIONS: Array[String]=["fire","aim","jump","interact","eat","heal","reload","weapon_next","lower_weapon","inspect","crouch","prone","sprint","lean_left","lean_right","mag_check"]
 static var release_epoch: int=0
 static var _configured: bool=false
 static var _release_required: bool=false
@@ -20,7 +20,7 @@ static func ensure_actions() -> void:
 	_configured=true
 	for name: String in ACTIONS:
 		if not InputMap.has_action("sr_"+name): InputMap.add_action("sr_"+name,TRIGGER_THRESHOLD if name in ["fire","aim"] else DEADZONE)
-	var keys: Dictionary={"move_left":KEY_A,"move_right":KEY_D,"move_forward":KEY_W,"move_back":KEY_S,"jump":KEY_SPACE,"crouch":KEY_CTRL,"sprint":KEY_SHIFT,"reload":KEY_R,"weapon_next":KEY_Y,"interact":KEY_E,"eat":KEY_F,"heal":KEY_H,"lower_weapon":KEY_B,"inventory":KEY_I,"pause":KEY_ESCAPE,"map":KEY_M,"track":KEY_T,"inspect":KEY_V,"lean_left":KEY_Q,"lean_right":KEY_C,"mag_check":KEY_J}
+	var keys: Dictionary={"move_left":KEY_A,"move_right":KEY_D,"move_forward":KEY_W,"move_back":KEY_S,"jump":KEY_SPACE,"crouch":KEY_CTRL,"prone":KEY_Z,"sprint":KEY_SHIFT,"reload":KEY_R,"weapon_next":KEY_Y,"interact":KEY_E,"eat":KEY_F,"heal":KEY_H,"lower_weapon":KEY_B,"inventory":KEY_I,"pause":KEY_ESCAPE,"map":KEY_M,"track":KEY_T,"inspect":KEY_V,"lean_left":KEY_Q,"lean_right":KEY_C,"mag_check":KEY_J}
 	for name: String in keys:
 		var key:=InputEventKey.new(); key.device=-1; key.physical_keycode=int(keys[name]); _bind("sr_"+name,key)
 		var logical:=InputEventKey.new(); logical.device=-1; logical.keycode=int(keys[name]); _bind("sr_"+name,logical)
@@ -82,7 +82,7 @@ static func gamepad_active() -> bool:
 
 static func hint(key: String) -> String:
 	if not _last_pad: return key
-	var labels: Dictionary={"E":"RB","F":"D-pad Up","H":"LB","B":"D-pad Down","I":"View","V":"R3","R":"X","Y":"Y","SPACE":"A","SHIFT":"L3","CTRL":"B","LMB":"RT","RMB":"LT","Q":"D-pad Left","C":"D-pad Right","lean_left":"D-pad Left","lean_right":"D-pad Right","ESC":"Menu","TAB":"Pause: Map","M":"Pause: Map","T":"Pause: Objectives","J":"R3 + X","mag_check":"R3 + X","interact":"RB","eat":"D-pad Up","heal":"LB","lower_weapon":"D-pad Down","inventory":"View","inspect":"R3","reload":"X","weapon_next":"Y","jump":"A","sprint":"L3","crouch":"B","fire":"RT","aim":"LT","pause":"Menu","map":"Pause: Map","track":"Pause: Objectives"}
+	var labels: Dictionary={"E":"RB","F":"D-pad Up","H":"LB","B":"D-pad Down","I":"View","V":"R3","R":"X","Y":"Y","SPACE":"A","SHIFT":"L3","CTRL":"B","Z":"Hold B","LMB":"RT","RMB":"LT","Q":"D-pad Left","C":"D-pad Right","lean_left":"D-pad Left","lean_right":"D-pad Right","ESC":"Menu","TAB":"Pause: Map","M":"Pause: Map","T":"Pause: Objectives","J":"R3 + X","mag_check":"R3 + X","interact":"RB","eat":"D-pad Up","heal":"LB","lower_weapon":"D-pad Down","inventory":"View","inspect":"R3","reload":"X","weapon_next":"Y","jump":"A","sprint":"L3","crouch":"B","fire":"RT","aim":"LT","pause":"Menu","map":"Pause: Map","track":"Pause: Objectives"}
 	return String(labels.get(key,labels.get(key.to_upper(),key)))
 
 static func require_release() -> void:

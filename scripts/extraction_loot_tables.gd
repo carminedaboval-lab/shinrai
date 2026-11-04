@@ -1,10 +1,11 @@
 extends RefCounted
 ## Local loot balance. Context selects eligible objects; inventory cannot reroll it.
-const TOOLS := ["can_opener","pliers","scissors","utility_knife","hammer","screwdriver","wrench"]
+const TOOLS := ["can_opener","pliers","scissors","utility_knife","hammer","screwdriver","wrench","bolt_cutters"]
 const ITEMS := [
 	{"id":"hammer","title":"Claw hammer","value":22,"mass_kg":0.65,"description":"Steel claw hammer with a worn grip. Recoverable maintenance tool; extract to bank or sell it.","world_spawn":false},
 	{"id":"screwdriver","title":"Screwdriver","value":12,"mass_kg":0.16,"description":"Flat-head screwdriver. Recoverable workshop tool; extract to bank or sell it.","world_spawn":false},
-	{"id":"wrench","title":"Adjustable wrench","value":24,"mass_kg":0.45,"description":"Adjustable steel wrench. Recoverable maintenance tool; extract to bank or sell it.","world_spawn":false}
+	{"id":"wrench","title":"Adjustable wrench","value":24,"mass_kg":0.45,"description":"Adjustable steel wrench. Recoverable maintenance tool; extract to bank or sell it.","world_spawn":false},
+	{"id":"bolt_cutters","title":"Bolt cutters","value":38,"mass_kg":1.40,"description":"Long-handled bolt cutters. Carry them to a chained park gate at night and hold interact to cut it open. Stays in your bag after use.","world_spawn":false}
 ]
 const POOLS := {
 	# Security supplies retain ammunition/optics/clothing; no generated guns or magazines outside homes.
@@ -15,8 +16,8 @@ const POOLS := {
 	"security_uzi":{"count":Vector2i(3,4),"weights":{"ammo_9x19":8,"security_armour_t2":2,"utility_pouch":3}},
 	"security_shigure":{"count":Vector2i(3,4),"weights":{"ammo_9x19":8,"security_armour_t2":2,"work_jacket":3}},
 	"security_kite":{"count":Vector2i(3,4),"weights":{"ammo_762x51":8,"patrol_armour_t3":2,"cargo_trousers":3}},
-	"maintenance":{"count":Vector2i(2,3),"weights":{"pliers":6,"utility_knife":3,"hammer":6,"screwdriver":8,"wrench":7}},
-	"workshop":{"count":Vector2i(2,3),"weights":{"scissors":8,"utility_knife":8,"pliers":4,"screwdriver":3,"hammer":1}},
+	"maintenance":{"count":Vector2i(2,3),"weights":{"pliers":6,"utility_knife":3,"hammer":6,"screwdriver":8,"wrench":7,"bolt_cutters":5}},
+	"workshop":{"count":Vector2i(2,3),"weights":{"scissors":8,"utility_knife":8,"pliers":4,"screwdriver":3,"hammer":1,"bolt_cutters":3}},
 	"pantry":{"count":Vector2i(2,3),"weights":{"can_opener":2,"canned_mackerel":6,"canned_peaches":6,"ration_bar":3,"bottled_water_closed":4,"scissors":1}},
 	"medical":{"count":Vector2i(2,3),"weights":{"bandage":8,"tourniquet":3,"splint":3,"scissors":2}},
 	"sports":{"count":Vector2i(1,3),"weights":{"sports_bottle_closed":8,"bottled_water_closed":5,"ration_bar":4,"bandage":2}}

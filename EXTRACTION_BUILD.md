@@ -32,6 +32,86 @@ No new art, models, textures or audio were generated. Interaction locations reus
 - For rendered HQ/HUD/map/result captures, omit `--headless` and append `-- --render`. Captures are saved in `user://extraction_qa/`.
 - Existing park placement warnings, root-certificate access warnings in the sandbox, and resource-cleanup errors at shutdown predate this build. They are not a clean-debugger sign-off.
 
+## Park perimeter, cover and wildlife (2026-10-31)
+
+- `scripts/midori_park_fence.gd`: green mesh fence with four gates. By day all gates stand open and the fence is whole. At night the north, west and east gates are chained, the south main gate is smashed (one panel hangs from its top hinge, the other lies on the ground) and seven holes open along the sides. Night gates re-chain at every raid start.
+- Bolt cutters (`bolt_cutters`) open a chained gate: hold E for 2.6 s. They drop from the maintenance and workshop loot tables and are not consumed.
+- Prone: Z, or hold B on a controller. Capsule 0.72 m, speed 1.05 m/s. Only prone fits a fence hole; the fence gap is 0.80 m high.
+- The playable area now reaches the pavement strip outside the fence (X 230.5, Z 190.5). That strip is plain ground, so nothing lives out there yet.
+- `scripts/midori_park_cover.gd`: emergency cover on a 36 m hex lattice, alternating low and sight-blocking tall kinds, plus camps and dropped belongings. Everything is procedural and merged per 120 m cell, ready to swap for authored GLBs.
+- `scripts/midori_park_wildlife.gd`: crows and pigeons that scatter from people, hostiles and gunfire; koi and dragonflies; fireflies and lamp moths at night. Only birds near the camera use CPU.
+
+Reproduce: `godot --headless --path . --script res://tests/test_park_perimeter.gd`. Append `-- --render` and omit `--headless` for screenshots in `user://perimeter_qa/`.
+
+### Test suite status (2026-10-31)
+
+Boot takes about 75 to 115 s headless, so scene tests now allow 300 s. Movement input needs a captured mouse, which a headless run never has, so the route and bridge walks call `player._advance_ground_movement` directly. Run suites one at a time.
+
+- Passing: `test_extraction`, `test_park_perimeter`, `test_extraction_routes` (all relays and a full extraction, with no detours), `test_bridge_walk`, `test_mantle_physics`, `test_survival_physics`, `test_salvage_choice`, `test_scav_combat`, `test_open_lawn_cover` (collision check only when headless).
+- Security weapon cases are placed by `extraction_weapon_loot.gd` after navigation is built, so nothing in the navigation graph avoids them. Each case takes the nearest pocket between grid routes that is on flat open ground, off the paving, at least 3.5 m from any relay, 2.6 m from any other case and 0.5 m from every real route. `test_extraction` checks these limits.
+- `test_drone_police` is unreliable. Across four runs it failed one of two different checks at random, with or without the fence, cover and wildlife. One run produced a search point 244 m behind the contact, which may be a real AI bug.
+- `test_k17_integration`, `test_k17_combat_extract` and `test_k17_showcase_weapons` test a drone the raid no longer spawns. They need retiring or rewriting around the police drones, and `test_k17_integration` hangs until killed.
+- `test_park_quality` and `test_open_lawn_cover` measure frame rate only in a window. In the cover view at 1080p, both presets average about 33 FPS by day and night, with or without the fence, cover and wildlife.
+
+## Tokyo roads, alleys and wind (2026-11-02)
+
+- `scripts/midori_tokyo_roads.gd` lays real road geometry 2 cm over the near city's flat ground plane, two blocks out from the park: the ring road, four-lane arterials every 256 m and two-lane roads between. It does not edit `midori_near_city.gd`. Roads further out keep the ground plane's look.
+- `scripts/midori_tokyo_road.gdshader` draws the asphalt: two rotated scales of the supplied aggregate, resurfacing runs with straight joints, tyre tracks, oil drips, sealed cracks, utility trenches, concrete gutters with grates, and Japanese markings (left-hand traffic, yellow no-lane-change lines before junctions, zebras, stop lines, lane arrows, crossing diamonds, blue cycle chevrons). Street-light pools on the road after dark follow the near city's lamp spacing.
+- The same module adds 止まれ on minor-road approaches (Windows Japanese system font), 117 manhole lids from the supplied lid texture, 54 signalised junctions with working Japanese vehicle and pedestrian signals (GPU-timed 60 s cycle), and a paved verge with a kerb where a strip of sea showed between the park and the ring road.
+- Once the raid reaches HQ, it moves the main south street, its back lane and the corporate roads onto the same asphalt (asphalt only; their own paint and kerbs stay). The main street still has its own centre dashes and crossing.
+- `scripts/midori_alley_life.gd` dresses the gaps the near city leaves between lots, within 150 m of the park: about 950 alleys. Street mouths get vending machines, bicycles, crates, bins and nobori flags in shopping blocks, and pots, towels on drying poles and cables in residential ones. Walls get meters, AC units with pipe runs and downpipes; about 1,200 wall lamps light at night (see the lamp bullet below). `midori_near_city.gd` gained one read-only list, `alleys`, filled where `_split` already cut its gaps.
+- `scripts/midori_wind.gdshaderinc` is one shared breeze field that gusts travel through. Cloth, leaves, nets and cables use it, at about half strength at night. `scripts/midori_wind_debris.gd` blows a few leaves past the camera (GPU particles, fewer at night).
+- Stardust Lane (`midori_near_city_lane.gd`) was reworked in place. Its floor uses the road shader, its noren, lanterns, pendants, cables and maple sway (a wind-patched copy of the shared building shader, built at runtime so `midori_near_city_bespoke.gdshader` stays untouched), and its stalls gained real bottle shelves over lit fridges, kitchen benches by trade (ramen stockpot, oden pan), corner TVs, counter food and drink, plank-fronted counters and ceiling joists. Stools, beer crates, vending machines and bicycles were rebuilt in more detail. The yakitori stall has a charcoal grill with drifting smoke, the ramen stall steam, the closed shop a dying fluorescent tube, the last house a laundry pole, and a cat sleeps on a bin. New detail uses its own random stream, so the original layout is unchanged.
+- Alley lamps (2026-11-02 rework). The old glowing cube was replaced with three real fittings:
+  - The ward's LED 防犯灯: an ivory shell on a bent steel arm with a frosted lens, a dusk switch, its feed cable clipped down the wall and a number plate below.
+  - A green enamel shade on a swan neck with the bulb showing (commercial alleys).
+  - A caged bulkhead over back doors.
+  - Lens, bulb and glass glow brightest at their centre, and only after dark. The shared props shader now gives night lamps frosted roughness instead of a mirror.
+  - Housings are built into separate `AlleyLamps_*` meshes on render layer 14 (`1 << 13`). The lamps' own lights skip that layer, so a housing is not washed white by its own bulb.
+  - Twelve pooled OmniLights (attenuation 1.1, 6.5 to 9 m reach) follow the camera to the nearest lamps after dark, each with five GPU-particle moths.
+  - The lane's pendants, battens and snack-bar lamp were rebuilt the same way, and each pendant got its own light.
+- Clipped shrubs (2026-11-03). Every low shrub and hedge round the south-street homes used to be the EZTree Bush006 conifer spray: about 2,400 spiky alpha-cut cards.
+  - `scripts/midori_clipped_shrubs.gd` hides them and stands about 3,400 clipped Japanese mounds (satsuki and kurume azalea, boxwood, holly) in their footprints, with species grouped by bed. It runs from `midori_south_street.gd` just before batching.
+  - Each mound is a lumpy core and two leaf shells (`shaders/midori_clipped_shrub.gdshader`, world-space 3 cm leaves, a little autumn bronze). They are tiled in 24 m multimesh cells; the shells drop out at 40 and 70 m and only the core casts shadows.
+  - Day frame rate around the homes rose from 61–69 to 84–98 FPS in the same views. Alpha overdraw was the cost, not triangles.
+- Lake reflection (2026-11-03). The live planar reflection in `midori_lake_life.gd` redraws the whole world, about 8 of a lake view's 25 ms.
+  - It now renders every other frame, keeping the image and matrices from its last render on the off frame.
+  - It also renders only when one of the water's own triangles is in view. The lake's box covers most of the park, so the old box test kept it on while facing away from the water.
+  - Day, Balanced, 1080p: a park view with no water in shot went from 41 to 59 FPS, the ring road north from 61 to 70, and facing the lake runs at 54.
+  - Remaining big costs inside the park are the near-city skyline (about 5.6 ms) and sun shadows (about 4.6 ms). Rendering at half resolution saves only about 3 ms, so the limit is geometry, not pixels.
+- Park cleanup (2026-11-03):
+  - **Zigzag in the sky.** The corporate tower's stair handrails (`staircases.gd`) and guard rails (`traversal.gd`) were placed with `look_at_from_position`, which reads world points, using tower-local points. So they hung about 19 m over the park centre, and the guard rails carried collision there. They now set their local transform.
+  - **Bush006 in the park.** The park's own conifer-spray bushes (about 1,300 copies in `MidoriDistanceDetail`) also get clipped shrubs, applied from `midori_distance_boot.gd` after the cells are built.
+  - **Cover props rebuilt in `midori_park_cover.gd`:**
+    - Cable drums: plank flanges, hub, bolts, wound cable, trailing tail.
+    - Site generator, which replaces the flat orange box.
+    - Ribbed site toilet cabins with a dome roof, door latch and vent stack.
+    - Caged IBC water totes.
+    - Folded, sagging tarps on the draped barriers.
+  - Prism shading now comes from a position hash rather than the placement RNG, so adding prop detail no longer moves the cover layout. That change moved it once.
+  - No repeating line detailing: the user rejected striped tarp folds, cabin ribs, flange seams, slat louvres and the cover shader's vertical rain streaks. Tarps are now smooth sheets (`_sheet`: one sag, one billow).
+  - The last Bush006 shrubs (plaza and park azalea bases, built after the earlier passes) are swapped by `ClippedShrubs.apply_after_boot`, a world-wide sweep once the raid leaves BOOT. Their red flower sprigs now sit on the mounds.
+- Secondary park walks (2026-11-03). PlaygroundWoodlandLoop, NorthWoodlandLoop, PlazaToSouthBridgeLanding, PavilionGardenLink and EastPromenadeToViewingDeck changed in three ways:
+  - **Shape.** They follow one flowing curve (`_smooth_walk`, Chaikin, in `midori_park_size_blockout.gd`) instead of straight runs with small rounded corners.
+  - **Height.** They sit at 3.5 cm, nearly flush, instead of 11 cm.
+  - **Surface.** `WalkMaterials.build_secondary` is weathered masado gravel, with no slab joints or wayfinding dashes. Its rim darkens into soil and breaks unevenly into the lawn.
+  - The main walks and the lake promenade are unchanged.
+  - **Terrain-painted walks (DayZ-style), now the visible look.** `scripts/midori_worn_paths.gd` paints these walks and the woodland trails into the ground itself. It runs from `midori_distance_boot.gd` once the raid leaves BOOT.
+    - It rasterises their centre lines into a 4 px/m path map and injects a block into the shared ground shader. There the ground swaps its own turf scan for its own soil scan, with a noise-ragged edge, surviving grass tufts, a darker loose rim, a paler packed centre and damp hollows.
+    - The old walk and trail meshes keep collision and their metadata but render on no layer (`layers = 0`).
+  - **Main walks (2026-11-04).** All the blue LEDs are gone:
+    - The walk shader's teal dashes.
+    - The cyan inlays and their emission on the supplied path modules.
+    - The blue slit streak projections. The slit spotlights are now warm and dimmer.
+    - The paving shader has no joints or seams. It uses two rotated stone reads to break tiling, a paler trodden middle, soil and moss toward the rim, damp stains and soft leaf flecks.
+    - The paving's rim now frays: noise discards up to 26 cm of the outer edge, letting the terrain's worn shoulder show through. Grime deepens toward the broken edge. The paving is toned down to a warmer, dirtier grey that matches the land's value.
+    - `midori_worn_paths.gd` also paints a ragged worn shoulder about 0.5 m out along every main walk.
+    - Woodland trails in the worn map now use the smoothed route, not the grid steps. The soil scan is read twice at different angles to hide its repeat.
+  - **Second pass.** The gravel is a mid warm grey-brown instead of pale sand. Detail is photo-based grit at three scales, plus damp patches, scattered stones and leaf litter thicker at the rim, with no line patterns.
+  - Open ends flare to 1.7× width over their last 5 m. They also run 1.2 m on under the walk they join, so the joint is a worn mouth, not a square butt.
+  - The worn-earth woodland trails (`midori_trail_surface.gd`) also changed. The grid stair-steps are simplified and smoothed. The surface is now trodden forest floor with a patchy grass edge instead of a mineral strip.
+- Cost, measured in a window at 1080p: boot to HQ was about 3 to 11 s slower than without these modules, within run-to-run noise. Frame rate was unchanged in two of three views; the ring road view dropped from about 62 to 59 FPS.
+
 ## Current GitHub handoff (2026-09-24)
 
 ### Open lawn and ground vegetation pass

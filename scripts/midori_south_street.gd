@@ -28,6 +28,7 @@ const DisplayLighting = preload("res://scripts/midori_display_lighting.gd")
 const GardenContinuity = preload("res://scripts/midori_neighbourhood_gardens.gd")
 const ResidentialFrontage = preload("res://scripts/midori_residential_frontage.gd")
 const HomeGardens = preload("res://scripts/midori_home_gardens.gd")
+const ClippedShrubs = preload("res://scripts/midori_clipped_shrubs.gd")
 const ShopfrontIdentity = preload("res://scripts/midori_shopfront_identity.gd")
 const AccessGeometry = preload("res://scripts/building_access/geometry.gd")
 const GalleryAccess = preload("res://scripts/building_access/gallery_sliding.gd")
@@ -225,6 +226,9 @@ func _ready() -> void:
 	_assign_day_bounce_layers(self)
 	_st = StartupTrace.finish("south_street._assign_day_bounce_layers", _st)
 	await Budget.checkpoint(park)
+	_st = StartupTrace.begin()
+	set_meta("clipped_shrubs", ClippedShrubs.apply(self))
+	_st = StartupTrace.finish("south_street.ClippedShrubs", _st)
 	_st = StartupTrace.begin()
 	# Keep repeated trim/slab geometry economical without merging object ownership.
 	for anchor: Node in get_children():

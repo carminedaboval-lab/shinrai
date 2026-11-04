@@ -5,6 +5,9 @@ extends Node3D
 ## midori_near_city_building.gdshader; balconies, signs and rooftop plant are real
 ## geometry. Each layer is split into culled MultiMesh chunks.
 const RNG_SEED := 20500702
+## The fixed city: every lot, pavement and tower with the random state it was laid out from.
+## Built by tests/city_layout_tool.gd; without it the generator lays the city out live.
+const LAYOUT_PATH := "res://assets/shinrai/near_city/city_layout.json"
 const HALF_EXTENT := 640.0
 const BLOCK := 64.0
 const ROAD := 7.0 # Half road width; the grid centres roads on block lines.
@@ -271,13 +274,23 @@ var _muted := false # Lays a lot out unseen, so the rest of the city keeps its r
 var _handmade: Array[Node3D] = []
 ## The gaps _split leaves between lots, for the alley dresser to furnish. Read only.
 var alleys: Array[Dictionary] = []
+## Set before _ready to lay the city out with the generator and keep every step in `layout`.
+var record_layout := false
+## Replayable steps, filled while recording. `layout_decks` holds the business decks they refer to.
+var layout: Array[Dictionary] = []
+var layout_decks: Array = []
+## Tests set this to keep the laid-out parts once they are committed, so two cities can be compared.
+var keep_build_data := false
+var build_rows := {}
+var build_hero: RefCounted
 
 func _ready() -> void:
 	add_to_group("midori_horizon")
 	_rng.seed = RNG_SEED
 	for i: int in range(BUSINESSES): _deck.append(i)
 	_build_ground()
-	_build_blocks()
+	if record_layout or not FileAccess.file_exists(LAYOUT_PATH): _build_blocks()
+	else: _build_from_layout()
 	_build_ring_street()
 	_build_expressway()
 	_build_viaduct()
@@ -367,6 +380,7 @@ func _commit_layers() -> void:
 	var wedge := PrismMesh.new()
 	wedge.left_to_right = 0.0
 	_commit_layer("wedges", wedge, trim_look, true)
+	if keep_build_data: build_rows = _rows.duplicate(true)
 	_rows.clear()
 
 func _commit_hero(wall_maps: Texture2DArray, wall_normals: Texture2DArray) -> void:
@@ -380,6 +394,7 @@ func _commit_hero(wall_maps: Texture2DArray, wall_normals: Texture2DArray) -> vo
 		_commit_part("NearCityShell_%d" % key, Hero.mesh_of(walls[key]), shell_look, true)
 		if panes.has(key) and not panes[key].v.is_empty():
 			_commit_part("NearCityPanes_%d" % key, Hero.mesh_of(panes[key]), glass_look, false)
+	if keep_build_data: build_hero = _hero
 	_hero = null
 
 func _commit_part(label: String, mesh: Mesh, material: Material, shadows: bool) -> void:
@@ -556,10 +571,13 @@ func _build_blocks() -> void:
 			var origin := (Vector2(-HALF_EXTENT + BLOCK * float(i), -HALF_EXTENT + BLOCK * float(j)) / BLOCK).floor() * BLOCK + Vector2(ROAD + WALK, ROAD + WALK)
 			var block := _fit_lot(Rect2(origin, Vector2(inner, inner)))
 			if block.size.x < MIN_LOT or block.size.y < MIN_LOT: continue
+			_record({"t":"pave", "block":_rect_data(block)})
 			_add_pavement(block)
 			var centre := block.get_center()
 			if _in_cluster(centre) and _rng.randf() < .55:
-				if _clear_of_reserved(block): _add_tower(block)
+				if _clear_of_reserved(block):
+					_record({"t":"tower", "block":_rect_data(block)})
+					_add_tower(block)
 				continue
 			# Arterials and the park edge are commercial; the rest is back streets.
 			var commercial := i % 4 == 0 or j % 4 == 0 or _park_distance(centre) < 50.0
@@ -602,15 +620,8 @@ func _pole_line(a: Vector2, b: Vector2, outward: Vector2) -> void:
 func _split(rect: Rect2, block: Rect2, commercial: bool) -> void:
 	var limit := _rng.randf_range(6.5, 12.0) if commercial else _rng.randf_range(8.0, 15.0)
 	if rect.size.x <= limit and rect.size.y <= limit * 1.7:
-		var design := _design_for(rect)
-		_muted = design != null
-		_lot(rect, block, commercial)
-		_muted = false
-		if design != null:
-			var building: Node3D = design.new()
-			building.position = Vector3(rect.get_center().x, .08, rect.end.y)
-			add_child(building)
-			_handmade.append(building)
+		_record({"t":"lot", "rect":_rect_data(rect), "block":_rect_data(block), "commercial":commercial})
+		_lay_lot(rect, block, commercial)
 		return
 	var cut := _rng.randf_range(.38, .62)
 	var alley := _rng.randf_range(.3, 1.4) * .5
@@ -624,6 +635,55 @@ func _split(rect: Rect2, block: Rect2, commercial: bool) -> void:
 		alleys.append({"rect":Rect2(rect.position.x, rect.position.y + at - alley, rect.size.x, alley * 2.0), "commercial":commercial})
 		_split(Rect2(rect.position, Vector2(rect.size.x, at - alley)), block, commercial)
 		_split(Rect2(rect.position + Vector2(0, at + alley), Vector2(rect.size.x, rect.size.y - at - alley)), block, commercial)
+
+func _lay_lot(rect: Rect2, block: Rect2, commercial: bool) -> void:
+	var design := _design_for(rect)
+	_muted = design != null
+	_lot(rect, block, commercial)
+	_muted = false
+	if design != null:
+		var building: Node3D = design.new()
+		building.position = Vector3(rect.get_center().x, .08, rect.end.y)
+		add_child(building)
+		_handmade.append(building)
+
+func _record(step: Dictionary) -> void:
+	# Keeps the random state and business deck each step starts from, so replaying
+	# it from the file builds exactly what the generator built, in any order.
+	if not record_layout: return
+	if layout_decks.is_empty() or layout_decks[-1] != _deck: layout_decks.append(_deck.duplicate())
+	step.rng = str(_rng.state)
+	step.deck = layout_decks.size() - 1
+	step.dealt = _dealt
+	layout.append(step)
+
+func _build_from_layout() -> void:
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(LAYOUT_PATH))
+	if not data is Dictionary:
+		push_error("City layout unreadable, laying the city out live: " + LAYOUT_PATH)
+		_build_blocks()
+		return
+	var decks: Array = []
+	for values: Array in data.decks:
+		var deck: Array[int] = []
+		for value: Variant in values: deck.append(int(value))
+		decks.append(deck)
+	for step: Dictionary in data.steps:
+		_rng.state = str(step.rng).to_int()
+		_deck.assign(decks[int(step.deck)])
+		_dealt = int(step.dealt)
+		match str(step.t):
+			"pave": _add_pavement(_rect_of(step.block))
+			"tower": _add_tower(_rect_of(step.block))
+			"lot": _lay_lot(_rect_of(step.rect), _rect_of(step.block), bool(step.commercial))
+	for alley: Dictionary in data.alleys:
+		alleys.append({"rect":_rect_of(alley.rect), "commercial":bool(alley.commercial)})
+
+func _rect_data(rect: Rect2) -> Array:
+	return [rect.position.x, rect.position.y, rect.size.x, rect.size.y]
+
+func _rect_of(values: Array) -> Rect2:
+	return Rect2(float(values[0]), float(values[1]), float(values[2]), float(values[3]))
 
 func _design_for(rect: Rect2) -> GDScript:
 	for row: Array in HANDMADE:

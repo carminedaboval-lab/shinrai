@@ -1,0 +1,185 @@
+extends RefCounted
+## Replaces the neighbourhood's low shrubs with clipped Japanese garden shrubs.
+## The gardens round the south-street homes used the EZTree Bush006 conifer
+## spray for every low shrub and hedge: about 2,400 spiky paper cards, around
+## 7.5 million triangles. Each one is hidden and a clipped mound (刈り込み:
+## satsuki azalea, boxwood, holly) of the same footprint stands in its place.
+## Neighbouring shrubs share a species, as they would in a planted bed.
+## Call once, after the gardens are built and before the street is batched.
+## The park's distance-detail cells carry copies of a few park Bush006 plants
+## too; there the copies render as flat brown discs, so the same swap runs on
+## those cells once they are built.
+const SHADER := preload("res://shaders/midori_clipped_shrub.gdshader")
+const LEAF_TEXTURE := "scene_9.png"
+const CELL := 24.0
+const SHELLS := [0.0, 0.035, 0.075]
+## Shells drop out with distance: the leafy fringe first, the core last.
+const RANGES := [160.0, 70.0, 40.0]
+# Leaf colour (albedo) and how much autumn bronze, per species.
+const SPECIES := [
+	[Color(0.11, 0.2, 0.07), 0.16],   # Satsuki azalea
+	[Color(0.13, 0.19, 0.065), 0.22], # Kurume azalea, turning
+	[Color(0.2, 0.27, 0.075), 0.03],  # Boxwood
+	[Color(0.075, 0.15, 0.06), 0.0],  # Japanese holly
+]
+
+## Last sweep once the raid has finished booting: some planting (the plaza
+## azalea beds among it) is built after the earlier passes, so anything still
+## showing Bush006 anywhere in the world is swapped then.
+static func apply_after_boot(park: Node3D) -> void:
+	var raid := park.get_node_or_null("ExtractionRun")
+	while is_instance_valid(raid) and raid.phase == raid.Phase.BOOT:
+		await park.get_tree().process_frame
+	if is_instance_valid(park): park.set_meta("clipped_shrubs_after_boot", apply(park))
+
+static func apply(street: Node3D) -> Dictionary:
+	var parts: Dictionary = {}
+	var leaves: Dictionary = {}
+	for visual: MeshInstance3D in street.find_children("*", "MeshInstance3D", true, false):
+		if visual.mesh == null or not String(visual.name).contains("Bush006"): continue
+		parts[visual.mesh] = true
+		if String(visual.name).contains("leaves"): leaves[visual.mesh] = true
+	var bounds: Dictionary = {}
+	var spots: Array[AABB] = []
+	var hidden := 0
+	var layers := 1
+	for geometry: GeometryInstance3D in street.find_children("*", "GeometryInstance3D", true, false):
+		# Already swapped (or a hidden source prototype): leave it alone.
+		if not geometry.is_visible_in_tree(): continue
+		var mesh: Mesh = null
+		if geometry is MeshInstance3D: mesh = geometry.mesh
+		elif geometry is MultiMeshInstance3D and geometry.multimesh != null: mesh = geometry.multimesh.mesh
+		if mesh == null: continue
+		# Copies keep the source mesh's name even where the node is renamed.
+		var named := mesh.resource_name.contains("Bush006")
+		var leafy := leaves.has(mesh) or _texture(geometry, mesh) == LEAF_TEXTURE or (named and mesh.resource_name.contains("leaves"))
+		if not leafy and not parts.has(mesh) and not named: continue
+		if leafy:
+			if not bounds.has(mesh): bounds[mesh] = _drawn_bounds(mesh)
+			if geometry is MultiMeshInstance3D:
+				var many: MultiMesh = geometry.multimesh
+				for i: int in range(many.instance_count):
+					spots.append(geometry.global_transform * many.get_instance_transform(i) * bounds[mesh])
+			else:
+				spots.append(geometry.global_transform * bounds[mesh])
+		if geometry.visible and hidden == 0: layers = geometry.layers
+		geometry.visible = false
+		hidden += 1
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7351
+	var cells: Dictionary = {}
+	var placed := 0
+	for box: AABB in spots:
+		var width := maxf(box.size.x, box.size.z)
+		var long_x := box.size.x >= box.size.z
+		var count := clampi(ceili(width / 1.25), 1, 4)
+		for k: int in range(count):
+			var t := (float(k) + 0.5) / float(count) - 0.5
+			var at := box.get_center() + (Vector3.RIGHT * box.size.x if long_x else Vector3.BACK * box.size.z) * t * (1.0 - 1.0 / float(count))
+			at.y = box.position.y
+			var w := clampf(width / float(count) * 0.85, 0.35, 1.4) * rng.randf_range(0.9, 1.1)
+			var h := clampf(minf(box.size.y * 0.85, w * 0.85), 0.28, 1.0) * rng.randf_range(0.85, 1.05)
+			var bed := Vector2i(floori(at.x / 3.0), floori(at.z / 3.0))
+			var kind: Array = SPECIES[absi(hash(bed)) % SPECIES.size()]
+			var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(w, h, w * rng.randf_range(0.75, 1.0)))
+			var key := Vector2i(floori(at.x / CELL), floori(at.z / CELL))
+			if not cells.has(key): cells[key] = []
+			var leaf: Color = kind[0]
+			leaf = leaf * rng.randf_range(0.88, 1.12)
+			leaf.a = kind[1]
+			cells[key].append([Transform3D(basis, at + Vector3.DOWN * 0.04), leaf])
+			placed += 1
+	var root := Node3D.new()
+	root.name = "ClippedShrubs"
+	street.add_child(root)
+	root.global_transform = Transform3D.IDENTITY
+	var meshes: Array[ArrayMesh] = []
+	var looks: Array[ShaderMaterial] = []
+	for s: int in range(SHELLS.size()):
+		meshes.append(_mound(SHELLS[s]))
+		var look := ShaderMaterial.new()
+		look.shader = SHADER
+		look.set_shader_parameter("shell", float(s))
+		looks.append(look)
+	for key: Vector2i in cells:
+		var rows: Array = cells[key]
+		for s: int in range(SHELLS.size()):
+			var many := MultiMesh.new()
+			many.transform_format = MultiMesh.TRANSFORM_3D
+			many.use_colors = true
+			many.mesh = meshes[s]
+			many.instance_count = rows.size()
+			for i: int in range(rows.size()):
+				many.set_instance_transform(i, rows[i][0])
+				many.set_instance_color(i, rows[i][1])
+			var node := MultiMeshInstance3D.new()
+			node.name = "Shrubs_%d_%d_%d" % [key.x, key.y, s]
+			node.multimesh = many
+			node.material_override = looks[s]
+			node.layers = layers
+			node.visibility_range_end = RANGES[s]
+			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if s == 0 else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(node)
+	return {"hidden_bush006_nodes":hidden, "source_bushes":spots.size(), "clipped_shrubs":placed, "cells":cells.size(), "triangles_per_shrub":meshes[0].get_faces().size() / 3 * SHELLS.size()}
+
+## A clipped mound one metre across and one high, its base at the origin:
+## lumpy like hand-clipped clouds, flat underneath. `grow` pushes it out
+## along its normals for the leaf shells.
+static func _mound(grow: float) -> ArrayMesh:
+	var noise := FastNoiseLite.new()
+	noise.seed = 31
+	noise.frequency = 1.6
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.5
+	sphere.height = 1.0
+	sphere.radial_segments = 20
+	sphere.rings = 10
+	var arrays := sphere.get_mesh_arrays()
+	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	for i: int in range(points.size()):
+		var p := points[i]
+		var lump := 1.0 + noise.get_noise_3dv(p * 2.0) * 0.16 + noise.get_noise_3dv(p * 5.0) * 0.05
+		p = p * lump
+		# Flat underneath, full and rounded on top.
+		p.y = ((p.y if p.y > 0.0 else p.y * 0.3) + 0.15) / 0.65
+		points[i] = p
+	arrays[Mesh.ARRAY_VERTEX] = points
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var tool := SurfaceTool.new()
+	tool.create_from(mesh, 0)
+	tool.generate_normals()
+	var smooth := tool.commit_to_arrays()
+	if grow > 0.0:
+		var verts: PackedVector3Array = smooth[Mesh.ARRAY_VERTEX]
+		var ns: PackedVector3Array = smooth[Mesh.ARRAY_NORMAL]
+		for i: int in range(verts.size()):
+			verts[i] += ns[i] * grow
+		smooth[Mesh.ARRAY_VERTEX] = verts
+	var out := ArrayMesh.new()
+	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, smooth)
+	return out
+
+static func _texture(geometry: GeometryInstance3D, mesh: Mesh) -> String:
+	var look: Material = geometry.material_override
+	if look == null and mesh.get_surface_count() > 0:
+		look = (geometry as MeshInstance3D).get_active_material(0) if geometry is MeshInstance3D else mesh.surface_get_material(0)
+	if look is BaseMaterial3D and look.albedo_texture != null: return look.albedo_texture.resource_path.get_file()
+	return ""
+
+## Bounds of the vertices the mesh actually draws; the source pack carries
+## unused LOD vertices that inflate its AABB.
+static func _drawn_bounds(mesh: Mesh) -> AABB:
+	var box := AABB()
+	var first := true
+	for s: int in range(mesh.get_surface_count()):
+		var arrays := mesh.surface_get_arrays(s)
+		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var indices = arrays[Mesh.ARRAY_INDEX]
+		var count: int = indices.size() if indices != null and indices.size() > 0 else points.size()
+		for k: int in range(count):
+			var p := points[indices[k] if indices != null and indices.size() > 0 else k]
+			box = AABB(p, Vector3.ZERO) if first else box.expand(p)
+			first = false
+	return box

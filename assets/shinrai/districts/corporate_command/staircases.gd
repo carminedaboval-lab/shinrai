@@ -78,7 +78,11 @@ func _convex_collision(label: String, points: PackedVector3Array) -> void:
 func _beam(label: String, start: Vector3, finish: Vector3, thickness: float) -> void:
 	var result := _visual_box(label, (start + finish) * 0.5,
 		Vector3(thickness, thickness, start.distance_to(finish)), _rail_material)
-	result.look_at_from_position((start + finish) * 0.5, finish, Vector3.UP)
+	# start and finish are local to the staircase, so orient in local space;
+	# look_at_from_position would read them as world points and strand the rail.
+	var along := (finish - start).normalized()
+	var up := Vector3.UP if absf(along.dot(Vector3.UP)) < 0.99 else Vector3.BACK
+	result.transform = Transform3D(Basis.looking_at(along, up), (start + finish) * 0.5)
 
 
 func _flight_guard(label: String, x: float, start_z: float, end_z: float, start_y: float, end_y: float) -> void:
