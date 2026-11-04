@@ -279,18 +279,44 @@ var record_layout := false
 ## Replayable steps, filled while recording. `layout_decks` holds the business decks they refer to.
 var layout: Array[Dictionary] = []
 var layout_decks: Array = []
-## Tests set this to keep the laid-out parts once they are committed, so two cities can be compared.
+## Tests set this to checksum every laid-out part per layer, so two cities can be compared.
 var keep_build_data := false
-var build_rows := {}
-var build_hero: RefCounted
+var build_audit := {}
+var slow_steps: Array[String] = []
+## The city is built in tiles of CHUNK metres, each its own node; while one is being
+## built, everything laid out goes to it.
+var tiles := {}
+var _tile_key := -1
+var _tile: Node3D
+var _layer_looks := {}
+var _shell_look: ShaderMaterial
+var _glass_look: ShaderMaterial
+## Streaming: tiles closer than load_radius to the camera are built, a few
+## milliseconds a frame, nearest first; tiles beyond unload_radius are freed.
+var load_radius := 900.0
+var unload_radius := 1100.0
+var build_budget_ms := 3.0
+var _steps_by_tile := {}
+var _decks: Array = []
+var _queue: Array[int] = []
+var _building := -1
+var _build_index := 0
+var _next_check := 0.0
+var _night := false
+var _pinned := {}
 
 func _ready() -> void:
 	add_to_group("midori_horizon")
+	var started := Time.get_ticks_msec()
+	var memory := OS.get_static_memory_usage()
 	_rng.seed = RNG_SEED
 	for i: int in range(BUSINESSES): _deck.append(i)
+	_tile = self
+	_prepare_looks()
 	_build_ground()
 	if record_layout or not FileAccess.file_exists(LAYOUT_PATH): _build_blocks()
 	else: _build_from_layout()
+	var laid_out := Time.get_ticks_msec()
 	_build_ring_street()
 	_build_expressway()
 	_build_viaduct()
@@ -299,9 +325,53 @@ func _ready() -> void:
 	var horizon := get_parent()
 	var park := horizon.get_parent() if horizon != null else null
 	set_night_mode(park != null and park.get("is_night_mode") == true)
-	print("MIDORI_NEAR_CITY: buildings ", _count)
+	print("MIDORI_NEAR_CITY: buildings %d, lots laid out in %d ms, built in %d ms, %d MB" % [_count, laid_out - started, Time.get_ticks_msec() - started, (OS.get_static_memory_usage() - memory) / 1048576])
+
+func _process(delta: float) -> void:
+	if _steps_by_tile.is_empty(): return
+	_next_check -= delta
+	if _next_check <= 0.0:
+		_next_check = .5
+		update_streaming(_focus())
+	if _building < 0 and not _queue.is_empty(): _begin_tile(_queue.pop_front())
+	if _building >= 0: _lay_tile(build_budget_ms)
+
+func _focus() -> Vector2:
+	# Where the player looks from, in the city's frame; the park centre before there is a camera.
+	var eye := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if eye == null: return Vector2.ZERO
+	var at := to_local(eye.global_position)
+	return Vector2(at.x, at.z)
+
+## Queues every tile within load_radius of focus and frees those beyond unload_radius.
+func update_streaming(focus: Vector2) -> void:
+	for key: int in _steps_by_tile:
+		var distance := _tile_distance(key, focus)
+		if distance < load_radius and not tiles.has(key) and key != _building and not _queue.has(key):
+			_queue.append(key)
+		elif distance > unload_radius:
+			_queue.erase(key)
+			if tiles.has(key) and key != _building and not _pinned.has(key): _unload_tile(key)
+	_queue.sort_custom(func(a: int, b: int) -> bool: return _tile_distance(a, focus) < _tile_distance(b, focus))
+
+## True once nothing is queued or half built.
+func is_streaming_idle() -> bool:
+	return _building < 0 and _queue.is_empty()
+
+func _tile_distance(key: int, focus: Vector2) -> float:
+	var centre := _tile_centre(key)
+	var d := (focus - centre).abs() - Vector2(CHUNK, CHUNK) * .5
+	return Vector2(maxf(d.x, 0.0), maxf(d.y, 0.0)).length()
+
+func _unload_tile(key: int) -> void:
+	var tile: Node3D = tiles[key]
+	tiles.erase(key)
+	for building: Node3D in _handmade.duplicate():
+		if building.get_parent() == tile: _handmade.erase(building)
+	tile.queue_free()
 
 func set_night_mode(value: bool) -> void:
+	_night = value
 	for material: ShaderMaterial in _materials:
 		material.set_shader_parameter("night", 1.0 if value else 0.0)
 	for building: Node3D in _handmade:
@@ -334,14 +404,31 @@ func _wall_array(suffix: String) -> Texture2DArray:
 	array.create_from_images(images)
 	return array
 
+func _chunk_key(at: Vector2) -> int:
+	return int((at.x + HALF_EXTENT) / CHUNK) + 100 * int((at.y + HALF_EXTENT) / CHUNK)
+
 func _put(layer: String, at: Vector3, xform: Transform3D, custom := Color(), color := Color.WHITE) -> void:
 	if _muted: return
-	var key := int((at.x + HALF_EXTENT) / CHUNK) + 100 * int((at.z + HALF_EXTENT) / CHUNK)
+	if keep_build_data: _audit(layer, [xform, custom, color])
+	var key := _tile_key if _tile_key >= 0 else _chunk_key(Vector2(at.x, at.z))
 	var table: Dictionary = _rows[layer]
 	if not table.has(key): table[key] = []
 	table[key].append([xform, custom, color])
 
-func _commit_layers() -> void:
+func _note_slow(what: String, started: int) -> void:
+	var ms := (Time.get_ticks_usec() - started) / 1000.0
+	if ms > 30.0: slow_steps.append("%s %.0f ms" % [what, ms])
+
+func _audit(layer: String, row: Array) -> void:
+	# Order-free checksum per layer, so cities grouped differently still compare.
+	var h := hash(row)
+	var sums: Array = build_audit.get(layer, [0, 0, 0])
+	sums[0] += 1
+	sums[1] += h
+	sums[2] = sums[2] ^ h
+	build_audit[layer] = sums
+
+func _prepare_looks() -> void:
 	var trim_look := _material(TRIM_SHADER, "SHINRAI_NearCityTrim")
 	var slab_look := StandardMaterial3D.new()
 	slab_look.albedo_texture = load(PAVER_ALBEDO)
@@ -357,54 +444,53 @@ func _commit_layers() -> void:
 	var wall_normals := _wall_array("nor")
 	body_look.set_shader_parameter("wall_maps", wall_maps)
 	body_look.set_shader_parameter("wall_normals", wall_normals)
-	_commit_hero(wall_maps, wall_normals)
+	_shell_look = _shader_material(SHELL_SHADER, "SHINRAI_NearCityShell")
+	_shell_look.set_shader_parameter("wall_maps", wall_maps)
+	_shell_look.set_shader_parameter("wall_normals", wall_normals)
+	_glass_look = _shader_material(GLASS_SHADER, "SHINRAI_NearCityGlass")
 	var tank := CylinderMesh.new()
 	tank.radial_segments = 14
 	tank.rings = 1
 	tank.top_radius = .5
 	tank.bottom_radius = .5
 	tank.height = 1.0
-	_commit_layer("bodies", BoxMesh.new(), body_look, true)
-	_commit_layer("trim", BoxMesh.new(), trim_look, false)
-	_commit_layer("detail", BoxMesh.new(), trim_look, true)
 	var dome := SphereMesh.new()
 	dome.radial_segments = 12
 	dome.rings = 5
 	dome.radius = .5
 	dome.height = 1.0
-	_commit_layer("domes", dome, trim_look, false)
-	_commit_layer("signs", BoxMesh.new(), sign_look, false)
-	_commit_layer("tanks", tank, trim_look, false)
-	_commit_layer("roofs", PrismMesh.new(), trim_look, true)
-	_commit_layer("slabs", BoxMesh.new(), slab_look, false)
 	var wedge := PrismMesh.new()
 	wedge.left_to_right = 0.0
-	_commit_layer("wedges", wedge, trim_look, true)
-	if keep_build_data: build_rows = _rows.duplicate(true)
-	_rows.clear()
+	# Layer: mesh, look, casts shadows.
+	_layer_looks = {"bodies":[BoxMesh.new(), body_look, true], "trim":[BoxMesh.new(), trim_look, false], "detail":[BoxMesh.new(), trim_look, true],
+		"domes":[dome, trim_look, false], "signs":[BoxMesh.new(), sign_look, false], "tanks":[tank, trim_look, false],
+		"roofs":[PrismMesh.new(), trim_look, true], "slabs":[BoxMesh.new(), slab_look, false], "wedges":[wedge, trim_look, true]}
 
-func _commit_hero(wall_maps: Texture2DArray, wall_normals: Texture2DArray) -> void:
-	var shell_look := _shader_material(SHELL_SHADER, "SHINRAI_NearCityShell")
-	shell_look.set_shader_parameter("wall_maps", wall_maps)
-	shell_look.set_shader_parameter("wall_normals", wall_normals)
-	var glass_look := _shader_material(GLASS_SHADER, "SHINRAI_NearCityGlass")
+func _commit_layers(parent: Node3D = self) -> void:
+	# Commits everything laid out so far under parent, then starts the tables afresh.
+	_commit_hero(parent)
+	for layer: String in _layer_looks:
+		var look: Array = _layer_looks[layer]
+		_commit_layer(layer, look[0], look[1], look[2], parent)
+		_rows[layer] = {}
+
+func _commit_hero(parent: Node3D) -> void:
 	var walls: Dictionary = _hero.walls()
 	var panes: Dictionary = _hero.glass()
 	for key: int in walls:
-		_commit_part("NearCityShell_%d" % key, Hero.mesh_of(walls[key]), shell_look, true)
+		_commit_part("NearCityShell_%d" % key, Hero.mesh_of(walls[key]), _shell_look, true, parent)
 		if panes.has(key) and not panes[key].v.is_empty():
-			_commit_part("NearCityPanes_%d" % key, Hero.mesh_of(panes[key]), glass_look, false)
-	if keep_build_data: build_hero = _hero
-	_hero = null
+			_commit_part("NearCityPanes_%d" % key, Hero.mesh_of(panes[key]), _glass_look, false, parent)
+	_hero = Hero.new()
 
-func _commit_part(label: String, mesh: Mesh, material: Material, shadows: bool) -> void:
+func _commit_part(label: String, mesh: Mesh, material: Material, shadows: bool, parent: Node3D = self) -> void:
 	var instance := MeshInstance3D.new()
 	instance.name = label
 	instance.mesh = mesh
 	instance.material_override = material
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	add_child(instance)
+	parent.add_child(instance)
 
 func _hero_spec(kind: int, seed_value: float, storey: float, ground: float) -> Dictionary:
 	# A building's look follows from one seed, so its parts all agree.
@@ -491,16 +577,18 @@ func _place_body(centre: Vector2, base: float, size: Vector3, kind: int, front: 
 	if distance > SHELL_RANGE or not eligible:
 		_box_body(centre, base, size, kind, front, seed_value)
 		return false
-	var key := int((centre.x + HALF_EXTENT) / CHUNK) + 100 * int((centre.y + HALF_EXTENT) / CHUNK)
+	var key := _tile_key if _tile_key >= 0 else _chunk_key(centre)
 	var spec := _hero_spec(kind, seed_value, storey, ground)
 	spec.detail = 0 if distance < HERO_RANGE else 1
 	# A rounded corner must stay a corner, never turn a slim building into a drum.
 	spec.radius = minf(spec.radius, minf(size.x, size.z) * .16)
 	spec.parapet = spec.get("parapet", .9) if flat_roof else 0.0
-	if not _muted: _hero.add(centre, base, size, front, key, spec)
+	if not _muted:
+		if keep_build_data: _audit("shells", [centre, base, size, front, spec])
+		_hero.add(centre, base, size, front, key, spec)
 	return true
 
-func _commit_layer(layer: String, mesh: Mesh, material: Material, shadows: bool) -> void:
+func _commit_layer(layer: String, mesh: Mesh, material: Material, shadows: bool, parent: Node3D = self) -> void:
 	var table: Dictionary = _rows[layer]
 	for key: int in table:
 		var rows: Array = table[key]
@@ -521,7 +609,7 @@ func _commit_layer(layer: String, mesh: Mesh, material: Material, shadows: bool)
 		instance.material_override = material
 		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-		add_child(instance)
+		parent.add_child(instance)
 
 func _build_ground() -> void:
 	var plane := PlaneMesh.new()
@@ -644,8 +732,12 @@ func _lay_lot(rect: Rect2, block: Rect2, commercial: bool) -> void:
 	if design != null:
 		var building: Node3D = design.new()
 		building.position = Vector3(rect.get_center().x, .08, rect.end.y)
-		add_child(building)
+		_tile.add_child(building)
 		_handmade.append(building)
+		if _night: building.set_night_mode(true)
+		# Hand-built buildings take up to 1.5 s each to build, too long for a frame,
+		# so their tiles stay once built. Only generic tiles stream.
+		if _tile_key >= 0: _pinned[_tile_key] = true
 
 func _record(step: Dictionary) -> void:
 	# Keeps the random state and business deck each step starts from, so replaying
@@ -663,21 +755,64 @@ func _build_from_layout() -> void:
 		push_error("City layout unreadable, laying the city out live: " + LAYOUT_PATH)
 		_build_blocks()
 		return
-	var decks: Array = []
 	for values: Array in data.decks:
 		var deck: Array[int] = []
 		for value: Variant in values: deck.append(int(value))
-		decks.append(deck)
+		_decks.append(deck)
+	# Each step belongs to the tile its lot or block centre falls in.
 	for step: Dictionary in data.steps:
+		var anchor := _rect_of(step.rect if step.t == "lot" else step.block)
+		var key := _chunk_key(anchor.get_center())
+		if not _steps_by_tile.has(key): _steps_by_tile[key] = []
+		_steps_by_tile[key].append(step)
+	for alley: Dictionary in data.alleys:
+		alleys.append({"rect":_rect_of(alley.rect), "commercial":bool(alley.commercial)})
+	# Everything in reach of the park is built now, nearest first, so the city is whole
+	# when the raid starts; the rest streams in as the camera moves.
+	update_streaming(Vector2.ZERO)
+	while not _queue.is_empty():
+		_begin_tile(_queue.pop_front())
+		_lay_tile(0.0)
+
+func _tile_centre(key: int) -> Vector2:
+	return Vector2((float(key % 100) + .5) * CHUNK - HALF_EXTENT, (floorf(key / 100.0) + .5) * CHUNK - HALF_EXTENT)
+
+func _begin_tile(key: int) -> void:
+	var tile := Node3D.new()
+	tile.name = "NearCityTile_%d" % key
+	add_child(tile)
+	tiles[key] = tile
+	_tile = tile
+	_tile_key = key
+	_building = key
+	_build_index = 0
+
+func _lay_tile(budget_ms: float) -> void:
+	# Lays the tile's steps until the budget is spent (0: all of them), then commits it.
+	var steps: Array = _steps_by_tile[_building]
+	var until := Time.get_ticks_usec() + int(budget_ms * 1000.0)
+	while _build_index < steps.size():
+		var step: Dictionary = steps[_build_index]
+		_build_index += 1
+		# Every step starts from the random state and deck it was laid out from.
 		_rng.state = str(step.rng).to_int()
-		_deck.assign(decks[int(step.deck)])
+		_deck.assign(_decks[int(step.deck)])
 		_dealt = int(step.dealt)
+		var step_started := Time.get_ticks_usec()
 		match str(step.t):
 			"pave": _add_pavement(_rect_of(step.block))
 			"tower": _add_tower(_rect_of(step.block))
 			"lot": _lay_lot(_rect_of(step.rect), _rect_of(step.block), bool(step.commercial))
-	for alley: Dictionary in data.alleys:
-		alleys.append({"rect":_rect_of(alley.rect), "commercial":bool(alley.commercial)})
+		if keep_build_data:
+			var design := _design_for(_rect_of(step.rect)) if step.t == "lot" else null
+			_note_slow("tile %d %s %s" % [_building, step.t, design.resource_path.get_file() if design != null else "generic"], step_started)
+		if budget_ms > 0.0 and Time.get_ticks_usec() > until: return
+	var commit_started := Time.get_ticks_usec()
+	_commit_layers(_tile)
+	if keep_build_data: _note_slow("tile %d commit" % _building, commit_started)
+	_tile = self
+	_tile_key = -1
+	_building = -1
 
 func _rect_data(rect: Rect2) -> Array:
 	return [rect.position.x, rect.position.y, rect.size.x, rect.size.y]
