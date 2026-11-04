@@ -150,6 +150,11 @@ Decided 2026-11-02. The city is the same in every raid, the way Gray Zone Warfar
 
 ## 8. How to build it (order of work)
 
+Progress (2026-11-04):
+- **Step 1 measured.** Today's city takes about 12 s of a ~100 s headless boot and about 0.7 GB. Generic buildings beyond 300 m of the park cost almost nothing (about 0.05 s). The cost is the 3D shells within 300 m (about 6.5 s) and the 32 hand-built buildings (about 6 s; the game centre alone 1.5 s).
+- **Step 2 done.** `assets/shinrai/near_city/city_layout.json` is the fixed layout; `tests/city_layout_tool.gd -- verify` proves the city built from it matches the generator exactly.
+- **Step 3 started.** The city is built in 320 m tiles that stream around the camera, a few milliseconds a frame (worst frame 24 ms in the test). Tiles with hand-built buildings stay loaded, because one hand-built building can take 1.5 s to build. **Before the building library can stream**, hand-built designs must be built once and saved, or built off the main thread; that needs a small convention added to every building script.
+
 1. **Measure today.** Record boot time, memory and frame rate of the current city, so every later step can show it helped.
 2. **Fixed layout file.** Export today's city layout to the file, with the hand-built buildings marked fixed, and make the game read it. The city should look exactly as it does now.
 3. **Streaming.** The game loads the layout in tiles around the player: full detail near, simplified far, nothing beyond. Needed for 2.9 km; the full game already runs out of memory on this laptop.
