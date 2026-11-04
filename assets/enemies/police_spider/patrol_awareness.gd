@@ -7,12 +7,28 @@ signal state_changed(previous: String, current: String)
 @export var pursuit_range := 78.0
 @export var field_of_view_degrees := 150.0
 const NOTICE_DURATION := 0.20
-const IDENTIFY_DURATION := 0.25
+# Police procedure: the scan beam holds on a contact long enough to be seen, so
+# the player has a clear beat to break line of sight before force is authorised.
+const IDENTIFY_DURATION := 1.1
+const REACQUIRE_DURATION := .25
 const COMBAT_ENTER_DURATION := 0.25
 const COMBAT_TURN_GAIN := 7.0
 const SEARCH_TRAVEL_LIMIT := 12.0
 const SEARCH_STALL_LIMIT := 3.5
-const SEARCH_SCAN_DURATION := 1.4
+const SEARCH_SCAN_DURATION := 2.0
+const SEARCH_SPEED := 1.1
+# Check the spot, then sweep twice more before giving up.
+const SEARCH_LEGS := 3
+# Breaking sight is not escape: run on to where the contact was heading first.
+const PURSUIT_MEMORY := 3.5
+const PURSUIT_LEAD_MAX := 9.0
+const PURSUIT_ARRIVAL := 1.6
+# Pushing forward without moving this long means a kerb or step is in the way.
+const HOP_STALL_SECONDS := .45
+const HOP_RANGE := 30.0
+# Retrying from one pose fails the same way, so a stuck unit crabs clear first.
+const SEARCH_UNSTICK_SECONDS := 2.0
+const COMBAT_UNSTICK_SECONDS := 2.0
 var actor: CharacterBody3D
 var target: Node3D
 var pursuit_target: Node3D
@@ -27,6 +43,9 @@ var last_known := Vector3.ZERO
 var patrol_pause := 0.0
 var history: Array[String] = ["PATROL"]
 var search_goal := Vector3.ZERO
+var search_leg := 0
+var search_unstuck := false
+var combat_blocked_time := 0.0
 var search_travel := true
 var search_travel_time := 0.0
 var search_stall_time := 0.0
@@ -35,6 +54,14 @@ var search_progress_anchor := Vector3.ZERO
 var had_live_target := false
 var pack_contact_remaining := 0.0
 const PACK_CONTACT_GRACE := .25
+var last_seen_velocity := Vector3.ZERO
+var hop_stall_time := 0.0
+# Packmates nose to tail can each brake for the other forever: back off and sidestep.
+const JAM_SECONDS := .8
+const JAM_BACKOFF_SECONDS := .7
+var jam_time := 0.0
+var jam_backoff := 0.0
+var jam_side := 1.0
 
 func _ready() -> void:
 	actor=get_parent() as CharacterBody3D
@@ -63,12 +90,27 @@ func receive_damage_contact(source: Node) -> void:
 	var point: Vector3=(source as Node3D).global_position
 	if not point.is_finite(): return
 	last_known=point
+	# Being shot must not restart an identification already under way.
+	if state in ["NOTICE","IDENTIFY"]: return
 	if state=="SEARCH": _begin_search()
 	else: change_state("SEARCH")
 
+## A contact the pack has already confirmed is reacquired at once, not re-identified.
+func _identify_hold() -> float:
+	var pack:=actor.get_parent()
+	var confirmed: bool=pack.get("battle_active")==true and is_instance_valid(target) and pack.get("battle_target_id")==target.get_instance_id()
+	return REACQUIRE_DURATION if confirmed else IDENTIFY_DURATION
+
 func _begin_search() -> void:
+	search_leg=0
+	_begin_search_leg()
+
+func _begin_search_leg() -> void:
 	var offset:=last_known-actor.global_position;offset.y=0
 	search_goal=actor.global_position+offset.limit_length(6.0)
+	var pack:=actor.get_parent()
+	if pack.has_method("search_point"): search_goal=pack.search_point(actor,last_known,search_leg)
+	search_unstuck=false
 	search_travel=true
 	search_travel_time=0;search_stall_time=0;search_scan_time=0
 	search_progress_anchor=actor.global_position
@@ -96,6 +138,10 @@ func change_state(next: String) -> void:
 	if next==state: return
 	var previous:=state
 	state=next;state_time=0;history.append(next)
+	# Police procedure: a new contact is warned while it is being identified.
+	if next=="IDENTIFY" and is_instance_valid(target) and _identify_hold()==IDENTIFY_DURATION:
+		var pack:=actor.get_parent()
+		if pack.has_method("radio_warning"): pack.radio_warning(target)
 	# SEARCH may originate from a sound or a previous range break. Only the
 	# current visible contact can acquire extended tracking on reconfirmation.
 	if next in ["NOTICE","IDENTIFY"] and visible and target_alive(): pursuit_target=target
@@ -123,6 +169,9 @@ func search_step(delta: float, yaw: float) -> void:
 		if displacement.length()>=.08:
 			# A valid path may first move away from its goal around cover.
 			search_progress_anchor=actor.global_position;search_stall_time=0
+		if search_stall_time>=SEARCH_UNSTICK_SECONDS and not search_unstuck:
+			search_unstuck=true
+			if actor.try_free_move(search_goal): search_stall_time=0
 		if distance<=.55 or search_travel_time>=SEARCH_TRAVEL_LIMIT or search_stall_time>=SEARCH_STALL_LIMIT:
 			search_travel=false;search_scan_time=0
 	if search_travel:
@@ -136,17 +185,65 @@ func search_step(delta: float, yaw: float) -> void:
 				actor.set_locomotion(0,0)
 				return
 		var heading:=yaw_to(steering)
-		var speed:=.38*heading_speed(heading)*clampf(distance,0,1)
+		var speed:=SEARCH_SPEED*heading_speed(heading)*clampf(distance,0,1)
 		# An empty/blocked route returns the current position. Hold and let the
 		# bounded stall budget expire; never substitute a blind straight chase.
 		if steering.distance_to(actor.global_position)<.1: speed=0
 		var pack:=actor.get_parent()
 		if pack.has_method("limit_approach"): speed=pack.limit_approach(actor,speed)
 		actor.set_locomotion(speed,heading*1.6)
+		_hop_if_stalled(delta,speed,steering)
 	else:
 		search_scan_time+=delta
 		actor.set_locomotion(0,clampf(yaw*.35,-.3,.3)+sin(search_scan_time*2.0)*.12)
-		if search_scan_time>=SEARCH_SCAN_DURATION: change_state("RELAX")
+		if search_scan_time>=SEARCH_SCAN_DURATION:
+			search_leg+=1
+			if search_leg<SEARCH_LEGS: _begin_search_leg()
+			else: change_state("RELAX")
+
+## A peer ahead has held this drone still: reverse and crab aside, then rejoin.
+func _jam_step(delta: float, wanted: float, allowed: float, yaw: float) -> bool:
+	if jam_backoff>0.0:
+		jam_backoff=maxf(0.0,jam_backoff-delta)
+		actor.set_combat_locomotion(-.44,.28*jam_side,yaw*COMBAT_TURN_GAIN*.5)
+		return true
+	var moving:=Vector2(actor.velocity.x,actor.velocity.z).length()
+	if wanted<.5 or allowed>wanted*.5 or moving>.4:
+		jam_time=0.0;return false
+	jam_time+=delta
+	# Staggered by unit so two jammed packmates do not back off in lockstep.
+	if jam_time<JAM_SECONDS+float(actor.get_instance_id()%5)*.15: return false
+	jam_time=0.0;jam_backoff=JAM_BACKOFF_SECONDS
+	jam_side=-1.0 if yaw>0.0 else 1.0
+	return false
+
+## Commanded forward but not moving: something low is in the way. Hop it.
+func _hop_if_stalled(delta: float, command: float, toward: Vector3) -> void:
+	var moving:=Vector2(actor.velocity.x,actor.velocity.z).length()
+	# Turning on the spot is not a stall; only a drone facing its way and held still is.
+	if command<.5 or moving>.4 or actor.mode!="GROUND" or absf(yaw_to(toward))>.35:
+		hop_stall_time=0.0;return
+	hop_stall_time+=delta
+	if hop_stall_time<HOP_STALL_SECONDS: return
+	hop_stall_time=0.0
+	var direction:=toward-actor.global_position
+	if Vector2(direction.x,direction.z).length()<.3: direction=actor.global_basis.z
+	actor.try_kerb_hop(direction)
+
+## A wounded unit ignores the fight while it falls back, then watches from cover.
+func _withdraw_step() -> bool:
+	var pack:=actor.get_parent()
+	if not pack.has_method("withdrawal_goal"): return false
+	var cover: Vector3=pack.withdrawal_goal(actor)
+	if not cover.is_finite(): return false
+	var steering: Vector3=actor.steering_point(cover)
+	if steering.distance_to(actor.global_position)<.1:
+		actor.set_locomotion(0,yaw_to(last_known)*COMBAT_TURN_GAIN)
+		return true
+	var heading:=yaw_to(steering)
+	var speed: float=pack.limit_approach(actor,1.55*heading_speed(heading))
+	actor.set_combat_locomotion(speed,pack.yield_strafe(actor),heading*COMBAT_TURN_GAIN)
+	return true
 
 func _physics_process(delta: float) -> void:
 	if not enabled or actor==null: return
@@ -166,11 +263,15 @@ func _physics_process(delta: float) -> void:
 		pursuit_target=null
 		if state in ["NOTICE","IDENTIFY","COMBAT_ENTER","COMBAT"]: change_state("SEARCH")
 		# The boundary also applies when sight was lost and SEARCH already began.
-		if state=="SEARCH": search_travel=false;search_scan_time=0
+		if state=="SEARCH": search_travel=false;search_scan_time=0;search_leg=SEARCH_LEGS
 	visible=can_see_target()
 	if visible:
 		confidence=minf(1.0,confidence+delta*1.2)
 		unseen_time=0;last_known=target.global_position
+		var seen_velocity: Variant=target.get("velocity")
+		if seen_velocity is Vector3:
+			var flat_velocity: Vector3=seen_velocity;flat_velocity.y=0.0
+			last_seen_velocity=last_seen_velocity.lerp(flat_velocity,minf(1.0,delta*8.0))
 		var pack:=actor.get_parent()
 		if pack.has_method("report_visual_contact"): pack.report_visual_contact(actor,target,last_known)
 	else:
@@ -202,22 +303,34 @@ func _physics_process(delta: float) -> void:
 		"IDENTIFY":
 			actor.set_locomotion(0,yaw*1.6)
 			if unseen_time>.25: change_state("SEARCH")
-			elif state_time>=IDENTIFY_DURATION and confidence>=.90 and visible: change_state("COMBAT_ENTER")
+			elif state_time>=_identify_hold() and confidence>=.90 and visible: change_state("COMBAT_ENTER")
 		"COMBAT_ENTER":
 			actor.set_locomotion(0,yaw*1.6)
 			if unseen_time>.20: change_state("SEARCH")
 			elif state_time>=COMBAT_ENTER_DURATION: change_state("COMBAT")
 		"COMBAT":
-			if unseen_time>.15 and pack_contact_remaining<=0.0:
-				change_state("SEARCH");return
-			var distance:=actor.global_position.distance_to(last_known)
-			if (visible and actor.combat.target_valid(target)) or pack_contact_remaining>0.0:
+			if _withdraw_step(): return
+			# Out of sight, run on along the contact's last heading before searching.
+			var pursuing: bool=not visible and pack_contact_remaining<=0.0 and unseen_time<=PURSUIT_MEMORY
+			var chase_point:=last_known
+			if pursuing:
+				chase_point=last_known+(last_seen_velocity*minf(unseen_time+.6,2.0)).limit_length(PURSUIT_LEAD_MAX)
+				var reached:=Vector2(chase_point.x-actor.global_position.x,chase_point.z-actor.global_position.z).length()<=PURSUIT_ARRIVAL
+				if reached or (unseen_time>.6 and actor.nav_status=="rejected"):
+					last_known=chase_point;change_state("SEARCH");return
+			if unseen_time>PURSUIT_MEMORY and pack_contact_remaining<=0.0:
+				last_known=chase_point;change_state("SEARCH");return
+			var distance:=actor.global_position.distance_to(chase_point)
+			if (visible and actor.combat.target_valid(target)) or pack_contact_remaining>0.0 or pursuing:
 				if visible and actor.combat.try_start(target): return
 				var pack:=actor.get_parent()
-				var goal:=last_known
-				if pack.has_method("combat_goal"): goal=pack.combat_goal(actor,last_known)
+				var goal:=chase_point
+				if pack.has_method("combat_goal"): goal=pack.combat_goal(actor,chase_point)
 				var backline: bool=pack.has_method("is_backline_gunner") and pack.is_backline_gunner(actor)
 				var steering: Vector3=actor.steering_point(goal)
+				combat_blocked_time=combat_blocked_time+delta if actor.nav_status=="blocked" else 0.0
+				if combat_blocked_time>=COMBAT_UNSTICK_SECONDS:
+					combat_blocked_time=0.0;actor.try_free_move(goal)
 				if backline and pack.gunner_goal.is_finite() and goal==pack.gunner_goal:
 					var backline_offset: Vector3=goal-actor.global_position;backline_offset.y=0.0
 					if backline_offset.length()<=.18:
@@ -230,12 +343,20 @@ func _physics_process(delta: float) -> void:
 					# native yaw collision owns this in-place turn and Slash's normal
 					# range/facing/contact tests still decide whether a strike can start.
 					var watch_contact: bool=actor.nav_status=="arrived" or (visible and actor.combat.target_valid(target))
+					# No route usually means a kerb or step between the drone and the
+					# contact. Face it and hop across rather than wait on the road.
+					if not backline and actor.nav_status in ["rejected","blocked"] and distance>2.4 and distance<HOP_RANGE:
+						var to_contact:=yaw_to(chase_point)
+						actor.set_locomotion(0,to_contact*COMBAT_TURN_GAIN)
+						if absf(to_contact)<.5: actor.try_kerb_hop(chase_point-actor.global_position)
+						return
 					actor.set_locomotion(0,yaw*COMBAT_TURN_GAIN if watch_contact else 0.0);return
 				yaw=yaw_to(steering)
 				# Keep pressure through the final metres instead of dropping to a
 				# slow walk outside claw range. Retain native braking and yielding. A shared
 				# sighting supplies a navigable destination, never a blind attack.
-				var chase:=1.55 if distance>2.6 else (1.10 if distance>1.5 else (.34 if distance>1.04 else 0.0))
+				# Far off, sprint: a drone that is only as fast as a walk never catches anyone.
+				var chase: float=actor.COMBAT_SPRINT if distance>6.0 else (1.55 if distance>2.6 else (1.10 if distance>1.5 else (.34 if distance>1.04 else 0.0)))
 				if backline:
 					# A close gunner must turn and travel toward its checked retreat
 					# waypoint, then face the contact on arrival. Target distance must
@@ -243,10 +364,13 @@ func _physics_process(delta: float) -> void:
 					var to_goal:=Vector2(goal.x-actor.global_position.x,goal.z-actor.global_position.z).length()
 					chase=1.55 if to_goal>2.6 else (1.10 if to_goal>1.5 else (.34 if to_goal>.18 else 0.0))
 				elif distance<.80: chase=-.24
+				var wanted:=chase
 				if pack.has_method("limit_approach"): chase=pack.limit_approach(actor,chase)
 				var yielding:=0.0
 				if pack.has_method("yield_strafe"): yielding=pack.yield_strafe(actor)
+				if _jam_step(delta,wanted,chase,yaw): return
 				actor.set_combat_locomotion(chase*heading_speed(yaw),yielding,yaw*COMBAT_TURN_GAIN)
+				_hop_if_stalled(delta,chase*heading_speed(yaw),steering)
 				return
 			var forward:=.32 if distance>4.4 else (-.24 if distance<2.7 else 0.0)
 			# Deliberate repositioning with pauses, not constant skating sideways.

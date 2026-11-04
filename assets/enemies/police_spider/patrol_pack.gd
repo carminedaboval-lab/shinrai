@@ -12,6 +12,22 @@ var hold := 0.0
 var roam_enabled := false
 var roaming = preload("patrol_roaming.gd").new()
 var roaming_catchup: Dictionary = {}
+const BACKUP_SPEED := 1.3
+const BACKUP_MAX_SECONDS := 250.0
+const BACKUP_ARRIVAL := 7.0
+const BACKUP_REGROUP_RADIUS := 15.0
+const BACKUP_REGROUP_SECONDS := 10.0
+const BACKUP_BLOCKED_SECONDS := 4.0
+const BACKUP_STALL_SECONDS := 10.0
+const BACKUP_UNSTICK_SECONDS := 4.0
+var backup_goal := Vector3.INF
+var backup_points: Dictionary = {}
+var backup_stuck: Dictionary = {}
+var backup_stall_seconds := 0.0
+var backup_regroup_seconds := 0.0
+var backup_remaining := 0.0
+var area_scanning := false
+var scan_clock := 0.0
 var attack_owner: CharacterBody3D
 var attack_gap := 0.0
 var stun_gap := 0.0
@@ -69,6 +85,23 @@ var role_probe_count := 0
 var role_last_probe_count := 0
 var role_peak_probe_count := 0
 var role_handoffs := 0
+const SEARCH_RANGE := 22.0
+const SEARCH_SPREAD := 6.0
+const SEARCH_SWEEP_DEPTH := 8.0
+const SEARCH_LEAD_SECONDS := 2.5
+const SEARCH_LEAD_MAX := 10.0
+var lost_velocity := Vector3.ZERO
+const WITHDRAW_HEALTH := 35.0
+const WITHDRAW_LAST_UNIT_HEALTH := 70.0
+const WITHDRAW_MIN_MOBILITY := .75
+const WITHDRAW_SECONDS := 12.0
+const WITHDRAW_ROUTE_GRACE := 1.0
+const WITHDRAW_CORNERED_RANGE := 4.0
+const COVER_RINGS := [10.0,15.0]
+const COVER_ANGLES := [0.0,.7,-.7,1.4,-1.4]
+const COVER_MAX_ROUTES := 3
+var withdrawals: Dictionary = {}
+var withdrawn: Dictionary = {}
 var wanderers: Dictionary = {}
 var wander_cooldowns: Dictionary = {}
 var returning_members: Dictionary = {}
@@ -113,6 +146,8 @@ func report_visual_contact(observer: CharacterBody3D, contact: Node3D, point: Ve
 	if not source.enabled or not source.visible or source.target!=contact or source.state!="COMBAT": return
 	_begin_battle()
 	_record_role_observation(point)
+	var director: Node=get_parent()
+	if is_instance_valid(director) and director.has_method("contact_update"): director.contact_update(point)
 	# Local notice/identify/entry must confirm this sighting before radio sharing.
 	# Never feed an observer its own report: its native confidence stays authoritative.
 	# Peers retain their own sight test for attacks and navigation/collision motor.
@@ -126,6 +161,9 @@ func _begin_battle() -> void:
 	if battle_active and battle_target_id==contact_id: return
 	_reset_battle()
 	battle_active=true;battle_target_id=contact_id;battle_begin_tick=true
+	var director: Node=get_parent()
+	if is_instance_valid(director) and director.has_method("request_backup"):
+		director.request_backup(self,target.global_position)
 
 func _reset_battle() -> void:
 	battle_active=false;battle_elapsed=0.0;battle_target_id=0;battle_begin_tick=false
@@ -135,6 +173,110 @@ func _reset_battle() -> void:
 	combat_roles.clear();role_holders.clear();melee_pressers.clear()
 	contact_age=INF;observation_seconds=-1.0;observed_velocity=Vector3.ZERO
 	role_plan_wait=0.0;role_scan_index=0
+	lost_velocity=Vector3.ZERO
+	withdrawals.clear();withdrawn.clear()
+
+## A destroyed unit is evidence: the pack stops patrolling past the wreck and goes
+## to look, and the loss is radioed in even if nobody saw who did it.
+func report_member_down(fallen: CharacterBody3D) -> void:
+	var point:=fallen.global_position
+	var alive:=living_members()
+	for member: CharacterBody3D in alive:
+		_end_wander(member)
+		var brain: Node=member.get_node("Awareness")
+		if brain.enabled and brain.state in ["PATROL","RELAX"]:
+			brain.last_known=point;brain.change_state("SEARCH")
+	var director: Node=get_parent()
+	if is_instance_valid(director) and director.has_method("request_backup"):
+		director.request_backup(self,point)
+	if alive.size()==1: consider_withdrawal(alive[0])
+
+## Where this unit looks next. One takes the exact spot and the rest spread out
+## across where the contact was last heading, then the pack sweeps past it. Only
+## the sighted motion is used, never where the contact really went.
+func search_point(member: CharacterBody3D, point: Vector3, leg: int) -> Vector3:
+	# A wounded unit watches from where it is rather than walking back into trouble.
+	if member.health.body_hp<=WITHDRAW_HEALTH: return member.global_position
+	var slot:=maxi(0,living_members().find(member))
+	var lead:=Vector3.ZERO
+	if battle_active and Vector2(point.x-observed_contact.x,point.z-observed_contact.z).length()<2.0:
+		lead=(lost_velocity*SEARCH_LEAD_SECONDS).limit_length(SEARCH_LEAD_MAX)
+	var forward:=lead if lead.length()>1.0 else point-member.global_position
+	forward.y=0.0
+	forward=forward.normalized() if forward.length()>.1 else member.global_basis.z
+	var across:=forward.cross(Vector3.UP)*(0.0 if slot==0 else (1.0 if slot%2==1 else -1.0)*ceilf(float(slot)/2.0)*SEARCH_SPREAD)
+	var spot:=point+lead+forward*SEARCH_SWEEP_DEPTH-across if leg>0 else (point if slot==0 else point+lead+across)
+	spot=member.global_position+(spot-member.global_position).limit_length(SEARCH_RANGE)
+	var source: Node=member.navigation_source
+	if is_instance_valid(source) and source.has_method("get_nearest_walkable_world"):
+		var projected: Variant=source.get_nearest_walkable_world(spot)
+		if projected is Vector3 and projected.is_finite(): return projected
+	return spot
+
+## A badly damaged unit stops trading blows and pulls back, once per battle. It
+## breaks line of sight where it can and calls for help as it goes. Someone always
+## stays in the fight, and a last survivor gives up sooner.
+func consider_withdrawal(member: CharacterBody3D) -> void:
+	if not battle_active or withdrawn.has(member) or member.dead: return
+	if member.mode!="GROUND" or member.combat.attack!="" or member.mobility<WITHDRAW_MIN_MOBILITY: return
+	if member.get_node("Awareness").state!="COMBAT": return
+	var alive:=living_members()
+	if member.health.body_hp>(WITHDRAW_LAST_UNIT_HEALTH if alive.size()==1 else WITHDRAW_HEALTH): return
+	if alive.size()>1 and withdrawals.size()>=alive.size()-1: return
+	# Route checks are the cost here, so a failed search is not retried on every hit.
+	withdrawn[member]=true
+	var cover:=_find_cover(member)
+	if not cover.is_finite(): return
+	withdrawals[member]={"goal":cover,"remaining":WITHDRAW_SECONDS}
+	if member==gunner: _release_gunner()
+	_release_combat_role(member)
+	melee_pressers.erase(member);melee_queue.erase(member);attack_queue.erase(member)
+	member.nav_refresh=0.0
+	var director: Node=get_parent()
+	if is_instance_valid(director) and director.has_method("request_backup"):
+		director.request_backup(self,observed_contact)
+
+## The nearest reachable spot the contact cannot see from where it last stood, or
+## failing that the first reachable spot farther away.
+func _find_cover(member: CharacterBody3D) -> Vector3:
+	var source: Node=member.navigation_source
+	if not is_instance_valid(source) or not source.has_method("get_nearest_walkable_world"): return Vector3.INF
+	var away:=member.global_position-observed_contact;away.y=0.0
+	away=away.normalized() if away.length()>.1 else -member.global_basis.z
+	var range_now: float=member.global_position.distance_to(observed_contact)
+	var eye:=observed_contact+Vector3.UP*1.2
+	var space:=member.get_world_3d().direct_space_state
+	var fallback:=Vector3.INF
+	var routes:=0
+	for distance: float in COVER_RINGS:
+		for angle: float in COVER_ANGLES:
+			var spot: Vector3=source.get_nearest_walkable_world(member.global_position+away.rotated(Vector3.UP,angle)*distance)
+			if not spot.is_finite() or spot.distance_to(observed_contact)<=range_now: continue
+			var query:=PhysicsRayQueryParameters3D.create(eye,spot+Vector3.UP*.5,1)
+			if target is CollisionObject3D: query.exclude=[(target as CollisionObject3D).get_rid()]
+			var hidden: bool=not space.intersect_ray(query).is_empty()
+			if not hidden and fallback.is_finite(): continue
+			if routes>=COVER_MAX_ROUTES: return fallback
+			routes+=1
+			if source.get_path_world(member.global_position,spot).is_empty(): continue
+			if hidden: return spot
+			fallback=spot
+	return fallback
+
+func withdrawal_goal(member: CharacterBody3D) -> Vector3:
+	return withdrawals[member].goal if withdrawals.has(member) else Vector3.INF
+
+func _update_withdrawals(delta: float, alive: Array[CharacterBody3D]) -> void:
+	for member in withdrawals.keys():
+		if member not in alive:
+			withdrawals.erase(member);continue
+		var state: Dictionary=withdrawals[member]
+		state.remaining=float(state.remaining)-delta
+		var brain: Node=member.get_node("Awareness")
+		var cornered: bool=brain.visible and member.global_position.distance_to(brain.last_known)<WITHDRAW_CORNERED_RANGE
+		var route_lost: bool=member.nav_status in ["blocked","rejected"] and float(state.remaining)<WITHDRAW_SECONDS-WITHDRAW_ROUTE_GRACE
+		if float(state.remaining)<=0.0 or brain.state!="COMBAT" or cornered or route_lost:
+			withdrawals.erase(member)
 
 func is_backline_gunner(member: CharacterBody3D) -> bool:
 	return battle_active and is_instance_valid(gunner) and member==gunner
@@ -182,7 +324,7 @@ func _select_gunner(alive: Array[CharacterBody3D]) -> void:
 	var selected: CharacterBody3D
 	var best := INF
 	for member: CharacterBody3D in alive:
-		if member.mobility<=0.0 or member.mode!="GROUND" or member.combat.attack!="" or not is_instance_valid(member.navigation_source): continue
+		if member.mobility<=0.0 or member.mode!="GROUND" or member.combat.attack!="" or not is_instance_valid(member.navigation_source) or withdrawals.has(member): continue
 		if float(gunner_rejections.get(member,0.0))>role_clock: continue
 		var distance:=Vector2(member.global_position.x-observed_contact.x,member.global_position.z-observed_contact.z).length()
 		var score: float=absf(distance-(GUNNER_MIN_RANGE+GUNNER_MAX_RANGE)*.5)+member.combat.stun_cooldown*.25+(1.0-member.mobility)*2.0
@@ -232,6 +374,7 @@ func _physics_process(delta: float) -> void:
 	if is_instance_valid(attack_owner) and attack_owner.dead: attack_finished_by(attack_owner)
 	var alive:=living_members()
 	_update_battle(delta,alive)
+	_update_withdrawals(delta,alive)
 	_update_combat_roles(delta,alive)
 	_update_melee_pressure(alive)
 	if alive.is_empty():
@@ -255,6 +398,8 @@ func _physics_process(delta: float) -> void:
 	var pack_alert := false
 	for member: CharacterBody3D in alive:
 		if member.get_node("Awareness").state!="PATROL": pack_alert=true
+	# Any alert ends a backup run: the pack has its own contact to deal with now.
+	if pack_alert and backup_goal.is_finite(): _end_dispatch(alive,false)
 	for member in alive:
 		var brain: Node=member.get_node("Awareness");brain.target=target
 		if member!=leader:
@@ -267,12 +412,15 @@ func _physics_process(delta: float) -> void:
 				_end_wander(member)
 	var leader_brain: Node=leader.get_node("Awareness")
 	if leader.mode!="GROUND" or leader_brain.state!="PATROL":
+		_update_area_scan(delta,alive,false)
 		if roam_enabled: roaming.suspend(leader)
 		return
 	leader.set_locomotion(0,0)
+	if backup_goal.is_finite() and _update_dispatch(delta,alive): return
 	if roam_enabled and is_instance_valid(leader.navigation_source):
 		var roam_goal: Vector3 = roaming.next_goal(leader,delta)
 		if roam_goal.is_finite(): _follow(leader,roam_goal,.34,alive)
+		_update_area_scan(delta,alive,not pack_alert and not roam_goal.is_finite() and roaming.checkpoint_scan and roaming.pause_remaining>.2)
 		return
 	# Stragglers, inspections and combat never hold up the leader's patrol.
 	if route.is_empty() or hold>0: return
@@ -287,7 +435,119 @@ func _physics_process(delta: float) -> void:
 			if endpoint.distance_to(goal)<=3.0 and endpoint.distance_to(leader.global_position)<.8:
 				waypoint=(waypoint+1)%route.size();hold=1.8;leader.set_locomotion(0,0)
 
+func _update_area_scan(delta: float, alive: Array[CharacterBody3D], active: bool) -> void:
+	if active != area_scanning:
+		area_scanning=active
+		for member: CharacterBody3D in alive: member.set_area_scan(active)
+	if active:
+		scan_clock+=delta
+		leader.set_locomotion(0,sin(scan_clock*.9)*.55)
+
+func radio_warning(contact: Node) -> void:
+	var director:=get_parent()
+	if director.has_method("police_warning"): director.police_warning(contact)
+
+## Radio dispatch: send this pack at speed to another pack's contact point.
+func dispatch_to(point: Vector3) -> void:
+	backup_goal=point;backup_remaining=BACKUP_MAX_SECONDS
+	backup_stall_seconds=0.0;backup_regroup_seconds=0.0
+	backup_points.clear()
+	backup_stuck.clear()
+	# The old patrol leg no longer applies: the next one starts from the scene.
+	roaming.goal=Vector3.INF;roaming.pause_remaining=0.0;roaming.checkpoint_scan=false;roaming.resume_attempt=0
+	for member: CharacterBody3D in living_members():
+		_end_wander(member)
+		roaming_catchup.erase(member)
+		member.set_area_scan(false)
+		member.police_lights.set_alert_state("SEARCH")
+	_assign_backup_points(point)
+	area_scanning=false
+
+## The contact moved on: the run continues, aimed at the newer sighting.
+func update_dispatch(point: Vector3) -> void:
+	backup_goal=point;backup_regroup_seconds=0.0
+	_assign_backup_points(point)
+
+func _assign_backup_points(point: Vector3) -> void:
+	var source: Node=leader.navigation_source if is_instance_valid(leader) else null
+	for member: CharacterBody3D in living_members():
+		member.nav_refresh=0.0
+		# Each drone heads for its own spot so the pack does not stack on one point.
+		var spot:=point
+		if member!=leader and is_instance_valid(source) and source.has_method("get_nearest_walkable_world"):
+			var projected: Variant=source.get_nearest_walkable_world(point+(slots.get(member,Vector3.ZERO) as Vector3)*1.5)
+			if projected is Vector3 and projected.is_finite(): spot=projected
+		backup_points[member]=spot
+
+func is_available_for_dispatch() -> bool:
+	if battle_active or backup_goal.is_finite(): return false
+	var alive:=living_members()
+	if alive.is_empty(): return false
+	for member: CharacterBody3D in alive:
+		if member.get_node("Awareness").state!="PATROL": return false
+	return not is_instance_valid(leader) or leader.dead or leader.mode=="GROUND"
+
+func _end_dispatch(alive: Array[CharacterBody3D], arrived: bool) -> void:
+	var point:=backup_goal
+	backup_goal=Vector3.INF
+	backup_points.clear()
+	backup_stuck.clear()
+	for member: CharacterBody3D in alive:
+		member.nav_urgent=false
+		var brain: Node=member.get_node("Awareness")
+		# On scene the pack searches where the contact was reported. A straggler
+		# left far behind rejoins the pack instead of searching from there.
+		if arrived and brain.state=="PATROL" and member.global_position.distance_to(point)<BACKUP_REGROUP_RADIUS+BACKUP_ARRIVAL:
+			brain.last_known=point;brain.change_state("SEARCH")
+		else: member.police_lights.set_alert_state(brain.state)
+	if is_instance_valid(leader) and not leader.dead:
+		leader.nav_refresh=0.0
+		if roam_enabled: roaming.suspend(leader)
+
+func _update_dispatch(delta: float, alive: Array[CharacterBody3D]) -> bool:
+	backup_remaining-=delta
+	for member: CharacterBody3D in alive:
+		if member.mobility>=1.0: member.nav_urgent=true
+	# The first drone on scene counts: a leader caught on a corner must not hold
+	# back followers that are still running.
+	var distance:=INF
+	var moving:=false
+	for member: CharacterBody3D in alive:
+		distance=minf(distance,Vector2(backup_goal.x-member.global_position.x,backup_goal.z-member.global_position.z).length())
+		var spot: Vector3=backup_goal if member==leader else backup_points.get(member,backup_goal)
+		if Vector2(member.velocity.x,member.velocity.z).length()>.3:
+			moving=true;backup_stuck.erase(member)
+		elif member.mobility>=1.0 and member.global_position.distance_to(spot)>BACKUP_ARRIVAL:
+			backup_stuck[member]=float(backup_stuck.get(member,0.0))+delta
+			if float(backup_stuck[member])>=BACKUP_UNSTICK_SECONDS:
+				# Retry on a shorter clock if no clear spot was found this time.
+				backup_stuck[member]=BACKUP_UNSTICK_SECONDS-2.0
+				member.try_free_move(spot)
+	if Vector2(backup_goal.x-leader.global_position.x,backup_goal.z-leader.global_position.z).length()>=BACKUP_ARRIVAL:
+		_follow(leader,backup_goal,BACKUP_SPEED,alive)
+	if distance<BACKUP_ARRIVAL:
+		# Hold on scene briefly so the pack arrives together, not as a lone leader.
+		backup_regroup_seconds+=delta
+		var waiting:=false
+		for member: CharacterBody3D in alive:
+			if member.mobility>=1.0 and member.nav_status not in ["blocked","rejected"] and member.global_position.distance_to(backup_goal)>BACKUP_ARRIVAL+BACKUP_REGROUP_RADIUS:
+				waiting=true
+		if not waiting or backup_regroup_seconds>=BACKUP_REGROUP_SECONDS:
+			_end_dispatch(alive,true);return false
+		return true
+	# Give up only when nobody can make headway, not on the clock alone. Real
+	# movement counts: routes wind round the lake and can lead away for a while.
+	backup_stall_seconds=0.0 if moving else backup_stall_seconds+delta
+	var stall_limit:=BACKUP_BLOCKED_SECONDS if leader.nav_status in ["blocked","rejected"] else BACKUP_STALL_SECONDS
+	if backup_remaining<=0.0 or backup_stall_seconds>=stall_limit:
+		_end_dispatch(alive,false);return false
+	return true
+
 func _patrol_follower(member: CharacterBody3D, alive: Array[CharacterBody3D], delta: float, pack_alert: bool) -> void:
+	# On a backup run each drone routes to the scene itself, not to the leader.
+	if backup_goal.is_finite() and member.mobility>=1.0 and is_instance_valid(member.navigation_source):
+		_follow(member,backup_points.get(member,backup_goal),BACKUP_SPEED,alive)
+		return
 	var distance: float=member.global_position.distance_to(leader.global_position)
 	if pack_alert or member.mobility<1.0 or distance>PATROL_BUBBLE or not is_instance_valid(member.navigation_source):
 		_end_wander(member)
@@ -320,6 +580,8 @@ func _patrol_follower(member: CharacterBody3D, alive: Array[CharacterBody3D], de
 func _begin_wander(member: CharacterBody3D) -> void:
 	# Discovery and one route request happen only at a staggered decision, never
 	# every frame. Real extraction sites supply object positions when available.
+	# A tick with no budget left retries later rather than burning the cooldown.
+	if is_instance_valid(member.navigation_source) and not member.planning_budget_left(): return
 	wander_cooldowns[member]=randf_range(20.0,33.0)+maxi(0,members.find(member))*.4
 	if not is_instance_valid(member.navigation_source): return
 	var interest: Dictionary=_wander_interest(member)
@@ -407,7 +669,10 @@ func _follow(member: CharacterBody3D, goal: Vector3, top_speed: float, alive: Ar
 		if other==member: continue
 		var separation:=other.global_position-member.global_position;separation.y=0
 		if separation.length()<1.9 and member.global_basis.z.dot(separation.normalized())>.45: speed=0
-	member.set_combat_locomotion(speed,yield_strafe(member),yaw*.8)
+	# The chassis stops to rotate past .18 rad, so a backup run swings round sharply
+	# instead of easing the last of each corner at a crawl.
+	var turn_gain:=2.0 if top_speed>=BACKUP_SPEED else .8
+	member.set_combat_locomotion(speed,yield_strafe(member),yaw*turn_gain)
 
 func combat_goal(member: CharacterBody3D, observed_point: Vector3) -> Vector3:
 	# Roles supply destinations only while a real pack sighting is fresh.
@@ -476,6 +741,7 @@ func _record_role_observation(point: Vector3) -> void:
 		observed_velocity=(point-observed_contact)/interval if interval<=ROLE_CONTACT_MEMORY else Vector3.ZERO
 		observed_velocity.y=0.0
 		observed_velocity=observed_velocity.limit_length(ROLE_MAX_OBSERVED_SPEED)
+		lost_velocity=observed_velocity
 	elif observation_seconds<0.0:
 		observed_velocity=Vector3.ZERO
 	observed_contact=point;observation_seconds=seconds;contact_age=0.0
@@ -506,7 +772,7 @@ func _update_combat_roles(delta: float, alive: Array[CharacterBody3D]) -> void:
 	for member in combat_roles.keys():
 		if member not in alive:
 			_release_combat_role(member);continue
-		if member==gunner or member.mobility<=0.0 or member.mode in ["FACE_ATTACHED","DISABLED","CLIMB","ATTACH","DETACH"]:
+		if member==gunner or withdrawals.has(member) or member.mobility<=0.0 or member.mode in ["FACE_ATTACHED","DISABLED","CLIMB","ATTACH","DETACH"]:
 			_release_combat_role(member);continue
 		# An active native attack/recovery completes without role reassignment.
 		if member.mode!="GROUND": continue
@@ -541,7 +807,7 @@ func _update_combat_roles(delta: float, alive: Array[CharacterBody3D]) -> void:
 		if axis.length()>.1: role_axis=axis.normalized()
 	var ranked: Array[Dictionary]=[]
 	for member in alive:
-		if member==gunner or member.mobility<=0.0 or member.mode!="GROUND" or not is_instance_valid(member.navigation_source): continue
+		if member==gunner or withdrawals.has(member) or member.mobility<=0.0 or member.mode!="GROUND" or not is_instance_valid(member.navigation_source): continue
 		var rejected: Dictionary=role_rejections.get(member,{})
 		if float(rejected.get(role_name,0.0))>role_clock: continue
 		var held: Dictionary=combat_roles.get(member,{})
@@ -639,6 +905,8 @@ func limit_approach(member: CharacterBody3D, command: float) -> float:
 	for other in living_members():
 		if other==member: continue
 		var offset:=other.global_position-member.global_position;offset.y=0
+		# A packmate running the same way ahead is not in the road; follow on its heels.
+		if other.velocity.dot(member.global_basis.z)>=maxf(1.0,Vector2(member.velocity.x,member.velocity.z).length()*.8): continue
 		if offset.length()<2.3 and member.global_basis.z.dot(offset.normalized())>.45:
 			command*=clampf((offset.length()-1.6)/.7,0,1)
 	return command

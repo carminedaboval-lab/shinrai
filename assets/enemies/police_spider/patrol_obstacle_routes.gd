@@ -2,11 +2,14 @@ extends RefCounted
 ## Bounded local routes around actual static collider footprints.
 ## The actor calls this only after its ordinary navigation wrapper accepted a route.
 const CLEARANCE_MARGIN := .28
-const MAX_CHECKS := 96
+const MAX_CHECKS := 180
+const ALERT_MAX_CHECKS := 96
+const CALM_MAX_CHECKS := 48
 const MAX_BODIES := 2
 const FAILED_SECONDS := 8.0
 var failed_points: Array[Dictionary] = []
 var last_checks := 0
+var check_limit := MAX_CHECKS
 var last_escape := Vector3.INF
 var last_obstacles := PackedStringArray()
 var _query: PhysicsShapeQueryParameters3D
@@ -28,18 +31,22 @@ func _failed(point: Vector3) -> bool:
 	return false
 
 func _clear(actor: CharacterBody3D, from: Vector3, to: Vector3, heading: Vector3 = Vector3.ZERO, fixed: bool = false) -> bool:
-	if last_checks>=MAX_CHECKS: return false
+	if last_checks>=check_limit: return false
 	last_checks+=1
 	return actor._navigation_link_clear(from,to,heading,fixed)
 
 func plan(actor: CharacterBody3D, accepted: PackedVector3Array) -> Dictionary:
 	last_checks=0;last_escape=Vector3.INF;last_obstacles.clear();_expire_failures()
 	if accepted.is_empty() or actor.nav_query==null: return {}
+	# A failed search is the costliest thing a calm drone does, so bound it harder.
+	check_limit=CALM_MAX_CHECKS if actor._is_calm_patrol() else (MAX_CHECKS if actor.nav_urgent else ALERT_MAX_CHECKS)
 	var destinations: Array[Dictionary]=[]
-	for index: int in range(mini(4,accepted.size())-1,-1,-1):
+	# Look past a route point sitting inside an obstacle's margin. Each leg of the
+	# detour is still limited to 8 m by the link check.
+	for index: int in range(mini(6,accepted.size())-1,-1,-1):
 		var point: Vector3=accepted[index]
 		var distance:=Vector2(point.x-actor.global_position.x,point.z-actor.global_position.z).length()
-		if distance>.2 and distance<=8.0: destinations.append({"index":index,"point":point})
+		if distance>.2 and distance<=12.0: destinations.append({"index":index,"point":point})
 	for item: Dictionary in destinations:
 		var route:=_around(actor,actor.global_position,item.point)
 		if not route.is_empty(): return {"points":route,"rejoin":item.index,"escape":Vector3.INF}

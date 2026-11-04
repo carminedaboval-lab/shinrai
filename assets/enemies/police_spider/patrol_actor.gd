@@ -5,6 +5,8 @@ signal ability_started(ability: String)
 signal ability_finished(ability: String)
 var visual: Node3D
 var police_lights: Node3D
+var scan_beam: Node3D
+var damage_fx: Node3D
 var combat: Node
 var face_attachment: Node
 var health: Node
@@ -15,6 +17,8 @@ var ragdoll: Node
 var dead := false
 var fault_effects: Dictionary = {}
 var mobility := 1.0
+# Lost legs set a gait of their own: lurching on three, a crawl on two.
+var cripple = preload("patrol_cripple.gd").new()
 var bound_forward_speed := 3.0
 var collider: CollisionShape3D
 var mode := "GROUND"
@@ -64,13 +68,22 @@ var ground_step_query: PhysicsShapeQueryParameters3D
 var ground_step_attempts := 0
 var ground_step_successes := 0
 var ground_step_success_frame := -1
+var hops := 0
+var hop_retry_at := 0
 const GRAVITY := 9.81
 const GROUND_SPEED_SCALE := 3.4 # Previous 2x ground speed, increased by another 1.7x.
 const GROUND_STEP_HEIGHT := .06
 const GROUND_STEP_MARGIN := .001
 const COMBAT_TURN_RATE := 5.4
-const COMBAT_TURN_ACCELERATION := 24.0
-const COMBAT_MOTOR_TORQUE := 30.0
+# A hunting drone runs down a sprinting player (6.65 m/s) instead of trailing it.
+const COMBAT_SPRINT := 2.1
+# A legged chassis hops a kerb or low step that its rolling ground motor cannot climb.
+const HOP_CLEARANCE := .70
+const HOP_REACH := 2.3
+const HOP_MAX_RISE := .60
+const HOP_MAX_DROP := 1.2
+const COMBAT_TURN_ACCELERATION := 15.0
+const COMBAT_MOTOR_TORQUE := 20.0
 
 func _ready() -> void:
 	collision_layer=2;collision_mask=1|2
@@ -87,6 +100,12 @@ func _ready() -> void:
 	_create_leg_hitboxes()
 	_create_core_hitbox()
 	combat=Node.new();combat.name="Combat";combat.set_script(preload("patrol_combat.gd"));add_child(combat)
+	combat.attack_started.connect(func(_kind: String) -> void: police_lights.flash_attack())
+	scan_beam=Node3D.new();scan_beam.name="ScanBeam"
+	scan_beam.set_script(preload("patrol_scan_beam.gd"));scan_beam.actor=self;police_lights.add_child(scan_beam)
+	damage_fx=Node3D.new();damage_fx.name="DamageFX"
+	damage_fx.set_script(preload("patrol_damage_fx.gd"));police_lights.add_child(damage_fx)
+	damage_fx.bind(health,police_lights)
 	face_attachment=preload("patrol_face_attachment.gd").new();face_attachment.name="FaceAttachment"
 	add_child(face_attachment);face_attachment.setup(self)
 	floor_snap_length=.12
@@ -111,11 +130,32 @@ func _react_to_damage(source: Node) -> void:
 	if dead: return
 	var brain:=get_node_or_null("Awareness")
 	if brain!=null: brain.receive_damage_contact(source)
+	# Every hit visibly lands: the chassis jolts away and the motors falter.
+	var from:=global_position-global_basis.z*randf_range(-1.0,1.0)+global_basis.x*randf_range(-1.0,1.0)
+	if is_instance_valid(source) and source is Node3D and source!=self: from=(source as Node3D).global_position
+	var away:=global_basis.inverse()*(global_position-from);away.y=0.0
+	visual.add_hit_reaction(away.normalized())
+	stagger_time=STAGGER_SECONDS
+	var pack:=get_parent()
+	if pack.has_method("consider_withdrawal"): pack.consider_withdrawal(self)
+	# Under fire in a fight a drone sometimes throws itself aside.
+	if brain==null or brain.state not in ["COMBAT_ENTER","COMBAT"] or combat.attack!="": return
+	var now:=Time.get_ticks_msec()
+	if now<dodge_ready_at or randf()>dodge_chance: return
+	dodge_ready_at=now+int(randf_range(DODGE_COOLDOWN_MIN,DODGE_COOLDOWN_MAX)*1000.0)
+	react_to_threat(from)
 
 func _on_leg_destroyed(leg: String) -> void:
 	visual.faults[leg]=true
 	mobility=float(health.intact_legs())/4.0
-	var effect:=Node3D.new();effect.set_script(preload("patrol_leg_fault.gd"));add_child(effect)
+	cripple.configure(visual.faults.keys())
+	visual.cripple=cripple
+	# Losing a leg mid-stride can put it straight down.
+	if cripple.stumble_chance>0.0 and Vector2(velocity.x,velocity.z).length()>1.5 and not cripple.stumbling():
+		cripple.stumble_duration=randf_range(cripple.STUMBLE_MIN,cripple.STUMBLE_MAX);cripple.stumble_time=cripple.stumble_duration
+		cripple.stumbles+=1
+	var effect:=Node3D.new();effect.set_script(preload("patrol_leg_fault.gd"))
+	effect.set("actor",self);effect.set("leg",leg);add_child(effect)
 	fault_effects[leg]=effect
 
 func _on_destroyed() -> void:
@@ -139,6 +179,8 @@ func _on_destroyed() -> void:
 	fault_effects.clear()
 	if is_instance_valid(last_attacker) and last_attacker.has_method("notify_kill"): last_attacker.notify_kill()
 	last_attacker=null
+	var pack:=get_parent()
+	if pack.has_method("report_member_down"): pack.report_member_down(self)
 	_begin_ragdoll.call_deferred(death_velocity,death_rotation)
 
 func _create_core_hitbox() -> void:
@@ -190,7 +232,7 @@ func _exit_tree() -> void:
 	if is_instance_valid(pack) and pack.has_method("living_members"):
 		pack.attack_finished_by(self)
 		pack.members.erase(self);pack.attack_queue.erase(self)
-		for key: String in ["slots","request_age","wanderers","wander_cooldowns","returning_members"]:
+		for key: String in ["slots","request_age","wanderers","wander_cooldowns","returning_members","withdrawals","withdrawn"]:
 			var state: Dictionary=pack.get(key)
 			state.erase(self)
 		if pack.leader==self: pack.leader=null
@@ -236,11 +278,16 @@ func _combat_motor_active() -> bool:
 	var brain:=get_node_or_null("Awareness")
 	return brain!=null and brain.enabled and brain.state=="COMBAT"
 
+func set_area_scan(active: bool) -> void:
+	visual.area_scan=active
+	scan_beam.area_scan=active
+
 func set_locomotion(speed: float, turn: float) -> void:
 	if dead: speed=0;turn=0
 	# AI and formation commands retain their baseline units; scale exactly once.
-	var turn_limit: float=COMBAT_TURN_RATE if _combat_motor_active() else 1.8
-	desired_speed=clampf(speed,-.44,1.55)*GROUND_SPEED_SCALE;desired_turn=clampf(turn,-turn_limit,turn_limit)
+	var combat_motor:=_combat_motor_active()
+	var turn_limit: float=COMBAT_TURN_RATE if combat_motor else 1.8
+	desired_speed=clampf(speed,-.44,COMBAT_SPRINT if combat_motor else 1.55)*GROUND_SPEED_SCALE;desired_turn=clampf(turn,-turn_limit,turn_limit)
 	desired_strafe=0.0
 
 func is_in_combat_with(candidate: Node) -> bool:
@@ -253,15 +300,78 @@ func hear_noise(point: Vector3, radius: float) -> void:
 	if brain!=null and brain.state in ["PATROL","RELAX"]:
 		brain.last_known=point;brain.change_state("SEARCH")
 
+## Route planning is the drones' biggest CPU cost. Calm patrols re-check less
+## often and share a per-tick time budget so they cannot stack on one frame.
+## Alerted and dispatched drones are exempt and still replan immediately.
+const PATROL_REPLAN_SECONDS := 4.0
+const SEARCH_REPLAN_SECONDS := 1.5 # A search leg heads for a fixed point.
+const PATROL_RETARGET_GAP := 1.0
+const PATROL_BLOCKED_RETRY_SECONDS := 1.2
+const PATROL_BLOCKED_RETRY_MAX := 8.0
+const ALERT_BLOCKED_RETRY_MAX := 2.0
+const NAV_LINK_RETRY_MSEC := 250
+const PATROL_PLAN_BUDGET_USEC := 3000
+static var _plan_frame := -1
+static var _plan_spent_usec := 0
+var nav_retarget_gap := 0.0
+var nav_urgent := false
+var nav_turn_vetoed := false
+var nav_link_retry_at := 0
+const STAGGER_SECONDS := .22
+const DODGE_COOLDOWN_MIN := 4.0
+const DODGE_COOLDOWN_MAX := 7.0
+var stagger_time := 0.0
+var dodge_chance := .4
+var dodge_ready_at := 0
+var nav_block_streak := 0
+var nav_block_until := 0
+var nav_block_pos := Vector3.INF
+var nav_block_goal := Vector3.INF
+var nav_best_aim := INF
+var nav_aim_point := Vector3.INF
+
+func planning_budget_left() -> bool:
+	var frame:=Engine.get_physics_frames()
+	if frame!=_plan_frame:
+		_plan_frame=frame;_plan_spent_usec=0
+	return _plan_spent_usec<PATROL_PLAN_BUDGET_USEC
+
+func _is_calm_patrol() -> bool:
+	return visual!=null and visual.expression=="PATROL" and not nav_urgent
+
+func _note_blocked_plan(goal: Vector3) -> void:
+	# The same pose and goal fail the same way, so retry a stuck drone less and less.
+	if nav_block_pos.is_finite() and global_position.distance_to(nav_block_pos)<1.0 and nav_block_goal.distance_to(goal)<3.0:
+		nav_block_streak+=1
+	else: nav_block_streak=1
+	nav_block_pos=global_position;nav_block_goal=goal
+	var limit:=PATROL_BLOCKED_RETRY_MAX if _is_calm_patrol() else ALERT_BLOCKED_RETRY_MAX
+	var wait:=minf(PATROL_BLOCKED_RETRY_SECONDS*pow(2.0,nav_block_streak-1),limit)+randf()*.5
+	nav_block_until=Time.get_ticks_msec()+int(wait*1000.0)
+	nav_refresh=wait
+
+func _block_wait_active() -> bool:
+	return nav_status=="blocked" and Time.get_ticks_msec()<nav_block_until and nav_block_pos.is_finite() and global_position.distance_to(nav_block_pos)<1.0
+
 func steering_point(goal: Vector3) -> Vector3:
 	if not is_instance_valid(navigation_source): return goal
 	nav_command_frame=Engine.get_physics_frames()
-	var changed:=not nav_goal.is_finite() or nav_goal.distance_to(goal)>3.0
-	if nav_refresh<=0.0 or changed:
+	# A hunting drone's goal moves with its quarry; replanning for every 3 m of that
+	# hands it a fresh first waypoint, often to one side, and stops it to turn.
+	var changed:=not nav_goal.is_finite() or nav_goal.distance_to(goal)>(5.0 if _combat_motor_active() else 3.0)
+	var calm:=_is_calm_patrol()
+	var replan:=nav_refresh<=0.0 or (changed and (not calm or nav_retarget_gap<=0.0 or not nav_goal.is_finite()))
+	if replan and not changed and _block_wait_active(): replan=false
+	if replan and calm and not planning_budget_left(): replan=false
+	if replan:
+		var plan_started:=Time.get_ticks_usec()
 		var accepted_path: PackedVector3Array=navigation_source.get_path_world(global_position,goal)
-		var keep_detour:=not changed and nav_detour_points>0 and not nav_recovery_pending
-		nav_goal=goal;nav_refresh=.65+float(get_instance_id()%7)*.035
+		var keep_detour:=not changed and (nav_detour_points>0 or nav_escape_point.is_finite()) and not nav_recovery_pending
+		nav_goal=goal
+		nav_refresh=PATROL_REPLAN_SECONDS+randf()*1.5 if calm else SEARCH_REPLAN_SECONDS if visual.expression=="SEARCH" else .65+float(get_instance_id()%7)*.035
+		nav_retarget_gap=PATROL_RETARGET_GAP
 		if accepted_path.is_empty():
+			if calm: _plan_spent_usec+=Time.get_ticks_usec()-plan_started
 			nav_path.clear();nav_detour_points=0;nav_escape_point=Vector3.INF
 			nav_status="rejected";nav_endpoint=global_position;set_locomotion(0,0)
 			return global_position
@@ -273,14 +383,48 @@ func steering_point(goal: Vector3) -> Vector3:
 			if not nav_recovery_pending and _navigation_link_clear(global_position,goal):
 				nav_path=PackedVector3Array([goal]);nav_endpoint=goal
 			_prepare_navigation_link()
+			# A fresh plan can start at a graph vertex beside or behind a running drone.
+			# Skip it when the leg beyond is directly clear, rather than stop to turn.
+			if _combat_motor_active() and nav_status=="following":
+				while nav_path.size()>1:
+					var first: Vector3=nav_path[0]-global_position;first.y=0.0
+					if first.length()>.3 and absf(global_basis.z.signed_angle_to(first,Vector3.UP))<.6: break
+					if not _navigation_link_clear(global_position,nav_path[1]): break
+					nav_path.remove_at(0)
+		# A blocked drone must not sit out the whole calm interval.
+		if nav_status=="blocked": _note_blocked_plan(goal)
+		else: nav_block_streak=0
+		if calm: _plan_spent_usec+=Time.get_ticks_usec()-plan_started
 	while not nav_path.is_empty():
 		var tolerance:=.18 if nav_path.size()==1 or nav_detour_points>0 else .65
 		if Vector2(nav_path[0].x-global_position.x,nav_path[0].z-global_position.z).length()>=tolerance: break
 		# Do not cut a corner early: the next turn/connector must be clear
 		# from the current actual pose, not only from the planned vertex.
-		if nav_path.size()>1 and not _navigation_link_clear(global_position,nav_path[1]):
-			_prepare_navigation_link();break
+		if nav_path.size()>1:
+			# A calm drone can hold this waypoint for a tick when the budget is spent.
+			if calm and not planning_budget_left(): break
+			var link_started:=Time.get_ticks_usec()
+			var link_clear:=_navigation_link_clear(global_position,nav_path[1])
+			if calm: _plan_spent_usec+=Time.get_ticks_usec()-link_started
+			if not link_clear:
+				# Failing here from a held pose repeats exactly, so don't re-plan every tick.
+				var retry_now:=Time.get_ticks_msec()
+				if retry_now<nav_link_retry_at: break
+				if calm and not planning_budget_left(): break
+				nav_link_retry_at=retry_now+NAV_LINK_RETRY_MSEC
+				# Standing on a detour corner with no way on: that corner is the
+				# problem, so the next search has to find a different one.
+				if nav_detour_points>0: obstacle_routes.remember_failure(nav_path[0])
+				var prepare_started:=Time.get_ticks_usec()
+				_prepare_navigation_link()
+				if nav_status=="blocked": _note_blocked_plan(goal)
+				if calm: _plan_spent_usec+=Time.get_ticks_usec()-prepare_started
+				break
 		nav_path.remove_at(0)
+		# A hunting drone cuts straight to the waypoint after next when that leg is
+		# clear, instead of zigzagging through every 4 m graph vertex.
+		if nav_detour_points==0 and nav_path.size()>1 and _combat_motor_active() and _navigation_link_clear(global_position,nav_path[1]):
+			nav_path.remove_at(0)
 		if nav_detour_points>0:
 			nav_detour_points-=1
 			if nav_detour_points==0: nav_refresh=0.0
@@ -352,7 +496,8 @@ func _navigation_link_clear(from: Vector3, to: Vector3, entering_heading: Vector
 		for z: float in [-half.z,half.z]:
 			var offset: Vector3=aligned*Vector3(x,0,z)
 			var side:=Vector2(offset.x,offset.z)
-			if not navigation._can_walk_floor(a+side,b+side): return false
+			# Centre-only: _can_walk_floor would add its own side rails on top of the chassis width.
+			if not navigation._can_walk_floor_centre(a+side,b+side): return false
 	nav_query.collision_mask=collision_mask if fixed_heading else 1
 	var angle:=start_basis.z.signed_angle_to(aligned.z,Vector3.UP)
 	var box:=collider.shape as BoxShape3D
@@ -398,7 +543,7 @@ func clear_launch(direction: Vector3, distance: float) -> bool:
 	return not test_move(start,direction*distance)
 
 func try_dodge(side: int) -> bool:
-	if mode!="GROUND" or mobility<=0 or cooldown>0 or not is_on_floor(): return false
+	if mode!="GROUND" or mobility<=0 or cooldown>0 or not is_on_floor() or cripple.stumbling(): return false
 	var direction:=global_basis.x*signf(float(side))
 	if direction==Vector3.ZERO or not clear_launch(direction,1.0):
 		blocked_attempts+=1;return false
@@ -410,10 +555,41 @@ func react_to_threat(world_origin: Vector3) -> bool:
 	return try_dodge(side) or try_dodge(-side)
 
 func try_leap() -> bool:
-	if mode!="GROUND" or mobility<=0 or cooldown>0 or not is_on_floor(): return false
+	if mode!="GROUND" or mobility<=0 or cooldown>0 or not is_on_floor() or cripple.stumbling(): return false
 	if not clear_launch(global_basis.z,2.45): blocked_attempts+=1;return false
 	_start_bound("Leap",global_basis.z)
 	return true
+
+## Hop up or down a kerb, step or low ledge the ground motor cannot climb. The
+## raised body sweep and a supported landing are both checked before takeoff.
+func try_kerb_hop(direction: Vector3) -> bool:
+	if mode!="GROUND" or mobility<.75 or cooldown>0 or not is_on_floor() or cripple.stumbling(): return false
+	# Each try sweeps the body several times; a held drone retries a few times a second.
+	var now:=Time.get_ticks_msec()
+	if now<hop_retry_at: return false
+	hop_retry_at=now+300
+	direction.y=0.0
+	if direction.length()<.1: return false
+	direction=direction.normalized()
+	# The chassis must already face the hop, so the Leap clip and the sweep agree.
+	if absf(global_basis.z.signed_angle_to(direction,Vector3.UP))>.6: return false
+	var start:=global_transform
+	if test_move(start,Vector3.UP*HOP_CLEARANCE): return false
+	var raised:=start;raised.origin+=Vector3.UP*HOP_CLEARANCE
+	# The native Leap flies about .8 s; its forward speed sets where it lands.
+	for reach: float in [HOP_REACH,1.5,3.2]:
+		if test_move(raised,direction*reach): continue
+		var above:=raised;above.origin+=direction*reach
+		var landing:=KinematicCollision3D.new()
+		if not test_move(above,Vector3.DOWN*(HOP_CLEARANCE+HOP_MAX_DROP),landing): continue
+		if landing.get_normal().dot(Vector3.UP)<.8 or not _tagged_step_floor(landing.get_collider()): continue
+		var rise:=above.origin.y+landing.get_travel().y-start.origin.y
+		if rise>HOP_MAX_RISE or rise< -HOP_MAX_DROP: continue
+		_start_bound("Leap",direction)
+		bound_forward_speed=reach/.8
+		hops+=1
+		return true
+	return false
 
 func _start_bound(name: String, direction: Vector3) -> void:
 	ability=name;mode="LOAD";phase_time=0;air_time=0
@@ -423,7 +599,7 @@ func _start_bound(name: String, direction: Vector3) -> void:
 	ability_started.emit(name)
 
 func try_climb() -> bool:
-	if mode!="GROUND" or mobility<=0 or not is_on_floor() or cooldown>0: return false
+	if mode!="GROUND" or mobility<=0 or not is_on_floor() or cooldown>0 or cripple.stumbling(): return false
 	var origin:=global_position+Vector3.UP*.45
 	var query:=PhysicsRayQueryParameters3D.create(origin,origin+global_basis.z*1.5,1)
 	var hit:=get_world_3d().direct_space_state.intersect_ray(query)
@@ -601,8 +777,12 @@ func _turn_ground(delta: float) -> void:
 				if turn_collision.get_normal(contact).dot(Vector3.UP)<.8:
 					if _paving_side_contacts(turn_collision) and _try_ground_step(Vector3.ZERO,next.basis,true): return
 					turn_rate=0.0
+					nav_turn_vetoed=true
 					return
-		global_basis=next.basis
+		# Rebuilt from yaw: stacking rotations slowly warps the basis, and route
+		# checks and the ragdoll both need an exactly upright, unit-scale chassis.
+		global_basis=Basis(Vector3.UP,atan2(next.basis.z.x,next.basis.z.z))
+		nav_turn_vetoed=false
 
 func _ground_motor_velocity(horizontal: Vector3, delta: float) -> Vector3:
 	# Accelerate along the actual supporting floor rather than pushing a heavy
@@ -630,20 +810,79 @@ func _previous_ground_motor_velocity() -> Vector3:
 	return horizontal
 
 func _update_navigation_progress(delta: float) -> void:
-	var moving_intent:=absf(desired_speed)>.25 or absf(desired_turn)>.35 or nav_status=="blocked" or nav_escape_point.is_finite()
+	# A drone parked on a detour corner whose next leg fails is stuck, not idle.
+	var steered_detour:=nav_detour_points>0 and nav_command_frame>=Engine.get_physics_frames()-1
+	var moving_intent:=absf(desired_speed)>.25 or absf(desired_turn)>.35 or nav_status=="blocked" or nav_escape_point.is_finite() or steered_detour
 	if not is_instance_valid(navigation_source) or nav_status not in ["following","blocked"] or not nav_goal.is_finite() or global_position.distance_to(nav_goal)<1.0 or not moving_intent:
 		nav_stall_time=0.0;nav_progress_anchor=global_position;nav_progress_yaw=global_rotation.y
 		nav_recovery_pending=false;return
 	if not nav_progress_anchor.is_finite(): nav_progress_anchor=global_position
 	var progress:=Vector2(global_position.x-nav_progress_anchor.x,global_position.z-nav_progress_anchor.z).length()
-	# Spinning back and forth without translating is not route progress.
+	# Spinning back and forth without translating is not route progress, but
+	# steadily turning to face the next point is.
+	if progress<.08 and not nav_path.is_empty():
+		var aim_offset:=nav_path[0]-global_position;aim_offset.y=0.0
+		var aim:=absf(global_basis.z.signed_angle_to(aim_offset,Vector3.UP))
+		# A new aim point is not progress, or a moving target would hide a stall.
+		if not nav_path[0].is_equal_approx(nav_aim_point):
+			nav_aim_point=nav_path[0];nav_best_aim=aim
+		elif aim<nav_best_aim-.05:
+			nav_best_aim=aim;nav_stall_time=0.0;return
 	if progress>=.08:
 		nav_stall_time=0.0;nav_progress_anchor=global_position;return
 	nav_stall_time+=delta
+	# A blocked drone is already on its retry back-off.
+	if _block_wait_active(): return
 	if nav_stall_time>=1.25 and nav_replan_wait<=0.0:
+		if (nav_turn_vetoed or nav_detour_points>0) and _try_unwedge():
+			nav_stall_time=0.0;nav_replan_wait=1.0;nav_stall_replans+=1
+			return
 		if not nav_path.is_empty(): obstacle_routes.remember_failure(nav_path[0])
 		nav_stall_time=0.0;nav_replan_wait=2.5;nav_refresh=0.0
 		nav_recovery_pending=true;nav_stall_replans+=1
+
+## A corner touching a prop can veto every rotation while the route ahead still
+## tests clear. Crab clear of it without turning, using the checked escape motion.
+func _try_unwedge() -> bool:
+	if nav_path.is_empty() or nav_escape_point.is_finite(): return false
+	var ahead:=nav_path[0]-global_position;ahead.y=0.0
+	var directions: Array[Vector3]=[ahead.normalized(),-global_basis.z,global_basis.x,-global_basis.x]
+	for distance: float in [.7,1.2]:
+		for direction: Vector3 in directions:
+			var point:=global_position+direction*distance
+			if _navigation_link_clear(global_position,point,global_basis.z,true):
+				nav_escape_point=point;nav_escape_check=0.0;nav_turn_vetoed=false
+				nav_refresh=maxf(nav_refresh,1.0)
+				return true
+	return false
+
+## Backup-run recovery for a drone that has stopped dead. Retrying from one pose
+## fails the same way, so crab to any checked spot nearby and route on from there.
+func try_free_move(goal: Vector3) -> bool:
+	if nav_escape_point.is_finite() or not is_instance_valid(navigation_source): return false
+	var route: PackedVector3Array=navigation_source.get_path_world(global_position,goal)
+	if route.is_empty(): return false
+	var ahead:=route[mini(2,route.size()-1)]-global_position
+	var heading:=atan2(ahead.x,ahead.z)
+	for distance: float in [1.0,1.8]:
+		for offset: float in [0.0,.8,-.8,1.6,-1.6,2.4,-2.4,PI]:
+			var point:=global_position+Vector3(sin(heading+offset),0,cos(heading+offset))*distance
+			if _navigation_link_clear(global_position,point,global_basis.z,true):
+				nav_goal=goal;nav_path=route;nav_endpoint=route[-1]
+				nav_status="following";nav_detour_points=0;nav_block_streak=0
+				nav_escape_point=point;nav_escape_check=0.0;nav_refresh=1.2
+				return true
+	# A chassis resting against a prop fails every check above at its start pose,
+	# so slide it clear with the physics motion test and let it plan again.
+	var navigation: RefCounted=navigation_source.get("navigation")
+	var flat:=Vector2(global_position.x,global_position.z)
+	for offset: float in [0.0,.8,-.8,1.6,-1.6,2.4,-2.4,PI]:
+		var step:=Vector3(sin(heading+offset),0,cos(heading+offset))*.5
+		if not navigation._can_walk_floor_centre(flat,flat+Vector2(step.x,step.z)) or test_move(global_transform,step): continue
+		move_and_collide(step)
+		nav_refresh=0.0;nav_block_pos=Vector3.INF;nav_block_streak=0
+		return true
+	return false
 
 func _navigation_ground_control(delta: float) -> Dictionary:
 	var control: Dictionary={"hold_turn":false,"brake":false,"limit":INF,"requested":Vector3.INF}
@@ -668,7 +907,16 @@ func _navigation_ground_control(delta: float) -> Dictionary:
 	var local:=global_basis.inverse()*offset
 	var yaw:=atan2(local.x,local.z)
 	control.limit=offset.length()*1.2
-	if absf(yaw)>.18:
+	# Run through a waypoint whose next leg bends gently; slow only for a real corner.
+	if nav_path.size()>1:
+		var onward: Vector3=nav_path[1]-nav_path[0];onward.y=0.0
+		if onward.length()>.05 and absf(offset.signed_angle_to(onward,Vector3.UP))<.35: control.limit=INF
+	# A hunting drone steers through a modest bend at speed; a calm one stops to turn.
+	var brake_yaw:=.18
+	if _combat_motor_active():
+		brake_yaw=.55
+		if absf(yaw)>.18: control.limit=minf(float(control.limit),.44*GROUND_SPEED_SCALE*(1.0+(brake_yaw-absf(yaw))*4.0))
+	if absf(yaw)>brake_yaw:
 		control.brake=true
 		# Brake before rotating the box. Otherwise motor inertia can carry
 		# a correctly checked turn into the pole before alignment finishes.
@@ -681,7 +929,9 @@ func _physics_process(delta: float) -> void:
 	ground_turn_step_wait=maxf(0,ground_turn_step_wait-delta)
 	nav_refresh=maxf(0,nav_refresh-delta)
 	nav_replan_wait=maxf(0.0,nav_replan_wait-delta)
+	nav_retarget_gap=maxf(0.0,nav_retarget_gap-delta)
 	cooldown=maxf(0,cooldown-delta);phase_time+=delta
+	stagger_time=maxf(0.0,stagger_time-delta)
 	if mode!="GROUND":
 		ground_acceleration=Vector3.ZERO;nav_stall_time=0.0;nav_progress_anchor=global_position;nav_recovery_pending=false
 		if nav_escape_point.is_finite(): nav_escape_point=Vector3.INF;nav_detour_points=0;nav_refresh=0.0
@@ -694,21 +944,38 @@ func _physics_process(delta: float) -> void:
 			var combat_motor:=_combat_motor_active()
 			var nav_control:=_navigation_ground_control(delta)
 			var angular_acceleration: float=COMBAT_TURN_ACCELERATION if combat_motor else 4.5
-			turn_rate=move_toward(turn_rate,desired_turn*mobility,delta*angular_acceleration)
+			var crippled: bool=cripple.active()
+			var flat_speed:=Vector2(velocity.x,velocity.z).length()
+			if crippled:
+				var driving:=absf(desired_speed)>.3 or (nav_control.requested as Vector3).is_finite()
+				if cripple.step(delta,flat_speed/maxf(cripple.top_speed,.1),driving):
+					# Each push throws the chassis forward and towards its missing legs.
+					visual.add_hit_reaction(Vector3(cripple.side*.35,0,1).normalized(),cripple.lunge)
+			var turn_wanted: float=desired_turn*(cripple.turn_scale if crippled else 1.0)
+			# Missing legs on one side pull its course round towards them.
+			if crippled: turn_wanted+=cripple.veer*cripple.side*clampf(flat_speed/maxf(cripple.top_speed,.1),0.0,1.0)
+			if cripple.stumbling(): turn_wanted=0.0
+			turn_rate=move_toward(turn_rate,turn_wanted,delta*angular_acceleration)
 			if bool(nav_control.hold_turn): turn_rate=0.0
 			_turn_ground(delta)
 			var horizontal:=_previous_ground_motor_velocity()
-			var requested: Vector3=(global_basis.z*desired_speed+global_basis.x*desired_strafe)*mobility
-			if (nav_control.requested as Vector3).is_finite(): requested=(nav_control.requested as Vector3)*mobility
+			var requested: Vector3=global_basis.z*desired_speed+global_basis.x*desired_strafe
+			if (nav_control.requested as Vector3).is_finite(): requested=nav_control.requested as Vector3
 			elif bool(nav_control.brake): requested=Vector3.ZERO
 			else: requested=requested.limit_length(float(nav_control.limit))
-			if mobility<1.0: requested=requested.limit_length(.44*mobility*GROUND_SPEED_SCALE)
-			var acceleration:=(.70 if requested.length()>horizontal.length() else 1.05)*GROUND_SPEED_SCALE
+			if crippled: requested=(requested*cripple.surge).limit_length(cripple.top_speed*cripple.surge)
+			if stagger_time>0.0: requested*=.3
+			# A heavy chassis builds speed and sheds it slowly; it skids when it stops.
+			var acceleration:=(.70 if requested.length()>horizontal.length() else .80)*GROUND_SPEED_SCALE
 			if combat_motor: acceleration*=2.0
+			# A lame push is a hard shove off the good legs, then a dragging glide.
+			if crippled and cripple.surge>1.0 and requested.length()>horizontal.length(): acceleration=3.6*GROUND_SPEED_SCALE
+			if cripple.stumbling(): acceleration=1.6*GROUND_SPEED_SCALE
 			var change := requested-horizontal
 			var wanted_acceleration := (change/maxf(delta,.001)).limit_length(acceleration)
 			# Motor torque builds and releases rather than snapping on each AI command.
 			var motor_torque: float=COMBAT_MOTOR_TORQUE if combat_motor else 12.0
+			if crippled: motor_torque=60.0
 			ground_acceleration=ground_acceleration.move_toward(wanted_acceleration,motor_torque*delta)
 			var step := ground_acceleration*delta
 			if step.dot(change)>0 and step.length()>change.length():
@@ -716,7 +983,7 @@ func _physics_process(delta: float) -> void:
 			else: horizontal+=step
 			# A leg can fail while already moving faster than the limp limit.
 			# Bound the motion sent to physics, including motor inertia.
-			if mobility<1.0: horizontal=horizontal.limit_length(.44*mobility*GROUND_SPEED_SCALE)
+			if crippled: horizontal=horizontal.limit_length(cripple.top_speed*1.25)
 			velocity=_ground_motor_velocity(horizontal,delta)
 			var before_slide:=global_position
 			move_and_slide()

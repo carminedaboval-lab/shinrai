@@ -409,6 +409,8 @@ func _attack_recovered(kind: String) -> bool:
 func try_start(candidate: Node3D, kind: String = "") -> bool:
 	if actor.dead or actor.mobility<=0 or actor.mode!="GROUND" or not actor.is_on_floor() or not _attack_recovered("LeapAttack") or attack!="": return false
 	if not target_valid(candidate): return false
+	# A drone that has gone down must get back up before it can strike.
+	if actor.cripple.stumbling(): return false
 	var offset:=actor.global_basis.inverse()*(candidate.global_position-actor.global_position)
 	if absf(offset.y)>.65: return false
 	var distance:=Vector2(offset.x,offset.z).length()
@@ -535,6 +537,7 @@ func _discharge_stun() -> void:
 	var applied := false
 	var damage := 0.0
 	if hit_target:
+		if target.has_method("register_damage_source"): target.register_damage_source(origin,.6)
 		target.take_damage(STUN_DAMAGE);damage=STUN_DAMAGE
 		if target_valid(target): applied=bool(target.apply_drone_stun(STUN_DURATION))
 	stun_emitter.fire_visual(visible_end)
@@ -595,6 +598,7 @@ func _strike(key: String, damage: float, legs: Array[String]) -> void:
 				_retire_leap_for_face_attachment()
 			# Exactly one initial damage call. The player helper alone owns later
 			# two-HP ticks; accepted attachment replaces the normal eighteen HP.
+			if victim.has_method("register_damage_source"): victim.register_damage_source(actor.global_position)
 			victim.take_damage(applied_damage)
 			var entry: Dictionary={"attack":hit_attack,"strike":key,"damage":applied_damage}
 			if hit_attack=="LeapAttack":

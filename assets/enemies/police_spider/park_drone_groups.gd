@@ -4,6 +4,16 @@ const PACK = preload("Shinrai_Drone_Pack.tscn")
 var raid: Node
 var groups: Array[Node3D]=[]
 var spawn_report: Array[Dictionary]=[]
+const BACKUP_RANGE := 420.0
+# Route length a pack can cover inside its dispatch time at its measured 1.9 m/s.
+const BACKUP_ROUTE_RANGE := 460.0
+const BACKUP_COOLDOWN := 45.0
+const WARNING_COOLDOWN := 30.0
+const BACKUP_UPDATE_SECONDS := 8.0
+const BACKUP_UPDATE_MOVE := 15.0
+var backup_update_at := 0.0
+var backup_ready_at := 0.0
+var warning_ready_at := 0.0
 
 func _ready() -> void:
 	top_level=true;global_transform=Transform3D.IDENTITY
@@ -36,6 +46,57 @@ func _ready() -> void:
 		spawn_report.append({"name":pack.name,"count":pack.members.size(),"anchor":str(anchor)})
 	print("POLICE_DRONE_GROUPS ",JSON.stringify(spawn_report))
 
+## The warning before force: tells the player a drone is identifying them, while
+## there is still about a second to break line of sight.
+func police_warning(contact: Node) -> void:
+	var now: float=float(raid.run_time)
+	if contact!=raid.player or now<warning_ready_at: return
+	warning_ready_at=now+WARNING_COOLDOWN
+	raid.announce("POLICE  ·  You are being identified. Break line of sight",3.0)
+
+## One pack at a time answers a contact, on a raid-wide cooldown, so backup adds
+## pressure and a warning without the whole park converging on the player.
+func request_backup(caller: Node3D, point: Vector3) -> void:
+	var now: float=float(raid.run_time)
+	if now<backup_ready_at or not point.is_finite(): return
+	# A wiped-out pack keeps its old goal, so only living responders count.
+	for pack: Node3D in groups:
+		if is_instance_valid(pack) and pack.backup_goal.is_finite() and not pack.living_members().is_empty(): return
+	var goal: Vector3=raid.navigation.nearest(point)
+	var candidates: Array[Dictionary]=[]
+	for pack: Node3D in groups:
+		if pack==caller or not is_instance_valid(pack) or not pack.is_available_for_dispatch(): continue
+		var distance: float=pack.living_members()[0].global_position.distance_to(point)
+		if distance<BACKUP_RANGE: candidates.append({"pack":pack,"distance":distance})
+	candidates.sort_custom(func(a: Dictionary,b: Dictionary)->bool:return a.distance<b.distance)
+	# Commit only to a pack with a real route: the player is told help is coming.
+	for row: Dictionary in candidates:
+		var path: PackedVector3Array=raid.get_path_world(row.pack.living_members()[0].global_position,goal)
+		if path.is_empty() or _path_length(path)>BACKUP_ROUTE_RANGE: continue
+		backup_ready_at=now+BACKUP_COOLDOWN
+		row.pack.dispatch_to(goal)
+		raid.announce("DISPATCH  ·  Police backup responding to your position",4.5)
+		return
+
+## Sightings keep a responding pack on the live contact, so a player who has moved
+## on is not simply left behind by a run to the first report.
+func contact_update(point: Vector3) -> void:
+	var now: float=float(raid.run_time)
+	if now<backup_update_at or not point.is_finite(): return
+	backup_update_at=now+BACKUP_UPDATE_SECONDS
+	for pack: Node3D in groups:
+		if not is_instance_valid(pack) or not pack.backup_goal.is_finite() or pack.living_members().is_empty(): continue
+		var goal: Vector3=raid.navigation.nearest(point)
+		if pack.backup_goal.distance_to(goal)<BACKUP_UPDATE_MOVE: continue
+		# An unreachable sighting keeps the pack on the route it already has.
+		if raid.get_path_world(pack.living_members()[0].global_position,goal).is_empty(): continue
+		pack.update_dispatch(goal)
+
+func _path_length(path: PackedVector3Array) -> float:
+	var total:=0.0
+	for index: int in range(1,path.size()): total+=path[index-1].distance_to(path[index])
+	return total
+
 func _process(_delta: float) -> void:
 	_update_player_capsule()
 	for pack in groups:
@@ -66,6 +127,12 @@ func _find_formation(preferred: Vector3,count: int) -> Array[Vector3]:
 			var query:=PhysicsShapeQueryParameters3D.new();var box:=BoxShape3D.new();box.size=Vector3(1.8,.74,1.5)
 			query.shape=box;query.collision_mask=1;query.transform=Transform3D(Basis.IDENTITY,at+Vector3.UP*.38)
 			if not get_world_3d().direct_space_state.intersect_shape(query,1).is_empty(): break
+			# Reject a spot overhanging an edge: a drone spawned there can never leave.
+			var flat:=Vector2(at.x,at.z)
+			var supported:=true
+			for corner: Vector2 in [Vector2(.7,.5),Vector2(-.7,.5),Vector2(.7,-.5),Vector2(-.7,-.5)]:
+				if not raid.navigation._can_walk_floor(flat+corner,flat): supported=false
+			if not supported: break
 			var overlap:=false
 			for other in placement:
 				if at.distance_to(other)<2.2: overlap=true

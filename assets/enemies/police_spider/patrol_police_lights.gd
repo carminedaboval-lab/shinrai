@@ -15,6 +15,15 @@ const LEG_MOUNTS := {
 	"RL":[Vector3(-.8132,.2247,-.6077),Vector3(.3098,-.7412,.5956)],
 	"RR":[Vector3(.8305,.2256,-.5068),Vector3(.4641,.1409,.8745)]}
 const COLORS := [Color(1,.025,.015),Color(.025,.18,1)]
+const ATTACK_FLASH_SECONDS := .5
+var attack_flash := 0.0
+var damage_flicker := false
+var _written_strengths := Vector2(-1.0,-1.0)
+var _written_powered := -1
+var _seen_pose := -1
+
+func flash_attack() -> void:
+	attack_flash=ATTACK_FLASH_SECONDS
 
 func _ready() -> void:
 	var housing:=MeshInstance3D.new();var base:=BoxMesh.new();base.size=Vector3(.36,.023,.115);housing.mesh=base
@@ -54,7 +63,11 @@ func set_alert_state(next: String) -> void:
 
 func _process(delta: float) -> void:
 	clock+=delta
-	if is_instance_valid(visual) and visual.skeleton!=null:
+	attack_flash=maxf(0.0,attack_flash-delta)
+	# A patrol pose only changes on LOD ticks, and a held rig not at all, so the
+	# bone reads run only when there is a new pose to follow.
+	if is_instance_valid(visual) and visual.skeleton!=null and not visual._lod_frozen and (visual.expression!="PATROL" or visual.pose_serial!=_seen_pose):
+		_seen_pose=visual.pose_serial
 		var skeleton: Skeleton3D=visual.skeleton
 		var bone:=skeleton.find_bone("Body")
 		var motion: Transform3D=skeleton.get_bone_global_pose(bone)*skeleton.get_bone_global_rest(bone).affine_inverse()
@@ -82,11 +95,23 @@ func _update_flash() -> void:
 		else:
 			strengths.x=1.0 if phase<.18 else 0.0
 			strengths.y=1.0 if phase>=.5 and phase<.68 else 0.0
-	for i in materials.size():
-		materials[i].albedo_color=COLORS[i]*lerpf(.10,1.0,strengths[i])
-		materials[i].emission_energy_multiplier=strengths[i]*4.0
-		lamps[i].light_energy=strengths[i]*1.6
+	elif state in ["PATROL","RELAX"]:
+		# Calm cruise light: a soft blue breath, so a patrol reads as police from afar.
+		strengths.y=snappedf(.12+.14*(.5+.5*sin(clock*1.6)),.02)
+	if attack_flash>0.0 and state!="DISABLED": strengths=Vector2.ONE
+	# Failing electrics: the bar cuts out in short random dropouts.
+	if damage_flicker and state!="DISABLED" and randf()<.3: strengths=Vector2.ZERO
+	# Material and light writes are the cost here, so only write real changes.
+	if strengths!=_written_strengths:
+		_written_strengths=strengths
+		for i in materials.size():
+			materials[i].albedo_color=COLORS[i]*lerpf(.10,1.0,strengths[i])
+			materials[i].emission_energy_multiplier=strengths[i]*4.0
+			lamps[i].light_energy=strengths[i]*1.6
 	# Steady low-output markers stay on independently of the alert flash cycle.
+	var marker_power:=1 if state!="DISABLED" else 0
+	if marker_power==_written_powered: return
+	_written_powered=marker_power
 	for leg: String in leg_markers:
 		var powered:=state!="DISABLED"
 		var color: Color=COLORS[LEG_COLORS[leg]]
