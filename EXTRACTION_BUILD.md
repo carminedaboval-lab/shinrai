@@ -53,6 +53,19 @@ Boot takes about 75 to 115 s headless, so scene tests now allow 300 s. Movement 
 - `test_k17_integration`, `test_k17_combat_extract` and `test_k17_showcase_weapons` test a drone the raid no longer spawns. They need retiring or rewriting around the police drones, and `test_k17_integration` hangs until killed.
 - `test_park_quality` and `test_open_lawn_cover` measure frame rate only in a window. In the cover view at 1080p, both presets average about 33 FPS by day and night, with or without the fence, cover and wildlife.
 
+## Raid HUD and body status (2026-11-04)
+
+- `scripts/extraction_hud.gd` is back to the committed HUD at `a09088f`, with its medical cross, heartbeat trace and condition lines. The user preferred it to the later minimal rework. That rework, uncommitted work from another session, was saved outside the repo before restoring.
+- `scripts/hud/body_status.gd` adds a see-through body (Gray Zone / Tarkov style) above the vitals cluster, as an X-ray.
+  - The player model is rendered front-on in a small transparent viewport, standing in its rest pose with the arms lowered. Its skin shows only a glowing outline, tinted per part through its skin binds.
+  - A skeleton built on the rig's own joints sits inside: skull and jaw, spine, rib hoops, collarbones, pelvis, and limb bones with joint balls. Each bone takes its part's colour; bleeding parts pulse red.
+  - A fractured limb's long bone (humerus or femur) snaps: the two halves part, the lower half sits out of line and twitches, and the break throbs orange.
+  - The medical model is unchanged. The rows below describe the parts and tints, which still apply.
+  - Each part shades from pale glass through amber to red as it loses HP. A destroyed part goes dark with a red cross.
+  - Bleeding parts pulse red with one or two drops. Fractured limbs show a broken bone. A part that just took damage flashes.
+  - It rests faint, comes forward when injured, and shows per-part HP while checking vitals (inspect / V).
+- `test_extraction` passes 119/0 with the restored HUD.
+
 ## Tokyo roads, alleys and wind (2026-11-02)
 
 - `scripts/midori_tokyo_roads.gd` lays real road geometry 2 cm over the near city's flat ground plane, two blocks out from the park: the ring road, four-lane arterials every 256 m and two-lane roads between. It does not edit `midori_near_city.gd`. Roads further out keep the ground plane's look.

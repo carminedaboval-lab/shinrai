@@ -15,6 +15,8 @@ const ItemArt = preload("./extraction_item_art.gd")
 const InventoryPanel = preload("./extraction_inventory.gd")
 const LootPanel = preload("./extraction_loot_panel.gd")
 var loot_view: Control
+const BodyStatus = preload("res://scripts/hud/body_status.gd")
+var body_status: Control
 var root: Control
 var telemetry: Label
 var objectives: Label
@@ -75,6 +77,15 @@ func _ready() -> void:
 	raid_status.offset_bottom = -12
 	raid_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(raid_status)
+	# See-through body above the vitals cluster.
+	body_status = BodyStatus.new()
+	body_status.name = "BodyStatus"
+	body_status.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	body_status.offset_left = 30
+	body_status.offset_right = 190
+	body_status.offset_top = -620
+	body_status.offset_bottom = -296
+	root.add_child(body_status)
 	ammo_status = AmmoStatus.new()
 	ammo_status.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	ammo_status.offset_left = -292
@@ -465,6 +476,9 @@ func update_raid(raid: Node) -> void:
 	status.combat = float(raid.run_time) < _combat_until
 	status.medkits = raid.medkits
 	_sync_health(status, raid.player)
+	var medical_state: Variant = raid.player.get("medical") if raid.player.get("extraction_mode") == true else null
+	body_status.feed(medical_state, vitals_check)
+	body_status.visible = overlay == null or not overlay.visible
 	var remaining_stun: Variant = raid.player.get("stun_remaining")
 	status.stun_remaining = maxf(0.0,float(remaining_stun)) if remaining_stun != null and bool(raid.player.get("drone_stun_active")) else 0.0
 	var current_stamina: Variant = raid.player.get("stamina")
