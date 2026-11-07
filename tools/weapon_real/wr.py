@@ -232,19 +232,46 @@ def boolean(target, cutter, op='DIFFERENCE', keep=False, solver='EXACT'):
     return target
 
 
-BEVEL_SCALE = 2.2  # real machined/moulded edges are rounder than CAD-sharp boxes
+BEVEL_SCALE = 3.0  # real machined/moulded edges are rounder than CAD-sharp boxes
+# Moulded, laminated and rubber parts come out of the mould or the sander with
+# much softer radii than machined metal; at first-person distance a 1 mm edge
+# is under a pixel and the part reads as a flat cut-out, so they round more.
+SOFT_BEVEL = 1.6
+SOFT_WORDS = ('polymer', 'stock', 'grip', 'texture', 'mcmillan', 'fibreglass', 'fiberglass',
+              'laminat', 'birch', 'wood', 'rubber', 'pad', 'pmag', 'magazine polymer', 'smoke magazine')
+
+
+def _soft(o):
+    names = [m.name.lower() for m in o.data.materials if m] if o.type == 'MESH' else []
+    return any(w in n for n in names for w in SOFT_WORDS) and not any('steel' in n or 'anodi' in n for n in names[:1])
 
 
 def bevel(o, width=0.0004, segments=2, angle=35.0, harden=True):
     m = o.modifiers.new('bevel', 'BEVEL')
-    m.width = width * BEVEL_SCALE
-    m.segments = max(segments, 3)
+    soft = _soft(o)
+    m.width = width * BEVEL_SCALE * (SOFT_BEVEL if soft else 1.0)
+    m.segments = max(segments, 4 if soft else 3)
     m.use_clamp_overlap = True
     m.limit_method = 'ANGLE'
     m.angle_limit = math.radians(angle)
     m.harden_normals = harden
     m.miter_outer = 'MITER_ARC'
+    co = [v.co.copy() for v in o.data.vertices]
+    lo = Vector([min(c[i] for c in co) for i in range(3)]) if co else None
+    hi = Vector([max(c[i] for c in co) for i in range(3)]) if co else None
     _apply_mod(o, m)
+    if co:
+        # A bevel over sliver faces can throw a vertex to the origin; drop any
+        # geometry that left the part's own bounds rather than ship a spike.
+        pad = 0.0005
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bad = [v for v in bm.verts if any(v.co[i] < lo[i] - pad or v.co[i] > hi[i] + pad for i in range(3))]
+        if bad:
+            print('BEVEL_SPIKES', o.name, len(bad))
+            bmesh.ops.delete(bm, geom=bad, context='VERTS')
+            bm.to_mesh(o.data)
+        bm.free()
     smooth(o, angle)
     # Flat machined faces stay flat; only the bevels carry the shading turn.
     n = o.modifiers.new('weighted', 'WEIGHTED_NORMAL')

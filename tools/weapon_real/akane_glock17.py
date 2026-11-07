@@ -87,8 +87,10 @@ for k in range(7):
             c = side('serration', [(cx - 1.0, 2.0), (cx + 1.0, 2.0), (cx + 1.0, 29), (cx - 1.0, 29)], 1.6, None, z=s * (SLIDE_HALF + 0.6))
             cuts.append(c)
 # Ejection port: right side, opening across the top to just past centreline.
+# Glock port: the top opening runs across nearly the full slide top so the
+# whole barrel hood shows from above; only the left top chamfer is left.
 port = [(78.0, -1), (117.0, -1), (117.0, 12.5)] + arc(115.0, 12.5, 2.0, 0, 90, 4)[1:] + arc(80.0, 12.5, 2.0, 90, 180, 4)
-cuts.append(side('ejection_port', port, 7.85, None, z=-6.9))
+cuts.append(side('ejection_port', port, 11.65, None, z=-3.1))
 # Muzzle: barrel bore and recoil-spring tunnel.
 # MOS cut and rear-sight dovetail recess on the top flat.
 cuts.append(top('mos_cut', wr.rounded_rect(149.0, 0, 31.0, 17.0, 2.5, 4), SLIDE_TOP - 1, SLIDE_TOP + 1.35, None))
@@ -166,13 +168,23 @@ wr.bevel(hood, 0.0003, 2, 30)
 barrel_parts.append(hood)
 barrel_parts.append(wr.cylinder('chamber_mouth', P(115.0, BORE_MM), P(116.6, BORE_MM), 0.0049, M['bore'], 24))
 barrel_parts.append(wr.text_top('mark_hood', '9x19', P(97.0, SLIDE_TOP - 0.02), 0.0028, M['mark']))
+# Barrel serial on the right flat of the chamber block, seen in the port.
+barrel_parts.append(wr.text('mark_hood_serial', 'AKN207', P(100.0, 10.4, -8.32), 0.0016, M['mark'], -1))
 barrel_obj = wr.join('Barrel', barrel_parts)
 
 # ---------------------------------------------------------------- frame ----
 F_HALF = 11.9
 frame_parts = []
-upper = [(4.0, 27.0), (186.0, 27.0), (188.0, 28.4), (188.0, 31.2), (185.5, 33.6), (183.0, 34.3), (180.0, 35.0), (177.0, 36.6), (174.0, 39.4), (171.0, 44.6), (169.6, 48.5), (160.0, 60.0), (118.0, 60.0), (113.0, 42.0), (64.0, 42.0), (8.0, 38.8)] + arc(6.6, 35.2, 3.0, 90, 180, 4)
-frame_parts.append(side('frame_upper', upper, F_HALF, M['frame']))
+upper = [(4.0, 27.0), (186.0, 27.0), (188.0, 28.4), (188.0, 31.2), (185.5, 33.6), (183.0, 34.3), (180.0, 35.0), (177.0, 36.6), (174.0, 39.4), (171.0, 44.6), (169.6, 48.5), (160.0, 60.0), (118.0, 60.0), (113.0, 42.0), (64.0, 41.6), (6.4, 41.6), (4.9, 41.1), (4.2, 39.8)]
+# Flat-bottomed dust cover: the accessory rail is cut into it below (side
+# grooves and the single cross slot), as on the real moulded frame.
+frame_upper = side('frame_upper', upper, F_HALF, M['frame'])
+# FS frames: the dust-cover nose is bevelled in plan to match the slide nose.
+R_FN = 3.2
+fr = [(4.2 + R_FN - R_FN * math.cos(math.radians(a)), -(F_HALF - R_FN) - R_FN * math.sin(math.radians(a))) for a in range(0, 91, 15)]
+fplan = fr + [(12.0, -F_HALF - 1), (200.0, -F_HALF - 1), (200.0, F_HALF + 1), (12.0, F_HALF + 1)] + [(x, -z) for x, z in reversed(fr)]
+wr.boolean(frame_upper, top('frame_plan', fplan, 20, 70, None), 'INTERSECT')
+frame_parts.append(frame_upper)
 # Squared Gen 5 trigger guard with the small hook at its lower front corner.
 guard = [(62.0, 40.0), (118.0, 40.0), (121.0, 66.0), (120.0, 67.6), (118.0, 67.5), (116.0, 67.8), (114.0, 68.8), (112.0, 69.9), (110.0, 70.6), (74.0, 70.5), (70.5, 70.3), (68.4, 69.9), (67.4, 68.6), (68.0, 67.2), (69.4, 66.0), (69.2, 47.0), (68.0, 45.2), (66.0, 43.3), (64.0, 42.2)]
 frame_parts.append(side('trigger_guard', guard, 5.6, M['frame']))
@@ -203,17 +215,23 @@ for y in levels:
     xf, xr = fstrap(y), bstrap(y)
     depth = xr - xf
     width = 29.6 + max(0.0, (y - 120) / 11.5) * 1.6  # Gen 5 flared magwell
+    if y < 64.0:  # blend out of the frame body above the grip
+        t = max(0.0, (y - 48.5) / 15.5)
+        width = 2 * F_HALF + (29.6 - 2 * F_HALF) * (t * t * (3 - 2 * t))
     r = min(10.5, depth / 2 - 0.3, width / 2 - 0.3)
     pts = wr.rounded_rect((xf + xr) / 2, 0.0, depth, width, r, 5)
     rings.append([P(x, y, z) for x, z in pts])
 frame_parts.append(wr.loft('grip', rings, M['frame']))
 frame = wr.join('Receiver', frame_parts)
-wr.moulded(frame, voxel=0.00042, smooth_factor=0.55, smooth_iter=5, ratio=0.22)
+wr.moulded(frame, voxel=0.00042, smooth_factor=0.55, smooth_iter=6, ratio=0.30)
 
 fcuts = []
-opening = [(75.0, 52.0)] + arc(80.0, 47.2, 5.0, 180, 270, 5)[1:] + [(106.0, 42.2), (110.5, 43.5), (113.5, 46.5), (116.0, 51.0), (117.2, 55.0), (116.6, 58.6), (114.2, 62.4), (111.6, 64.6), (108.0, 66.1), (80.0, 66.4), (76.5, 64.5), (75.0, 60.0)]
+TRIG_PIN = (102.0, 32.4)
+STOP_ARM = [(102.0 + 1.8 * math.cos(math.radians(a)), 32.4 + 1.8 * math.sin(math.radians(a))) for a in range(270, 90, -20)] + [(103.2, 34.1), (126.2, 30.8), (126.2, 28.8)]
+STOP_ARM_CUT = [(102.0 + 2.2 * math.cos(math.radians(a)), 32.4 + 2.2 * math.sin(math.radians(a))) for a in range(270, 90, -20)] + [(103.2, 34.5), (126.6, 31.2), (126.6, 28.4)]
+opening =[(75.0, 52.0)] + arc(80.0, 47.2, 5.0, 180, 270, 5)[1:] + [(106.0, 42.2), (110.5, 43.5), (113.5, 46.5), (116.0, 51.0), (117.2, 55.0), (116.6, 58.6), (114.2, 62.4), (111.6, 64.6), (108.0, 66.1), (80.0, 66.4), (76.5, 64.5), (75.0, 60.0)]
 fcuts.append(side('trigger_opening', opening, 20, None))
-# Magazine well, along the 22-degree magazine axis, and the Gen 5 front cutout.
+# Magazine well, along the 22-degree magazine axis.
 ang = math.radians(22.0)
 ax = (-math.sin(ang), -math.cos(ang))  # photo frame: up the grip
 
@@ -229,17 +247,22 @@ def mag_ring(t, depth, width, rr=3.0, cx=166.4, cy=132.2):
 
 
 fcuts.append(wr.loft('magwell', [mag_ring(-4, 34.4, 24.6, 3.4), mag_ring(12, 33.2, 23.4, 3.2), mag_ring(96, 33.2, 23.4, 3.2)], None))
-fcuts.append(wr.cylinder('mag_cutout', P(150.0, 134.0, -20), P(150.0, 134.0, 20), 0.0061, None, 32))
+# No half-moon cutout: the FS (front-serration) Gen 5 frames dropped it.
 # Takedown and slide-stop recesses on both sides.
 for s in (1, -1):
     fcuts.append(side('takedown_recess', [(87.6, 27.6), (92.8, 27.6), (92.8, 38.4), (87.6, 38.4)], 1.0, None, z=s * F_HALF))
     fcuts.append(side('stop_recess', [(124.8, 26.5), (136.4, 26.5), (136.4, 33.6), (124.8, 33.6)], 0.8, None, z=s * F_HALF))
-# Gen 5 rail with its single cross slot.
+    # Channel for the slide-stop arm, which runs from the trigger pin back
+    # and up to the thumb tab.
+    fcuts.append(side('stop_channel', STOP_ARM_CUT, 0.55, None, z=s * F_HALF))
+# Gen 5 rail: grooves moulded into both sides of the dust cover (flat top
+# face, 45-degree lip below) and its single cross slot cut up from below.
+for s in (1, -1):
+    g = [(10.6, 38.3), (14.0, 38.3), (14.0, 40.9), (12.6, 40.9), (10.6, 39.3)]
+    fcuts.append(section('rail_groove', [(s * z, y) for z, y in g], 0.0, 49.5, None))
+fcuts.append(side('rail_slot', [(20.4, 39.0), (23.9, 39.0), (23.9, 44.0), (20.4, 44.0)], 14, None))
 wr.boolean(frame, fcuts, 'DIFFERENCE', solver='MANIFOLD')
 wr.clean_slots(frame, M['frame'])
-rail = section('rail', [(-11.2, 37.8), (11.2, 37.8), (11.2, 38.9), (9.6, 39.8), (10.4, 40.8), (10.0, 41.6), (-10.0, 41.6), (-10.4, 40.8), (-9.6, 39.8), (-11.2, 38.9)], 6.0, 47.5, M['frame'])
-wr.boolean(rail, side('rail_slot', [(20.4, 39.4), (23.9, 39.4), (23.9, 43), (20.4, 43)], 14, None), 'DIFFERENCE')
-wr.bevel(rail, 0.0003, 2, 30)
 # Textured grip: Gen 5 texture on both sides, front strap and backstrap,
 # bounded above by the thumb-rest line.
 
@@ -252,46 +275,58 @@ def textured(x, y, z):
     if xm < 118:
         return False
     edge = 58.5 + (45.6 - 58.5) * (min(max(xm, 126), 169) - 126) / 43.0
+    # Smooth relief around the magazine catch (fitted on the left side).
+    if z > 0.010 and ((xm - 129.3) / 10.0) ** 2 + ((ym - 59.6) / 8.2) ** 2 < 1.0:
+        return False
     return ym > edge + 2.0
 
 
 wr.assign_faces(frame, M['grip'], textured)
-frame_parts = [frame, rail]
+frame_parts = [frame]
 # Molded frame marking (raised) on the left dust cover.
 frame_parts.append(wr.text('frame_logo', 'AKANE', P(27.0, 33.4, F_HALF - 0.05), 0.0026, M['frame'], 1, depth=0.00018))
 frame_parts.append(wr.text('frame_cal', '9x19', P(40.0, 33.4, -(F_HALF - 0.05)), 0.0024, M['frame'], -1, depth=0.00018))
 for s in (1, -1):
     z = s * (F_HALF - 0.55)
     # Takedown lever: serrated steel tab.
-    lever = side('takedown_lever', [(88.3, 28.3), (92.1, 28.3), (92.1, 37.6), (88.3, 37.6)], 0.7, M['small'], z=z + s * 0.25)
-    wr.boolean(lever, [side('lever_groove', [(88.0, yy), (92.4, yy), (92.4, yy + 0.55), (88.0, yy + 0.55)], 0.5, None, z=z + s * 0.95) for yy in (29.8, 31.6, 33.4)], 'DIFFERENCE')
+    lever = side('takedown_lever', [(x, y) for x, y in wr.rounded_rect(90.2, 33.0, 3.8, 9.2, 1.4, 4)], 0.6, M['small'], z=z + s * 0.2)
     wr.bevel(lever, 0.0002, 1, 30)
+    # The real slide lock has five horizontal pull grooves across its face.
+    zo = s * (F_HALF - 0.55 + 0.2 + 0.6)
+    lever_cuts = [side('lever_groove', [(87.6, gy - 0.32), (92.8, gy - 0.32), (92.8, gy + 0.32), (87.6, gy + 0.32)], 0.28, None, z=zo) for gy in (30.0, 31.5, 33.0, 34.5, 36.0)]
+    wr.boolean(lever, lever_cuts, 'DIFFERENCE')
+    wr.clean_slots(lever, M['small'])
     frame_parts.append(lever)
     # Ambidextrous slide stop with gripping ridges.
-    stop = side('slide_stop', [(125.6, 27.4), (135.4, 27.4), (135.4, 31.0), (133.6, 32.8), (125.6, 32.8)], 1.1, M['small'], z=s * (F_HALF + 0.5))
-    wr.boolean(stop, [side('stop_ridge', [(xx, 26), (xx + 0.6, 26), (xx + 0.6, 34), (xx, 34)], 0.5, None, z=s * (F_HALF + 1.6)) for xx in (127.4, 129.2, 131.0, 132.8)], 'DIFFERENCE')
+    stop = side('slide_stop', [(125.6, 27.4), (135.4, 27.4), (135.6, 30.4), (134.2, 32.6), (126.4, 32.6), (125.4, 31.2)], 0.9, M['small'], z=s * (F_HALF + 0.45))
+    # The stop's grip ridges are too fine to model at this size.
     wr.bevel(stop, 0.0002, 1, 30)
     frame_parts.append(stop)
-    for px, py in ((102.0, 36.6), (166.0, 52.8)):
-        frame_parts.append(wr.cylinder('pin', P(px, py, s * (F_HALF - 0.6)), P(px, py, s * (F_HALF + 0.08)), 0.00145, M['bright'], 18))
+    # Slide-stop arm: pivots on the trigger pin, sits in its frame channel.
+    arm = side('slide_stop_arm', STOP_ARM, 0.3, M['small'], z=s * (F_HALF - 0.3))
+    wr.bevel(arm, 0.0001, 1, 30)
+    frame_parts.append(arm)
+    for px, py, out in ((TRIG_PIN[0], TRIG_PIN[1], 0.12), (166.0, 52.8, 0.08)):
+        frame_parts.append(wr.cylinder('pin', P(px, py, s * (F_HALF - 0.6)), P(px, py, s * (F_HALF + out)), 0.00145, M['bright'], 18))
 # Magazine catch (left side), with vertical ridges.
-catch = side('mag_catch', [(122.8, 54.6), (135.6, 54.6), (135.8, 64.6), (123.6, 64.6)], 1.6, M['frame'], z=14.2)
-wr.boolean(catch, [side('catch_ridge', [(xx, 53), (xx + 0.7, 53), (xx + 0.7, 66), (xx, 66)], 0.5, None, z=15.8) for xx in (125.0, 127.6, 130.2, 132.8)], 'DIFFERENCE')
+catch = side('mag_catch', [(x, y) for x, y in wr.rounded_rect(129.3, 59.6, 12.6, 9.8, 2.2, 5)], 1.4, M['frame'], z=14.2)
+# Real Gen 5 catch: rounded, faintly textured button (no slats).
 wr.bevel(catch, 0.0003, 2, 30)
 frame_parts.append(catch)
 # Captive recoil-spring guide rod end, seen in the lower muzzle opening.
 frame_parts.append(wr.cylinder('guide_rod', P(3.4, 23.0), P(40.0, 23.0), 0.0021, M['small'], 24))
 frame_parts.append(wr.cylinder('guide_rod_cap', P(3.2, 23.0), P(4.4, 23.0), 0.0029, M['small'], 24))
-frame_parts.append(wr.box('serial_plate', P(57.0, 41.75, 0), (0.0115, 0.0003, 0.0072), M['bright']))
+frame_parts.append(wr.box('serial_plate', P(57.0, 41.58, 0), (0.0115, 0.0002, 0.0072), M['bright']))
 frame_obj = wr.join('Receiver', frame_parts)
 
 # -------------------------------------------------------------- trigger ----
 tf = [(101.2, 43.0), (100.6, 48.0), (99.4, 52.6), (97.4, 56.0), (95.2, 59.2), (93.8, 62.2)]
 tr = [(108.6, 43.0), (108.2, 52.0), (106.4, 57.6), (103.6, 61.2), (100.4, 63.4), (97.2, 65.0)]
-shoe = side('trigger_shoe', [(101.6, 40.0)] + tf + arc(95.4, 63.2, 1.8, 160, 75, 4) + list(reversed(tr)) + [(109.0, 40.0)], 3.3, M['small'])
+shoe = side('trigger_shoe', [(101.6, 40.0)] + tf + arc(95.4, 63.2, 1.8, 160, 75, 4) + list(reversed(tr)) + [(109.0, 40.0)], 3.3, M['frame'])
 wr.boolean(shoe, side('safety_slot', [(x - 1.2, y) for x, y in tf[1:-1]] + [(x + 1.6, y) for x, y in reversed(tf[1:-1])], 1.25, None), 'DIFFERENCE')
 wr.bevel(shoe, 0.0004, 2, 30)
-blade = side('trigger_safety', [(x - 0.9, y) for x, y in tf[1:-1]] + [(x + 1.8, y) for x, y in reversed(tf[1:-1])], 1.1, M['small'])
+# Glock trigger shoe and safety blade are black polymer, not steel.
+blade = side('trigger_safety', [(x - 0.9, y) for x, y in tf[1:-1]] + [(x + 1.8, y) for x, y in reversed(tf[1:-1])], 1.1, M['frame'])
 wr.bevel(blade, 0.0002, 1, 30)
 trigger_obj = wr.join('Trigger', [shoe, blade])
 
@@ -302,7 +337,8 @@ for i, t in enumerate((20, 33, 46, 59, 72)):
     cx, cy = 166.4 + ax[0] * t + math.cos(ang) * 15.9, 132.2 + ax[1] * t - math.sin(ang) * 15.9
     hole = wr.cylinder('witness', P(cx - math.cos(ang) * 2, cy + math.sin(ang) * 2), P(cx + math.cos(ang) * 1, cy - math.sin(ang) * 1), 0.0016, M['bore'], 16)
     mag_parts.append(hole)
-base = [(146.8, 133.2), (147.6, 132.0), (186.4, 132.0), (187.4, 133.4), (187.0, 139.6), (185.6, 140.8), (150.4, 140.8), (147.4, 139.4)]
+# Gen 5 floor plate with its forward pull lip.
+base = [(147.0, 133.0), (147.8, 132.0), (186.4, 132.0), (187.4, 133.4), (187.0, 139.6), (185.6, 140.8), (146.0, 140.8), (143.6, 140.0), (142.8, 138.6), (143.2, 137.0), (144.6, 135.6), (146.2, 134.6)]
 bp = side('base_plate', base, 13.4, M['mag'])
 wr.bevel(bp, 0.0009, 3, 30)
 mag_parts.append(bp)

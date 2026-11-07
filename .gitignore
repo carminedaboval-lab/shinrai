@@ -35,3 +35,6 @@ docs/weapon_realism_20261107/before_assets/
 docs/weapon_realism_20261107/renders/
 # Godot import descriptors for images inside docs (docs are .gdignore'd).
 docs/**/*.import
+
+# Lock file used by tools/weapon_real/one_gun_locked.ps1
+.godot_render.lock

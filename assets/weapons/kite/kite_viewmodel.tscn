@@ -7,5 +7,5 @@
 script = ExtResource("1")
 weapon_key = "kite"
 assembly_scene = ExtResource("2")
-magazine_grip = Vector3(0.008, -0.06, 0)
+magazine_grip = Vector3(0.0375, -0.0466, 0)
 optic_id = "prism_01"

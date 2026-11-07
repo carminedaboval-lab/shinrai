@@ -208,7 +208,8 @@ func get_ads_eye_relief() -> float:
 	# Magnified prism has a finite eye box; a reflex allows a longer relief.
 	if optic_id == "prism_01": return 0.115
 	if optic_id == "reflex_01": return 0.17
-	return 0.205
+	# Irons: the catalogue's per-gun eye position (peep sights sit close to the eye).
+	return float(Catalog.WEAPONS.get(weapon_key, {}).get("iron_eye_relief_m", 0.205))
 
 func get_muzzle_world_position() -> Vector3:
 	if is_instance_valid(assembly):

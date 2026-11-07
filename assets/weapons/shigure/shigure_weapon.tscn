@@ -5,32 +5,32 @@
 
 [node name="Shigure" type="Node3D"]
 script = ExtResource("2")
-metadata/real_counterpart = "CZ Scorpion EVO 3 A1, 9x19 mm"
+metadata/real_counterpart = "CZ Scorpion EVO 3 A1, 9x19 mm (traced from a calibrated side photo)"
 
 [node name="Geometry" parent="." instance=ExtResource("1")]
 
 [node name="OpticSocket" type="Marker3D" parent="."]
-position = Vector3(-0.0347, 0.0847, 0)
+position = Vector3(-0.0299, 0.0815, 0)
 rotation = Vector3(0, -1.5707963268, 0)
 
 [node name="Muzzle" type="Marker3D" parent="."]
-position = Vector3(-0.309, 0.0365, 0)
+position = Vector3(-0.3166, 0.0322, 0)
 rotation = Vector3(0, -1.5707963268, 0)
 
 [node name="GripRight" type="Marker3D" parent="."]
 position = Vector3(0.057, -0.056, 0)
 
 [node name="GripLeft" type="Marker3D" parent="."]
-position = Vector3(-0.234, 0.004, 0.01)
+position = Vector3(-0.2106, -0.0018, 0.01)
 
 [node name="IronRearSight" type="Marker3D" parent="."]
-position = Vector3(0.0433, 0.0985, 0)
+position = Vector3(0.0521, 0.0932, 0)
 
 [node name="IronFrontSight" type="Marker3D" parent="."]
-position = Vector3(-0.1867, 0.0985, 0)
+position = Vector3(-0.1883, 0.0932, 0)
 
 [node name="BoltRelease" type="Marker3D" parent="."]
-position = Vector3(-0.0507, 0.0165, 0.018)
+position = Vector3(-0.1059, 0.0232, 0.018)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(-0.0777, 0.0465, -0.014)
+position = Vector3(-0.0659, 0.0391, -0.017)

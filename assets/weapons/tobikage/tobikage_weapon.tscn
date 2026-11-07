@@ -15,7 +15,7 @@ metadata/real_counterpart = "Dragunov SVD, laminated furniture, 7.62x54R"
 [node name="Geometry" parent="." instance=ExtResource("1")]
 
 [node name="OpticSocket" type="Marker3D" parent="."]
-position = Vector3(-0.0466, 0.077, 0)
+position = Vector3(-0.0466, 0.0805, 0)
 rotation = Vector3(0, -1.570796326795, 0)
 
 [node name="Muzzle" type="Marker3D" parent="."]
@@ -38,7 +38,7 @@ position = Vector3(-0.6596, 0.0893, 0)
 position = Vector3(-0.1156, 0.052, -0.032)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(-0.1096, 0.051, -0.015)
+position = Vector3(-0.0616, 0.051, -0.015)
 
 [node name="ActionGrip" type="Marker3D" parent="."]
 position = Vector3(-0.1156, 0.052, -0.032)

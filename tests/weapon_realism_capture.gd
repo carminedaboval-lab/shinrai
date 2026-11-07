@@ -83,6 +83,12 @@ func _build_stage() -> void:
 	key_light.light_energy = 1.9
 	key_light.shadow_enabled = true
 	key_light.directional_shadow_max_distance = 4.0
+	# Close-up product shots: a finer shadow atlas and soft filtering so a
+	# barrel's shadow on a stock doesn't stair-step.
+	RenderingServer.directional_shadow_atlas_set_size(8192, true)
+	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_HIGH)
+	key_light.shadow_blur = 1.5
+	key_light.directional_shadow_blend_splits = true
 	stage.add_child(key_light)
 	var rim := DirectionalLight3D.new()
 	rim.rotation_degrees = Vector3(-20, 200, 0)
@@ -241,6 +247,12 @@ func _capture(key: String, tag: String) -> void:
 		var span := r.distance_to(f)
 		views.append({"name": "sights_live", "ortho": false, "fov": 24.0, "pos": r + Vector3(span * 0.55, 0.006, 0.0), "target": f, "up": Vector3.UP})
 		views.append({"name": "fp34_live", "ortho": false, "fov": 42.0, "pos": r + Vector3(span * 0.5, span * 0.28, -span * 0.38), "target": r.lerp(f, 0.45) + Vector3(0, -h * 0.22, 0), "up": Vector3.UP})
+	# Left side of the lower / frame (selector, roll marks, mag catch): framed
+	# on the firing hand's grip marker, looking in from the gun's left (+Z).
+	var grip := node.get_node_or_null("GripRight") as Node3D
+	if grip != null:
+		var g := grip.global_position + Vector3(-0.035, 0.035, 0.0)
+		views.append({"name": "left_live", "ortho": false, "fov": 38.0, "pos": g + Vector3(0.03, 0.04, 0.27), "target": g, "up": Vector3.UP})
 	for view: Dictionary in views:
 		if view.ortho:
 			camera.projection = Camera3D.PROJECTION_ORTHOGONAL

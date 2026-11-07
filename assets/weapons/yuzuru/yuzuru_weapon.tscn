@@ -17,26 +17,26 @@ position = Vector3(-0.812, 0.065, 0)
 rotation = Vector3(0, -1.5707963267949, 0)
 
 [node name="GripRight" type="Marker3D" parent="."]
-position = Vector3(0.135, -0.03, 0)
+position = Vector3(0.1, -0.03, 0)
 
 [node name="GripLeft" type="Marker3D" parent="."]
-position = Vector3(-0.26, 0.01, 0.01)
+position = Vector3(-0.26, 0.013, 0.01)
 
 [node name="IronRearSight" type="Marker3D" parent="."]
-position = Vector3(0.084, 0.115, 0)
+position = Vector3(0.026, 0.115, 0)
 
 [node name="IronFrontSight" type="Marker3D" parent="."]
-position = Vector3(-0.7154, 0.115, 0)
+position = Vector3(-0.77, 0.115, 0)
 
 [node name="OpticSocket" type="Marker3D" parent="."]
-position = Vector3(0.0, 0.092, 0)
+position = Vector3(-0.072, 0.0885, 0)
 rotation = Vector3(0, -1.5707963267949, 0)
 
 [node name="BoltRelease" type="Marker3D" parent="."]
-position = Vector3(0.09, 0.065, 0.018)
+position = Vector3(0.016, 0.067, 0.019)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(-0.02, 0.075, -0.017)
+position = Vector3(-0.054, 0.0705, -0.0175)
 
 [node name="ActionGrip" type="Marker3D" parent="."]
-position = Vector3(0.097, 0.05, -0.048)
+position = Vector3(0.038, 0.031, -0.05)

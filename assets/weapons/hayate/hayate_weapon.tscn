@@ -7,13 +7,13 @@
 script = ExtResource("2")
 metadata/magazine_node_path = "Geometry/Magazine"
 metadata/action_node_path = "Geometry/Action"
-metadata/magazine_grip = Vector3(-0.0565, 0.0, 0)
+metadata/magazine_grip = Vector3(-0.026, 0.0, 0)
 metadata/real_counterpart = "USMC M40A5 (Remington 700, McMillan A4), 7.62x51 mm"
 
 [node name="Geometry" parent="." instance=ExtResource("1")]
 
 [node name="Muzzle" type="Marker3D" parent="."]
-position = Vector3(-0.805, 0.075, 0)
+position = Vector3(-0.766, 0.075, 0)
 rotation = Vector3(0, -1.5707963267949, 0)
 
 [node name="GripRight" type="Marker3D" parent="."]
@@ -26,7 +26,7 @@ position = Vector3(-0.29, 0.025, 0.008)
 position = Vector3(0.062, 0.132, 0)
 
 [node name="IronFrontSight" type="Marker3D" parent="."]
-position = Vector3(-0.149, 0.132, 0)
+position = Vector3(-0.249, 0.132, 0)
 
 [node name="OpticSocket" type="Marker3D" parent="."]
 position = Vector3(-0.034, 0.1017, 0)
@@ -36,7 +36,7 @@ rotation = Vector3(0, -1.5707963267949, 0)
 position = Vector3(0.046, 0.077, 0.018)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(-0.064, 0.085, -0.017)
+position = Vector3(-0.0285, 0.085, -0.017)
 
 [node name="ActionGrip" type="Marker3D" parent="."]
-position = Vector3(0.094, 0.045, -0.048)
+position = Vector3(0.106, 0.045, -0.048)

@@ -1,3 +1,5 @@
+> **Per-gun open items from the previous session: see [HANDOVER_PER_GUN.md](HANDOVER_PER_GUN.md).**
+
 # Guns → real counterparts (2026-11-07)
 
 Every gun was rendered close up from fixed cameras (left, right, top, a 3/4
@@ -27,6 +29,26 @@ capacity, mass and silhouette.
 Trademarked logos (GLOCK, COLT, FN, CZ…) are replaced with the in-game names in
 the same places and styles (slide logo box, receiver roll marks, selector
 markings, serials).
+
+## Photo-trace pass (after the user's "trace them really carefully")
+For the guns that were furthest off, outlines are now extracted automatically from calibrated side
+photos (marching squares on a colour/alpha mask, simplified to about 0.3 mm). The scale is
+measured from the 10.0 mm MIL-STD-1913 slot pitch where the gun has a rail. Each part is the traced
+outline clipped to that part's region, extruded at the real part width, then rounded. Traced
+controls, screws and slots become relief or recesses, and traced holes are cut through. Reference
+data lives in `tools/weapon_real/refs/`; `tools/weapon_real/trace.py` turns it into geometry
+(including true-round lathe parts for barrels and brakes).
+
+| Gun | Trace source | Scale |
+|---|---|---|
+| Kite / SCAR 17S | FN America studio left-side photo, 2400 px | 2.42 px/mm (rail slots) |
+| Shigure / EVO 3 A1 | Commons "Scorpion EVO 3 A1 left.jpg", 3807 px | 6.10 px/mm (rail slots) |
+| Raiden / M4A1 | Commons "M4A1 SOPMOD Block II.jpg", 7607 px | 7.18 px/mm (rail slots) |
+| Tobikage / SVD | Commons "Dragunovs rt noBG.jpg" | 0.978 px/mm (1225 mm OAL) |
+| Hayate / M40A5 stock | Commons "M-40A3.jpg", levelled on the barrel (13.1°) | 1124 mm OAL |
+| Yuzuru / AW stock | Commons "PSG 90 G24" side image | 1180 mm OAL |
+
+The FN photo is used only to measure outlines; it isn't copied into the game or the sheets.
 
 ## Gap lists
 
@@ -71,6 +93,11 @@ tube, laminated vented handguard with retaining rings, hooded front sight with b
 trunnion).
 Remaining: the catalogue still lists the ammo as "6.5×48 fictional" (gameplay data left
 unchanged); the stock shape is approximate.
+Pass 3 changes (see the table below for the full list):
+- Receiver re-placed from the trace: 577-950, bottom -31.5, cover 37.5.
+- The stock no longer includes the receiver hump.
+- Ribbed early cover, cover catch, forward regulator and left-side swivels.
+- 58k vertices.
 
 **HAYATE → M40A5.**
 Before: the barrelled action floated above an invented olive stock.
@@ -108,6 +135,58 @@ simplified; no gas regulator detail.
 **UZI.** Already an accurate IMI Uzi (ribbed top cover, grip safety, folding stock, front-sight
 ears, knurled barrel nut). No change needed.
 
+## Pass 3: one agent per gun, plus shared finish (2026-11-07, integrated)
+Each gun was reworked part by part against its real counterpart by its own agent. The shared
+finish shader was rewritten, and an integrator then applied the shared requests, re-rendered
+every gun (after and before, same cameras) and ran the gameplay check. Nothing is committed.
+
+| Gun | Fixed in this pass | Still differs | Vertices (README budget) |
+|---|---|---|---|
+| AKANE / Glock 17 Gen 5 | Rail moulded into a flat-bottomed dust cover; full barrel-hood top showing in the port; no half-moon cutout (FS frame); bevelled dust-cover nose; floor-plate lip; polymer trigger and safety; grooved slide-lock lever; slide-stop arm; barrel serial; smooth relief at the mag catch; flush serial plate | Grip texture is shader-only; markings are flat inlays; slide-stop arm and serration counts come from memory, not a photo; no barrel tilt | 75,443 (61k, +24%) |
+| RAIDEN / M4A1 Block II | Invented RIS II vent holes removed; clamshell split and 6 bolts; front disc artefacts removed and open rail front with barrel; real A2 birdcage; gas block and tube; KAC front and rear sights rebuilt; selector arc SAFE/SEMI/AUTO; 10 mm guard bar; castle-nut notches; rubber butt pad; smooth PMAG with floorplate; 39 mm charging handle; magwell flare; rail slot numbers | Lower-receiver side contours simplified; the new left close-up shows the selector markings barely readable; SOPMOD stock has no adjustment lever; KAC knobs not knurled; handguard 320 mm vs 311 mm spec | 90,280 (102k, -12%) |
+| TOBIKAGE / Dragunov SVD | Receiver re-placed from the trace (d 577-950, bottom -31.5, cover top 37.5); receiver hump removed from the stock; magazine closes into the magwell; no AK rivets; ribbed early cover with spring-guide button; cover catch lever; forward regulator sleeve (1/2); left-side swivels; trigger housing and guard from the trace; chamfered flash-hider nose; 23 mm barrel; smoothed stock and real cheek-rest groove; PSO rail with recoil slot; OpticSocket and EjectionPort moved | Part widths estimated (one 0.98 px/mm photo); no handguard parting line; no rear-sight numerals; trigger housing simplified; laminate ply bands only where the surface cuts across the plies | 58,116 (54k, +8%) |
+| HAYATE / M40A5 | Remington 700 short action (168 mm) with port, tang, gas vent and lug; true 25 in barrel; SureFire-style brake; McMillan A4 rebuilt as a smooth loft at spec widths with thumb notch, saddle cheek piece, 6 flush cups and bipod stud; embedded front rail; Badger 30 MOA base and M5 bottom metal; AICS 5-round mag; real folding BUIS; markings tangent to the round surfaces; markers moved | Length of pull 12.8 in (real 13-14.5 in): butt not lengthened so the first-person fit is kept; plain OD with no field camo; brake ports and flush-cup positions are labelled defaults; muzzle camera locked to the old muzzle point (muzzle_live is correct) | 38,656 (62k, -38%) |
+| YUZURU / AI AW | Stock re-traced from a measured PSG 90 photo with lofted rounded sections; action group moved 40-60 mm forward; 70 mm butt spacer and pad assembly; cheek piece; monopod; fore-end flute and swivel cup instead of invented slots; flat-sided receiver at +23.5 mm rail; 6-lug bolt, shroud, safety and swept handle; clamp-collar brake with windows; moulded guard; markings on the right; markers moved | Black (AWP) colour rather than olive; no bolt flutes or extractor; the shroud rotates with the bolt; no stock parting seam | 74,218 (58k, +28%) |
+| SHIGURE / CZ Scorpion EVO 3 A1 | True 1913 top rail from front to rear sight; flat-topped upper running forward to the front sight; hollow M-LOK handguard; charging slot on both sides; magwell flare; translucent smoked magazine with 27 visible rounds and follower; cylindrical flash hider and bored barrel; real rotating rear drum; ambidextrous selector, pictograms and bolt catch; rubber butt pad | Stock and hand stop are extrusions; magazine holds 27, not 30; no sling points; grip texture is shader-only | 57,073 (57k, 0%) |
+| KITE / FN SCAR 17S | Upper section 42 mm with anodised band to -13 mm; lightening slots and charging channels; 1913 side and bottom rails; NRCH; sling plates; phosphated gas block, regulator and folding front sight; open compensator prongs; rebuilt rear sight on an 83 mm sight line; real lower controls; long low port with deflector; markings, oval logo and data matrix; grip texture limited to the panel; stock beam step, comb button and LOP marks; real stamped mag | Compensator prong slots approximate; engraving faint; no Torx recesses or checkered pads; section widths estimated | 46,170 (47k, -2%) |
+| UZI / IMI Uzi | Textures re-authored: no fake 0.5 AO; satin baked-enamel finish with bare-steel wear; phosphate barrel and magazine; matte ABS grips; roll marks restamped with in-game names (UZI S.M.G. / FULL AUTO / SHINRAI ARMS) | Selector still reads S/F (Model B); handguard sheen gradient; the BEFORE column is blank (there is no uzi in `before_assets/`) | 17,045 (unchanged) |
+
+**Shared finish (`scripts/weapon_real_finish.gd` / `.gdshader`).** Wear is driven by object-space
+signed curvature: convex bevels lighten, and in contact patches they wear through to bare metal;
+concave fillets collect dust; rounded surfaces take on a handling polish. New patterns: hard-anodised
+aluminium (6), rubber (7) and plain (8). Laminate plies and glue lines are shown when `ply_mm > 0`,
+and phosphate has blotchy oil-sheen patches. Unknown material names fall back to a keyword finish.
+Integrator changes:
+- Edge wear and dust now fade out once a pixel covers more than about 0.3-0.7 mm. This removes
+  the bright dashed outlines on rail slots in full-gun views; close-ups keep the wear.
+- "SVD magazine steel" edge wear lowered from 0.6 to 0.35.
+- McMillan OD darkened to (0.24, 0.27, 0.19) and (0.23, 0.26, 0.18).
+- Added "AW bullet jacket" (copper) and "SCAR phosphate steel" (grey phosphate on the gas block
+  and front sight base). "SCAR magazine" lightened to the real golden FDE (0.6, 0.5, 0.32).
+
+The smoked EVO magazine names stay out of the table on purpose so the glTF alpha blend survives.
+
+**Capture (`tests/weapon_realism_capture.gd`).** Changes:
+- 8192 directional shadow atlas with soft-high filtering and blended splits, which removes the
+  stair-stepped barrel shadow on stocks.
+- New `left_live` close-up framed on GripRight: the left side of the lower or frame, for the
+  selector, roll marks and mag catch.
+
+Before and after were both re-rendered with these settings.
+
+**Validation:** `tests/weapon_realism_validate.gd` gives 128/128 with 0 failures. Every gun's
+sight line is centred (0.0000), including those whose markers moved: tobikage, hayate, yuzuru and
+kite. Run it windowed, as its usage line shows. A `--headless` run has no frame cap, so the
+fixed frame waits end before the equip animation does: that gives 13 false failures ("ready for
+input after equip" and "sight line centred").
+
+Open shared items:
+- Handling polish comes from noise. Placing it where hands actually rest needs a vertex-colour
+  contact mask from the builders.
+- "M4 hard anodized" covers both upper and lower, so the real colour mismatch between them can't
+  be shown.
+- `hayate_muzzle.json` stays on the old muzzle point (-0.805) so before and after share a camera.
+
 ## Not covered
 - Optics (AME reflex, TOBI prism, KASUMI scope) were not rebuilt.
 - Reference photos are linked by name, not embedded in the sheets. Downloading them needs the
@@ -143,7 +222,11 @@ needed.
 - Builders: `tools/weapon_real/<gun>.py` (Blender 5.2, `blender --background --python ...`),
   helpers in `tools/weapon_real/wr.py`.
 - Finishes: `scripts/weapon_real_finish.gd` / `.gdshader`, keyed by material name.
-- Renders: `tools/weapon_real/capture.ps1 -Only <gun> -Tag <tag>`; same-camera pass
+- Renders + sheet (preferred, safe with several agents): `powershell -File
+  tools/weapon_real/one_gun_locked.ps1 -Key <gun> -Builder <builder> [-SkipBuild] [-WithBefore]`.
+  It takes the exclusive `.godot_render.lock` for every Godot step. Older path:
+  `tools/weapon_real/capture.ps1 -Only <gun> -Tag <tag>`; same-camera pass
   `tools/weapon_real/before_after.ps1 -Backup <old weapon folders>`; sheets via
   `python tools/weapon_realism_sheet.py compare <gun>`.
-- Gameplay check: `tests/weapon_realism_validate.gd`.
+- Gameplay check: `tests/weapon_realism_validate.gd`. Run it windowed, without `--headless`, and
+  under the same lock.

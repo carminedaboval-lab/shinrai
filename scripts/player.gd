@@ -187,6 +187,7 @@ var alive: bool = true
 
 var head: Node3D
 var camera: Camera3D
+var aim_focus: CameraAttributesPractical
 var weapon: Node3D
 var weapon_body: Node3D
 var magazine: Node3D
@@ -327,6 +328,13 @@ func _build_camera() -> void:
     camera.current = true
     camera.fov = 73.0
     camera.near = 0.012
+    # Aim focus: with iron sights the eye focuses on the front sight, so the
+    # rear sight a few centimetres away goes soft (the "ghost ring" every
+    # shooter shows). Off unless aiming on irons; see _update_aim_focus().
+    aim_focus = CameraAttributesPractical.new()
+    aim_focus.dof_blur_near_enabled = false
+    aim_focus.dof_blur_far_enabled = false
+    camera.attributes = aim_focus
     head.add_child(camera)
 
 func _material(color: Color, metallic: float = 0.0, roughness: float = 0.5) -> StandardMaterial3D:
@@ -1245,6 +1253,22 @@ func _input(event: InputEvent) -> void:
     if is_instance_valid(face_drone_latch) and face_drone_latch.consume_space_event(event):
         get_viewport().set_input_as_handled()
 
+func _update_aim_focus() -> void:
+    if aim_focus == null:
+        return
+    var relief := 1.0
+    var irons := is_instance_valid(uzi_viewmodel) and str(uzi_viewmodel.get("optic_id") if "optic_id" in uzi_viewmodel else "").is_empty()
+    if irons and uzi_viewmodel.has_method("get_ads_eye_relief"):
+        relief = float(uzi_viewmodel.call("get_ads_eye_relief"))
+    # Only a rear sight close to the eye blurs; long-relief sights (pistol,
+    # SVD tangent sight) stay crisp, and optics never blur their reticle.
+    var focus := smoothstep(0.55, 1.0, ads_blend) if irons and relief < 0.2 and not weapon_id.is_empty() else 0.0
+    aim_focus.dof_blur_near_enabled = focus > 0.001
+    if focus > 0.001:
+        aim_focus.dof_blur_near_distance = relief + 0.13
+        aim_focus.dof_blur_near_transition = 0.11
+        aim_focus.dof_blur_amount = 0.07 * focus
+
 func reset_controller_intents() -> void:
     field_handling.cancel(self)
     _cancel_bolt_cycle()
@@ -1395,7 +1419,9 @@ func _physics_process(delta: float) -> void:
             _finish_reload()
 
     ads_blend = move_toward(ads_blend, 1.0 if ads and not reloading else 0.0, delta * float(weapon_definition.ads_speed))
-    camera.fov = lerpf(73.0, float(weapon_definition.ads_fov), ads_blend)
+    # Eased like other shooters' aim-in, so the zoom settles instead of stopping dead.
+    camera.fov = lerpf(73.0, float(weapon_definition.ads_fov), smoothstep(0.0, 1.0, ads_blend))
+    _update_aim_focus()
 
     var gameplay_allowed: bool = _controller_gameplay_allowed()
     var input_vec: Vector2 = ControllerInput.movement() if gameplay_allowed else Vector2.ZERO
