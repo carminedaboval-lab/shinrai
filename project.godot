@@ -4,7 +4,7 @@
 ;
 ; Format:
 ;   [section] ; section goes between []
-;   param=value ; assign values to parameters
+;   param=value ; assigning values to parameters
 
 config_version=5
 
@@ -23,6 +23,10 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 MidoriSakuraSwap="*res://scripts/midori_sakura_swap.gd"
 MidoriGrassDetail="*res://scripts/midori_grass_detail.gd"
 MidoriGroundTexture="*res://scripts/midori_ground_texture.gd"
+
+[autoload]
+
+SakuraCleanup="*res://scripts/sakura_cleanup.gd"
 
 [display]
 
