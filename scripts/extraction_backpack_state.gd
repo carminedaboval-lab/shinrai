@@ -1,7 +1,7 @@
 extends RefCounted
-## Isolated candidate. No assets, scene nodes, production writes or automatic activation.
 const Clothing=preload("./extraction_clothing.gd")
 const LootContainers = preload("./extraction_loot_containers.gd")
+const Storage = preload("./extraction_storage_layout.gd")
 const TEST_ARGUMENT := "--shinrai-test-backpacks"
 const MOUNTAIN_CHANCE := 0.05
 const REGULAR := "backpack_regular"
@@ -61,7 +61,14 @@ static func limits(state: Dictionary, bag: Array, purchased_level: int) -> Dicti
 
 static func fits(state: Dictionary, bag: Array, purchased_level: int) -> bool:
 	var cap := limits(state,bag,purchased_level)
-	return bag.size()<=int(cap.slots) and cargo_mass(bag)<=float(cap.kg)+0.00001
+	return cargo_mass(bag) <= float(cap.kg) + 0.00001 and Storage.build(state, bag, int(cap.slots)).overflow.is_empty()
+
+static func layout(state: Dictionary, bag: Array, purchased_level: int) -> Dictionary:
+	var cells := int(limits(state, bag, purchased_level).slots)
+	return Storage.build(state, bag, cells)
+
+static func settle(state: Dictionary, bag: Array, purchased_level: int) -> void:
+	Storage.commit(bag, layout(state, bag, purchased_level))
 
 static func load_ratio(state: Dictionary, bag: Array, purchased_level: int) -> float:
 	return clampf(cargo_mass(bag)/float(limits(state,bag,purchased_level).kg),0.0,1.0)
@@ -92,6 +99,7 @@ static func pickup(state: Dictionary, bag: Array, id: String, purchased_level: i
 	next.collected[id]=true
 	bag.assign(candidate)
 	state.merge(next,true)
+	settle(state, bag, purchased_level)
 	return true
 
 static func equip(state: Dictionary, bag: Array, uid: String, purchased_level: int) -> bool:
@@ -109,9 +117,13 @@ static func discard(state: Dictionary, bag: Array, index: int, purchased_level: 
 	if index<0 or index>=bag.size(): return false
 	var candidate := bag.duplicate(true)
 	var next := state.duplicate(true)
-	if str(candidate[index].get("pack_uid",""))==str(next.equipped_uid): next.equipped_uid=""
+	var worn := not str(next.equipped_uid).is_empty() and str(candidate[index].get("pack_uid","")) == str(next.equipped_uid)
+	if worn: next.equipped_uid=""
 	candidate.remove_at(index)
-	if not fits(next,candidate,purchased_level): return false
+	# A legacy kit may already exceed the available cells. Allow ordinary
+	# discards so the player can resolve it even if several items must go.
+	if worn and not fits(next,candidate,purchased_level): return false
 	bag.assign(candidate)
 	state.equipped_uid=next.equipped_uid
+	settle(state, bag, purchased_level)
 	return true

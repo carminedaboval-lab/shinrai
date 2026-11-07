@@ -2,9 +2,29 @@ extends RefCounted
 ## A bounded, shared tactical planner. Knowledge comes only from delivered
 ## sight/sound/hit reports; geometry queries never sample the hidden player.
 const CONTACT_LIFETIME:=14.0
-const RADIO_RANGE:=45.0
+const RADIO_RANGE:=80.0
 const FAILED_GOAL_SECONDS:=8.0
 const LATERAL_COOLDOWN:=10.0
+# A crewmate this far out with no lane walks in to about the standoff distance.
+const JOIN_RANGE:=24.0
+# Past this even a clear lane is too far for a rifle in these hands to matter.
+const JOIN_LANE_LIMIT:=35.0
+const JOIN_STANDOFF:=15.0
+const JOIN_COOLDOWN:=3.0
+const JOIN_ROUTE_LIMIT:=110.0
+# Walking a route stops for a burst when the enemy appears this close.
+const REACTION_RANGE:=20.0
+const REACTION_SECONDS:=1.5
+const REACTION_COOLDOWN:=7.0
+const RELOAD_TOPUP_ROUNDS:=10
+const SEARCH_LEAD_SECONDS:=2.5
+const SEARCH_LEAD_MAX:=10.0
+# A firing spot needs a lane for the rifle: eyes clear low cover that the gun hits.
+const MUZZLE_HEIGHT:=1.2
+const SEARCH_PACE:=.7
+const SEARCH_BEARING_TRIES:=4
+# Without cover a shooter kneels and shifts position rather than standing as a post.
+const KNEEL_RANGE:=8.0
 var crew: Node3D
 var clock:=0.0
 var knowledge: Dictionary={}
@@ -22,12 +42,15 @@ var _sequence:=0
 var _failed_goals: Dictionary={}
 var _lateral_after: Dictionary={}
 var _search_state: Dictionary={}
+var _join_after: Dictionary={}
+var _reaction_after: Dictionary={}
+var _last_sighting: Dictionary={}
 
 func setup(owner_crew: Node3D) -> void:
 	crew=owner_crew
 
 func alive(actor: Node) -> bool:
-	return is_instance_valid(actor) and not actor.dead
+	return is_instance_valid(actor) and not actor.dead and not actor.fleeing
 
 func send(actor: Node3D, kind: String, detail: Dictionary={}) -> void:
 	var message: Dictionary={"time":clock,"sender":actor.name,"position":actor.global_position,"kind":kind}
@@ -38,7 +61,7 @@ func send(actor: Node3D, kind: String, detail: Dictionary={}) -> void:
 func report(actor: CharacterBody3D, point: Vector3, kind: String="visual") -> void:
 	if not alive(actor) or not point.is_finite(): return
 	var confidence: float={"visual":1.0,"sound":.48,"hit":.65}.get(kind,.4)
-	var report_data: Dictionary={"point":point,"time":clock,"confidence":confidence,"kind":kind}
+	var report_data: Dictionary={"point":point,"time":clock,"confidence":confidence,"kind":kind,"heading":_sighted_heading(point,kind)}
 	var receivers: Array[String]=[]
 	for peer: CharacterBody3D in crew.members:
 		if not alive(peer) or peer.global_position.distance_to(actor.global_position)>RADIO_RANGE: continue
@@ -48,6 +71,19 @@ func report(actor: CharacterBody3D, point: Vector3, kind: String="visual") -> vo
 		receivers.append(peer.name)
 		if peer!=actor: peer.investigate(point)
 	send(actor,"enemy_"+kind,{"enemy_position":point,"confidence":confidence,"receivers":receivers})
+
+# Two real sightings give a direction of travel. Reports a moment apart are the
+# same glimpse from two people, so the older sighting stays as the baseline.
+func _sighted_heading(point: Vector3, kind: String) -> Vector3:
+	if kind!="visual": return Vector3.ZERO
+	if _last_sighting.is_empty() or clock-float(_last_sighting.time)>3.0:
+		_last_sighting={"point":point,"time":clock,"heading":Vector3.ZERO}
+		return Vector3.ZERO
+	var elapsed: float=clock-float(_last_sighting.time)
+	if elapsed<.4: return _last_sighting.heading
+	var heading: Vector3=(point-_last_sighting.point)/elapsed; heading.y=0
+	_last_sighting={"point":point,"time":clock,"heading":heading}
+	return heading
 
 # Called only for a genuine observed hostile contact, not a radio estimate.
 # Planning does not bypass this member's normal personal combat confirmation.
@@ -108,10 +144,14 @@ func _decide(actor: CharacterBody3D) -> void:
 	var threat: Vector3=info.point
 	var order: Dictionary=orders.get(actor,{})
 	var safe_hold: Dictionary={}
-	var low_health: bool=actor.health/actor.max_health<.32
+	# An empty rifle has no more business in the open than a wounded man.
+	var low_health: bool=actor.health/actor.max_health<.32 or actor.out_of_ammo()
 	if not order.is_empty() and order.kind=="flank" and order.has("threat") and _flat(order.threat,threat)>6.0:
 		_abort_flank("contact_relocated")
 		order={}
+	if not order.is_empty() and _should_return_fire(actor,order,threat):
+		_return_fire(actor)
+		return
 	if not order.is_empty():
 		var moving: bool=order.kind in ["move_cover","retreat","flank","peek_move","return_cover","search_sector","reposition"]
 		# The follower publishes remaining route length, so sideways shuffling or
@@ -133,7 +173,7 @@ func _decide(actor: CharacterBody3D) -> void:
 			if order.has("cover"):
 				var cover: Dictionary=order.cover
 				if order.kind=="peek_move":
-					_issue(actor,"peek",order.goal,PackedVector3Array(),{"cover":cover,"until":clock+1.25,"crouch":false})
+					_issue(actor,"peek",order.goal,PackedVector3Array(),{"cover":cover,"until":clock+randf_range(1.7,2.8),"crouch":false})
 				else:
 					_issue(actor,"hold_cover",cover.point,PackedVector3Array(),{"cover":cover,"until":clock+1.2+crew.members.find(actor)*.55,"crouch":cover.crouch})
 				return
@@ -149,12 +189,16 @@ func _decide(actor: CharacterBody3D) -> void:
 				send(actor,"cover_compromised" if compromised else "need_cover")
 				if actor==flank_actor: _abort_flank("cover_compromised")
 				orders.erase(actor); order={}
+		# Reloads happen behind cover: a dry peek ends now, and a quiet moment in
+		# cover tops up a low magazine before the next one.
+		if not order.is_empty() and order.kind=="peek" and actor.magazine_reload_remaining>0: order.until=clock
+		if not order.is_empty() and order.kind=="hold_cover" and actor.weapon_rounds<=RELOAD_TOPUP_ROUNDS: actor.begin_reload()
 		if not order.is_empty() and clock<float(order.until): return
 		if not order.is_empty() and order.kind=="hold_cover":
 			# A long checked approach can consume several seconds of the report's
 			# lifetime. Healthy members may probe that last-known lane until contact
 			# expires normally; this never refreshes knowledge or authorizes a shot.
-			if low_health or actor.pinned_time>0:
+			if low_health or actor.pinned_time>0 or actor.magazine_reload_remaining>0:
 				order.until=clock+1.5
 				return
 			if order.cover.has("peek"):
@@ -179,6 +223,10 @@ func _decide(actor: CharacterBody3D) -> void:
 			return
 		if not order.is_empty() and order.kind=="flank":
 			_abort_flank("timeout")
+	var gap: float=_flat(actor.global_position,threat)
+	if float(info.age)<=6.0 and not low_health and clock>=float(_join_after.get(actor,0.0)) and gap>JOIN_RANGE and (gap>JOIN_LANE_LIMIT or not sightline(actor.global_position+Vector3.UP*1.5,threat+Vector3.UP*1.2)):
+		_join_after[actor]=clock+JOIN_COOLDOWN
+		if _join_fight(actor,threat): return
 	if float(info.age)>6.0:
 		# Search assignment follows the reported location and completed visits,
 		# never a wall-clock phase. Replanning a blocked route keeps its sector.
@@ -188,12 +236,17 @@ func _decide(actor: CharacterBody3D) -> void:
 			_search_state[actor]=search
 		var sector: int=maxi(0,crew.members.find(actor))
 		var member_count: int=maxi(1,crew.members.size())
-		var angle:=float(sector)*TAU/float(member_count)+float(search.step)*.45
-		var goal: Vector3=crew.get_nearest_walkable_world(threat+Vector3(cos(angle),0,sin(angle))*7.0)
-		var route:=path_to(actor.global_position,goal,actor) if not _goal_failed(actor,goal) and not claimed(goal,actor) else PackedVector3Array()
-		if not route.is_empty() and _flat(actor.global_position,goal)>.65:
-			_issue(actor,"search_sector",goal,route,{"until":clock+5.0})
-			return
+		# Search where a moving enemy was heading, not only where they were last seen.
+		var lead: Vector3=(info.get("heading",Vector3.ZERO) as Vector3)*SEARCH_LEAD_SECONDS
+		var center: Vector3=threat+lead.limit_length(SEARCH_LEAD_MAX)
+		# A blocked sector rolls on to the next bearing rather than leaving them idle.
+		for attempt: int in SEARCH_BEARING_TRIES:
+			var angle:=float(sector)*TAU/float(member_count)+float(search.step)*.45+float(attempt)*.9
+			var goal: Vector3=crew.get_nearest_walkable_world(center+Vector3(cos(angle),0,sin(angle))*7.0)
+			var route:=path_to(actor.global_position,goal,actor) if not _goal_failed(actor,goal) and not claimed(goal,actor) else PackedVector3Array()
+			if not route.is_empty() and _flat(actor.global_position,goal)>.65:
+				_issue(actor,"search_sector",goal,route,{"until":clock+5.0,"pace":SEARCH_PACE})
+				return
 	# Being pinned calls for protection, not an automatic outward displacement.
 	var cover:=find_cover(actor,threat,low_health)
 	if not cover.is_empty():
@@ -209,7 +262,7 @@ func _decide(actor: CharacterBody3D) -> void:
 		if not route.is_empty() and _flat(goal,threat)>_flat(actor.global_position,threat)+2.0:
 			_issue(actor,"reposition",goal,route,{"until":clock+4.0})
 			return
-	elif clock>=float(_lateral_after.get(actor,0.0)) and (not sightline(actor.global_position+Vector3.UP*1.5,threat+Vector3.UP*1.2) or _flat(actor.global_position,threat)<5.0):
+	elif clock>=float(_lateral_after.get(actor,0.0)):
 		_lateral_after[actor]=clock+LATERAL_COOLDOWN
 		var toward: Vector3=threat-actor.global_position; toward.y=0
 		var side:=Vector3(-toward.z,0,toward.x).normalized()
@@ -218,12 +271,48 @@ func _decide(actor: CharacterBody3D) -> void:
 			if _goal_failed(actor,goal) or claimed(goal,actor) or _flat(goal,threat)<=2.0 or absf(_flat(goal,threat)-_flat(actor.global_position,threat))>1.25: continue
 			var route:=path_to(actor.global_position,goal,actor)
 			if route.is_empty() or path_length(route,actor.global_position)>5.0 or _flat(goal,actor.global_position)<1.0: continue
-			if not sightline(goal+Vector3.UP*1.5,threat+Vector3.UP*1.2): continue
+			if not sightline(goal+Vector3.UP*MUZZLE_HEIGHT,threat+Vector3.UP*1.2): continue
 			_issue(actor,"reposition",goal,route,{"until":clock+4.0})
 			return
 	# Healthy members with a clear useful lane engage instead of repeatedly
 	# withdrawing three metres. Own sight, aim and friendly-fire gates still apply.
-	_issue(actor,"observe",actor.global_position,PackedVector3Array(),{"until":clock+1.5})
+	_issue(actor,"observe",actor.global_position,PackedVector3Array(),{"until":clock+1.5,"crouch":_flat(actor.global_position,threat)>KNEEL_RANGE})
+
+## The moment a person walking a route spots the enemy, without waiting a planner
+## turn: by then a glimpse through a gap has already gone behind them.
+func sighted(actor: CharacterBody3D) -> void:
+	var order: Dictionary=orders.get(actor,{})
+	var info:=contact(actor)
+	if not order.is_empty() and not info.is_empty() and _should_return_fire(actor,order,info.point): _return_fire(actor)
+
+func _return_fire(actor: CharacterBody3D) -> void:
+	_reaction_after[actor]=clock+REACTION_COOLDOWN
+	send(actor,"returning_fire")
+	_issue(actor,"observe",actor.global_position,PackedVector3Array(),{"until":clock+REACTION_SECONDS})
+
+func _should_return_fire(actor: CharacterBody3D, order: Dictionary, threat: Vector3) -> bool:
+	if not order.kind in ["move_cover","reposition","search_sector","return_cover"] or actor==flank_actor: return false
+	if clock<float(_reaction_after.get(actor,0.0)) or not actor.can_fire_now(): return false
+	return actor.own_visual_time<=.3 and _flat(actor.global_position,threat)<REACTION_RANGE
+
+# Walk a crewmate in along the real route, then let cover near that point decide
+# where they end up. Open ground with no cover still closes the distance.
+func _join_fight(actor: CharacterBody3D, threat: Vector3) -> bool:
+	var route: PackedVector3Array=crew.get_path_world(actor.global_position,crew.get_nearest_walkable_world(threat))
+	if route.is_empty() or path_length(route,actor.global_position)>JOIN_ROUTE_LIMIT: return false
+	var anchor: Vector3=route[-1]
+	for point: Vector3 in route:
+		if _flat(point,threat)<=JOIN_STANDOFF: anchor=point; break
+	var cover:=find_cover(actor,threat,false,anchor,7.0,JOIN_ROUTE_LIMIT)
+	if not cover.is_empty():
+		send(actor,"joining_fight")
+		_issue(actor,"move_cover",cover.point,cover.path,{"cover":cover,"crouch":false,"until":clock+12.0})
+		return true
+	var walk:=path_to(actor.global_position,anchor,actor)
+	if walk.is_empty(): return false
+	send(actor,"joining_fight")
+	_issue(actor,"reposition",anchor,walk,{"until":clock+4.0})
+	return true
 
 func _remember_failed_goal(actor: CharacterBody3D, point: Vector3) -> void:
 	var recent: Array=_failed_goals.get(actor,[])
@@ -242,8 +331,9 @@ func _goal_failed(actor: CharacterBody3D, point: Vector3) -> bool:
 	return false
 
 func permits_fire(actor: CharacterBody3D) -> bool:
+	# Cover that gives a personal view of the enemy gives them a view back.
 	var kind: String=orders.get(actor,{}).get("kind","")
-	return kind in ["peek","observe"] and actor.pinned_time<=0
+	return kind in ["peek","observe","hold_cover"] and actor.pinned_time<=0
 
 # The order permits covering, but an empty or reloading weapon cannot provide
 # it. Maintenance keeps the existing 2.2-second interruption grace in tick().
@@ -312,7 +402,7 @@ func plan_flank(actor: CharacterBody3D, support: CharacterBody3D, threat: Vector
 		if score<best_score: best_score=score; best={"goal":goal,"path":route,"cover":cover,"length":length,"exposure":exposure}
 	return best
 
-func find_cover(actor: CharacterBody3D, threat: Vector3, retreat: bool=false, center: Vector3=Vector3.INF, radius: float=17.0) -> Dictionary:
+func find_cover(actor: CharacterBody3D, threat: Vector3, retreat: bool=false, center: Vector3=Vector3.INF, radius: float=17.0, reach: float=33.0) -> Dictionary:
 	if not center.is_finite(): center=actor.global_position
 	var candidates: Array[Vector3]=[]
 	# Cast a small fixed fan from local samples toward the reported threat. The
@@ -339,7 +429,7 @@ func find_cover(actor: CharacterBody3D, threat: Vector3, retreat: bool=false, ce
 			_remember_failed_goal(actor,point)
 			continue
 		var length:=path_length(route,actor.global_position)
-		if length>33.0 or (retreat and _flat(point,threat)<_flat(actor.global_position,threat)+2): continue
+		if length>reach or (retreat and _flat(point,threat)<_flat(actor.global_position,threat)+2): continue
 		var slot: Dictionary={"point":point,"crouch":crouch,"path":route}
 		var away: Vector3=(point-threat).normalized()
 		var side:=Vector3(-away.z,0,away.x)
@@ -359,7 +449,7 @@ func find_cover(actor: CharacterBody3D, threat: Vector3, retreat: bool=false, ce
 # reachability alone can lead around an entire wall to a point one metre away.
 func _peek_path(actor: CharacterBody3D, point: Vector3, peek: Vector3, threat: Vector3) -> PackedVector3Array:
 	if claimed(peek,actor) or _flat(peek,threat)<=2.0 or not clear_at(peek,actor,false): return PackedVector3Array()
-	if not sightline(peek+Vector3.UP*1.5,threat+Vector3.UP*1.2): return PackedVector3Array()
+	if not sightline(peek+Vector3.UP*MUZZLE_HEIGHT,threat+Vector3.UP*1.2): return PackedVector3Array()
 	var route:=path_to(point,peek,actor)
 	if path_length(route,point)>minf(3.5,_flat(point,peek)*1.6+.3): return PackedVector3Array()
 	return route
@@ -449,3 +539,4 @@ func member_down(actor: CharacterBody3D) -> void:
 	if actor==flank_actor or actor==flank_support: _abort_flank("teammate_down")
 	orders.erase(actor); knowledge.erase(actor); positions.erase(actor)
 	_failed_goals.erase(actor); _lateral_after.erase(actor); _search_state.erase(actor)
+	_join_after.erase(actor); _reaction_after.erase(actor)

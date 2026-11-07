@@ -26,6 +26,7 @@ var message: Label
 var marker: Label
 var progress: ProgressBar
 var overlay: ColorRect
+var inventory_backdrop: TextureRect
 var panel_content: VBoxContainer
 var menu_center: CenterContainer
 var menu_scroll: ScrollContainer
@@ -179,6 +180,15 @@ func _ready() -> void:
 	overlay.color = Color(0.016, 0.032, 0.055, 0.88)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(overlay)
+	inventory_backdrop = TextureRect.new()
+	inventory_backdrop.name = "InventoryBackdrop"
+	inventory_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	inventory_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	inventory_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inventory_backdrop.modulate = Color(0.64, 0.74, 0.75, 0.82)
+	inventory_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inventory_backdrop.hide()
+	overlay.add_child(inventory_backdrop)
 	menu_center = CenterContainer.new()
 	menu_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(menu_center)
@@ -204,6 +214,7 @@ func _label(parent: Node, text: String, size_value: int, color: Color) -> Label:
 	return label
 
 func _clear_panel() -> void:
+	inventory_backdrop.hide()
 	_set_menu_scrolling(true)
 	call_deferred("_fit_menu_scroll")
 	_close_loot_view()
@@ -332,15 +343,24 @@ func show_inventory(raid: Node) -> void:
 				inventory_selection = str(child.entries[child.selected].id)
 	_clear_panel()
 	_set_menu_scrolling(false)
-	overlay.color = Color(0.0, 0.0, 0.0, 0.035)
+	overlay.color = Color(0.022, 0.059, 0.065, 0.88)
+	if not inventory_backdrop.texture:
+		inventory_backdrop.texture = load("res://assets/ui/inventory/inventory_backdrop.png")
+	inventory_backdrop.show()
+	body_status.hide()
 	panel_content.custom_minimum_size.x = 1504
 	var inventory := InventoryPanel.new()
 	panel_content.add_child(inventory)
 	inventory.configure(raid)
+	var fit_width := func() -> void:
+		inventory.custom_minimum_size = Vector2(clampf(root.size.x - 24.0, 1504.0, 2280.0), maxf(0.0, root.size.y - 28.0))
+	fit_width.call()
+	root.resized.connect(fit_width)
+	inventory.tree_exiting.connect(func() -> void: root.resized.disconnect(fit_width), CONNECT_ONE_SHOT)
 	inventory.action_requested.connect(func(action: String) -> void: action_requested.emit(action))
 	if not previous_view.is_empty() and bool(previous_view.in_hq) == inventory.in_hq:
 		inventory.restore_view_state(previous_view)
-	elif not inventory_selection.is_empty():
+	elif inventory.in_hq and not inventory_selection.is_empty():
 		for index: int in range(inventory.entries.size()):
 			if str(inventory.entries[index].id) == inventory_selection:
 				inventory._select(index)
@@ -348,6 +368,7 @@ func show_inventory(raid: Node) -> void:
 
 func show_raid() -> void:
 	_close_loot_view()
+	body_status.show()
 	for child: Node in panel_content.get_children():
 		if child is InventoryPanel:
 			panel_content.remove_child(child)
@@ -401,12 +422,12 @@ func show_pause(raid: Node, map_open: bool) -> void:
 		var names: Array[String] = []
 		for item: Dictionary in raid.bag:
 			names.append(item.title)
-		var cargo := _label(panel_content, "CARGO %d/%d  ·  %s" % [raid.bag.size(), raid.capacity(), ", ".join(names) if not names.is_empty() else "Empty"], 18, PAPER)
+		var cargo := _label(panel_content, "CARGO %d/%d CELLS  ·  %s" % [raid.cargo_cells_used(), raid.capacity(), ", ".join(names) if not names.is_empty() else "Empty"], 18, PAPER)
 		cargo.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cargo.max_lines_visible = 2
 		cargo.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		cargo.custom_minimum_size.x = 780
-	_button("INVENTORY  ·  %d / %d cargo slots" % [raid.bag.size(), raid.capacity()], "inventory")
+	_button("INVENTORY  ·  %d / %d cargo cells" % [raid.cargo_cells_used(), raid.capacity()], "inventory")
 	_label(panel_content, "The raid clock and patrols are paused.", 19, Color("#ddd4bd"))
 	_button("RESUME", "resume").grab_focus()
 	var map_button:=Button.new();map_button.text="PAUSE MENU" if map_open else "FIELD MAP"
@@ -503,7 +524,7 @@ func update_raid(raid: Node) -> void:
 	supplies.ammo = raid.player.ammo
 	supplies.reserve = raid.player.reserve
 	supplies.medkits = raid.medkits
-	supplies.cargo = raid.bag.size()
+	supplies.cargo = raid.cargo_cells_used()
 	supplies.capacity = raid.capacity()
 	supplies.cargo_mass_kg = raid.cargo_mass_kg()
 	supplies.cargo_limit_kg = raid.cargo_limit_kg()
@@ -936,7 +957,7 @@ class AmmoStatus extends Control:
 		if reloading and reload_ratio >= 0:
 			Optical.line(self, Vector2(20, 130), Vector2(184, 130), Color("476461"))
 			Optical.line(self, Vector2(20, 130), Vector2(20 + 164 * reload_ratio, 130), Optical.CYAN, 2)
-		Optical.text(self,Vector2(20,154),"CARGO %d/%d" % [cargo,capacity],15,Color(Optical.AMBER if cargo>=capacity else Optical.CYAN,cargo_alpha))
+		Optical.text(self,Vector2(20,154),"CELLS %d/%d" % [cargo,capacity],15,Color(Optical.AMBER if cargo>=capacity else Optical.CYAN,cargo_alpha))
 		Optical.text(self,Vector2(20,174),"MASS %.1f/%.1f kg" % [cargo_mass_kg,cargo_limit_kg],13,Color(Optical.AMBER if cargo_mass_kg>=cargo_limit_kg else Optical.CYAN,cargo_alpha))
 
 class MissionStatus extends Control:

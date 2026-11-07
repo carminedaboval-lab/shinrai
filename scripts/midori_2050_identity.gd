@@ -83,7 +83,7 @@ func install() -> void:
 	await _plaza_pocket("East",Vector2(190,147),true,"PlazaBench_02")
 	if complete_plaza:
 		await _plaza_pocket("West",Vector2(143,123),true,"")
-		await _plaza_pocket("North",Vector2(164,110.8),false,"PlazaBench_03")
+		await _plaza_pocket("North",_north_rest_bay(),false,"PlazaBench_03")
 		await _plaza_pocket("Arrival",Vector2(142,149),false,"PlazaBench_01")
 		_refine_plaza_finishes()
 	if complete_entrance: await _entrance()
@@ -223,6 +223,36 @@ func _plaza_pocket(id: String,p: Vector2,canopy: bool,cache_id: String) -> void:
 	var toward: Vector2=(PLAZA_CENTRE-p).normalized()
 	if id=="Arrival": toward=Vector2(-.8,.6)
 	await _rest_pocket(id,p,canopy,cache_id,toward,false)
+
+## Place the complete furnished bay beside the shrine walk before foliage batching,
+## navigation and searchable bench registration capture any world positions.
+func _north_rest_bay() -> Vector2:
+	var shape := BoxShape3D.new()
+	# Includes both benches, the rear bed, three dividers and front access.
+	shape.size = Vector3(8.6, 1.40, 4.75)
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.collision_mask = 1
+	var space := get_world_3d().direct_space_state
+	for p: Vector2 in [Vector2(177.5,114.7),Vector2(151,114.8),Vector2(181,117),Vector2(149,117.5)]:
+		var facing := (PLAZA_CENTRE - p).normalized()
+		var yaw := Basis(Vector3.UP,atan2(facing.x,facing.y))
+		var y := _ground(p)
+		# Every corner lies inside the measured 31m grounding court.
+		var fits := true
+		for x: float in [-4.3,4.3]:
+			for z: float in [-2.1,2.65]:
+				var corner := yaw * Vector3(x,0,z)
+				if (p + Vector2(corner.x,corner.z)).distance_to(PLAZA_CENTRE) >= 30.8: fits = false
+		if not fits: continue
+		query.transform = Transform3D(yaw,Vector3(p.x,y+0.92,p.y) + yaw * Vector3(0,0,.275))
+		if space.intersect_shape(query,1).is_empty():
+			set_meta("north_rest_bay",{"centre":p,"clearance_checked":true})
+			return p
+	# If a custom layout occupies every lateral option, keep its functional seats.
+	var original := Vector2(164,110.8)
+	set_meta("north_rest_bay",{"centre":original,"clearance_checked":false})
+	return original
 
 func _rest_pocket(id: String,p: Vector2,canopy: bool,cache_id: String,toward: Vector2,paved: bool) -> void:
 	var group:=Node3D.new();group.name="Plaza"+id+"RestGarden"

@@ -17,3 +17,21 @@ profile_startup.flag
 trailer/engine/
 # Trailer assembly output (regenerate with trailer/build_trailer.py)
 trailer/build/
+
+# Bulky intermediate review renders (regenerate with the capture scripts).
+# The concept images, the per-area sheets and the code snapshots stay tracked.
+docs/biome_concepts/built/latest/
+docs/biome_concepts/built/round3/*.png
+!docs/biome_concepts/built/round3/*_sheet.png
+docs/biome_concepts/built/round4/now/
+docs/biome_concepts/built/sakura_v3/
+docs/biome_concepts/built/sakura_v4/
+docs/biome_concepts/built/sakura_v5/
+docs/biome_concepts/built/sakura_v6/
+docs/biome_concepts/built/sakura_v7/
+docs/biome_concepts/built/sakura_v8/*.png
+!docs/biome_concepts/built/sakura_v8/compare_*.png
+docs/weapon_realism_20261107/before_assets/
+docs/weapon_realism_20261107/renders/
+# Godot import descriptors for images inside docs (docs are .gdignore'd).
+docs/**/*.import

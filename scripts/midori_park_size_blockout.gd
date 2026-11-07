@@ -1775,6 +1775,9 @@ func _prepare_reference_vegetation() -> void:
 	hollow_bark_prototype = _extract_whole_scene_prototype(HollowBarkScene, "HeavyHollowBark")
 	midnight_fern_prototype = _extract_whole_scene_prototype(MidnightFernScene, "MidnightFern")
 	emerald_fountain_grass_prototype = _extract_whole_scene_prototype(EmeraldFountainGrassScene, "EmeraldFountainGrass")
+	# The supplied fountain-grass photo is a saturated lime; every later planter
+	# reuses this prototype, so tone it once here to a weathered olive.
+	_tone_foliage_prototype(emerald_fountain_grass_prototype, Color(0.66, 0.66, 0.5))
 	japanese_maple_prototype = _extract_mesh_prototype(JapaneseMapleMesh, "Free3DJapaneseMaple", 6.4)
 	neon_park_bench_prototype = _extract_whole_scene_prototype(NeonParkBenchScene, "NeonParkBench")
 	futuristic_eco_bench_prototype = _extract_whole_scene_prototype(FuturisticEcoBenchScene, "FuturisticEcoBench")
@@ -1976,10 +1979,34 @@ func _naturalize_dense_grass_prototype(node: Node) -> void:
 				material.metallic = 0.0
 				material.metallic_specular = 0.15
 				material.roughness = 0.94
-				material.albedo_color = Color(0.82, 0.94, 0.78, 1.0)
+				material.albedo_color = Color(0.72, 0.74, 0.6, 1.0)
 				mesh_instance.set_surface_override_material(surface_index, material)
 	for child: Node in node.get_children():
 		_naturalize_dense_grass_prototype(child)
+
+## Multiplies every surface's albedo by `tint` on duplicated materials (so a
+## shared material is never toned twice) and takes the sheen off the leaves.
+## The toned material goes on a duplicated mesh, not an instance override,
+## because several planters build MultiMeshes straight from the mesh.
+func _tone_foliage_prototype(node: Node, tint: Color) -> void:
+	if node == null: return
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		var mesh_instance := node as MeshInstance3D
+		var mesh := mesh_instance.mesh.duplicate() as Mesh
+		for surface_index: int in range(mesh.get_surface_count()):
+			var source_material := mesh_instance.get_active_material(surface_index)
+			if source_material is StandardMaterial3D:
+				var material := source_material.duplicate() as StandardMaterial3D
+				material.albedo_color = material.albedo_color * tint
+				material.roughness_texture = null
+				material.roughness = 0.88
+				material.metallic = 0.0
+				material.metallic_specular = 0.2
+				mesh.surface_set_material(surface_index, material)
+				mesh_instance.set_surface_override_material(surface_index, null)
+		mesh_instance.mesh = mesh
+	for child: Node in node.get_children():
+		_tone_foliage_prototype(child, tint)
 
 func _make_lamp_reflective(node: Node) -> void:
 	if node == null:
@@ -2622,6 +2649,8 @@ func _build_emerald_grass_clusters(parent: Node3D) -> void:
 			if not _is_vegetation_clear(position_value, 0.62):
 				continue
 			var grass := emerald_fountain_grass_prototype.duplicate(DUPLICATE_USE_INSTANTIATION) as Node3D
+			# Instantiation copies come back with the supplied lime material; tone them too.
+			_tone_foliage_prototype(grass, Color(0.66, 0.66, 0.5))
 			grass.name = "EmeraldFountainGrass_%03d" % (serial + 1)
 			grass.position = position_value
 			grass.rotation_degrees.y = fmod(float(serial * 137 + cluster_index * 41), 360.0)

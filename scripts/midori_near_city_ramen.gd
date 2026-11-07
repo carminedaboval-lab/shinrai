@@ -1,8 +1,9 @@
 extends "res://scripts/midori_near_city_handmade.gd"
 ## らーめん 福丸: a shop one counter wide, the noodle room in the window and the stockpots
-## going since five. A mahjong room upstairs, a flat above that, and a ticket machine that
+## going since five. Three flats share a stair in the east alley. The ticket machine
 ## took a palm reader in 2041 and has not been cleaned since.
 const ATLAS := "res://assets/shinrai/near_city/ramen_atlas.png"
+const Apartments := preload("res://scripts/midori_fukumaru_apartments.gd")
 const WIDE := 3.72
 const DEEP := 9.2
 const GROUND := 3.3
@@ -17,11 +18,15 @@ const CHROME := Color("#c9ccce")
 const RENDER := Color(.8, .76, .68)
 const DOOR := Rect2(.22, .02, 1.2, 2.36)
 const WINDOW := Rect2(2.2, .62, 1.32, 1.56)
+const NOREN_LEFT := .095
+const NOREN_WIDTH := 1.42
+const NOREN_TOP := 2.46
 
 var _front := Transform3D(Basis.IDENTITY, Vector3(-WIDE * .5, 0, 0))
 var _east := Transform3D(Basis(Vector3.FORWARD, Vector3.UP, Vector3.RIGHT), Vector3(WIDE * .5, 0, 0))
 var _back := Transform3D(Basis(Vector3.LEFT, Vector3.UP, Vector3.FORWARD), Vector3(WIDE * .5, 0, -DEEP))
 var _west := Transform3D(Basis(Vector3.BACK, Vector3.UP, Vector3.LEFT), Vector3(-WIDE * .5, 0, -DEEP))
+var _flats: Apartments
 
 func _ready() -> void:
 	_rng.seed = 2019
@@ -39,8 +44,10 @@ func _ready() -> void:
 	_upper_front()
 	_duct()
 	_blade()
-	_render_wall(_east, DEEP, PARAPET, GROUND, STOREY, RENDER, [] as Array[Rect2], .7)
-	_render_wall(_back, WIDE, PARAPET, GROUND, STOREY, RENDER, [] as Array[Rect2], .5)
+	_render_wall(_east, DEEP, PARAPET, GROUND, STOREY, RENDER, [Apartments.ENTRY_2F, Apartments.ENTRY_3F], .7)
+	_render_wall(_back, WIDE, PARAPET, GROUND, STOREY, RENDER, [Apartments.REAR_LOWER, Apartments.REAR_UPPER], .5)
+	for rear_window: Rect2 in [Apartments.REAR_LOWER, Apartments.REAR_UPPER]:
+		_window(_back, rear_window, .46, false)
 	_render_wall(_west, DEEP, PARAPET, GROUND, STOREY, RENDER * .9, [] as Array[Rect2], .7)
 	_rooftop()
 	_street_things()
@@ -48,9 +55,18 @@ func _ready() -> void:
 	_kit = null
 	_omni("RamenCounter", Vector3(-.6, 2.3, -2.6), Color(1.0, .86, .66), .9, 5.5)
 	_omni("RamenStreet", Vector3(-.5, 2.5, .9), Color(1.0, .72, .46), .55, 5.0)
+	_flats = Apartments.new()
+	_flats.name = "Apartments"
+	add_child(_flats)
+
+func set_night_mode(value: bool) -> void:
+	super.set_night_mode(value)
+	if is_instance_valid(_flats):
+		_flats.set_night_mode(value)
 
 func _build_looks() -> void:
 	_shared_looks()
+	_looks.glass = _looks.front
 	var signs: Texture2D = load(ATLAS)
 	_looks.tile = _look("", 1.0, .3)
 	_looks.tile.set_shader_parameter("tile_size", Vector2(.216, .06))
@@ -77,7 +93,7 @@ func _build_looks() -> void:
 	_looks.strips.set_shader_parameter("glow", .42)
 	_looks.strips.set_shader_parameter("day_glow", .16)
 	_looks.cloth = _look("", 1.0, .92)
-	_looks.cloth.set_shader_parameter("albedo_map", signs)
+	_looks.cloth.set_shader_parameter("albedo_map", preload("res://assets/shinrai/near_city/fukumaru_noren.png"))
 	_looks.board = _look("", 1.0, .8)
 	_looks.board.set_shader_parameter("albedo_map", signs)
 	_looks.lantern = _look("", 1.0, .7)
@@ -275,30 +291,58 @@ func _fascia() -> void:
 	_kit.quad("lamp", f * Vector3(.2, 2.66, .28), f * Vector3(.2, 2.66, .04), f * Vector3(1.5, 2.66, .04), f * Vector3(1.5, 2.66, .28), Color(1.0, .82, .6))
 
 func _noren() -> void:
-	# Four indigo drops on a pole over the door, weighted by nothing but a decade of steam.
-	var f := _front
-	var x0 := DOOR.position.x - .02
-	var drop := .78
-	var top := 2.42
-	var wide := (DOOR.size.x + .04) / 4.0
-	var rect := _cell(0, 320, 1200, 420)
-	_kit.tube("metal", [f * Vector3(x0 - .08, top + .02, .1), f * Vector3(x0 + wide * 4.0 + .08, top + .02, .1)], .014, Color("#5c4128"), 6)
-	for i: int in range(4):
-		var left := x0 + float(i) * wide + .012
-		var right := left + wide - .024
-		var columns := 5
-		for c: int in range(columns):
-			var u0 := float(c) / float(columns)
-			var u1 := float(c + 1) / float(columns)
-			var a0 := lerpf(left, right, u0)
-			var a1 := lerpf(left, right, u1)
-			var w0 := .1 + sin(u0 * 7.0 + float(i) * 1.9) * .016
-			var w1 := .1 + sin(u1 * 7.0 + float(i) * 1.9) * .016
-			var patch := Rect2(0.0, 320.0 / 2048.0, 1200.0 / 2048.0, 420.0 / 2048.0)
-			patch.position.x = (float(i) + u0) * .25 * rect.size.x
-			patch.size.x = .25 * rect.size.x / float(columns)
-			_kit.atlas("cloth", f * Vector3(a0, top - drop, w0 + .014), f * Vector3(a0, top, .1), f * Vector3(a1, top, .1), f * Vector3(a1, top - drop, w1 + .014), patch, Color.WHITE, .9, .2)
-			_kit.atlas("cloth", f * Vector3(a1, top - drop, w1 + .012), f * Vector3(a1, top, .098), f * Vector3(a0, top, .098), f * Vector3(a0, top - drop, w0 + .012), patch, Color(.4, .4, .45), .7)
+	# Short split curtain, carried by a sewn sleeve on a removable pole.
+	var left := NOREN_LEFT - .07
+	var right := NOREN_LEFT + NOREN_WIDTH + .07
+	var top := NOREN_TOP - .016
+	var rod_z := .16
+	for x: float in [left + .02, right - .02]:
+		_bar("metal", _front, x, top - .035, .008, Vector3(.045, .085, .016), STEEL)
+		_kit.tube("metal", [_front * Vector3(x, top - .055, .016), _front * Vector3(x, top - .055, rod_z), _front * Vector3(x, top, rod_z)], .009, STEEL, 6)
+	_kit.tube("metal", [_front * Vector3(left, top, rod_z), _front * Vector3(right, top, rod_z)], .014, Color("#786148"), 8)
+
+	# Start with a curved sleeve. The short upper band stays joined above the four slits.
+	var rows: Array[float] = [0.0, .035, .075, .19, .44, .75, .975, 1.0]
+	const COLUMNS := 8
+	for flap: int in range(4):
+		for col: int in range(COLUMNS):
+			var u0 := float(col) / COLUMNS
+			var u1 := float(col + 1) / COLUMNS
+			for row: int in range(rows.size() - 1):
+				var v0 := rows[row]
+				var v1 := rows[row + 1]
+				var points: Array[Vector3] = []
+				var normals: Array[Vector3] = []
+				var ink: Array[Vector2] = []
+				for uv: Vector2 in [Vector2(u0, v1), Vector2(u0, v0), Vector2(u1, v0), Vector2(u1, v1)]:
+					var u := uv.x
+					var v := uv.y
+					points.append(_front * _noren_point(flap, u, v))
+					var across := _noren_point(flap, u + .002, v) - _noren_point(flap, u - .002, v)
+					var down := _noren_point(flap, u, v + .002) - _noren_point(flap, u, v - .002)
+					normals.append(down.cross(across).normalized())
+					ink.append(Vector2((flap + u) * .25, v))
+				var wear: Array[float] = [0.0, 0.0, 0.0, 0.0]
+				_kit.mapped("cloth", points, normals, ink, wear, Color.WHITE)
+				# A single layer of dyed cotton shows the same print, reversed, from the doorway.
+				for k: int in range(4):
+					normals[k] = -normals[k]
+				_kit.mapped("cloth", points, normals, ink, wear, Color("#d9c9b9"))
+
+
+func _noren_point(flap: int, u: float, v: float) -> Vector3:
+	var s := float(flap) + u
+	var free := smoothstep(.19, 1.0, v)
+	var x := NOREN_LEFT + NOREN_WIDTH * s * .25
+	x += ((.5 - u) * .018 + sin(float(flap) * 2.1) * .012) * free
+	var y := NOREN_TOP - .53 * v
+	y += free * (.013 * cos(u * TAU) + .019 * sin(float(flap) * 2.4 + u * 1.7))
+	var z := .16 + .016 * smoothstep(.035, .14, v)
+	z += .013 * sin(s * 4.6) * smoothstep(.075, .44, v)
+	# Round the fabric over the rod and let each unrestrained hem kick forward.
+	z += .014 * sin(clampf(v / .075, 0.0, 1.0) * PI)
+	z += free * (.029 * sin(s * 6.4 + v * 1.3) + .023 * cos(s * 2.8) + .021)
+	return Vector3(x, y, z)
 
 func _lantern() -> void:
 	# 赤提灯 by the door, the paper gone pink on its sunny side.
@@ -310,14 +354,12 @@ func _lantern() -> void:
 	_kit.lathe("lantern", at, profile, Color.WHITE, 18, _cell(1440, 1480, 500, 300))
 
 func _upper_front() -> void:
-	# Strip-tile above the shop: the mahjong room's wide sash, then the flat with its rail.
+	# Street-facing flats share the original tiled facade and balcony.
 	var f := _front
 	var low := Rect2(.34, GROUND + .6, 2.5, 1.42)
 	var flat := Rect2(.34, GROUND + STOREY + .1, 2.5, 2.0)
 	_tiled("white", f, Rect2(0, GROUND, WIDE, PARAPET - GROUND), [low, flat], Color(.82, .79, .7), .7)
 	_window(f, low, .19, false)
-	_panel("decal", f, low.position.x + .1, low.end.x - .1, low.position.y + .52, low.position.y + 1.0, .004, _cell(540, 1420, 880, 170))
-	_panel("decal", f, low.position.x + .22, low.end.x - .22, low.position.y + .3, low.position.y + .52, .004, _cell(540, 1600, 880, 110))
 	_window(f, flat, .61, false)
 	_bar("plain", f, WIDE * .5, PARAPET + .04, -.04, Vector3(WIDE + .06, .08, .24), Color("#7b786f"), .7, 1.0)
 	_bar("plain", f, WIDE * .5, GROUND + STOREY, .02, Vector3(WIDE, .1, .06), Color("#8d8a7f"), .8, 1.0)

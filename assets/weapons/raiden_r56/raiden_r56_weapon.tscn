@@ -1,10 +1,14 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/weapons/raiden_r56/raiden_r56_geometry.glb" id="1"]
+[ext_resource type="Script" path="res://scripts/weapon_real_finish.gd" id="2"]
 
 [node name="Raiden" type="Node3D"]
+script = ExtResource("2")
 metadata/magazine_node_path = NodePath("Geometry/Magazine")
 metadata/action_node_path = NodePath("Geometry/Action")
+metadata/magazine_grip = Vector3(-0.016, -0.0435, 0)
+metadata/real_counterpart = "Colt M4A1 carbine, SOPMOD Block II layout, 5.56x45 mm"
 
 [node name="Geometry" parent="." instance=ExtResource("1")]
 
@@ -15,24 +19,24 @@ position = Vector3(0.112, -0.047, 0)
 position = Vector3(-0.145, 0.033, 0.014)
 
 [node name="OpticSocket" type="Marker3D" parent="."]
-position = Vector3(0.04, 0.121, 0)
+position = Vector3(0.029, 0.097, 0)
 rotation = Vector3(0, -1.5707963268, 0)
 
 [node name="Muzzle" type="Marker3D" parent="."]
-position = Vector3(-0.539, 0.075, 0)
+position = Vector3(-0.4555, 0.0665, 0)
 rotation = Vector3(0, -1.5707963268, 0)
 
 [node name="IronRearSight" type="Marker3D" parent="."]
-position = Vector3(0.145, 0.155, 0)
+position = Vector3(0.099, 0.1325, 0)
 
 [node name="IronFrontSight" type="Marker3D" parent="."]
-position = Vector3(-0.343, 0.155, 0)
+position = Vector3(-0.362, 0.1325, 0)
 
 [node name="BoltRelease" type="Marker3D" parent="."]
-position = Vector3(0.114, 0.025, 0.033)
+position = Vector3(0.015, 0.042, 0.0125)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(0.055, 0.073, 0.033)
+position = Vector3(0.014, 0.0685, -0.0118)
 
 [node name="ActionGrip" type="Marker3D" parent="."]
-position = Vector3(0.092, 0.08, 0.061)
+position = Vector3(0.124, 0.0855, 0.016)

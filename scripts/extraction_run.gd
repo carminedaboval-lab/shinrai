@@ -100,7 +100,16 @@ var run_time := 0.0
 ## Seconds after deployment during which hostiles cannot perceive the player,
 ## so a new raid starts with time to orient instead of an instant firefight.
 const INSERTION_GRACE_SECONDS := 15.0
-var last_safe := Vector3(0, 0.2, 160)
+## Raids start on the north shopping street, on the pavement outside the
+## police box, looking east past the game centre and the hand-built shops.
+## The park lies across the ring road; by day the gates stand open, at night
+## the nearest way in is the prone hole in the fence at x 118.
+const RAID_SPAWN := Vector3(70.0, 0.1, -201.5)
+const RAID_SPAWN_LOOK := Vector3(120.0, 1.4, -203.5)
+## The shop street, from the outside pavement to the shop fronts: walkable,
+## playable ground (the near city draws it but gives it no floor).
+const NORTH_STREET := Rect2(-62.0, -207.0, 250.0, 17.5)
+var last_safe := RAID_SPAWN
 var notice := ""
 var notice_time := 0.0
 var prompt_text := ""
@@ -319,7 +328,62 @@ func _register_sites() -> void:
 	if not context_result.missing.is_empty():push_warning("CONTEXT_LOOT missing anchors: "+str(context_result.missing))
 
 func capacity() -> int:
-	return int(BackpackRules.limits(backpack_state, [] if phase == Phase.HQ else bag, int(profile.data.pack_level)).slots)
+	return int(BackpackRules.limits(_inventory_storage_state(), inventory_gear(), int(profile.data.pack_level)).slots)
+
+func inventory_gear() -> Array:
+	return profile.data.field_kit if phase == Phase.HQ else bag
+
+func inventory_outfit() -> Dictionary:
+	return profile.data.clothing if phase == Phase.HQ else backpack_state.clothing
+
+func inventory_pack_uid() -> String:
+	return str(profile.data.get("field_pack_uid", "")) if phase == Phase.HQ else str(backpack_state.equipped_uid)
+
+func _inventory_storage_state() -> Dictionary:
+	if phase == Phase.HQ:
+		return {"clothing": inventory_outfit(), "equipped_uid": inventory_pack_uid()}
+	return backpack_state
+
+func storage_layout() -> Dictionary:
+	return BackpackRules.layout(_inventory_storage_state(), inventory_gear(), int(profile.data.pack_level))
+
+func cargo_cells_used() -> int:
+	var used := 0
+	if phase == Phase.HQ:
+		# Older saved kits acquire cell metadata on the first explicit move.
+		for cell: Dictionary in storage_layout().placements:
+			if not cell.is_empty():
+				used += int(cell.w) * int(cell.h)
+		return used
+	for item: Dictionary in bag:
+		if item.has(BackpackRules.Storage.POSITION):
+			var footprint := BackpackRules.Storage.footprint(item)
+			used += footprint.x * footprint.y
+	return used
+
+func move_storage_item(index: int, expected_record: Dictionary, container: String, x: int, y: int) -> bool:
+	if phase not in [Phase.PAUSED, Phase.HQ] or not inventory_open or deployment_pending or not pending_cache_id.is_empty() or not pending_result_save.is_empty():
+		return false
+	var gear := inventory_gear()
+	if index < 0 or index >= gear.size() or not is_same(gear[index], expected_record):
+		return false
+	if phase == Phase.PAUSED:
+		return BackpackRules.Storage.move(gear, storage_layout(), index, container, x, y)
+	if profile.data.active_run or not profile.last_error.is_empty():
+		return false
+	var candidate := gear.duplicate(true)
+	var proposed := storage_layout()
+	if not BackpackRules.Storage.move(candidate, proposed, index, container, x, y):
+		return false
+	profile.data.field_kit = candidate
+	var saved := profile.save_profile()
+	profile.data.field_kit = gear
+	if saved:
+		BackpackRules.Storage.commit(gear, proposed)
+	return saved
+
+func settle_cargo() -> void:
+	BackpackRules.settle(backpack_state, bag, int(profile.data.pack_level))
 
 func _on_action(action: String) -> void:
 	var loading_ui := get_tree().get_first_node_in_group("shinrai_loading_ui")
@@ -485,6 +549,8 @@ func open_inventory() -> void:
 	if not pending_cache_id.is_empty():
 		return
 	inventory_open = true
+	if phase == Phase.PAUSED:
+		settle_cargo()
 	_capture_weapon_ammunition()
 	_flush_weapon_save()
 	map_open = false
@@ -537,6 +603,7 @@ func start_run(retry_save: bool = false) -> void:
 			return
 		profile.last_error = ""
 	var staged_kit: Array = profile.data.get("field_kit",[]).duplicate(true)
+	var staged_pack_uid := str(profile.data.get("field_pack_uid", ""))
 	var starter_supplies := bool(profile.data.get("starter_pending",false))
 	if not profile.begin_run():
 		deployment_pending = false
@@ -557,6 +624,10 @@ func start_run(retry_save: bool = false) -> void:
 		bag.append(LootContainers.spec("bandage"))
 	backpack_state = BackpackRules.new_state("run-%d" % int(profile.data.runs))
 	backpack_state.clothing = profile.data.clothing.duplicate(true)
+	backpack_state.equipped_uid = staged_pack_uid
+	if BackpackRules.equipped_id(backpack_state, bag).is_empty():
+		backpack_state.equipped_uid = ""
+	settle_cargo()
 	player.equipped_clothing = backpack_state.clothing
 	inventory_open = false
 	relays = 0
@@ -594,7 +665,8 @@ func start_run(retry_save: bool = false) -> void:
 	player.damage_flash = 0.0
 	player.clear_stun()
 	player.velocity = Vector3.ZERO
-	player.position = navigation.nearest(Vector3(0, 0.2, 160))
+	_ensure_north_street_floor()
+	player.position = RAID_SPAWN
 	last_safe = player.position
 	if is_instance_valid(park_fence): park_fence.reset_for_raid()
 	player.rotation = Vector3.ZERO
@@ -603,10 +675,7 @@ func start_run(retry_save: bool = false) -> void:
 	_previous_stamina = player.stamina
 	player.set_cargo_mass(0.0, cargo_limit_kg())
 	refresh_guidance()
-	for point: Vector3 in guidance_path:
-		if point.distance_to(player.position) > 12.0:
-			player.look_at(Vector3(point.x, player.position.y, point.z))
-			break
+	player.look_at(Vector3(RAID_SPAWN_LOOK.x, player.position.y, RAID_SPAWN_LOOK.z))
 	player.camera.make_current()
 	player._update_hud()
 	# Remain in HQ with actors locked until the first native raid view is drawn.
@@ -988,6 +1057,7 @@ func complete_site(site: Dictionary, replace_index: int = -1) -> bool:
 		if replace_index >= 0: bag[replace_index] = recovered
 		else: bag.append(recovered)
 		if BackpackRules.equipped_id(backpack_state, bag).is_empty(): backpack_state.equipped_uid = ""
+		settle_cargo()
 		if site.done and selected_destination == site.id: selected_destination = ""
 		hold_progress = 0.0
 		announce("Recovered %s%s" % [recovered.title, " · backpack empty" if site.done else ""], 3.0)
@@ -1014,6 +1084,7 @@ func complete_site(site: Dictionary, replace_index: int = -1) -> bool:
 		else:
 			bag.append(site.loot.duplicate(true))
 		if BackpackRules.equipped_id(backpack_state,bag).is_empty(): backpack_state.equipped_uid=""
+		settle_cargo()
 		var ammo_bonus := mini(maxi(int(site.get("ammo_bonus", 15)), 0), maxi(240 - player.reserve, 0))
 		player.reserve += ammo_bonus
 		if is_instance_valid(site.get("pickup_node")): site.pickup_node.hide()
@@ -1030,7 +1101,16 @@ func refresh_guidance() -> void:
 	var objective := tracked_objective()
 	if objective.is_empty():
 		return
-	guidance_path = navigation.path(player.position, objective.position)
+	var street_leg := _street_entry_leg()
+	if street_leg.is_empty():
+		guidance_path = navigation.path(player.position, objective.position)
+	else:
+		# On the north street the walk grid does not reach the player: walk to
+		# the way into the park, then follow the park route from just inside it.
+		var inside: PackedVector3Array = navigation.path(street_leg[street_leg.size() - 1], objective.position)
+		guidance_path = PackedVector3Array([player.position])
+		guidance_path.append_array(street_leg)
+		guidance_path.append_array(inside)
 	# Deployment still uses the full path for initial facing and entry placement.
 	if (phase == Phase.RAID or phase == Phase.PAUSED) and objective.get("kind", "") == "relay" and not objective.get("done", false):
 		var relay_position := Vector2(objective.position.x, objective.position.z)
@@ -1053,6 +1133,27 @@ func refresh_guidance() -> void:
 				break
 	for index: int in range(1, guidance_path.size()):
 		guidance_distance += guidance_path[index - 1].distance_to(guidance_path[index])
+
+## Outside-then-inside points of the way into the park from the north street:
+## by day the open north gate, at night the nearest north-side prone hole.
+## Empty when the player is not on the north street.
+func _street_entry_leg() -> PackedVector3Array:
+	var leg := PackedVector3Array()
+	if not NORTH_STREET.has_point(Vector2(player.position.x, player.position.z)): return leg
+	var night: bool = is_instance_valid(park_fence) and bool(park_fence.get("night"))
+	var fence_z := -180.0 + 0.6
+	var entry := Vector3(-76.0, 0.1, fence_z)
+	if night and is_instance_valid(park_fence):
+		var best := INF
+		for hole: Vector3 in park_fence.hole_positions():
+			if hole.z > -170.0: continue
+			var gap := Vector2(hole.x, hole.z).distance_to(Vector2(player.position.x, player.position.z))
+			if gap < best:
+				best = gap
+				entry = Vector3(hole.x, 0.1, fence_z)
+	leg.append(Vector3(entry.x, 0.1, fence_z - 3.0))
+	leg.append(navigation.nearest(Vector3(entry.x, 0.1, fence_z + 9.0)))
+	return leg
 
 func can_heal() -> bool:
 	var item := treatment_item if not treatment_item.is_empty() else "medkit"
@@ -1177,7 +1278,7 @@ func retry_result_save() -> bool:
 func _attempt_result_save() -> bool:
 	if pending_result_save.is_empty(): return false
 	var outcome := pending_result_save.duplicate(true)
-	if not profile.complete_run(bool(outcome.extracted),bag,int(outcome.bonus),field_loadout,backpack_state.get("clothing",{})):
+	if not profile.complete_run(bool(outcome.extracted),bag,int(outcome.bonus),field_loadout,backpack_state.get("clothing",{}),str(backpack_state.get("equipped_uid",""))):
 		hud.show_pending_result(self)
 		return false
 	pending_result_save.clear()
@@ -1391,9 +1492,25 @@ func get_path_world(from: Vector3, to: Vector3) -> PackedVector3Array:
 	if is_instance_valid(park_fence) and park_fence.blocks_route(from,route): return PackedVector3Array()
 	return route
 
+## A flat floor under the north shop street, flush with the drawn pavement, so
+## the spawn and the walk to the park stand on solid ground. Built once.
+func _ensure_north_street_floor() -> void:
+	if park.has_node("NorthStreetFloor"): return
+	var body := StaticBody3D.new()
+	body.name = "NorthStreetFloor"
+	body.collision_layer = 1
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(NORTH_STREET.size.x, 0.4, NORTH_STREET.size.y)
+	shape.shape = box
+	body.add_child(shape)
+	park.add_child(body)
+	body.global_position = Vector3(NORTH_STREET.get_center().x, -0.2, NORTH_STREET.get_center().y)
+
 func _inside_playable_area(point: Vector3) -> bool:
 	if not point.is_finite() or point.y < -12.0:return false
 	if absf(point.x)<=215.0 and absf(point.z)<=175.0:return true
+	if NORTH_STREET.has_point(Vector2(point.x,point.z)):return true
 	if not is_instance_valid(park):return false
 	# The fence has a real outside now: the pavement strip up to the road kerb.
 	if absf(point.x)<=230.5 and absf(point.z)<=190.5:return true
@@ -1435,6 +1552,7 @@ func consume_coffee(index: int) -> bool:
 	if phase != Phase.PAUSED or not inventory_open or not pending_cache_id.is_empty() or index < 0 or index >= bag.size(): return false
 	if bag[index].id != "coffee_cup": return false
 	bag.remove_at(index)
+	settle_cargo()
 	player.apply_coffee_boost()
 	metabolism.consume("coffee_cup")
 	hud.show_inventory(self)
@@ -1480,22 +1598,23 @@ func _reset_site_spawns() -> void:
 
 
 func cargo_mass_kg() -> float:
-	return 0.0 if phase == Phase.HQ else BackpackRules.cargo_mass(bag)
+	return BackpackRules.cargo_mass(inventory_gear())
 
 func cargo_item_mass(item: Dictionary) -> float:
 	return BackpackRules.item_mass(item)
 
 func cargo_limit_kg() -> float:
-	return float(BackpackRules.limits(backpack_state,[] if phase == Phase.HQ else bag,int(profile.data.pack_level)).kg)
+	return float(BackpackRules.limits(_inventory_storage_state(), inventory_gear(), int(profile.data.pack_level)).kg)
 
 func equipped_backpack_id() -> String:
-	return "" if phase == Phase.HQ else BackpackRules.equipped_id(backpack_state,bag)
+	return BackpackRules.equipped_id(_inventory_storage_state(), inventory_gear())
 
 func equip_backpack(uid: String) -> bool:
 	if phase != Phase.PAUSED or not inventory_open or not pending_cache_id.is_empty(): return false
 	if not BackpackRules.equip(backpack_state,bag,uid,int(profile.data.pack_level)):
 		announce("Remove cargo before changing to a smaller backpack.",3.0)
 		return false
+	settle_cargo()
 	hud.show_inventory(self)
 	return true
 
@@ -1594,6 +1713,7 @@ func _consume_medical(item: String) -> bool:
 	for index: int in range(bag.size()):
 		if str(bag[index].get("id", "")) == item:
 			bag.remove_at(index)
+			settle_cargo()
 			return true
 	return false
 
@@ -1638,6 +1758,7 @@ func consume_provision(index: int) -> bool:
 	var item: Dictionary=bag[index]
 	if not consume_food_item(item):return false
 	bag.remove_at(index)
+	settle_cargo()
 	hud.show_inventory(self)
 	announce_food_consumption(item)
 	return true
@@ -1731,7 +1852,9 @@ func unload_magazine() -> bool:
 func pack_magazine(index: int) -> bool:
 	if phase!=Phase.PAUSED or not inventory_open or not pending_cache_id.is_empty() or index<0 or index>=bag.size():return false
 	var moved := WeaponSupply.pack(bag[index],bag)
-	if moved>0:_refresh_magazine_cargo()
+	if moved>0:
+		settle_cargo()
+		_refresh_magazine_cargo()
 	announce("Packed %d rounds into magazine" % moved if moved>0 else "No compatible loose ammunition or magazine already full.",3.0)
 	return moved>0
 
@@ -1750,6 +1873,7 @@ func wear_clothing(index: int) -> bool:
 		return false
 	bag.assign(candidate)
 	backpack_state = next
+	settle_cargo()
 	player.equipped_clothing = next.clothing
 	return true
 
@@ -1775,6 +1899,7 @@ func _stow_or_drop_magazine(item: Dictionary, preferred_index: int = -1) -> bool
 	else:candidate.append(item.duplicate(true))
 	if BackpackRules.fits(backpack_state,candidate,int(profile.data.pack_level)):
 		bag.assign(candidate)
+		settle_cargo()
 		_notify_magazine_destination("cargo")
 		return true
 	if DroppedMagazine.drop(self,item):
@@ -1821,6 +1946,7 @@ func physical_magazine_reload(event: String) -> bool:
 		pending_magazine.clear()
 		_reload_outgoing_magazine.clear()
 		_reload_magazine_source_index=-1
+		settle_cargo()
 		_refresh_magazine_cargo()
 		return true
 	return false
@@ -1848,6 +1974,7 @@ func _cancel_magazine_reload() -> bool:
 				# Keep this reservation owned until cargo space is freed; do not repeat the failed event.
 				return false
 		else:bag.assign(candidate)
+		settle_cargo()
 		pending_magazine.clear()
 	_reload_outgoing_magazine.clear()
 	_reload_magazine_source_index=-1

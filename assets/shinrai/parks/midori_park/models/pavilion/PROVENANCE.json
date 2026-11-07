@@ -1,0 +1,142 @@
+{
+  "provider": "Meshy",
+  "name": "Weathered Japanese timber garden pavilion (azumaya)",
+  "state": "exported_and_statically_validated",
+  "created_date": "2026-11-05",
+  "workspace": "Existing signed-in Meshy workspace used for Shinrai scav and corporate_command assets",
+  "reference_image": "docs/biome_concepts/after_maple_glen.png",
+  "reference_concept_sha256": "F2BAD1DAAFA3E752ABEA8AF7C03C404B7260BBDC3600A96A7A74CAADBBE6FDE6",
+  "reference_image_attached": true,
+  "reference_preparation": {
+    "provider": "Meshy Image",
+    "engine": "Nano Banana Pro",
+    "source_task": "01a1a90c-9677-75ab-862a-e54344d34f8b",
+    "number_of_images": 1,
+    "aspect_ratio": "1:1",
+    "cost_credits": 9,
+    "purpose": "Isolate the pavilion from the supplied full-park screenshot as a single complete asset reference.",
+    "prompt": "Isolate and reconstruct ONLY the weathered Japanese timber garden pavilion in this park reference as one standalone game asset on plain neutral grey background, three-quarter view. Square 4.5 x 4.5 metre footprint. Four sturdy square timber corner posts on a low square stone plinth; low wooden bench rails on three sides, open entrance. One hipped pyramid roof of dark grey clay tiles, wide eaves, small subtle ridge cap. Aged grey-brown wood with realistic grain and modest weathering; restrained Japanese azumaya construction. Show entire roof and base, all structural parts clearly, empty open interior. Realistic PBR asset study, soft neutral light. No trees, plants, park, landscape, people, text, extra buildings or props."
+  },
+  "source_geometry_task": "01a1a90e-9024-75bb-afae-925939364aa1",
+  "source_texture_task": "01a1a910-259f-7622-ad84-4bca1d4a566b",
+  "generation": {
+    "engine": "Meshy 7.1 Flagship",
+    "input": "single isolated image derived in Meshy from the attached park reference",
+    "high_detail": true,
+    "geometry_resolution": "Ultra 2K",
+    "texture_engine": "Meshy 7",
+    "texture": "4K",
+    "image_enhancement": false,
+    "pose": "None",
+    "private": true,
+    "cost_credits": 35
+  },
+  "remesh": {
+    "target_triangles": 30000,
+    "topology": "triangle",
+    "mode": "Fixed",
+    "cost_credits": 0
+  },
+  "total_cost_credits": 44,
+  "direction": "Square footprint about 4.5 x 4.5 m, four or six square timber posts on a low stone plinth, low wooden bench rails between posts, dark grey clay tile hipped pyramid roof with wide eaves and small ridge cap, aged grey-brown wood. Realistic PBR, no text.",
+  "evidence": "Generated asset inspected in the Meshy viewer; exported GLB validated statically for geometry, indices, embedded textures and dimensions. No game/editor integration or runtime/playtest validation performed.",
+  "game_remesh_task": "01a1a913-3fa9-759c-8569-f8c70df23156",
+  "source_export": {
+    "file_name": "Meshy_AI_Isolate_and_reconstru_1105002356_texture.glb",
+    "sha256": "261EC019AB15EEA117FF38A4D01E8AB31E5926CD12F4D79CBAB66B22CFFEEC12",
+    "bytes": 49551896
+  },
+  "postprocessing": {
+    "method": "Added one glTF root transform; preserved original BIN geometry, UVs and embedded texture bytes.",
+    "unit": "metre",
+    "scale_factor": 2.9156669359597305,
+    "translation": [
+      0.0018660410478632216,
+      2.3161183310719746,
+      -0.09641831921968115
+    ],
+    "reference_measurement": "Main stone-plinth X width scaled to 4.5 m; the front step extends Z footprint slightly.",
+    "expected_total_base_bounds_m": [
+      4.5,
+      0.45366042959523434,
+      4.697297236863158
+    ],
+    "origin": "Bottom centre of plinth-and-step bounds",
+    "axes": "glTF Y up"
+  },
+  "validation": {
+    "triangles": 30152,
+    "vertices": 60680,
+    "primitive_count": 1,
+    "material_count": 1,
+    "textures_embedded": true,
+    "textures": [
+      {
+        "mime_type": "image/png",
+        "width": 4096,
+        "height": 4096
+      },
+      {
+        "mime_type": "image/png",
+        "width": 4096,
+        "height": 4096
+      },
+      {
+        "mime_type": "image/png",
+        "width": 4096,
+        "height": 4096
+      }
+    ],
+    "pbr_maps": [
+      "baseColor",
+      "normal",
+      "metallicRoughness"
+    ],
+    "finite_vertices": true,
+    "triangle_indices_valid": true,
+    "game_run": false,
+    "bounds_m": {
+      "min": [
+        -2.787103528913166,
+        0,
+        -2.8854289029816225
+      ],
+      "max": [
+        2.779592963514748,
+        4.623737594628629,
+        2.6916505112069053
+      ],
+      "size": [
+        5.566696492427914,
+        4.623737594628629,
+        5.577079414188528
+      ]
+    },
+    "base_bounds_m": {
+      "min": [
+        -2.25,
+        0,
+        -2.348648618431579
+      ],
+      "max": [
+        2.25,
+        0.45366042959523445,
+        2.3486486184315787
+      ],
+      "size": [
+        4.5,
+        0.45366042959523445,
+        4.697297236863157
+      ]
+    },
+    "triangle_target_note": "Meshy Fixed 30K remesh exported 30,152 actual triangles.",
+    "source_binary_geometry_and_texture_bytes_preserved": true
+  },
+  "files": {
+    "azumaya.glb": {
+      "sha256": "348C9383EA2A926654D823CC5067F60971AA3F88EC053DAEEF4AE9DE8B4B0A77",
+      "bytes": 49552224,
+      "triangles": 30152
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+	"builder_torii": {
+		"at": [
+			164.0,
+			136.0
+		],
+		"finished_walk": {
+			"capsule_radius": 0.42,
+			"from": "(164.0, 95.0)",
+			"metres": 41.0,
+			"pass": true,
+			"support_probes": 42,
+			"swept_both_ways": true,
+			"to": "(164.0, 136.0)"
+		},
+		"height_m": 7.02,
+		"navigation": {
+			"approach_walk": {
+				"capsule_radius": 0.42,
+				"from": "(164.0, 95.0)",
+				"metres": 41.0,
+				"pass": true,
+				"support_probes": 42,
+				"swept_both_ways": true,
+				"to": "(164.0, 136.0)"
+			},
+			"capsule_radius": 0.42,
+			"changed_edges": 26,
+			"corridor_clear": true,
+			"forward": "[(164.0, 0.2, 132.0), (164.0, 0.2, 136.0), (164.0, 0.2, 140.0)]",
+			"outer_edge_ids": [
+				8528,
+				8639
+			],
+			"outer_edge_passed": true,
+			"resampled_cells": 25,
+			"reverse": "[(164.0, 0.2, 140.0), (164.0, 0.2, 136.0), (164.0, 0.2, 132.0)]",
+			"supported": true
+		},
+		"old_meshes": 1,
+		"old_neon": {
+			"strips": 8,
+			"washes": 2
+		},
+		"old_solid_shapes": 2,
+		"open_width_m": 4.8708,
+		"placed": true,
+		"post_colliders_hit": 2,
+		"removed_nodes": [
+			"ARC04_NeonToriiPortal",
+			"NeonToriiPillarCollision_Left",
+			"NeonToriiPillarCollision_Right",
+			"NeonToriiPortalGlow",
+			"NeonToriiThresholdGlow"
+		],
+		"rest_bay": {
+			"bench_nodes": 2,
+			"cache_id": "PlazaBench_03",
+			"cache_on_bench": true,
+			"cache_world": "(178.8937, 0.1365, 115.5833)",
+			"centre": "(177.5, 114.7)",
+			"clearance_checked": true,
+			"planter_colliders": 4,
+			"plants": 38,
+			"plants_in_bay": 38,
+			"rear_bed_world": "(178.1692, 0.4215, 113.6442)",
+			"seat_colliders": 2
+		},
+		"socket": "ARC04_NeonToriiPortalSocket_12m",
+		"span_m": 5.5728,
+		"walk_clear": true
+	},
+	"camera_count": 29,
+	"camera_sha256": "684eca01a12dd0bd27d9e86c0524a974047fd48711d16539d46cc69d4e51941f",
+	"clear_capsule_sweeps": 3,
+	"gate_xz": [
+		164.0,
+		136.0
+	],
+	"legacy_monument_nodes": 0,
+	"legacy_night_parts": 0,
+	"night_views": [
+		"shrine_approach",
+		"shrine_approach_reverse"
+	],
+	"retained_plaza_lights": 2,
+	"solid_post_rays": 2
+}

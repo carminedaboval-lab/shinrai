@@ -15,6 +15,8 @@ static func install_before_hq(park: Node3D) -> Dictionary:
 	report["plant_shadows"]=shadows.install(park)
 	if report.plant_shadows.has("error"): shadows.free();report["error"]=report.plant_shadows.error
 	else: shadows.apply(true)
+	report["draw_distance"]=await preload("res://scripts/midori_draw_distance.gd").apply(park)
+	if not is_instance_valid(park): return {"status":"cancelled"}
 	if RenderingServer.get_current_rendering_method()=="gl_compatibility":
 		report["clouds"]={"status":"native_fallback","reason":"Compute rendering unavailable"}
 	else:

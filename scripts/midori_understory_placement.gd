@@ -84,7 +84,7 @@ static func apply(park: Node3D) -> Dictionary:
 		var gap_fill:=step>=trees.size()*3
 		if gap_fill:
 			var cell:=(step-trees.size()*3)*137%(28*22)
-			centre=Vector2(-196+14*(cell%28),-147+14*int(cell/28))+Vector2(rng.randf_range(-2,2),rng.randf_range(-2,2))
+			centre=Vector2(-196+14*(cell%28),-147+14*int(cell/28))+Vector2(rng.randf_range(-5,5),rng.randf_range(-5,5))
 		var crowded:=false
 		for prior in centres:
 			if centre.distance_to(prior)<(12.0 if gap_fill else 6.0):
@@ -100,10 +100,16 @@ static func apply(park: Node3D) -> Dictionary:
 		var positions:Array[Vector2]=[]
 		for z in range(-10,11):
 			for x in range(-14,15):
-				var offset:=Vector2(x*.52+rng.randf_range(-.16,.16),z*.52+rng.randf_range(-.16,.16))
+				# Scattered, not planted in rows: wide jitter, random gaps, and a bed
+				# that thins out toward its rim instead of ending in a hard ellipse.
+				var offset:=Vector2(x*.52+rng.randf_range(-.40,.40),z*.52+rng.randf_range(-.40,.40))
+				if rng.randf()<.28:
+					continue
 				var edge:=pow(offset.x/7.2,2)+pow(offset.y/5.2,2)
 				var scallop:=.12*sin(offset.x*1.6+angle)+.10*cos(offset.y*2.1-angle)
 				if edge>rng.randf_range(.85,1.10)+scallop:
+					continue
+				if edge>.45 and rng.randf()<(edge-.45)*.9:
 					continue
 				var p:=centre+offset.rotated(angle)
 				if not detail._is_lawn_position(p.x,p.y) or not park._is_vegetation_clear(Vector3(p.x/2.0,0,p.y/2.0),.45):
@@ -122,7 +128,7 @@ static func apply(park: Node3D) -> Dictionary:
 					continue
 				var height:=rng.randf_range(.45,.62)*lerpf(1.0,.8,clampf(edge,0,1))
 				var width:=rng.randf_range(.82,1.12)/maxf(bounds.size.x,bounds.size.z)
-				var basis:=Basis(Vector3.UP,angle+rng.randf_range(-.75,.75)).scaled(Vector3(width,height/bounds.size.y,width))
+				var basis:=Basis(Vector3.UP,rng.randf_range(0,TAU)).scaled(Vector3(width,height/bounds.size.y,width))
 				transforms.append(Transform3D(basis,Vector3(p.x-centre.x,detail.GROUND_SURFACE_Y+.004,p.y-centre.y)-basis*anchor))
 				positions.append(p)
 				minimum_trunk=minf(minimum_trunk,nearest)

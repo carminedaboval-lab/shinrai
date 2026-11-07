@@ -1,0 +1,223 @@
+{
+	"camera_script_sha256": "e269dac840d2936bc8f8344f2424a43e8cd18ca89320f938339a37e174b19406",
+	"city_sha256": "bc900e4f22d35154533755ac0d7a97a7f83d91e5be42c4d1aade4d9d20afcc3c",
+	"context": "actual streamed near-city tile",
+	"dependencies_sha256": {
+		"midori_fukumaru_apartments": "60e19e5676b181d999d228c320e48e61716abccb07b7f510ec5fefcc0e092e5d",
+		"midori_fukumaru_furniture": "3853bf7fe8efd67615b9f8f67c3e4cd114439fb89c8c3824ffe9ec483728e2d4",
+		"midori_fukumaru_stairs": "3ffaffc6861c03f2e0fa93fb9d26653fb3740eb325284ceec275e2aed892d80c",
+		"midori_near_city_arcade": "970b35b40e80320ec895d1b69394a08aa16f3b34c368dc4db553a8f176921343"
+	},
+	"driver": "vulkan",
+	"renderer": "NVIDIA GeForce RTX 5050 Laptop GPU",
+	"shop_base_triangles": 51236,
+	"shop_meshes": 105,
+	"shop_origin": "(90.39729, 0.08, -206.0)",
+	"shop_surfaces": 33,
+	"source_sha256": "9e9df6b47cc16b918355a25c8d70121c7c8cdbd43b402d3106fbef76a69f3504",
+	"views": {
+		"01_north_street": {
+			"eye": [
+				2.0,
+				1.64,
+				12.7
+			],
+			"fov": 52.0,
+			"frames_per_trial": 40,
+			"ms_per_frame_median": 5.5374,
+			"ms_per_frame_trials": [
+				5.43645,
+				5.5374,
+				6.5415
+			],
+			"night": false,
+			"settle_frames": 70,
+			"sha256": "13a19e08fb6897bddce97690774e6effa4d1fcfe457e906acbe935e463db595e",
+			"size": [
+				1600,
+				900
+			],
+			"target": [
+				0.38,
+				4.88,
+				-0.2
+			],
+			"viewport_draws": 447,
+			"viewport_primitives": 1076276
+		},
+		"02_apartment_stairs": {
+			"eye": [
+				2.77,
+				1.64,
+				3.64
+			],
+			"fov": 69.0,
+			"frames_per_trial": 40,
+			"ms_per_frame_median": 5.13435,
+			"ms_per_frame_trials": [
+				5.1303,
+				5.13435,
+				6.181275
+			],
+			"night": false,
+			"settle_frames": 70,
+			"sha256": "5ac630efa41d4d77b08e1a3f4315eb3583b345ef0d97fe32b99c0f95c53fc65f",
+			"size": [
+				1600,
+				900
+			],
+			"target": [
+				2.24,
+				2.29,
+				-2.1
+			],
+			"viewport_draws": 352,
+			"viewport_primitives": 913806
+		},
+		"03_201_front_studio": {
+			"eye": [
+				0.42,
+				4.85,
+				-2.71
+			],
+			"fov": 80.0,
+			"frames_per_trial": 40,
+			"ms_per_frame_median": 4.387475,
+			"ms_per_frame_trials": [
+				4.387475,
+				4.37075,
+				4.5117
+			],
+			"night": false,
+			"settle_frames": 70,
+			"sha256": "2a49a80bf26e46b45eef21dd90d3972242e1693473403a5bfcd146a71bb0d820",
+			"size": [
+				1600,
+				900
+			],
+			"target": [
+				-0.07,
+				4.17,
+				-0.59
+			],
+			"viewport_draws": 141,
+			"viewport_primitives": 808044
+		},
+		"04_202_rear_studio": {
+			"eye": [
+				0.58,
+				4.84,
+				-5.69
+			],
+			"fov": 83.0,
+			"frames_per_trial": 40,
+			"ms_per_frame_median": 5.06945,
+			"ms_per_frame_trials": [
+				5.06945,
+				4.706075,
+				5.31895
+			],
+			"night": false,
+			"settle_frames": 70,
+			"sha256": "f0387c618f3139f078885109719dce8b140bd6f84bfd1838e1d19e71a57e2a64",
+			"size": [
+				1600,
+				900
+			],
+			"target": [
+				-0.25,
+				4.11,
+				-8.17
+			],
+			"viewport_draws": 66,
+			"viewport_primitives": 714972
+		},
+		"05_301_living_kitchen": {
+			"eye": [
+				0.86,
+				7.69,
+				-4.21
+			],
+			"fov": 77.0,
+			"frames_per_trial": 40,
+			"ms_per_frame_median": 5.2802,
+			"ms_per_frame_trials": [
+				5.25865,
+				5.2802,
+				5.60495
+			],
+			"night": false,
+			"settle_frames": 70,
+			"sha256": "ad19dac6f5c6c69468460bf6bd38582b48255cc848facf69c630f0648c4838fc",
+			"size": [
+				1600,
+				900
+			],
+			"target": [
+				-0.44,
+				7.03,
+				-6.67
+			],
+			"viewport_draws": 190,
+			"viewport_primitives": 778608
+		},
+		"06_301_front_bedroom": {
+			"eye": [
+				1.13,
+				7.7,
+				-3.03
+			],
+			"fov": 77.0,
+			"frames_per_trial": 40,
+			"ms_per_frame_median": 4.7814,
+			"ms_per_frame_trials": [
+				4.7084,
+				4.7814,
+				5.442225
+			],
+			"night": false,
+			"settle_frames": 70,
+			"sha256": "0021286b0715955e2c5e48b1485fc1332ad2fc84519527ccb1df321d71503a50",
+			"size": [
+				1600,
+				900
+			],
+			"target": [
+				-0.77,
+				7.0,
+				-1.31
+			],
+			"viewport_draws": 331,
+			"viewport_primitives": 943408
+		},
+		"07_301_bathroom": {
+			"eye": [
+				-0.14,
+				7.67,
+				-7.93
+			],
+			"fov": 78.0,
+			"frames_per_trial": 40,
+			"ms_per_frame_median": 4.3921,
+			"ms_per_frame_trials": [
+				4.3921,
+				4.3351,
+				4.395725
+			],
+			"night": false,
+			"settle_frames": 70,
+			"sha256": "5f78a05b159d400fe3fb83e415a0d8d75aa343646e9128c636c4780403120316",
+			"size": [
+				1600,
+				900
+			],
+			"target": [
+				-1.21,
+				6.84,
+				-8.49
+			],
+			"viewport_draws": 308,
+			"viewport_primitives": 887874
+		}
+	}
+}

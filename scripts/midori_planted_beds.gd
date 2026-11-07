@@ -416,11 +416,12 @@ func _pond_raft_candidates(spec: Dictionary, radius: float, rng: RandomNumberGen
 			width = maxf(0.0,width)
 		var row_limit := 14 if spec.has("lobes") else 7
 		for row in range(row_limit):
-			var depth := .16 + float(row)*.52 + rng.randf_range(-.10,.10)
+			# Loose drifts, not ranks: jitter about half the row spacing either way.
+			var depth := .16 + float(row)*.52 + rng.randf_range(-.24,.24)
 			if depth > width:
 				continue
 			var stagger := .20 if row%2 == 1 else -.10
-			var along := stagger+rng.randf_range(-.13,.13)
+			var along := stagger+rng.randf_range(-.32,.32)
 			var point: Vector2 = frame.point + frame.inward*(base_gap+depth) + frame.tangent*along
 			candidates.append(point)
 	# Fixed bounded sampling, no repeated random attempts or blanket carpet.

@@ -2,7 +2,7 @@
 
 [ext_resource type="PackedScene" path="res://assets/weapons/akane/akane_weapon.tscn" id="1"]
 [sub_resource type="BoxShape3D" id="Shape"]
-size = Vector3(0.215, 0.158, 0.034)
+size = Vector3(0.205, 0.142, 0.034)
 
 [node name="AkaneWorld" type="Node3D"]
 
@@ -13,5 +13,5 @@ collision_layer = 0
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="PickupArea"]
-position = Vector3(-0.040499999999999994, -0.039999999999999994, 0)
+position = Vector3(-0.019, -0.036, 0)
 shape = SubResource("Shape")

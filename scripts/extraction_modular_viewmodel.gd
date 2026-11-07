@@ -184,7 +184,12 @@ func set_optic(id: String) -> bool:
 				else:
 					var glass := StandardMaterial3D.new()
 					glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-					glass.albedo_color = Color(0.65, 0.47, 0.18, 0.035)
+					if id == "reflex_01":
+						# Clear neutral Ame window; keep other optics' authored glass.
+						glass.albedo_color = Color(0.85, 0.85, 0.85, 0.012)
+						glass.metallic_specular = 0.08
+					else:
+						glass.albedo_color = Color(0.65, 0.47, 0.18, 0.035)
 					glass.roughness = 0.08
 					glass.cull_mode = BaseMaterial3D.CULL_DISABLED
 					mesh.material_override = glass
@@ -218,6 +223,12 @@ func get_sight_world_points() -> PackedVector3Array:
 	return super.get_sight_world_points()
 
 func _build_backup_iron_sights() -> void:
+	# Real-counterpart assemblies model their own sights at the marker heights;
+	# hide them with an optic exactly like the generated backup pair.
+	var authored := assembly.get_node_or_null("Geometry/IronSights") as Node3D
+	if authored != null:
+		_backup_iron_sights = authored
+		return
 	# The supplied receivers had a rail edge in place of a usable rear sight.
 	# Compact folding sights use the same physical marks as the ADS solver.
 	_backup_iron_sights = Node3D.new()

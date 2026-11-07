@@ -272,6 +272,8 @@ func _prepare_imported_nodes(node: Node) -> void:
         # A generous cull margin prevents the complete skinned rig from being
         # discarded while its authored animation is visibly in front of camera.
         mesh_node.extra_cull_margin = 2.0
+        if lower_name in ["object_1084", "object_1085"]:
+            preload("res://scripts/weapon_surface_detail.gd").apply_baked_materials(mesh_node)
         # The Sketchfab source includes presentation-only sky and aim-card
         # geometry. Neither belongs in Blacksite's first-person view.
         if lower_name.contains("sky") or lower_name.contains("dome") or lower_name.begins_with("aim"):
@@ -283,10 +285,11 @@ func _build_viewmodel_light() -> void:
     var fill_light: OmniLight3D = OmniLight3D.new()
     fill_light.name = "ViewmodelFillLight"
     fill_light.position = Vector3(0.35, 0.28, 0.18)
-    fill_light.light_color = Color(0.72, 0.84, 1.0)
+    fill_light.light_color = Color(0.88, 0.93, 1.0)
     # Keep the weapon readable without washing skin and gloves to white in the
     # park's daylight environment.
-    fill_light.light_energy = 1.15
+    fill_light.light_energy = 0.85
+    fill_light.light_specular = 0.22
     fill_light.omni_range = 4.0
     fill_light.shadow_enabled = false
     fill_light.light_cull_mask = VIEWMODEL_LAYER

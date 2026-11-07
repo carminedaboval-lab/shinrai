@@ -1,40 +1,42 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/weapons/yuzuru/yuzuru_geometry.glb" id="1"]
+[ext_resource type="Script" path="res://scripts/weapon_real_finish.gd" id="2"]
 
 [node name="Yuzuru" type="Node3D"]
+script = ExtResource("2")
 metadata/magazine_node_path = "Geometry/Magazine"
 metadata/action_node_path = "Geometry/Action"
-metadata/action_grip_node_path = "Geometry/Action/BoltGrip"
+metadata/magazine_grip = Vector3(-0.015, -0.02, 0)
+metadata/real_counterpart = "Accuracy International Arctic Warfare (AW), 7.62x51 mm"
 
 [node name="Geometry" parent="." instance=ExtResource("1")]
 
 [node name="Muzzle" type="Marker3D" parent="."]
-position = Vector3(-0.743, 0.125, 0)
+position = Vector3(-0.812, 0.065, 0)
 rotation = Vector3(0, -1.5707963267949, 0)
 
 [node name="GripRight" type="Marker3D" parent="."]
 position = Vector3(0.135, -0.03, 0)
 
 [node name="GripLeft" type="Marker3D" parent="."]
-position = Vector3(-0.125, 0.045, 0.012)
+position = Vector3(-0.26, 0.01, 0.01)
 
 [node name="IronRearSight" type="Marker3D" parent="."]
-position = Vector3(0.127, 0.2, 0)
+position = Vector3(0.084, 0.115, 0)
 
 [node name="IronFrontSight" type="Marker3D" parent="."]
-position = Vector3(-0.475, 0.2, 0)
+position = Vector3(-0.7154, 0.115, 0)
 
 [node name="OpticSocket" type="Marker3D" parent="."]
-position = Vector3(0.029, 0.172, 0)
+position = Vector3(0.0, 0.092, 0)
 rotation = Vector3(0, -1.5707963267949, 0)
 
 [node name="BoltRelease" type="Marker3D" parent="."]
-position = Vector3(0.147, 0.102, -0.03)
+position = Vector3(0.09, 0.065, 0.018)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(0.026, 0.131, -0.026)
+position = Vector3(-0.02, 0.075, -0.017)
 
 [node name="ActionGrip" type="Marker3D" parent="."]
-position = Vector3(0.147, 0.074, -0.071)
-
+position = Vector3(0.097, 0.05, -0.048)

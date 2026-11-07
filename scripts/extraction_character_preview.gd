@@ -143,13 +143,13 @@ func _ready() -> void:
 	environment.background_mode = Environment.BG_CLEAR_COLOR
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color("b9c7d5")
-	environment.ambient_light_energy = 0.60
+	environment.ambient_light_energy = 0.48
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	world.environment = environment
 	studio.add_child(world)
-	_light(studio, Vector3(1.5,2.7,2.2), Color("ffe5cc"), 3.5)
-	_light(studio, Vector3(-2.0,1.5,1.0), Color("c4dcec"), 2.2)
-	_light(studio, Vector3(0.6,2.0,-1.8), Color("eff2dd"), 3.0)
+	_light(studio, Vector3(1.5,2.7,2.2), Color("ffe5cc"), 2.9)
+	_light(studio, Vector3(-2.0,1.5,1.0), Color("c4dcec"), 1.4)
+	_light(studio, Vector3(0.6,2.0,-1.8), Color("d9eae6"), 2.6)
 	camera = Camera3D.new()
 	camera.fov = 36.0
 	camera.near = 0.05
@@ -230,8 +230,8 @@ func set_backpack(id: String) -> void:
 	pack.transform = bone_world.affine_inverse() * desired
 
 func _resize() -> void:
-	# Render no larger than 900 px; the preview is inactive outside inventory.
-	stretch_shrink = maxi(1, ceili(maxf(size.x, size.y) / 900.0))
+	# Keep the full-height operator sharp at the inventory's 1080p design size.
+	stretch_shrink = maxi(1, ceili(maxf(size.x, size.y) / 1536.0))
 
 func _visibility() -> void:
 	if viewport == null: return

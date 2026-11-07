@@ -86,42 +86,52 @@ const GRID_COLUMNS := 4
 const TILE_FILL := Color(0.035, 0.045, 0.038, 0.18)
 const TILE_BORDER := Color("#b8c3bf36")
 const BackpackState = preload("res://scripts/extraction_backpack_state.gd")
+const FieldOverview = preload("./extraction_inventory_overview.gd")
+const MedicalData = preload("./extraction_medical.gd")
+const SurvivalSymbols = preload("res://assets/ui/inventory/survival_symbols.svg")
+const InventoryFonts = preload("res://scripts/hud/shinrai_ui_style.gd")
+var field_overview: Control
+var catalog_columns: HBoxContainer
+var catalog_switch: Button
+var controls_hint: Label
+var overview_open := false
 
 func configure(source: Node) -> void:
 	raid = source
 	in_hq = raid.phase == raid.Phase.HQ
 	custom_minimum_size = Vector2(1504, 0)
-	add_theme_constant_override("separation", 10)
+	add_theme_constant_override("separation", 3)
 	_collect_entries()
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 12)
 	var head_surface := PanelContainer.new()
-	head_surface.add_theme_stylebox_override("panel", _style(Color(0.035,0.045,0.038,0.40),Color.TRANSPARENT,8))
+	head_surface.add_theme_stylebox_override("panel", _style(Color("101d24ee"),Color("78979876"),10))
 	add_child(head_surface)
 	head_surface.add_child(head)
 	var crest := FieldCrest.new()
 	crest.custom_minimum_size = Vector2(34,34)
 	crest.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(crest)
-	var title := _text(head, "SHINRAI  /  FIELD KIT", 22, PAPER)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_text(head, "HQ LOCKER  ·  SECURED" if in_hq else "FIELD CARGO  ·  PAUSED", 16, MUTED)
-	_text(head, "%s CR" % _number(int(raid.profile.data.credits)), 20, AMBER)
+	var title := _text(head, "SHINRAI   /   FIELD KIT", 22, Color("e5efef"))
+	title.add_theme_font_override("font", InventoryFonts.heading_font())
+	catalog_switch = _button(head, "HQ LOCKER" if in_hq else "CARGO LIST", func() -> void: _set_overview(not overview_open))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(spacer)
+	_text(head, "HQ  ·  SECURED" if in_hq else "MIDORI PARK  ·  PAUSED", 16, Color("a9c2c3"))
+	_text(head, "%s CR" % _number(int(raid.profile.data.credits)), 17, AMBER)
 	if not in_hq: _button(head, "FIELD MAP", func() -> void: action_requested.emit("map"))
 	_button(head, "BACK TO OPERATIONS" if in_hq else "RESUME RAID", func() -> void: action_requested.emit("inventory_close"))
-	var rule := FieldRule.new()
-	rule.custom_minimum_size.y = 8
-	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(rule)
-	_build_survival_strip()
 	var columns := HBoxContainer.new()
+	catalog_columns = columns
 	columns.name = "InventoryColumns"
 	columns.add_theme_constant_override("separation", 32)
 	add_child(columns)
 	# DayZ-style composition: item information / full character / equipment+cargo.
 	var inspector := _column(columns, 440)
 	_build_vicinity(inspector)
-	var medical_available: bool = raid.has_method("request_treatment") and is_instance_valid(raid.player) and raid.player.has_method("max_health") and raid.player.get("medical") != null and ResourceLoader.exists("res://scripts/extraction_medical_panel.gd")
+	var medical_available: bool = raid.has_method("request_treatment") and (in_hq or (is_instance_valid(raid.player) and raid.player.has_method("max_health") and raid.player.get("medical") != null)) and ResourceLoader.exists("res://scripts/extraction_medical_panel.gd")
 	if medical_available:
 		var tabs := HBoxContainer.new()
 		inspector.add_child(tabs)
@@ -195,7 +205,7 @@ func configure(source: Node) -> void:
 	equipment_title = _text(weapon_copy, "", 22, PAPER)
 	equipment_ammunition = _text(weapon_copy, "", 16, PAPER)
 	_button(weapon_copy, "WEAPONS & OPTICS", _open_weapon_workbench)
-	if not in_hq and is_instance_valid(raid.player) and raid.player.physical_magazines and raid.player.magazine_inserted:
+	if not in_hq and is_instance_valid(raid.player) and raid.player.get("physical_magazines") == true and raid.player.get("magazine_inserted") == true:
 		_button(weapon_copy,"REMOVE MAGAZINE",func()->void:_request_inventory_action("unload_magazine"))
 	_refresh_equipment_readout()
 	var right := _column(columns, 464)
@@ -203,16 +213,24 @@ func configure(source: Node) -> void:
 	_build_cargo(right)
 	if not entries.is_empty(): selected = 0
 	_build_details()
-	var footer := HBoxContainer.new()
-	add_child(footer)
+	var footer := _build_survival_strip()
 	_status_caption = "STASH  /  Banked items stay at HQ" if in_hq else "UNBANKED  /  Extract to keep cargo"
-	transaction_status = _text(footer, _status_caption, 17, MUTED)
+	transaction_status = _text(footer, _status_caption, 14, MUTED)
 	transaction_status.name = "InventoryFeedback"
+	transaction_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	transaction_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	transaction_status.clip_text = true
 	transaction_status.mouse_filter = Control.MOUSE_FILTER_PASS
 	_refresh_transaction_feedback()
-	_text(footer, "PAD: Dpad SELECT / Y CARGO-ACTIONS / LB-RB CATEGORIES-TABS / B BACK" if GameInput.gamepad_active() else "ARROWS  SELECT    F  ACTIONS    CTRL F  SEARCH    I / TAB / ESC  CLOSE", 16, PAPER)
+	controls_hint = _text(footer, "", 14, PAPER)
+	controls_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	field_overview = FieldOverview.new()
+	field_overview.name = "FieldGearOverview"
+	add_child(field_overview)
+	move_child(field_overview, columns.get_index())
+	field_overview.configure(self)
+	_set_overview(true, false)
+	_update_hint()
 	if is_instance_valid(raid.player):
 		for property: Dictionary in raid.player.get_property_list():
 			if str(property.name) in ["weapon", "uzi_viewmodel"]: game_model_properties.append(str(property.name))
@@ -224,9 +242,30 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if is_instance_valid(weapon_workbench):
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.ctrl_pressed and event.keycode == KEY_F:
+		if overview_open: _set_overview(false, false)
 		search.grab_focus()
 		search.select_all()
 		get_viewport().set_input_as_handled()
+
+func _set_overview(active: bool, focus: bool = true) -> void:
+	if not is_instance_valid(field_overview): return
+	overview_open = active
+	catalog_columns.visible = not active
+	field_overview.visible = active
+	catalog_switch.text = ("HQ LOCKER" if in_hq else "CARGO LIST") if active else "GEAR OVERVIEW"
+	if in_hq:
+		_status_caption = "FIELD KIT  /  Prepared for your next deployment" if active else "STASH  /  Banked items stay at HQ"
+		_refresh_transaction_feedback()
+	field_overview.set_overview(active)
+	_update_hint()
+	if focus: _focus_first()
+
+func _update_hint() -> void:
+	if not is_instance_valid(controls_hint): return
+	if overview_open:
+		controls_hint.text = "D-PAD  Navigate     A  Select     B  Back" if GameInput.gamepad_active() else "Drag items to move     Ctrl F  Search     I  Close"
+	else:
+		controls_hint.text = "D-PAD  Select     Y  Actions     LB / RB  Categories" if GameInput.gamepad_active() else "Arrows  Select     F  Actions     Ctrl F  Search"
 
 func _collect_entries() -> void:
 	entries.clear()
@@ -344,7 +383,7 @@ func _refresh_equipment_readout() -> void:
 	equipment_title.text = str(WeaponCatalog.WEAPONS[id].title)
 	var rounds := int(record.ammo)
 	var spare := int(record.reserve)
-	if is_instance_valid(raid.player) and str(raid.player.weapon_id) == id:
+	if not in_hq and is_instance_valid(raid.player) and str(raid.player.get("weapon_id")) == id:
 		rounds = int(raid.player.ammo)
 		spare = int(raid.player.reserve)
 	equipment_ammunition.text = "%s     %02d / %03d" % [WeaponCatalog.weapon(id).ammo_type, rounds, spare]
@@ -362,15 +401,9 @@ func _open_weapon_workbench() -> void:
 	weapon_workbench.configure(raid)
 	weapon_workbench.exit_requested.connect(func() -> void: action_requested.emit("inventory_close"))
 	weapon_workbench.closed.connect(func() -> void:
-		weapon_workbench.queue_free()
-		weapon_workbench = null
-		for child: Node in get_children():
-			if child is Control and not child.is_queued_for_deletion():
-				child.show()
-		_refresh_equipment_readout()
-		_refresh_transaction_feedback()
-		_filter_changed(search.text)
-		_focus_first())
+		# Changing an optic can return a reserved reload magazine to cargo.
+		# Rebuild from current records and let the HUD restore the return view.
+		raid.hud.show_inventory(raid))
 
 func _build_cargo(box: VBoxContainer) -> void:
 	var total := 0
@@ -381,7 +414,8 @@ func _build_cargo(box: VBoxContainer) -> void:
 	_section(box, "STASH" if in_hq else "CARRIED CARGO", "%s CR TOTAL" % _number(value))
 	var capacity_row := HBoxContainer.new()
 	box.add_child(capacity_row)
-	capacity_label = _text(capacity_row, "%d BANKED ITEMS" % total if in_hq else "%02d / %02d SLOTS%s" % [total, raid.capacity(), "  ·  FULL" if total >= raid.capacity() else ""], 21, PAPER)
+	var cells: int = raid.cargo_cells_used() if not in_hq else 0
+	capacity_label = _text(capacity_row, "%d BANKED ITEMS" % total if in_hq else "%02d / %02d CELLS%s" % [cells, raid.capacity(), "  ·  FULL" if cells >= raid.capacity() else ""], 21, PAPER)
 	capacity_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mass_label = _text(capacity_row, "SECURED AT HQ" if in_hq else "%.1f / %.1f kg" % [raid.cargo_mass_kg(), raid.cargo_limit_kg()], 18, MUTED)
 	var meter := ProgressBar.new()
@@ -390,7 +424,7 @@ func _build_cargo(box: VBoxContainer) -> void:
 	meter.show_percentage = false
 	meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meter.max_value = 1.0
-	meter.value = 1.0 if in_hq else maxf(float(total) / raid.capacity(), raid.cargo_mass_kg() / raid.cargo_limit_kg())
+	meter.value = 1.0 if in_hq else maxf(float(cells) / raid.capacity(), raid.cargo_mass_kg() / raid.cargo_limit_kg())
 	meter.add_theme_stylebox_override("background", _style(Color("#90909040"), Color.TRANSPARENT, 0))
 	meter.add_theme_stylebox_override("fill", _style(AMBER if not in_hq and meter.value >= 1.0 else MINT.darkened(0.3), Color.TRANSPARENT, 0))
 	box.add_child(meter)
@@ -432,17 +466,7 @@ func _build_cargo(box: VBoxContainer) -> void:
 	grid.add_theme_constant_override("v_separation", 1)
 	cargo_scroll.add_child(grid)
 	for index: int in range(entries.size()): _add_tile(index)
-	if not in_hq:
-		for index: int in range(entries.size(), raid.capacity()):
-			var empty := PanelContainer.new()
-			empty.custom_minimum_size = TILE_SIZE
-			empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			empty.add_theme_stylebox_override("panel", _style(Color(0.08,0.10,0.08,0.10), TILE_BORDER, 6))
-			grid.add_child(empty)
-			var label := _text(empty, "%02d" % (index + 1), 14, Color("#c3c3c399"))
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	empty_label = _text(box, "Stash is empty. Extract with cargo to bank items." if in_hq and entries.is_empty() else "Grouped by item · Select to inspect" if in_hq else "One item per slot · Select to inspect", 17, MUTED)
+	empty_label = _text(box, "Stash is empty. Extract with cargo to bank items." if in_hq and entries.is_empty() else "Grouped by item · Select to inspect" if in_hq else "%d carried · Select to inspect" % total, 17, MUTED)
 	empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	empty_label.custom_minimum_size.x = 464
 
@@ -556,6 +580,11 @@ func view_state() -> Dictionary:
 		"controller_focus": _controller_focus_state(), "inspector_tab": inspector_tab, "sorting": sorting, "sort_applied": _sort_applied, "scroll": cargo_scroll.scroll_vertical}
 	if selected >= 0 and selected < entries.size():
 		state["item"] = entries[selected]
+	if is_instance_valid(field_overview):
+		state["overview_open"] = overview_open
+		state["overview_page"] = field_overview.page
+		state["overview_record"] = field_overview.selected_record()
+		if is_instance_valid(medical_panel): state["body_part"] = medical_panel.selected_part
 	return state
 
 func restore_view_state(state: Dictionary) -> void:
@@ -589,6 +618,12 @@ func restore_view_state(state: Dictionary) -> void:
 	# Apply after container layout and initial keyboard focus have settled.
 	_restore_scroll_after_layout(int(state.get("scroll", 0)))
 	_show_inspector_tab(str(state.get("inspector_tab", "ITEM")))
+	if is_instance_valid(field_overview):
+		_set_overview(bool(state.get("overview_open", true)), false)
+		if overview_open:
+			field_overview.restore_record(state.get("overview_record",{}))
+			field_overview.restore_page(str(state.get("overview_page","body")), str(state.get("body_part","thorax")))
+			return
 	if GameInput.gamepad_active():call_deferred("_restore_controller_focus",state.get("controller_focus",{}))
 
 func _restore_scroll_after_layout(offset: int) -> void:
@@ -661,7 +696,7 @@ func _build_details() -> void:
 	detail.add_child(identity)
 	var kind := _text(identity, _kind(str(entry.id)), 14, MUTED)
 	kind.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_text(identity,"BANKED" if in_hq else "SLOT %02d" % (int(entry.bag_index)+1),14,MUTED)
+	_text(identity,"BANKED" if in_hq else "CARRIED ITEM %02d" % (int(entry.bag_index)+1),14,MUTED)
 	var title := _text(detail,entry.title,28,PAPER)
 	title.name = "ItemTitle"
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -968,6 +1003,9 @@ func _animate_entrance() -> void:
 
 func _focus_first() -> void:
 	if not is_inside_tree() or is_queued_for_deletion(): return
+	if overview_open and is_instance_valid(field_overview):
+		field_overview.focus_first()
+		return
 	var retained_tab := inspector_tab
 	if selected >= 0 and selected < tiles.size() and tiles[selected].visible:
 		tiles[maxi(0, selected)].grab_focus()
@@ -1285,15 +1323,6 @@ class FieldCrest extends Control:
 		draw_line(Vector2(9,26),Vector2(23,11),brass,1.5,true)
 		draw_circle(Vector2(29,23),2,brass)
 
-class FieldRule extends Control:
-	func _ready() -> void: resized.connect(queue_redraw)
-	func _draw() -> void:
-		draw_line(Vector2(0,4),Vector2(size.x,4),Color(0.75,0.78,0.70,0.22),1,true)
-		draw_line(Vector2(0,4),Vector2(82,4),Color("c7bb8e"),2,true)
-		for index: int in range(3):
-			var x := 94.0 + index*8.0
-			draw_line(Vector2(x,2),Vector2(x-3,6),Color("c7bb8e"),1,true)
-
 class SlotAccent extends Control:
 	func _draw() -> void:
 		var c := Color("c7bb8e")
@@ -1304,48 +1333,83 @@ class SlotAccent extends Control:
 			draw_line(p,p+Vector2(0,9*sy),c,2,true)
 
 
-func _build_survival_strip() -> void:
+func _build_survival_strip() -> VBoxContainer:
 	var surface := PanelContainer.new()
 	surface.name = "SurvivalStats"
-	surface.add_theme_stylebox_override("panel",_style(Color(0.035,0.045,0.038,0.40),TILE_BORDER,8))
+	surface.custom_minimum_size.y = 57
+	surface.add_theme_stylebox_override("panel", _style(Color("0a181ff5"), Color("738e9082"), 10))
 	add_child(surface)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation",16)
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.add_theme_constant_override("separation", 16)
 	surface.add_child(row)
 	var reserves: RefCounted = raid.metabolism
-	var med: Variant = raid.player.get("medical") if is_instance_valid(raid.player) else null
-	var blood := 100.0 if in_hq or med == null else float(med.blood)
-	var body := 100.0 if in_hq else float(med.total_hp())/float(med.TOTAL_HP)*100.0 if med!=null else float(raid.player.health)
-	_survival_meter(row,"ENERGY  ·  %d BPM" % roundi(68.0 if in_hq else reserves.heart_rate),100.0 if in_hq else reserves.energy,AMBER,"Long-term reserve. Activity and sustained higher heart rate increase consumption. Stamina remains your short-term sprint reserve.",1.5)
-	_survival_meter(row,"HUNGER",100.0 if in_hq else reserves.food,MINT,"Food reserve: lower means hungrier. Field rations restore food and energy.")
-	_survival_meter(row,"THIRST",100.0 if in_hq else reserves.hydration,MINT,"Water reserve: lower means thirstier. Drinking restores hydration.")
-	_survival_meter(row,"BLOOD",blood,Color("e6a394"),"Bleeding reduces blood. After bleeding stops, food and hydration improve slow blood recovery; the lower reserve sets the pace. Keep energy above 20%.")
-	_survival_meter(row,"BODY HEALTH",body,PAPER,"HP = body health x blood percentage. Slow recovery needs food/water 65%+, energy 30%+, blood 75%+, body health 60%+ and 20 seconds without damage. Combat or strenuous movement pauses it. Destroyed or fractured parts need treatment.")
+	var medical: Variant = raid.player.get("medical") if is_instance_valid(raid.player) else null
+	var maximum := int(MedicalData.TOTAL_HP)
+	var hp := float(maximum)
+	if not in_hq:
+		if medical != null:
+			hp = medical.effective_hp()
+		elif is_instance_valid(raid.player):
+			hp = raid.player.health
+			maximum = int(raid.player.max_health()) if raid.player.has_method("max_health") else 100
+	var water := 100 if in_hq else roundi(reserves.hydration)
+	var food := 100 if in_hq else roundi(reserves.food)
+	var energy := 100 if in_hq else roundi(reserves.energy)
+	var blood := 100 if in_hq or medical == null else roundi(medical.blood)
+	var pulse := 68 if in_hq else roundi(reserves.heart_rate)
+	_survival_readout(row, 0, "Health", str(ceili(hp)), "/%d" % maximum, "Effective HP includes injury and blood loss.")
+	_survival_readout(row, 1, "Water", str(water), "/100", "Drinking restores hydration.")
+	_survival_readout(row, 2, "Food", str(food), "/100", "Eating restores your food reserve.")
+	_survival_readout(row, 3, "Energy", str(energy), "/100", "Activity draws on your long-term energy reserve.")
+	_survival_readout(row, 4, "Blood", str(blood), "%", "Bleeding reduces blood volume.")
+	_survival_readout(row, 5, "Pulse", str(pulse), " bpm", "Current heart rate.")
+	_survival_readout(row, 6, "Cargo", "%.1f" % raid.cargo_mass_kg(), " kg", "Carried cargo. Your limit is %.1f kg." % raid.cargo_limit_kg())
+	var feedback := VBoxContainer.new()
+	feedback.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	feedback.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	feedback.add_theme_constant_override("separation", 0)
+	row.add_child(feedback)
+	return feedback
 
-func _survival_meter(parent: Control, caption: String, value: float, tint: Color, hint: String, stretch: float = 1.0) -> void:
-	var box := VBoxContainer.new()
-	box.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-	box.size_flags_stretch_ratio=stretch
-	box.tooltip_text=hint
-	parent.add_child(box)
-	var copy := HBoxContainer.new()
-	box.add_child(copy)
-	var title := _text(copy,caption,16,tint)
-	title.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-	_text(copy,"%.0f%%" % clampf(value,0.0,100.0),18,PAPER)
-	var meter := ProgressBar.new()
-	meter.name=caption.split("  ")[0].replace(" ","")+"Meter"
-	meter.custom_minimum_size=Vector2(140,5)
-	meter.value=clampf(value,0.0,100.0)
-	meter.show_percentage=false
-	meter.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	meter.add_theme_stylebox_override("background",_style(Color(0.6,0.7,0.6,0.18),Color.TRANSPARENT,0))
-	meter.add_theme_stylebox_override("fill",_style(Color("e69c82") if value<20.0 else tint,Color.TRANSPARENT,0))
-	box.add_child(meter)
+func _survival_readout(row: HBoxContainer, symbol_index: int, stat: String, amount: String, unit: String, detail_text: String) -> void:
+	var group := HBoxContainer.new()
+	group.name = stat
+	group.add_theme_constant_override("separation", 0)
+	group.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	group.mouse_filter = Control.MOUSE_FILTER_PASS
+	group.accessibility_name = "%s %s%s" % [stat, amount, unit]
+	group.tooltip_text = group.accessibility_name + "\n" + detail_text
+	row.add_child(group)
+	var glyph := AtlasTexture.new()
+	glyph.atlas = SurvivalSymbols
+	glyph.region = Rect2(symbol_index * 64, 0, 64, 64)
+	glyph.filter_clip = true
+	var icon := TextureRect.new()
+	icon.texture = glyph
+	icon.custom_minimum_size = Vector2(34, 30)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	group.add_child(icon)
+	var value := _text(group, amount, 25, Color("f3f6f3"))
+	value.name = "Value"
+	value.add_theme_font_override("font", InventoryFonts.heading_font())
+	var units := _text(group, unit, 17, Color("bfd0d1"))
+	units.add_theme_font_override("font", InventoryFonts.body_font())
+	var divider := VSeparator.new()
+	var line := StyleBoxLine.new()
+	line.vertical = true
+	line.color = Color("728b8b69")
+	divider.add_theme_stylebox_override("separator", line)
+	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(divider)
 
 # Controller routing only changes presentation; original callbacks validate actions.
 func controller_event(event: InputEvent) -> bool:
 	if is_instance_valid(weapon_workbench):return false
+	if overview_open: return field_overview.handle_controller(event)
 	var focused:=get_viewport().gui_get_focus_owner()
 	if GameInput.pressed(event,"ui_details"):
 		if is_instance_valid(focused) and (detail_shell.is_ancestor_of(focused) or (is_instance_valid(medical_panel) and medical_panel.is_ancestor_of(focused))):_focus_first()
@@ -1408,6 +1472,8 @@ func _restore_controller_focus(state: Dictionary) -> void:
 	else:_focus_first()
 
 func controller_cancel() -> bool:
+	if overview_open and not _discard_confirmation:
+		return field_overview.go_back()
 	if not _discard_confirmation or not detail.is_visible_in_tree():return false
 	_build_details()
 	for button: Button in detail.find_children("*","Button",true,false):

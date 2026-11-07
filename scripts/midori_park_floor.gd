@@ -223,7 +223,7 @@ func install() -> void:
 	if installed: return
 	var started := Time.get_ticks_msec()
 	rng.seed=2050102607
-	for i: int in range(6): file_source("stone_%02d.glb"%i,"stone",46.0)
+	for i: int in range(6): file_source("stone_%02d.glb"%i,"stone",60.0)
 	for i: int in range(3): file_source("branch_%02d.glb"%i,"branch",35.0)
 	for i: int in range(6): file_source("groundcover_%02d.glb"%i,"groundcover",58.0)
 	for i: int in range(3): file_source("leaf_%02d.glb"%i,"leaf",24.0)
@@ -236,6 +236,10 @@ func install() -> void:
 	var stones := variants("stone")
 	var branches := variants("branch")
 	var leaves := variants("leaf")
+	# Where open lawn gets a few settled stones: loose patches, not an even spread.
+	var lawn_stones := FastNoiseLite.new()
+	lawn_stones.seed = 4127
+	lawn_stones.frequency = 0.045
 	# A coprime traversal gives every park sector a share of the budget. Coherent
 	# lobes connect beds; density measurements avoid adding to existing carpets.
 	for step: int in range(38*31):
@@ -272,6 +276,19 @@ func install() -> void:
 				if j<3: place(stones[(serial+j)%stones.size()],p,rng.randf_range(.035,.13))
 				elif j==3 and serial%3==0: place(branches[serial%branches.size()],p,rng.randf_range(.035,.11))
 				else: place(leaves[(serial+j)%leaves.size()],p,rng.randf_range(.010,.021))
+		elif lawn_stones.get_noise_2dv(centre)>-.05:
+			# Open lawn: a small cluster of stones half sunk in the turf, a couple of
+			# low tufts at its foot and a few fallen leaves, so bare lawn has texture.
+			var seed_p := centre+Vector2(rng.randf_range(-4.0,4.0),rng.randf_range(-3.0,3.0))
+			for j: int in range(rng.randi_range(3,7)):
+				var a := rng.randf_range(0,TAU)
+				place(stones[(serial+j)%stones.size()],seed_p+Vector2(cos(a),sin(a))*rng.randf_range(.3,1.4),rng.randf_range(.06,.18))
+			if rng.randf()<.3: place(stones[serial%stones.size()],seed_p,rng.randf_range(.22,.38))
+			for j: int in range(rng.randi_range(1,3)):
+				var a := rng.randf_range(0,TAU)
+				place(flowers[(serial+j)%flowers.size()],seed_p+Vector2(cos(a),sin(a))*rng.randf_range(.5,1.6),rng.randf_range(.14,.24),rng.randf_range(.3,.5))
+			for j: int in range(2):
+				place(leaves[(serial+j)%leaves.size()],seed_p+Vector2(rng.randf_range(-1.5,1.5),rng.randf_range(-1.5,1.5)),rng.randf_range(.010,.021))
 		if placed>5 and serial%9==0:
 			place(stones[serial%stones.size()],centre+Vector2(1.2,.7),rng.randf_range(.18,.32))
 	# Small litter near existing human-use destinations, confined to dry soil.

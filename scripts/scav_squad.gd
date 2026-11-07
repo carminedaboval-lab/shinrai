@@ -8,6 +8,12 @@ const TownNavigation=preload("./scav_town_navigation.gd")
 const Activity=preload("./scav_activity.gd")
 const Social=preload("./scav_social.gd")
 const ROLES: Array[String]=["leader","scout","rear_guard"]
+const NEAR_MISS_RADIUS:=1.5
+const NEAR_MISS_RANGE:=60.0
+const CALLOUT_COOLDOWN:=3.0
+const CASUALTY_FLINCH_RANGE:=30.0
+# The last one standing gives up the fight once hurt this badly.
+const LAST_STAND_HEALTH:=.6
 var raid: Node
 var asset_root: String="res://assets/enemies/scavs"
 var members: Array[CharacterBody3D]=[]
@@ -28,6 +34,7 @@ var encounter_started: float=INF
 var last_visual_report: float=-100.0
 var casualties: Array[Dictionary]=[]
 var morale_broken:=false
+var callout_ready_at:=0.0
 var warning_anchor:=Vector3.ZERO
 var _step_distance:=0.0
 var town_navigation: RefCounted
@@ -247,7 +254,7 @@ func _hear_player_steps(delta: float) -> void:
 	_step_distance=0.0
 	var radius: float=3.5 if crouched else 18.0 if bool(player.get("sprinting")) else 9.0
 	for actor: CharacterBody3D in members:
-		if not is_instance_valid(actor) or actor.dead or actor.surrendered or actor.fleeing: continue
+		if not is_instance_valid(actor) or actor.dead or actor.fleeing: continue
 		var muffled: bool=not tactics.sightline(actor.global_position+Vector3.UP,player.global_position+Vector3.UP)
 		actor.hear_noise(player.global_position,radius*(.55 if muffled else 1.0))
 
@@ -266,11 +273,41 @@ func player_fired() -> void:
 	for actor: CharacterBody3D in members:
 		if is_instance_valid(actor) and not actor.dead and actor.global_position.distance_to(raid.player.global_position)<65.0:
 			make_hostile(actor,"gunfire")
-			return
+			break
+	_note_near_misses()
+
+# The aim line stands in for the bullet: close enough to the shot, a person hears
+# the crack, and only an unobstructed line can have passed near them.
+func _note_near_misses() -> void:
+	var camera:=raid.player.get("camera") as Camera3D
+	if not is_instance_valid(camera): return
+	var origin: Vector3=camera.global_position
+	var forward: Vector3=-camera.global_basis.z
+	for actor: CharacterBody3D in _living():
+		var chest: Vector3=actor.global_position+Vector3.UP*1.2
+		var along: float=(chest-origin).dot(forward)
+		if along<1.0 or along>NEAR_MISS_RANGE: continue
+		if (origin+forward*along).distance_to(chest)>NEAR_MISS_RADIUS: continue
+		if tactics.sightline(origin,chest): actor.near_miss()
+
+func _living() -> Array[CharacterBody3D]:
+	var living: Array[CharacterBody3D]=[]
+	for actor: CharacterBody3D in members:
+		if is_instance_valid(actor) and not actor.dead: living.append(actor)
+	return living
+
+## Short combat chatter over the head only: the HUD keeps the crew's big moments.
+func callout(actor: Node3D, text: String) -> void:
+	if tactics.clock<callout_ready_at: return
+	callout_ready_at=tactics.clock+CALLOUT_COOLDOWN
+	_caption(actor,text)
 
 func _say(actor: Node3D, text: String) -> void:
 	if social!=null:social.interrupt()
 	if raid.has_method("announce"): raid.announce("SCAV: "+text,3.2)
+	_caption(actor,text)
+
+func _caption(actor: Node3D, text: String) -> void:
 	var caption:=Label3D.new()
 	caption.text=text; caption.font_size=34; caption.pixel_size=.006
 	caption.billboard=BaseMaterial3D.BILLBOARD_ENABLED
@@ -291,30 +328,55 @@ func _on_defeated(actor: Node) -> void:
 		var previous: Dictionary=casualties[-2]
 		if (float(latest.time)-float(previous.time)<=2.0 and (latest.leader or previous.leader)) or (latest.unlocated and previous.unlocated):
 			_break_morale("leader_and_partner_lost" if latest.leader or previous.leader else "unseen_ambush")
+	if not morale_broken:
+		var living:=_living()
+		if not living.is_empty(): callout(living[0],"Man down!")
+		for survivor: CharacterBody3D in living:
+			if survivor.global_position.distance_to(actor.global_position)<CASUALTY_FLINCH_RANGE:
+				survivor.pinned_time=maxf(survivor.pinned_time,randf_range(.5,1.0))
+			reassess_morale(survivor)
 	_formation_goals.erase(actor)
 	if actor==_leader: _leader=null
 	_formation_elapsed=0
 
+## Called just before a corpse is removed: nothing may keep a typed reference to it.
+func forget(actor: CharacterBody3D) -> void:
+	members.erase(actor)
+	if social!=null: social.forget(actor)
+
+func reassess_morale(actor: CharacterBody3D) -> void:
+	if morale_broken or not hostile: return
+	var fighters: int=_living().filter(func(member: CharacterBody3D)->bool:return not member.fleeing).size()
+	if fighters==1 and actor.health/actor.max_health<LAST_STAND_HEALTH: _break_morale("last_standing")
+
 func _break_morale(reason: String) -> void:
-	morale_broken=true
 	tactics._abort_flank("morale_broken")
-	for survivor: CharacterBody3D in members:
-		if not is_instance_valid(survivor) or survivor.dead: continue
+	# Anyone with a way out takes it. A cornered scav stays in the fight, and the
+	# planner keeps running for them until nobody is left to fight.
+	var cornered:=false
+	for survivor: CharacterBody3D in _living():
+		if survivor.fleeing: continue
+		var escape:=_escape_route(survivor)
+		if escape.is_empty():
+			cornered=true
+			continue
 		tactics.orders.erase(survivor)
-		var info: Dictionary=tactics.contact(survivor)
-		var threat: Vector3=info.get("point",survivor.last_seen_position)
-		var escape:=PackedVector3Array()
-		if survivor.health/survivor.max_health>.5:
-			var away: Vector3=survivor.global_position-threat; away.y=0
-			if away.length()<.1: away=-survivor.global_basis.z
-			for turn: float in [0.0,-.7,.7]:
-				var goal: Vector3=get_nearest_walkable_world(survivor.global_position+away.normalized().rotated(Vector3.UP,turn)*24.0)
-				if goal.distance_to(threat)<survivor.global_position.distance_to(threat)+10.0: continue
-				escape=tactics.path_to(survivor.global_position,goal,survivor)
-				if not escape.is_empty(): break
 		survivor.break_morale(escape)
-		tactics.send(survivor,"flee" if not escape.is_empty() else "surrender",{"reason":reason})
-		_say(survivor,"I'm leaving!" if not escape.is_empty() else "Don't shoot! I give up!")
+		tactics.send(survivor,"flee",{"reason":reason})
+		_say(survivor,"I'm leaving!")
+	morale_broken=not cornered
+
+func _escape_route(survivor: CharacterBody3D) -> PackedVector3Array:
+	var info: Dictionary=tactics.contact(survivor)
+	var threat: Vector3=info.get("point",survivor.last_seen_position)
+	var away: Vector3=survivor.global_position-threat; away.y=0
+	if away.length()<.1: away=-survivor.global_basis.z
+	for turn: float in [0.0,-.7,.7]:
+		var goal: Vector3=get_nearest_walkable_world(survivor.global_position+away.normalized().rotated(Vector3.UP,turn)*24.0)
+		if goal.distance_to(threat)<survivor.global_position.distance_to(threat)+10.0: continue
+		var escape: PackedVector3Array=tactics.path_to(survivor.global_position,goal,survivor)
+		if not escape.is_empty(): return escape
+	return PackedVector3Array()
 
 func set_active(active: bool) -> void:
 	if social!=null:social.set_active(active)

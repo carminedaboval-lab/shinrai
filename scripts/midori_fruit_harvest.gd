@@ -165,6 +165,7 @@ func try_pick(raid: Node, fruit_id: String) -> bool:
 	if not _fits(raid, item_id): return false
 	# No node state changes until the actual slot AND mass transaction succeeds.
 	raid.bag.append(fruits[fruit_id].item.duplicate(true))
+	BackpackRules.settle(raid.backpack_state, raid.bag, int(raid.profile.data.pack_level))
 	_claim(fruit_id)
 	raid.player.set_cargo_mass(raid.cargo_mass_kg(), raid.cargo_limit_kg())
 	raid.announce("Picked " + str(FRUIT_NAMES[item_id]), 2.0)

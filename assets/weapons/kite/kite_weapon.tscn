@@ -1,33 +1,36 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/weapons/kite/kite_geometry.glb" id="1"]
+[ext_resource type="Script" path="res://scripts/weapon_real_finish.gd" id="2"]
 
 [node name="Kite" type="Node3D"]
+script = ExtResource("2")
+metadata/real_counterpart = "FN SCAR 17S (SCAR-H), 7.62x51 mm"
 
 [node name="Geometry" parent="." instance=ExtResource("1")]
 
 [node name="OpticSocket" type="Marker3D" parent="."]
-position = Vector3(0.125, 0.09225, 0)
+position = Vector3(0.0283, 0.1385, 0)
 rotation = Vector3(0, -1.5707963268, 0)
 
 [node name="Muzzle" type="Marker3D" parent="."]
-position = Vector3(-0.410, 0.074, 0)
+position = Vector3(-0.5337, 0.08, 0)
 rotation = Vector3(0, -1.5707963268, 0)
 
 [node name="GripRight" type="Marker3D" parent="."]
-position = Vector3(0.180, -0.030, 0)
+position = Vector3(0.18, -0.03, 0)
 
 [node name="GripLeft" type="Marker3D" parent="."]
-position = Vector3(-0.13, 0.028, 0.01)
+position = Vector3(-0.2017, 0.05, 0.01)
 
 [node name="IronRearSight" type="Marker3D" parent="."]
-position = Vector3(0.1635, 0.0967, 0)
+position = Vector3(0.1773, 0.175, 0)
 
 [node name="IronFrontSight" type="Marker3D" parent="."]
-position = Vector3(-0.3266, 0.10456, 0)
+position = Vector3(-0.2857, 0.175, 0)
 
 [node name="BoltRelease" type="Marker3D" parent="."]
-position = Vector3(0.113, 0.036, 0.027)
+position = Vector3(0.0623, 0.053, 0.024)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(0.124, 0.054, -0.028)
+position = Vector3(0.0683, 0.092, -0.026)

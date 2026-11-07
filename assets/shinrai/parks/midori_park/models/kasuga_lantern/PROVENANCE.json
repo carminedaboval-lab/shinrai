@@ -1,0 +1,136 @@
+{
+  "provider": "Meshy",
+  "name": "Weathered stone Kasuga garden lantern",
+  "state": "exported_and_statically_validated",
+  "created_date": "2026-11-05",
+  "workspace": "Existing signed-in Meshy workspace used for Shinrai scav and corporate_command assets",
+  "reference_image": "docs/biome_concepts/after_moss_garden.png",
+  "reference_concept_sha256": "9E0C2D52232E8E42FE6A459508079573AC2AFFDC62C6010CF67CE167DE2E792E",
+  "reference_image_attached": true,
+  "reference_preparation": {
+    "provider": "Meshy Image",
+    "engine": "Nano Banana Pro",
+    "number_of_images": 1,
+    "aspect_ratio": "1:1",
+    "cost_credits": 9,
+    "prompt": "Isolate and reconstruct ONLY the large stone Kasuga lantern at the left of this garden reference as ONE complete standalone game prop on plain neutral grey background, three-quarter view. Match its weathered warm-grey granite, tall slightly tapered square stone shaft, stepped square base, square hollow light chamber with deep open rectangular windows, broad gently curved stone roof with upturned eaves and rounded stacked finial. Approx 1.8m tall. Fine granular stone, subtle edge chips and restrained moss/lichen in crevices. Complete coherent geometry, roof and base fully visible. Unlit empty chamber, no flame, bulb or baked glow. Realistic PBR asset study, soft neutral light. No garden, ground patch, rocks, plants, people, text, inscriptions, symbols, extra objects or duplicate lanterns.",
+    "source_task": "01a1a91b-b5a8-768f-a338-af40e006f312"
+  },
+  "generation": {
+    "engine": "Meshy 7.1 Flagship",
+    "input": "single isolated image derived in Meshy from the attached moss-garden reference",
+    "high_detail": true,
+    "geometry_resolution": "Ultra 2K",
+    "texture_engine": "Meshy 7",
+    "texture": "2K",
+    "image_enhancement": false,
+    "pose": "None",
+    "private": true,
+    "cost_credits": 35
+  },
+  "remesh": {
+    "target_triangles": 10000,
+    "topology": "triangle",
+    "mode": "Fixed",
+    "cost_credits": 0
+  },
+  "direction": "Weathered warm-grey granite Kasuga lantern matching the foreground lantern of after_moss_garden.png, stepped base, tall square shaft, hollow square chamber, curved wide roof and rounded finial. Restrained moss/lichen. No text.",
+  "evidence": "Generated asset inspected in Meshy viewer; exported GLB checked statically for geometry, indices, embedded PBR textures and dimensions. No game/editor integration or runtime/playtest validation performed.",
+  "scope": "Only kasuga_lantern.glb and PROVENANCE.json added to models/kasuga_lantern. Existing models/stone_lantern untouched.",
+  "source_geometry_task": "01a1a91d-2566-75a4-bebd-4da34f6995c0",
+  "source_texture_task": "01a1a91d-9175-7371-bdff-609748884cb1",
+  "total_cost_credits": 44,
+  "game_remesh_task": "01a1a91e-d857-70e3-98cc-3aad6e4f685d",
+  "source_export": {
+    "file_name": "Meshy_AI_Isolate_and_reconstru_1105003459_texture.glb",
+    "sha256": "DF0D1F712D4F27ED1C5AC5C1C1105F8B7B43BFA1D4AFCD549D092C47A1439E2F",
+    "bytes": 12689484
+  },
+  "postprocessing": {
+    "method": "Added one glTF root transform; preserved original BIN geometry, UVs and embedded texture bytes.",
+    "unit": "metre",
+    "height_m": 1.8,
+    "scale_factor": 0.9470230665853203,
+    "translation": [
+      -5.919876343496768e-05,
+      0.9007448460385279,
+      -0.00047690636717156917
+    ],
+    "origin": "Bottom centre of stone base",
+    "axes": "glTF Y up"
+  },
+  "validation": {
+    "triangles": 9923,
+    "vertices": 10573,
+    "primitive_count": 1,
+    "material_count": 1,
+    "textures_embedded": true,
+    "textures": [
+      {
+        "mime_type": "image/png",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "mime_type": "image/png",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "mime_type": "image/png",
+        "width": 2048,
+        "height": 2048
+      }
+    ],
+    "pbr_maps": [
+      "baseColor",
+      "normal",
+      "metallicRoughness"
+    ],
+    "finite_vertices": true,
+    "triangle_indices_valid": true,
+    "bounds_m": {
+      "min": [
+        -0.3504207651481333,
+        0,
+        -0.3474974328386854
+      ],
+      "max": [
+        0.3499690482428763,
+        1.8,
+        0.3476989485340015
+      ],
+      "size": [
+        0.7003898133910096,
+        1.8,
+        0.6951963813726869
+      ]
+    },
+    "base_bounds_m": {
+      "min": [
+        -0.2533395628840452,
+        0,
+        -0.25182051838078096
+      ],
+      "max": [
+        0.25333956288404524,
+        0.1798671520479197,
+        0.25182051838078096
+      ],
+      "size": [
+        0.5066791257680905,
+        0.1798671520479197,
+        0.5036410367615619
+      ]
+    },
+    "game_run": false,
+    "source_binary_geometry_and_texture_bytes_preserved": true
+  },
+  "files": {
+    "kasuga_lantern.glb": {
+      "sha256": "1C6E8B7EF0C3E95F3451C6ADC872BB8306C45D4A69DB08A5C62C0263BE64739D",
+      "bytes": 12689812,
+      "triangles": 9923
+    }
+  }
+}

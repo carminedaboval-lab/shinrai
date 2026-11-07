@@ -17,10 +17,10 @@ const SHELLS := [0.0, 0.035, 0.075]
 const RANGES := [160.0, 70.0, 40.0]
 # Leaf colour (albedo) and how much autumn bronze, per species.
 const SPECIES := [
-	[Color(0.11, 0.2, 0.07), 0.16],   # Satsuki azalea
-	[Color(0.13, 0.19, 0.065), 0.22], # Kurume azalea, turning
-	[Color(0.2, 0.27, 0.075), 0.03],  # Boxwood
-	[Color(0.075, 0.15, 0.06), 0.0],  # Japanese holly
+	[Color(0.085, 0.15, 0.055), 0.16], # Satsuki azalea
+	[Color(0.1, 0.14, 0.05), 0.22],   # Kurume azalea, turning
+	[Color(0.14, 0.18, 0.06), 0.03],  # Boxwood
+	[Color(0.06, 0.11, 0.045), 0.0],  # Japanese holly
 ]
 
 ## Last sweep once the raid has finished booting: some planting (the plaza
@@ -69,6 +69,9 @@ static func apply(street: Node3D) -> Dictionary:
 	rng.seed = 7351
 	var cells: Dictionary = {}
 	var placed := 0
+	# Some source beds were laid out as lattices. Mounds that would crowd a
+	# lattice are thinned and nudged so a bed reads as planted by hand.
+	var occupied: Dictionary = {}
 	for box: AABB in spots:
 		var width := maxf(box.size.x, box.size.z)
 		var long_x := box.size.x >= box.size.z
@@ -78,6 +81,23 @@ static func apply(street: Node3D) -> Dictionary:
 			var at := box.get_center() + (Vector3.RIGHT * box.size.x if long_x else Vector3.BACK * box.size.z) * t * (1.0 - 1.0 / float(count))
 			at.y = box.position.y
 			var w := clampf(width / float(count) * 0.85, 0.35, 1.4) * rng.randf_range(0.9, 1.1)
+			var near := 0
+			var touching := false
+			var here := Vector2i(floori(at.x / 2.0), floori(at.z / 2.0))
+			for dz: int in range(-1, 2):
+				for dx: int in range(-1, 2):
+					for other: Vector2 in occupied.get(here + Vector2i(dx, dz), []):
+						var gap := other.distance_to(Vector2(at.x, at.z))
+						if gap < 2.0: near += 1
+						if gap < w * 0.55: touching = true
+			# Never drop a mound (flower sprigs may sit on it); only loosen crowded
+			# lattices with a small nudge and a size change.
+			if near >= 2:
+				at += Vector3(rng.randf_range(-0.2, 0.2), 0.0, rng.randf_range(-0.2, 0.2))
+				w *= rng.randf_range(0.8, 1.05)
+			if touching: w *= 0.85
+			if not occupied.has(here): occupied[here] = []
+			occupied[here].append(Vector2(at.x, at.z))
 			var h := clampf(minf(box.size.y * 0.85, w * 0.85), 0.28, 1.0) * rng.randf_range(0.85, 1.05)
 			var bed := Vector2i(floori(at.x / 3.0), floori(at.z / 3.0))
 			var kind: Array = SPECIES[absi(hash(bed)) % SPECIES.size()]

@@ -9,6 +9,7 @@ const OPTIC_SCENES := {"reflex_01": "res://assets/weapons/optics/ame_reflex.tscn
 @export var slide_travel := 0.026
 @export var slide_cycle_seconds := 0.105
 @export var optic_mount_enabled := true
+@export_range(0.08, 0.8, 0.01, "suffix:m") var iron_eye_relief_m := ADS_REAR_DEPTH
 @export var case_length := 0.019
 @export var case_radius := 0.0048
 var slide_mesh: Node3D
@@ -73,6 +74,12 @@ var _cases: Array[Dictionary] = []
 var _rig_base_transform := Transform3D.IDENTITY
 var _rig_motion := Transform3D.IDENTITY
 var _chamber_presentation := false
+# Pistol fixed to the idle right hand, so a reload can move the gun with the
+# wrist instead of folding the wrist to a gun that moved on its own.
+var _hand_to_assembly := Transform3D.IDENTITY
+# How much the reloading hands keep their natural (forearm-following) wrist
+# versus the authored presentation cant. 1.0 = wrist never bends from idle.
+const RELOAD_WRIST_CANT_WEIGHT := 0.6
 
 func set_magazine_inserted(value: bool) -> void:
 	_magazine_inserted = value
@@ -188,6 +195,7 @@ func _load_bundled_model() -> void:
 	magazine_rest = assembly.global_transform.affine_inverse() * magazine_mesh.global_transform
 	body_fit = (skeleton.global_transform * skeleton.get_bone_global_pose(body_bone)).affine_inverse() * assembly.global_transform
 	assembly_reference = global_transform.affine_inverse() * assembly.global_transform
+	_hand_to_assembly = (skeleton.global_transform * _pistol_right_idle[4]).affine_inverse() * assembly.global_transform
 	magazine_reference = skeleton.get_bone_global_pose(body_bone).affine_inverse() * skeleton.get_bone_global_pose(magazine_bone)
 	_prepare_imported_nodes(assembly)
 	_fitted = true
@@ -235,7 +243,12 @@ func set_optic(id: String) -> bool:
 				else:
 					var glass := StandardMaterial3D.new()
 					glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-					glass.albedo_color = Color(0.65, 0.47, 0.18, 0.035)
+					if id == "reflex_01":
+						# Clear neutral Ame window; keep other optics' authored glass.
+						glass.albedo_color = Color(0.85, 0.85, 0.85, 0.012)
+						glass.metallic_specular = 0.08
+					else:
+						glass.albedo_color = Color(0.65, 0.47, 0.18, 0.035)
 					glass.roughness = 0.08
 					glass.cull_mode = BaseMaterial3D.CULL_DISABLED
 					mesh.material_override = glass
@@ -249,6 +262,11 @@ func set_optic(id: String) -> bool:
 		add_child(prism_view)
 		prism_view.configure(gameplay_camera,reticle_material)
 	return true
+
+func get_ads_eye_relief() -> float:
+	# Pistols can extend their iron sights to a two-hand aiming distance while
+	# retaining the optic's existing camera position.
+	return iron_eye_relief_m if optic_id.is_empty() else ADS_REAR_DEPTH
 
 func _update_sight_alignment() -> void:
 	if is_instance_valid(optic_model):
@@ -308,9 +326,30 @@ func update_supplied_pose(rig: Skeleton3D, delta: float = 0.0) -> void:
 	for index: int in range(left_bones.size()):
 		poses.append(_pistol_left_idle[index] if reloading else rig.get_bone_global_pose(left_bones[index]))
 		right_poses.append(_pistol_right_idle[index] if reloading else rig.get_bone_global_pose(right_bones[index]))
-	var right_palm_offset := rig.global_basis*right_poses[4].basis*RIGHT_PALM_CONTACT
-	var right_target: Vector3 = assembly.get_node("GripRight").global_position-right_palm_offset
-	_solve_arm(rig,right_bones,right_poses,rig.global_transform.affine_inverse()*right_target,true)
+	if reloading:
+		# The presentation lifts the pistol ~20 cm. Reaching it from the idle arm
+		# used to keep the idle hand orientation, so the forearm swung up while the
+		# hand stayed put and the wrist folded. Let the hand follow the forearm,
+		# keep a little of the authored cant, and attach the pistol to that hand.
+		var cant := rig.global_basis.inverse() * (global_basis * _rig_motion.basis * global_basis.inverse()) * rig.global_basis
+		var cant_basis := cant * right_poses[4].basis
+		var grip_target: Vector3 = assembly.get_node("GripRight").global_position
+		var provisional_offset := rig.global_basis * cant_basis * RIGHT_PALM_CONTACT
+		_solve_arm(rig,right_bones,right_poses,rig.global_transform.affine_inverse()*(grip_target-provisional_offset),false)
+		var natural := rig.get_bone_global_pose(right_bones[4]).basis
+		var hand_basis := Basis(natural.get_rotation_quaternion().slerp(cant_basis.get_rotation_quaternion(),RELOAD_WRIST_CANT_WEIGHT)).scaled(natural.get_scale())
+		right_poses[4].basis = hand_basis
+		var palm_offset := rig.global_basis * hand_basis * RIGHT_PALM_CONTACT
+		_solve_arm(rig,right_bones,right_poses,rig.global_transform.affine_inverse()*(grip_target-palm_offset),true)
+		# The pistol now rides on the solved hand, so palm and grip stay together.
+		assembly.global_transform = rig.global_transform * rig.get_bone_global_pose(right_bones[4]) * _hand_to_assembly
+		magazine_mesh.global_transform = assembly.global_transform * magazine_rest
+		if not _chamber_presentation:
+			magazine_mesh.global_position += assembly.global_basis * Presentation.magazine_offset(empty,ratio)
+	else:
+		var right_palm_offset := rig.global_basis*right_poses[4].basis*RIGHT_PALM_CONTACT
+		var right_target: Vector3 = assembly.get_node("GripRight").global_position-right_palm_offset
+		_solve_arm(rig,right_bones,right_poses,rig.global_transform.affine_inverse()*right_target,true)
 	magazine_mesh.visible = _magazine_inserted or reloading
 	magazine_exchange.update(ratio,reloading and not _chamber_presentation,_magazine_inserted,empty)
 	var contact_world: Vector3 = assembly.get_node("GripLeft").global_position
@@ -330,7 +369,17 @@ func update_supplied_pose(rig: Skeleton3D, delta: float = 0.0) -> void:
 		contact_local = contact_local.lerp(_pistol_thumb_contact,_pistol_release_weight)
 	_pistol_contact_target_world = contact_world
 	var wrist_world := contact_world-rig.global_basis*poses[4].basis*contact_local
-	_solve_arm(rig,left_bones,poses,rig.global_transform.affine_inverse()*wrist_world,true)
+	if reloading:
+		# Same treatment for the support hand: follow the forearm to the contact,
+		# then re-aim the contact point with the hand it actually ended up with.
+		_solve_arm(rig,left_bones,poses,rig.global_transform.affine_inverse()*wrist_world,false)
+		for iteration: int in range(2):
+			var natural := rig.get_bone_global_pose(left_bones[4]).basis
+			poses[4].basis = Basis(natural.get_rotation_quaternion().slerp(_pistol_left_idle[4].basis.get_rotation_quaternion(),RELOAD_WRIST_CANT_WEIGHT)).scaled(natural.get_scale())
+			wrist_world = contact_world-rig.global_basis*poses[4].basis*contact_local
+			_solve_arm(rig,left_bones,poses,rig.global_transform.affine_inverse()*wrist_world,true)
+	else:
+		_solve_arm(rig,left_bones,poses,rig.global_transform.affine_inverse()*wrist_world,true)
 	_update_slide()
 
 func _solve_arm(rig: Skeleton3D, bones: Array[int], poses: Array[Transform3D], target: Vector3, preserve_hand_orientation: bool = false) -> void:

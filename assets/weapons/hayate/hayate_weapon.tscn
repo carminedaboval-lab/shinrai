@@ -1,40 +1,42 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/weapons/hayate/hayate_geometry.glb" id="1"]
+[ext_resource type="Script" path="res://scripts/weapon_real_finish.gd" id="2"]
 
 [node name="Hayate" type="Node3D"]
+script = ExtResource("2")
 metadata/magazine_node_path = "Geometry/Magazine"
 metadata/action_node_path = "Geometry/Action"
-metadata/action_grip_node_path = "Geometry/Action/BoltGrip"
+metadata/magazine_grip = Vector3(-0.0565, 0.0, 0)
+metadata/real_counterpart = "USMC M40A5 (Remington 700, McMillan A4), 7.62x51 mm"
 
 [node name="Geometry" parent="." instance=ExtResource("1")]
 
 [node name="Muzzle" type="Marker3D" parent="."]
-position = Vector3(-0.663, 0.115, 0)
+position = Vector3(-0.805, 0.075, 0)
 rotation = Vector3(0, -1.5707963267949, 0)
 
 [node name="GripRight" type="Marker3D" parent="."]
 position = Vector3(0.126, -0.02, 0)
 
 [node name="GripLeft" type="Marker3D" parent="."]
-position = Vector3(-0.13, 0.048, 0.007)
+position = Vector3(-0.29, 0.025, 0.008)
 
 [node name="IronRearSight" type="Marker3D" parent="."]
-position = Vector3(0.119, 0.178, 0)
+position = Vector3(0.062, 0.132, 0)
 
 [node name="IronFrontSight" type="Marker3D" parent="."]
-position = Vector3(-0.597, 0.178, 0)
+position = Vector3(-0.149, 0.132, 0)
 
 [node name="OpticSocket" type="Marker3D" parent="."]
-position = Vector3(0.033, 0.15, 0)
+position = Vector3(-0.034, 0.1017, 0)
 rotation = Vector3(0, -1.5707963267949, 0)
 
 [node name="BoltRelease" type="Marker3D" parent="."]
-position = Vector3(0.155, 0.103, -0.033)
+position = Vector3(0.046, 0.077, 0.018)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(0.025, 0.119, -0.024)
+position = Vector3(-0.064, 0.085, -0.017)
 
 [node name="ActionGrip" type="Marker3D" parent="."]
-position = Vector3(0.141, 0.064, -0.071)
-
+position = Vector3(0.094, 0.045, -0.048)

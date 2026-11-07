@@ -2,8 +2,9 @@ extends "./enemy.gd"
 ## Human scav AI uses the established perception/path state machine and real art.
 var weapon_id := "shigure"
 var weapon_rounds := 30
-var spare_magazines := 1
+var spare_magazines := 2
 var magazine_reload_remaining := 0.0
+const RELOAD_SECONDS: float=2.9
 const ScavVisual=preload("./scav_visual.gd")
 # Quiet first spotting stays forgiving; known threats can be engaged farther out.
 const HUMAN_VISION_RANGE: float=40.0
@@ -30,6 +31,15 @@ var _tactical_index:=0
 var own_visual_time:=999.0
 const NOTICE_CONFIRM_SECONDS: float=.65
 const SHOT_ACQUIRE_SECONDS: float=.22
+# A new sighting starts loose and settles as the shooter tracks the target.
+const AIM_SETTLE_SECONDS: float=2.0
+const AIM_LOOSE: float=1.45
+const AIM_SETTLED: float=.9
+const AIM_CROSSING_SPEED: float=5.0
+const NEAR_MISS_PRESSURE: float=.3
+const SUPPRESSED_AT: float=.6
+const SUPPRESSION_DECAY: float=.35
+var suppression:=0.0
 var notice_exposure:=0.0
 var personal_visible_for:=0.0
 var _investigation_goal:=Vector3.INF
@@ -39,7 +49,6 @@ var busy_search:=false
 var search_focus:=Vector3.ZERO
 var routine: String=""
 var last_seen_height:=1.2
-var surrendered:=false
 var fleeing:=false
 var _escape_path:=PackedVector3Array()
 var _escape_index:=0
@@ -78,6 +87,7 @@ func _physics_process(delta: float) -> void:
 	if dead: return
 	_report_delay=maxf(0.0,_report_delay-delta)
 	pinned_time=maxf(0.0,pinned_time-delta)
+	suppression=maxf(0.0,suppression-SUPPRESSION_DECAY*delta)
 	super._physics_process(delta)
 
 func _update_perception(target_visible: bool, delta: float) -> void:
@@ -87,7 +97,9 @@ func _update_perception(target_visible: bool, delta: float) -> void:
 	personal_visible_for=personal_visible_for+delta if target_visible else 0.0
 	var confirmed: bool=target_visible and (notice_exposure>=NOTICE_CONFIRM_SECONDS or (is_instance_valid(squad) and squad.hostile))
 	super._update_perception(confirmed,delta)
+	var new_sighting: bool=confirmed and own_visual_time>.3
 	own_visual_time=0.0 if target_visible else own_visual_time+delta
+	if new_sighting and is_instance_valid(squad) and squad.hostile: squad.tactics.sighted(self)
 	if confirmed: last_seen_height=.68 if bool(target.get("crouching")) else 1.2
 	if is_instance_valid(squad) and squad.has_method("observe_player"): squad.observe_player(self,confirmed,delta)
 	if confirmed and state==AIState.COMBAT and _report_delay<=0.0:
@@ -109,10 +121,10 @@ func _update_state(delta: float, target_visible: bool) -> void:
 	busy_search=false;routine=""
 	if is_instance_valid(squad) and not squad.hostile:
 		target_visible=target_visible and notice_exposure>=NOTICE_CONFIRM_SECONDS
-	if surrendered or fleeing:
-		_set_crouch(surrendered)
+	if fleeing:
+		_set_crouch(false)
 		desired_velocity_xz=Vector3.ZERO
-		while fleeing and _escape_index<_escape_path.size():
+		while _escape_index<_escape_path.size():
 			var direction: Vector3=_escape_path[_escape_index]-global_position; direction.y=0
 			if direction.length()<.5: _escape_index+=1; continue
 			desired_velocity_xz=direction.normalized()*move_speed*1.35
@@ -153,7 +165,9 @@ func _state_combat(delta: float, target_visible: bool) -> void:
 	if not target_visible and time_since_seen>LOST_SIGHT_GRACE: _enter_state(AIState.SEARCH)
 
 func _follow_order(order: Dictionary, delta: float) -> void:
-	_set_crouch(bool(order.get("crouch",false)))
+	# Nobody stands tall under fire or while their hands are on a magazine.
+	var ducking: bool=order.kind in ["hold_cover","observe"] and (pinned_time>0.0 or magazine_reload_remaining>0.0)
+	_set_crouch(bool(order.get("crouch",false)) or ducking)
 	if int(order.id)!=_tactical_id:
 		_tactical_id=int(order.id)
 		_tactical_path=order.path.duplicate()
@@ -173,7 +187,7 @@ func _follow_order(order: Dictionary, delta: float) -> void:
 		remaining+=previous.distance_to(_tactical_path[index])
 		previous=_tactical_path[index]
 	order.route_remaining=remaining
-	desired_velocity_xz=direction*move_speed*(.5 if crouching else 1.0)
+	desired_velocity_xz=direction*move_speed*(.5 if crouching else 1.0)*float(order.get("pace",1.0))
 	if direction.length_squared()>.01:
 		_face_direction(direction,delta,9.0)
 	elif last_seen_valid:
@@ -255,7 +269,7 @@ func _apply_movement(delta: float) -> void:
 		desired_velocity_xz+=squad.separation(self)
 	var urgent:=_urgent_movement()
 	var can_catch_up:=false
-	if is_instance_valid(squad) and not squad.hostile and not surrendered and not crouching and routine.is_empty() and not busy_search and state!=AIState.SEARCH:
+	if is_instance_valid(squad) and not squad.hostile and not crouching and routine.is_empty() and not busy_search and state!=AIState.SEARCH:
 		var activity: RefCounted=squad.get("activity")
 		var lead: CharacterBody3D=squad.leader()
 		if activity!=null and activity.mode=="patrol" and is_instance_valid(lead) and lead!=self:
@@ -274,7 +288,7 @@ func _apply_movement(delta: float) -> void:
 	super._apply_movement(delta)
 
 func hear_noise(point: Vector3, radius: float) -> void:
-	if dead or surrendered or fleeing or global_position.distance_to(point)>radius: return
+	if dead or fleeing or global_position.distance_to(point)>radius: return
 	# Bounded uncertainty: repeated estimates of one sound stay within one
 	# five-metre search area rather than restarting at opposite square corners.
 	var estimate:=point+Vector3.RIGHT.rotated(Vector3.UP,randf_range(0.0,TAU))*randf_range(0.0,2.5)
@@ -282,7 +296,7 @@ func hear_noise(point: Vector3, radius: float) -> void:
 	if state!=AIState.COMBAT: investigate(estimate)
 
 func investigate(point: Vector3) -> void:
-	if dead or surrendered or fleeing or not point.is_finite(): return
+	if dead or fleeing or not point.is_finite(): return
 	last_seen_position=point
 	last_seen_valid=true
 	# A delivered report may redirect attention, never refresh personal sight or
@@ -305,12 +319,10 @@ func _flat_distance_between(a: Vector3,b: Vector3) -> float:
 func _shoot_at_player(distance: float) -> void:
 	if magazine_reload_remaining>0.0:return
 	if personal_visible_for<SHOT_ACQUIRE_SECONDS:return
-	if weapon_rounds<=0:
-		if spare_magazines>0:magazine_reload_remaining=2.9
-		return
+	if weapon_rounds<=0:return
 	if scav_visual.has_method("impact_can_fire") and not scav_visual.impact_can_fire():return
 	if distance>=attack_range: return
-	if dead or surrendered or fleeing or not is_instance_valid(target) or not _can_see_target(): return
+	if dead or fleeing or not is_instance_valid(target) or not _can_see_target(): return
 	if is_instance_valid(squad) and squad.get("hostile")!=null and not squad.hostile: return
 	if is_instance_valid(squad) and not squad.tactics.permits_fire(self): return
 	# Personal vision is wider than a firing stance. Turn onto the target before
@@ -326,7 +338,8 @@ func _shoot_at_player(distance: float) -> void:
 	var obstruction:=get_world_3d().direct_space_state.intersect_ray(lane)
 	if not obstruction.is_empty() and obstruction.get("collider")!=target: return
 	# Short, imperfect bursts. The actual muzzle ray must hit the player to hurt them.
-	var spread:=.14+distance*.022
+	if _burst_left<=0: _burst_left=3
+	var spread:=aim_spread(distance)
 	var aim:=chest+global_basis.x*randf_range(-spread,spread)+Vector3.UP*randf_range(-spread*.65,spread*.65)
 	var direction: Vector3=(aim-origin).normalized()
 	var end: Vector3=origin+direction*(origin.distance_to(chest)+2.0)
@@ -335,14 +348,50 @@ func _shoot_at_player(distance: float) -> void:
 	var hit: Dictionary=get_world_3d().direct_space_state.intersect_ray(query)
 	var visible_end: Vector3=hit.get("position",end)
 	_show_tracer(origin,visible_end)
-	if _burst_left<=0: _burst_left=3
 	_burst_left-=1
 	attack_cooldown=.16 if _burst_left>0 else randf_range(1.5,2.2)
 	muzzle_timer=.055
 	rounds_fired+=1
 	weapon_rounds-=1
 	if hit.get("collider")==target and target.has_method("take_damage"):
+		if target.has_method("register_damage_source"): target.register_damage_source(global_position)
 		target.take_damage(randf_range(4.0,7.0))
+
+## Half-width of a shot's scatter at the target, in metres. Everything here is
+## something a person would feel: tracking time, a crossing target, recoil,
+## wounds and rounds cracking past.
+func aim_spread(distance: float) -> float:
+	var settle: float=lerpf(AIM_LOOSE,AIM_SETTLED,clampf(personal_visible_for/AIM_SETTLE_SECONDS,0.0,1.0))
+	var crossing:=0.0
+	if is_instance_valid(target) and target is CharacterBody3D:
+		var line: Vector3=target.global_position-global_position; line.y=0
+		if line.length_squared()>.01:
+			var moved: Vector3=target.velocity; moved.y=0
+			crossing=clampf((moved-line.normalized()*moved.dot(line.normalized())).length()/AIM_CROSSING_SPEED,0.0,1.0)
+	var recoil: float=1.0+float(3-_burst_left)*.2 if _burst_left>0 else 1.0
+	var wounded: float=1.0+(1.0-health/max_health)*.5
+	return (.14+distance*.022)*settle*(1.0+crossing*.8)*recoil*wounded*(1.0+suppression*1.2)
+
+## A round cracking past. One is a flinch; several in a row put a head down.
+func near_miss() -> void:
+	if dead or fleeing: return
+	suppression=minf(1.0,suppression+NEAR_MISS_PRESSURE)
+	if suppression>=SUPPRESSED_AT: pinned_time=maxf(pinned_time,randf_range(.8,1.3))
+
+func begin_reload() -> void:
+	if dead or fleeing or spare_magazines<=0 or magazine_reload_remaining>0.0 or weapon_rounds>=30: return
+	magazine_reload_remaining=RELOAD_SECONDS
+	if is_instance_valid(squad): squad.callout(self,"Reloading!")
+
+func out_of_ammo() -> bool:
+	return weapon_rounds<=0 and spare_magazines<=0 and magazine_reload_remaining<=0.0
+
+func can_fire_now() -> bool:
+	return weapon_rounds>0 and magazine_reload_remaining<=0.0 and pinned_time<=0.0
+
+func weapon_up() -> bool:
+	if magazine_reload_remaining>0.0 or not is_instance_valid(target): return false
+	return state==AIState.COMBAT or (is_instance_valid(squad) and squad.hostile and squad.tactics.orders.has(self))
 
 func _show_tracer(start: Vector3, end: Vector3) -> void:
 	var line:=end-start
@@ -372,6 +421,7 @@ func _update_timers(delta: float) -> void:
 		if magazine_reload_remaining==0.0 and spare_magazines>0:
 			spare_magazines-=1
 			weapon_rounds=30
+	elif weapon_rounds<=0: begin_reload()
 	super._update_timers(delta)
 	if is_instance_valid(muzzle_light) and is_instance_valid(scav_visual):
 		muzzle_light.global_position=scav_visual.muzzle_position()
@@ -388,7 +438,9 @@ func take_damage(amount: float, source: Node=null) -> void:
 		time_since_seen=0.0
 		if state!=AIState.COMBAT: _enter_state(AIState.ALERT)
 		if is_instance_valid(squad): squad.tactics.report(self,last_seen_position,"hit")
-	if health>0.0: return
+	if health>0.0:
+		if is_instance_valid(squad): squad.reassess_morale(self)
+		return
 	dead=true
 	if is_instance_valid(muzzle_light): muzzle_light.light_energy=0
 	desired_velocity_xz=Vector3.ZERO
@@ -406,11 +458,13 @@ func take_damage(amount: float, source: Node=null) -> void:
 	var corpse_ref: WeakRef=weakref(self)
 	get_tree().create_timer(30.0,false).timeout.connect(func() -> void:
 		var live: Node=corpse_ref.get_ref()
-		if is_instance_valid(live): live.queue_free())
+		if not is_instance_valid(live): return
+		if is_instance_valid(live.squad): live.squad.forget(live)
+		live.queue_free())
 
 func break_morale(escape: PackedVector3Array) -> void:
-	if dead: return
-	fleeing=not escape.is_empty(); surrendered=not fleeing
+	if dead or escape.is_empty(): return
+	fleeing=true
 	_escape_path=escape; _escape_index=0
 	_burst_left=0; attack_cooldown=9999.0; muzzle_timer=0
 	state=AIState.RETURN_TO_PATROL

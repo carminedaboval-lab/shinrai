@@ -53,6 +53,26 @@ Boot takes about 75 to 115 s headless, so scene tests now allow 300 s. Movement 
 - `test_k17_integration`, `test_k17_combat_extract` and `test_k17_showcase_weapons` test a drone the raid no longer spawns. They need retiring or rewriting around the police drones, and `test_k17_integration` hangs until killed.
 - `test_park_quality` and `test_open_lawn_cover` measure frame rate only in a window. In the cover view at 1080p, both presets average about 33 FPS by day and night, with or without the fence, cover and wildlife.
 
+## North-street spawn and park planting pass (2026-11-04)
+
+- **Spawn.** Raids start on the north shop street at `RAID_SPAWN` (70, 0.1, −201.5), outside the police box, looking east past the game centre and the hand-built shops (`extraction_run.gd`).
+  - The near city gave that street no floor, so `_ensure_north_street_floor()` adds one flush box (`NORTH_STREET`, x −62..188, z −207..−189.5). That rect is also part of the playable area.
+  - Guidance from the street (`_street_entry_leg`) walks to the north gate by day, or the nearest north-side prone hole at night, then follows the park route from inside.
+  - `test_extraction_routes` now measures park connectivity from the south entry, as before.
+- **Greens.**
+  - The supplied emerald fountain grass (lime texture) and the evergreen shrub are toned once on duplicated meshes (`_tone_foliage_prototype`, blockout). Instantiation copies are toned too.
+  - Hakonechloa mounds are olive with lower contrast and backlight. The lawn blades' 1.12 boost is now 0.96, the dense grass pack tint is muted, and court/neighbourhood leaf gain and backlight are reduced.
+- **No rows.**
+  - Mounds (understory beds and forest-grass drifts) have ±0.38–0.40 m jitter, 28% random gaps, a thinning rim and random yaw.
+  - Path-shoulder outer plants use random pockets instead of every other grid cell.
+  - Iris carpets have wider jitter and thinning across the whole carpet.
+  - Walkside planted beds have looser rows.
+  - Clipped shrubs on lattice beds are nudged and resized, never dropped, since flower sprigs sit on them.
+- **Sparse ground.**
+  - Open lawn gets noise-gated clusters of `stone_00..05`: 3–7 stones at 6–18 cm, occasionally a 22–38 cm one, with low tufts and leaves (`midori_park_floor.gd`).
+  - `midori_woodland_diversity.gd` now plants every bed that woodland companions doesn't. Those beds get a lighter mix of fern, toned fountain grass, flowering shrub, bush and stones, up to 14 each.
+- **Checks.** Frame rate is unchanged within noise: park 60.5 vs 61.8, lake 55. `test_extraction` 119/0, routes 0 failures, perimeter 0 failures, open-lawn cover passes.
+
 ## Raid HUD and body status (2026-11-04)
 
 - `scripts/extraction_hud.gd` is back to the committed HUD at `a09088f`, with its medical cross, heartbeat trace and condition lines. The user preferred it to the later minimal rework. That rework, uncommitted work from another session, was saved outside the repo before restoring.

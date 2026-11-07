@@ -1,33 +1,36 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/weapons/shigure/shigure_geometry.glb" id="1"]
+[ext_resource type="Script" path="res://scripts/weapon_real_finish.gd" id="2"]
 
 [node name="Shigure" type="Node3D"]
+script = ExtResource("2")
+metadata/real_counterpart = "CZ Scorpion EVO 3 A1, 9x19 mm"
 
 [node name="Geometry" parent="." instance=ExtResource("1")]
 
 [node name="OpticSocket" type="Marker3D" parent="."]
-position = Vector3(-0.02, 0.10745, 0)
+position = Vector3(-0.0347, 0.0847, 0)
 rotation = Vector3(0, -1.5707963268, 0)
 
 [node name="Muzzle" type="Marker3D" parent="."]
-position = Vector3(-0.341, 0.061, 0)
+position = Vector3(-0.309, 0.0365, 0)
 rotation = Vector3(0, -1.5707963268, 0)
 
 [node name="GripRight" type="Marker3D" parent="."]
 position = Vector3(0.057, -0.056, 0)
 
 [node name="GripLeft" type="Marker3D" parent="."]
-position = Vector3(-0.15, 0.02, 0.01)
+position = Vector3(-0.234, 0.004, 0.01)
 
 [node name="IronRearSight" type="Marker3D" parent="."]
-position = Vector3(0.060, 0.116, 0)
+position = Vector3(0.0433, 0.0985, 0)
 
 [node name="IronFrontSight" type="Marker3D" parent="."]
-position = Vector3(-0.284, 0.1186, 0)
+position = Vector3(-0.1867, 0.0985, 0)
 
 [node name="BoltRelease" type="Marker3D" parent="."]
-position = Vector3(0.014, 0.039, 0.025)
+position = Vector3(-0.0507, 0.0165, 0.018)
 
 [node name="EjectionPort" type="Marker3D" parent="."]
-position = Vector3(0.038, 0.051, -0.027)
+position = Vector3(-0.0777, 0.0465, -0.014)

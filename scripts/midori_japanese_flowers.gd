@@ -73,7 +73,7 @@ func install() -> void:
 			var blooms: Array[Vector3] = []
 			for z in range(-11, 12):
 				for x in range(-14, 15):
-					var offset := Vector2(x * .42 + rng.randf_range(-.10, .10), z * .42 + rng.randf_range(-.10, .10))
+					var offset := Vector2(x * .42 + rng.randf_range(-.22, .22), z * .42 + rng.randf_range(-.22, .22))
 					var edge := pow(offset.x / 5.9, 2.0) + pow(offset.y / 4.4, 2.0)
 					var scallop := .13 * sin(offset.x * .8 + angle) + .10 * cos(offset.y * 1.2)
 					if edge > 1.0 + scallop: continue
@@ -308,6 +308,8 @@ func _canopy_cover(p: Vector2, park: Node3D, shoulder: float) -> int:
 
 func _companion_frames(park: Node3D) -> Array[Dictionary]:
 	var evergreen: Node3D = load("res://assets/shinrai/parks/midori_park/models/vegetation/midori_evergreen_shrub_v1.glb").instantiate()
+	# Its supplied leaf texture reads pale lime in sun; tone it like the other foliage.
+	park._tone_foliage_prototype(evergreen, Color(0.62, 0.64, 0.5))
 	var sources: Array[Node3D] = [park.midnight_fern_prototype, park.lilac_prototypes[0], park.lilac_prototypes[1], park.forest_floor_bush_prototypes[0], park.emerald_fountain_grass_prototype, evergreen]
 	var frames: Array[Dictionary] = []
 	for source in sources:
@@ -352,7 +354,7 @@ func _install_west_carpet(park: Node3D, terrain: Node, detail: Node, sockets: Ar
 	var pivot := Vector2(-164,-40)
 	for z in range(-25, 26):
 		for x in range(-33, 34):
-			var offset := Vector2(x * .46 + rng.randf_range(-.10, .10), z * .46 + rng.randf_range(-.10, .10))
+			var offset := Vector2(x * .46 + rng.randf_range(-.22, .22), z * .46 + rng.randf_range(-.22, .22))
 			var p := centre + offset
 			if not _west_footprint(p) or not _clear(p, park, terrain, detail, sockets): continue
 			var root := Vector3(p.x, terrain.height_at(p) - .008, p.y)
@@ -376,13 +378,14 @@ func _install_west_carpet(park: Node3D, terrain: Node, detail: Node, sockets: Ar
 			var rotation := Basis.IDENTITY
 			var factor := 1.0
 			var fan_count := 6
-			if p.distance_to(pivot)<=24.0:
+			# Thin and loosen the whole carpet, not only the old review circle.
+			if true:
 				var density := clampf(.59+.19*sin(p.x*.34+p.y*.15)+.14*cos(p.y*.43-p.x*.11),.25,.90)
 				if correction_rng.randf()>density:
 					removed+=1
 					continue
 				var candidate := p+Vector2(correction_rng.randf_range(-.28,.28),correction_rng.randf_range(-.28,.28))
-				if candidate.distance_to(pivot)<=24.0 and _west_footprint(candidate) and _clear(candidate,park,terrain,detail,sockets):
+				if _west_footprint(candidate) and _clear(candidate,park,terrain,detail,sockets):
 					p=candidate
 				rotation=Basis(Vector3.UP,correction_rng.randf_range(-PI,PI))
 				factor=correction_rng.randf_range(.67,1.0)

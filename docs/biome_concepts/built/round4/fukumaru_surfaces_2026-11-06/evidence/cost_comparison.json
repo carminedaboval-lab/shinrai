@@ -1,0 +1,328 @@
+{
+  "scope": "Single streamed near-city tile. 1600x900. 70 settling frames, then 3 intervals of 40 rendered frames.",
+  "godot_concurrency_monitored": true,
+  "timing_limitations": "Native process checks every 200ms found no other Godot process in either run. The intervals measure this isolated tile fixture; clock, workload and background application variation may still affect timings.",
+  "before": "surface_control_before",
+  "now": "surface_final2",
+  "array_mesh_base_triangles": {
+    "before": 51236,
+    "now": 85288
+  },
+  "views": {
+    "01_north_street": {
+      "before_ms": 7.468875,
+      "now_ms": 7.485825,
+      "delta_ms": 0.016950000000000465,
+      "before_trials_ms": [
+        7.468875,
+        8.51955,
+        7.16575
+      ],
+      "now_trials_ms": [
+        7.485825,
+        8.7957,
+        7.413625
+      ],
+      "before_draws": 447,
+      "now_draws": 449,
+      "before_primitives": 1076276,
+      "now_primitives": 1110328,
+      "before_render_cpu_ms": 1.17977499961853,
+      "now_render_cpu_ms": 1.25315000712872,
+      "delta_render_cpu_ms": 0.07337500751019,
+      "before_render_cpu_trials_ms": [
+        1.10594999492168,
+        1.36797499805689,
+        1.17977499961853
+      ],
+      "now_render_cpu_trials_ms": [
+        1.18827500194311,
+        1.25315000712872,
+        1.34664999842644
+      ],
+      "before_render_gpu_ms": 7.38285003900528,
+      "now_render_gpu_ms": 7.44737499952316,
+      "delta_render_gpu_ms": 0.06452496051787993,
+      "before_render_gpu_trials_ms": [
+        7.38285003900528,
+        8.44822494983673,
+        7.12065002918243
+      ],
+      "now_render_gpu_trials_ms": [
+        7.44737499952316,
+        8.71015000343323,
+        7.37784992456436
+      ]
+    },
+    "02_apartment_stairs": {
+      "before_ms": 7.133125,
+      "now_ms": 6.625725,
+      "delta_ms": -0.5073999999999996,
+      "before_trials_ms": [
+        6.491525,
+        8.129425,
+        7.133125
+      ],
+      "now_trials_ms": [
+        6.938925,
+        6.625725,
+        5.28305
+      ],
+      "before_draws": 352,
+      "now_draws": 354,
+      "before_primitives": 913806,
+      "now_primitives": 947858,
+      "before_render_cpu_ms": 1.34760001003742,
+      "now_render_cpu_ms": 1.16417500376701,
+      "delta_render_cpu_ms": -0.18342500627040992,
+      "before_render_cpu_trials_ms": [
+        1.48432500362396,
+        1.34760001003742,
+        1.13347500115633
+      ],
+      "now_render_cpu_trials_ms": [
+        1.16417500376701,
+        1.20772499293089,
+        1.02455000430346
+      ],
+      "before_render_gpu_ms": 7.08850001096725,
+      "now_render_gpu_ms": 6.58325001001358,
+      "delta_render_gpu_ms": -0.5052500009536702,
+      "before_render_gpu_trials_ms": [
+        6.41809996366501,
+        8.0315750002861,
+        7.08850001096725
+      ],
+      "now_render_gpu_trials_ms": [
+        6.8616500377655,
+        6.58325001001358,
+        5.24689999818802
+      ]
+    },
+    "03_201_front_studio": {
+      "before_ms": 5.53505,
+      "now_ms": 6.150275,
+      "delta_ms": 0.6152249999999997,
+      "before_trials_ms": [
+        5.37925,
+        5.53505,
+        7.076375
+      ],
+      "now_trials_ms": [
+        6.07815,
+        6.72675,
+        6.150275
+      ],
+      "before_draws": 141,
+      "now_draws": 142,
+      "before_primitives": 808044,
+      "now_primitives": 836608,
+      "before_render_cpu_ms": 0.593600000441074,
+      "now_render_cpu_ms": 0.526674999296665,
+      "delta_render_cpu_ms": -0.06692500114440902,
+      "before_render_cpu_trials_ms": [
+        0.690525000542402,
+        0.593600000441074,
+        0.561725001782179
+      ],
+      "now_render_cpu_trials_ms": [
+        0.514725000411272,
+        0.526674999296665,
+        0.574749998748302
+      ],
+      "before_render_gpu_ms": 5.46917499899864,
+      "now_render_gpu_ms": 6.05527499914169,
+      "delta_render_gpu_ms": 0.5861000001430501,
+      "before_render_gpu_trials_ms": [
+        5.34077503681183,
+        5.46917499899864,
+        7.00294997692108
+      ],
+      "now_render_gpu_trials_ms": [
+        5.71087499856949,
+        6.64997500181198,
+        6.05527499914169
+      ]
+    },
+    "04_202_rear_studio": {
+      "before_ms": 6.8583,
+      "now_ms": 6.8117,
+      "delta_ms": -0.04659999999999975,
+      "before_trials_ms": [
+        6.11425,
+        6.8583,
+        6.8739
+      ],
+      "now_trials_ms": [
+        5.9846,
+        7.21165,
+        6.8117
+      ],
+      "before_draws": 66,
+      "now_draws": 68,
+      "before_primitives": 714972,
+      "now_primitives": 749024,
+      "before_render_cpu_ms": 0.763524998724461,
+      "now_render_cpu_ms": 1.04725000709295,
+      "delta_render_cpu_ms": 0.283725008368489,
+      "before_render_cpu_trials_ms": [
+        0.719249999523163,
+        0.799524998664856,
+        0.763524998724461
+      ],
+      "now_render_cpu_trials_ms": [
+        0.964549997448921,
+        1.04725000709295,
+        1.45612500011921
+      ],
+      "before_render_gpu_ms": 6.7968000292778,
+      "now_render_gpu_ms": 6.76887494325638,
+      "delta_render_gpu_ms": -0.027925086021419965,
+      "before_render_gpu_trials_ms": [
+        6.0684749007225,
+        6.82117499113083,
+        6.7968000292778
+      ],
+      "now_render_gpu_trials_ms": [
+        5.94820002317429,
+        7.14532499313354,
+        6.76887494325638
+      ]
+    },
+    "05_301_living_kitchen": {
+      "before_ms": 6.71945,
+      "now_ms": 5.908425,
+      "delta_ms": -0.8110249999999999,
+      "before_trials_ms": [
+        6.417625,
+        8.031975,
+        6.71945
+      ],
+      "now_trials_ms": [
+        5.3529,
+        5.908425,
+        6.230125
+      ],
+      "before_draws": 190,
+      "now_draws": 192,
+      "before_primitives": 778608,
+      "now_primitives": 812660,
+      "before_render_cpu_ms": 0.805899998545647,
+      "now_render_cpu_ms": 0.727774995565414,
+      "delta_render_cpu_ms": -0.07812500298023295,
+      "before_render_cpu_trials_ms": [
+        0.771674996614456,
+        0.843625000119209,
+        0.805899998545647
+      ],
+      "now_render_cpu_trials_ms": [
+        0.727774995565414,
+        0.722799998521805,
+        0.748199999332428
+      ],
+      "before_render_gpu_ms": 6.6491250038147,
+      "now_render_gpu_ms": 5.86757501363754,
+      "delta_render_gpu_ms": -0.7815499901771599,
+      "before_render_gpu_trials_ms": [
+        6.30102500915527,
+        7.89939999580383,
+        6.6491250038147
+      ],
+      "now_render_gpu_trials_ms": [
+        5.31747500896454,
+        5.86757501363754,
+        6.19172500371933
+      ]
+    },
+    "06_301_front_bedroom": {
+      "before_ms": 6.728975,
+      "now_ms": 7.351225,
+      "delta_ms": 0.6222500000000002,
+      "before_trials_ms": [
+        6.613525,
+        7.9174,
+        6.728975
+      ],
+      "now_trials_ms": [
+        7.351225,
+        7.45395,
+        6.6084
+      ],
+      "before_draws": 331,
+      "now_draws": 333,
+      "before_primitives": 943408,
+      "now_primitives": 977460,
+      "before_render_cpu_ms": 0.801475004851818,
+      "now_render_cpu_ms": 1.00922499895096,
+      "delta_render_cpu_ms": 0.20774999409914208,
+      "before_render_cpu_trials_ms": [
+        0.786250001192093,
+        0.904650002717972,
+        0.801475004851818
+      ],
+      "now_render_cpu_trials_ms": [
+        1.06049999892712,
+        1.00922499895096,
+        0.999924997985363
+      ],
+      "before_render_gpu_ms": 6.63047499656677,
+      "now_render_gpu_ms": 7.28612504005432,
+      "delta_render_gpu_ms": 0.6556500434875501,
+      "before_render_gpu_trials_ms": [
+        6.55099999904633,
+        7.8610999584198,
+        6.63047499656677
+      ],
+      "now_render_gpu_trials_ms": [
+        7.28612504005432,
+        7.41209996938705,
+        6.5705249786377
+      ]
+    },
+    "07_301_bathroom": {
+      "before_ms": 5.505925,
+      "now_ms": 6.807375,
+      "delta_ms": 1.30145,
+      "before_trials_ms": [
+        5.2595,
+        5.505925,
+        6.3894
+      ],
+      "now_trials_ms": [
+        6.807375,
+        7.30445,
+        6.323875
+      ],
+      "before_draws": 308,
+      "now_draws": 310,
+      "before_primitives": 887874,
+      "now_primitives": 921926,
+      "before_render_cpu_ms": 0.743350000679493,
+      "now_render_cpu_ms": 0.821675001084805,
+      "delta_render_cpu_ms": 0.07832500040531198,
+      "before_render_cpu_trials_ms": [
+        0.743350000679493,
+        0.741475000977516,
+        0.85372499525547
+      ],
+      "now_render_cpu_trials_ms": [
+        0.784200005233288,
+        0.848599998652935,
+        0.821675001084805
+      ],
+      "before_render_gpu_ms": 5.46092503666878,
+      "now_render_gpu_ms": 6.76515002250671,
+      "delta_render_gpu_ms": 1.30422498583793,
+      "before_render_gpu_trials_ms": [
+        5.22335001826286,
+        5.46092503666878,
+        6.3288999915123
+      ],
+      "now_render_gpu_trials_ms": [
+        6.76515002250671,
+        7.26444997787476,
+        6.27807503938675
+      ]
+    }
+  }
+}

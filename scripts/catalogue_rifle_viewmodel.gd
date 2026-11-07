@@ -352,7 +352,12 @@ func set_optic(id: String) -> bool:
 				else:
 					var glass := StandardMaterial3D.new()
 					glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-					glass.albedo_color = Color(0.65, 0.47, 0.18, 0.035)
+					if id == "reflex_01":
+						# Clear neutral Ame window; keep other optics' authored glass.
+						glass.albedo_color = Color(0.85, 0.85, 0.85, 0.012)
+						glass.metallic_specular = 0.08
+					else:
+						glass.albedo_color = Color(0.65, 0.47, 0.18, 0.035)
 					glass.roughness = 0.08
 					glass.cull_mode = BaseMaterial3D.CULL_DISABLED
 					mesh.material_override = glass

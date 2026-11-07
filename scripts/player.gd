@@ -221,6 +221,14 @@ var ads_dot: Label
 var hit_cross: Control
 var damage_rect: ColorRect
 var uzi_viewmodel: Node3D
+const TacticalCrosshair := preload("res://scripts/hud/tactical_crosshair.gd")
+const DamageDirection := preload("res://scripts/hud/damage_direction.gd")
+const ImpactFX := preload("res://scripts/fx/combat_impact_fx.gd")
+const CameraTrauma := preload("res://scripts/fx/camera_trauma.gd")
+var tactical_crosshair: TacticalCrosshair
+var damage_direction: DamageDirection
+var impact_fx: ImpactFX
+var camera_trauma: CameraTrauma
 
 # Real WRAD first-person arms. The GLB is CC0 and downloaded once from the
 # official GitHub repository, then cached in user:// so later launches are local.
@@ -259,6 +267,11 @@ func _ready() -> void:
     _build_weapon()
     _build_weapon_posture()
     _build_hud()
+    camera_trauma = CameraTrauma.new()
+    camera_trauma.name = "CameraTrauma"
+    add_child(camera_trauma)
+    camera_trauma.bind(camera)
+    _ensure_impact_fx.call_deferred()
     Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
     _update_hud()
     add_child(preload("res://scripts/urban_explorer_body.gd").new())
@@ -1167,6 +1180,60 @@ func _build_hud() -> void:
     damage_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
     canvas.add_child(damage_rect)
 
+    # The drawn crosshair and its markers replace the "+" glyph and the stroke
+    # marker. The old nodes stay hidden because their visibility is still the
+    # single source of truth for when the crosshair should show.
+    crosshair.self_modulate.a = 0.0
+    hit_cross.visible = false
+    tactical_crosshair = TacticalCrosshair.new()
+    canvas.add_child(tactical_crosshair)
+    damage_direction = DamageDirection.new()
+    canvas.add_child(damage_direction)
+
+func _ensure_impact_fx() -> void:
+    if is_instance_valid(impact_fx) or not is_inside_tree() or get_parent() == null:
+        return
+    impact_fx = ImpactFX.new()
+    get_parent().add_child(impact_fx)
+
+func _add_camera_trauma(amount: float) -> void:
+    if not is_instance_valid(camera_trauma):
+        return
+    camera_trauma.reduced_motion = bool(get_meta("reduced_motion", false))
+    camera_trauma.add_trauma(amount)
+
+func _show_impact(result: Dictionary) -> void:
+    var collider: Object = result.get("collider") as Object
+    if not is_instance_valid(impact_fx) or collider == null:
+        return
+    var actor: bool = collider.has_method("receive_bullet_hit") or collider.has_method("take_damage") or collider is CharacterBody3D
+    # Trigger volumes without damage handling are not surfaces.
+    if collider is Area3D and not actor:
+        return
+    # Actors get no bullet hole, since decals would not follow them. Machines
+    # spark; people show a puff instead.
+    var surface := ImpactFX.Surface.DUST
+    if actor and not _is_human_target(collider as Node):
+        surface = ImpactFX.Surface.METAL
+    var normal: Vector3 = result.get("normal", -camera.global_transform.basis.z)
+    if normal.length_squared() < 0.0001:
+        normal = -camera.global_transform.basis.z
+    impact_fx.spawn_impact(result.position, normal, surface, not actor)
+
+func _is_human_target(node: Node) -> bool:
+    var current := node
+    for depth in 6:
+        if current == null:
+            return false
+        if current.is_in_group("human_scavs"):
+            return true
+        current = current.get_parent()
+    return false
+
+func register_damage_source(world_position: Vector3, strength: float = 1.0) -> void:
+    if alive and is_instance_valid(damage_direction):
+        damage_direction.add_source(world_position, strength)
+
 func _add_hit_marker_stroke(parent: Control, start: Vector2, finish: Vector2) -> void:
     var stroke: Line2D = Line2D.new()
     stroke.width = 2.0
@@ -1316,6 +1383,10 @@ func _physics_process(delta: float) -> void:
     if _is_legacy_stunned() and damage_flash < 0.25:
         damage_color = Color(0.09, 0.31, 0.72, minf(0.13, stun_remaining * 0.12))
     damage_rect.color = damage_color
+    if is_instance_valid(tactical_crosshair):
+        tactical_crosshair.ticks_visible = is_instance_valid(crosshair) and crosshair.visible
+        if not weapon_id.is_empty():
+            tactical_crosshair.set_spread(_get_shot_spread(), camera.fov)
 
     if reloading:
         reload_time += delta
@@ -2362,6 +2433,13 @@ func shoot() -> void:
         elif collider and collider.has_method("take_damage"):
             collider.take_damage(damage, self)
             hit_marker = 0.14
+        if hit_marker >= 0.14 and is_instance_valid(tactical_crosshair):
+            tactical_crosshair.show_hit()
+        _show_impact(result)
+    # Other viewmodels draw their own flash on the viewmodel layer.
+    if weapon_id == "uzi" and is_instance_valid(impact_fx):
+        impact_fx.show_muzzle_flare(muzzle, direction)
+    _add_camera_trauma(0.1)
     _apply_shot_recoil()
     if is_instance_valid(uzi_viewmodel): uzi_viewmodel.call("play_fire")
     if _uses_manual_bolt(): _start_bolt_cycle(true)
@@ -2574,6 +2652,7 @@ func take_damage(amount: float, body_part: String = "") -> void:
         health = maxf(0.0, health - amount)
     damage_received.emit(amount)
     damage_flash = 0.75
+    _add_camera_trauma(clampf(amount / 18.0, 0.25, 0.6))
     if health <= 0.0: _eliminate()
     _update_hud()
 
@@ -2633,6 +2712,8 @@ func notify_kill() -> void:
     kills += 1
     reserve += mini(6, maxi(0, 240 - reserve))
     hit_marker = 0.18
+    if is_instance_valid(tactical_crosshair):
+        tactical_crosshair.show_hit(true)
     _update_hud()
 
 func set_wave(value: int) -> void:

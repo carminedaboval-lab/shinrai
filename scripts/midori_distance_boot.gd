@@ -91,6 +91,8 @@ static func install_before_hq(park: Node3D) -> Dictionary:
 		if owner != null: result["clipped_shrubs_" + owner_name] = shrubs.apply(owner)
 	shrubs.apply_after_boot(park)
 	load("res://scripts/midori_worn_paths.gd").install(park)
+	# Themed grounds (docs/PARK_BIOME_PLAN.md), after everything is placed.
+	load("res://scripts/midori_biomes.gd").install(park)
 	park.set_meta(RESULT_META, result)
 	return result
 

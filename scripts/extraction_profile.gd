@@ -14,7 +14,7 @@ var recovered_interrupted_run := false
 
 static func defaults() -> Dictionary:
 	var initial: Dictionary = {"version": VERSION, "credits": 0, "stash": {}, "runs": 0,
-		"extracts": 0, "pack_level": 0, "prepared_medkit": false, "active_run": false,
+		"extracts": 0, "pack_level": 0, "prepared_medkit": false, "active_run": false, "field_pack_uid": "",
 		"loadout": WeaponState.defaults(), "food_lots": {}, "food_lot_serial": 0, "food_illness": {}, "starter_pending":true,"clothing":Clothing.defaults(),"field_kit":[],"pistol_starter_version":0}
 	var starter: Dictionary = PistolStarter.kit()
 	if not starter.is_empty():
@@ -132,6 +132,7 @@ func begin_run() -> bool:
 	# Ammunition stays with owned weapons; deployment is not a free refill.
 	data.starter_pending = false
 	data.field_kit = []
+	data.field_pack_uid = ""
 	data.runs += 1
 	data.active_run = true
 	data.prepared_medkit = false
@@ -141,7 +142,7 @@ func begin_run() -> bool:
 	data = previous
 	return false
 
-func complete_run(extracted: bool, bag: Array, bonus: int, field_loadout: Dictionary = {}, clothing: Dictionary = {}) -> bool:
+func complete_run(extracted: bool, bag: Array, bonus: int, field_loadout: Dictionary = {}, clothing: Dictionary = {}, equipped_pack_uid: String = "") -> bool:
 	if not data.active_run:
 		return false # Idempotent: a result screen cannot pay a second time.
 	var previous := data.duplicate(true)
@@ -151,12 +152,15 @@ func complete_run(extracted: bool, bag: Array, bonus: int, field_loadout: Dictio
 		if not field_loadout.is_empty(): data.loadout = WeaponState.normalize(field_loadout)
 		if not clothing.is_empty(): data.clothing = Clothing.normalize(clothing)
 		data.field_kit = []
+		data.field_pack_uid = ""
 		data.extracts += 1
 		data.credits += bonus
 		for item: Dictionary in bag:
 			var key: String = item.id
 			if key in ["backpack_regular","backpack_mountain"] or Supply.is_supply(key) or not Clothing.spec(key).is_empty():
 				data.field_kit.append(item.duplicate(true))
+				if key in ["backpack_regular","backpack_mountain"] and str(item.get("pack_uid","")) == equipped_pack_uid:
+					data.field_pack_uid = equipped_pack_uid
 				continue
 			data.stash[key] = int(data.stash.get(key, 0)) + 1
 			if Food.is_perishable(key): _append_food_lot(item)

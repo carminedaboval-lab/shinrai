@@ -1,0 +1,431 @@
+{
+	"checkpoints": [
+		{
+			"local": "(2.408081, -0.104844, 2.399994)",
+			"name": "cross-front pavement",
+			"support": [
+				"NorthStreetFloor/@CollisionShape3D@5"
+			],
+			"tick": 86
+		},
+		{
+			"local": "(2.458755, 0.037173, 0.806152)",
+			"name": "street apron",
+			"support": [
+				"ApartmentStructure/LowerStairRamp"
+			],
+			"tick": 129
+		},
+		{
+			"local": "(2.459991, 3.275532, -3.865219)",
+			"name": "second landing",
+			"support": [
+				"ApartmentStructure/SecondFloorLanding"
+			],
+			"tick": 244
+		},
+		{
+			"local": "(1.145889, 3.275532, -3.88916)",
+			"name": "shared vestibule",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 287
+		},
+		{
+			"local": "(1.10186, 3.275532, -2.748322)",
+			"name": "201 genkan",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 333
+		},
+		{
+			"local": "(1.100082, 3.275532, -1.572495)",
+			"name": "201 front",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 379
+		},
+		{
+			"local": "(0.066292, 3.275532, -1.521912)",
+			"name": "201 centre",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 417
+		},
+		{
+			"local": "(0.02037, 3.275532, -2.829483)",
+			"name": "201 bath approach",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 453
+		},
+		{
+			"local": "(-0.477943, 3.275532, -2.839951)",
+			"name": "201 bathroom",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 480
+		},
+		{
+			"local": "(-0.029503, 3.275532, -2.839951)",
+			"name": "201 bath return",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 506
+		},
+		{
+			"local": "(0.018158, 3.275532, -1.569305)",
+			"name": "201 return",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 555
+		},
+		{
+			"local": "(1.053665, 3.275532, -1.521759)",
+			"name": "201 door approach",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 593
+		},
+		{
+			"local": "(1.098877, 3.275532, -2.671829)",
+			"name": "201 threshold",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 627
+		},
+		{
+			"local": "(1.099991, 3.275532, -3.872955)",
+			"name": "vestibule from 201",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 662
+		},
+		{
+			"local": "(1.099991, 3.275532, -5.221909)",
+			"name": "202 genkan",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 699
+		},
+		{
+			"local": "(0.231018, 3.275896, -5.331314)",
+			"name": "202 centre",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 733
+		},
+		{
+			"local": "(0.081612, 3.275896, -7.358063)",
+			"name": "202 rear",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 782
+		},
+		{
+			"local": "(0.129868, 3.275943, -5.420898)",
+			"name": "202 return aisle",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 852
+		},
+		{
+			"local": "(-0.020462, 3.275239, -5.007324)",
+			"name": "202 bath approach",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 880
+		},
+		{
+			"local": "(-0.323555, 3.275239, -4.948227)",
+			"name": "202 bathroom",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 902
+		},
+		{
+			"local": "(-0.090256, 3.275239, -4.957916)",
+			"name": "202 bath return",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 921
+		},
+		{
+			"local": "(0.121193, 3.275858, -5.365341)",
+			"name": "202 return aisle clear",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 948
+		},
+		{
+			"local": "(1.053917, 3.275805, -5.248627)",
+			"name": "202 threshold",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 984
+		},
+		{
+			"local": "(1.098343, 3.275805, -3.938828)",
+			"name": "vestibule from 202",
+			"support": [
+				"ApartmentStructure/Floor"
+			],
+			"tick": 1034
+		},
+		{
+			"local": "(2.414146, 3.275805, -3.891373)",
+			"name": "middle stair",
+			"support": [
+				"ApartmentStructure/SecondFloorLanding"
+			],
+			"tick": 1077
+		},
+		{
+			"local": "(2.459846, 6.125215, -8.572678)",
+			"name": "top landing",
+			"support": [
+				"ApartmentStructure/ThirdFloorLanding"
+			],
+			"tick": 1190
+		},
+		{
+			"local": "(1.089104, 6.125215, -8.589401)",
+			"name": "301 genkan",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1234
+		},
+		{
+			"local": "(0.429054, 6.125943, -8.155716)",
+			"name": "301 hall",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1280
+		},
+		{
+			"local": "(0.445778, 6.125943, -7.952286)",
+			"name": "301 bath approach",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1300
+		},
+		{
+			"local": "(-0.149155, 6.125943, -7.912598)",
+			"name": "301 bathroom",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1329
+		},
+		{
+			"local": "(0.421539, 6.125943, -7.910217)",
+			"name": "301 bath return",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1358
+		},
+		{
+			"local": "(0.088524, 6.125941, -6.628738)",
+			"name": "301 living",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1408
+		},
+		{
+			"local": "(0.177597, 6.125941, -4.533447)",
+			"name": "301 lounge",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1476
+		},
+		{
+			"local": "(1.040924, 6.125941, -4.302658)",
+			"name": "301 bedroom approach",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1511
+		},
+		{
+			"local": "(1.087944, 6.125941, -3.150391)",
+			"name": "301 bedroom door",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1557
+		},
+		{
+			"local": "(0.469315, 6.125941, -2.812805)",
+			"name": "301 bedroom aisle",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1589
+		},
+		{
+			"local": "(0.42131, 6.125941, -1.320068)",
+			"name": "301 front bedroom",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1643
+		},
+		{
+			"local": "(0.421852, 6.125941, -2.789307)",
+			"name": "301 bedroom return",
+			"support": [
+				"ApartmentStructure/301_Bedside",
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1681
+		},
+		{
+			"local": "(1.046005, 6.125941, -3.079437)",
+			"name": "301 bedroom threshold",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1711
+		},
+		{
+			"local": "(1.089424, 6.125941, -4.273941)",
+			"name": "301 lounge return",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1745
+		},
+		{
+			"local": "(0.224007, 6.125941, -4.470596)",
+			"name": "301 lounge aisle",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1780
+		},
+		{
+			"local": "(0.060883, 6.125941, -6.578522)",
+			"name": "301 living return",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1830
+		},
+		{
+			"local": "(0.427048, 6.12594, -8.096634)",
+			"name": "301 hall return",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1876
+		},
+		{
+			"local": "(0.991226, 6.12594, -8.574081)",
+			"name": "301 threshold",
+			"support": [
+				"ApartmentStructure/Floor2"
+			],
+			"tick": 1915
+		},
+		{
+			"local": "(2.411942, 6.12594, -8.589493)",
+			"name": "upper landing return",
+			"support": [
+				"ApartmentStructure/ThirdFloorLanding"
+			],
+			"tick": 1960
+		},
+		{
+			"local": "(2.459496, 3.27585, -3.939392)",
+			"name": "middle landing descent",
+			"support": [
+				"ApartmentStructure/SecondFloorLanding"
+			],
+			"tick": 2114
+		},
+		{
+			"local": "(2.459961, 0.084211, 0.748276)",
+			"name": "bottom apron",
+			"support": [],
+			"tick": 2275
+		},
+		{
+			"local": "(2.459969, -0.104167, 2.747101)",
+			"name": "public pavement",
+			"support": [
+				"NorthStreetFloor/@CollisionShape3D@5"
+			],
+			"tick": 2342
+		}
+	],
+	"doors": [
+		{
+			"angle_deg": -90.0000025044782,
+			"distance": 0.739619433879852,
+			"number": "201",
+			"opened": true,
+			"prompt": "E  ·  Open apartment 201"
+		},
+		{
+			"angle_deg": -90.0000025044782,
+			"distance": 0.977255702018738,
+			"number": "202",
+			"opened": true,
+			"prompt": "E  ·  Open apartment 202"
+		},
+		{
+			"angle_deg": 90.0000025044782,
+			"distance": 0.652420461177826,
+			"number": "301",
+			"opened": true,
+			"prompt": "E  ·  Open apartment 301"
+		}
+	],
+	"error": "",
+	"fixture": {
+		"floor": "(63.0, -0.2, -198.25)",
+		"neighbors": [
+			"midori_near_city_koban.gd",
+			"midori_near_city_arcade.gd",
+			"midori_near_city_ramen.gd",
+			"midori_near_city_fudosan.gd",
+			"midori_near_city_flower.gd",
+			"midori_near_city_books.gd"
+		],
+		"shop_origin": "(90.39729, 0.08, -206.0)",
+		"shop_sha256": "9e9df6b47cc16b918355a25c8d70121c7c8cdbd43b402d3106fbef76a69f3504",
+		"tiles": "[102]"
+	},
+	"grounded_samples": 2342,
+	"max_single_tick_vertical_m": 0.0370712280273438,
+	"passed": true,
+	"samples": 2342,
+	"travel_m": 74.5433801541803,
+	"waypoint": "public pavement"
+}

@@ -16,3 +16,5 @@ hotel_atlas.png is drawn by code for this project from the same SIL OFL fonts an
 cycle_atlas.png is drawn by code for this project from the same SIL OFL fonts and contains no third-party imagery.
 yaoya_atlas.png is drawn by code for this project from the same SIL OFL fonts and contains no third-party imagery.
 snack_atlas.png is drawn by code for this project from the same SIL OFL fonts; its menu board re-uses CC0 Wikimedia Commons food photos already listed above.
+
+fukumaru_noren.png uses an original cotton print with lettering from Yuji Boku and Shippori Mincho B1 (SIL Open Font License 1.1).

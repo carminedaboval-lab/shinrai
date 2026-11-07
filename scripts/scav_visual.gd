@@ -31,6 +31,7 @@ var dying:=false
 var impact: SkeletonModifier3D
 var search_blend:=0.0
 var routine_blend:=0.0
+var reload_blend:=0.0
 var last_routine: String=""
 var routine_errors: Dictionary={}
 var head_bone: int=-1
@@ -161,7 +162,7 @@ func _prepare_weapon() -> void:
 func _process(_delta: float) -> void:
 	if not ready_for_use or dying: return
 	var yaw:=0.0;var pitch:=0.0
-	var casual: bool=actor.social_look_point.is_finite() and actor.state!=actor.AIState.COMBAT and not actor.surrendered and not actor.fleeing and head_bone>=0
+	var casual: bool=actor.social_look_point.is_finite() and actor.state!=actor.AIState.COMBAT and not actor.fleeing and head_bone>=0
 	if casual:
 		var offset: Vector3=skeleton.to_local(actor.social_look_point)-skeleton.get_bone_global_pose(head_bone).origin
 		yaw=clampf(atan2(offset.x,offset.z),-.7,.7)
@@ -169,6 +170,7 @@ func _process(_delta: float) -> void:
 	var gaze_rate:=4.0 if casual else 12.0
 	gaze_yaw=lerpf(gaze_yaw,yaw,clampf(_delta*gaze_rate,0,1));gaze_pitch=lerpf(gaze_pitch,pitch,clampf(_delta*gaze_rate,0,1))
 	search_blend=move_toward(search_blend,1.0 if actor.busy_search else 0.0,_delta*6.0)
+	reload_blend=move_toward(reload_blend,1.0 if actor.magazine_reload_remaining>0.0 else 0.0,_delta*6.0)
 	var personal: String=actor.routine
 	var active: bool=personal in ["tie_boot","check_kit","stretch"] and actor.state!=actor.AIState.COMBAT
 	if active:last_routine=personal
@@ -208,7 +210,7 @@ func _apply_standing_posture(delta: float) -> void:
 	posture_after_lean=posture_before_lean
 	# Preserve authored crouching, searching, gestures and morale poses. Walking
 	# is already upright; only the shared combat-stance idle needs correction.
-	var allowed: bool=not actor.crouching and not actor.busy_search and search_blend<.001 and routine_blend<.001 and not actor.surrendered and not actor.fleeing
+	var allowed: bool=not actor.crouching and not actor.busy_search and search_blend<.001 and routine_blend<.001 and not actor.fleeing
 	var eligible: bool=current_state=="idle" and allowed
 	var alert: bool=actor.state in [actor.AIState.ALERT,actor.AIState.COMBAT,actor.AIState.SEARCH]
 	if is_instance_valid(actor.squad):alert=alert or actor.squad.hostile or actor.squad.warning_active
@@ -401,7 +403,7 @@ func _apply_relaxed_idle_legs(delta: float) -> void:
 	# crouches, searches, gestures and balance reactions retain authored poses.
 	var alert: bool=actor.state in [actor.AIState.ALERT,actor.AIState.COMBAT,actor.AIState.SEARCH]
 	if is_instance_valid(actor.squad):alert=alert or actor.squad.hostile or actor.squad.warning_active
-	var excluded: bool=actor.crouching or actor.busy_search or search_blend>.001 or routine_blend>.001 or actor.surrendered or actor.fleeing
+	var excluded: bool=actor.crouching or actor.busy_search or search_blend>.001 or routine_blend>.001 or actor.fleeing
 	if impact!=null and impact.ready_for_use:excluded=excluded or impact.balance.active() or not impact.springs.is_empty()
 	if excluded:
 		_idle_pelvis_lift=0.0
@@ -485,13 +487,6 @@ func pose_weapon(frame_delta: float=1.0/60.0) -> void:
 		# SkeletonModifier poses are restored after skinning. Measure the actual
 		# applied transform here, while the temporary head pose is in effect.
 		gaze_applied_angle=before.angle_to(skeleton.get_bone_global_pose(head_bone).basis.get_rotation_quaternion())
-	if actor.surrendered:
-		weapon.visible=false
-		for side: String in arms:
-			var arm: Dictionary=arms[side]
-			var hand:=skeleton.get_bone_global_pose(arm.hand)
-			_solve_arm(arm,Vector3(.32 if side=="Left" else -.32,1.65,.05),hand.basis,side)
-		return
 	weapon.visible=true
 	var time:=Time.get_ticks_msec()*.001
 	if routine_blend>0 and last_routine=="tie_boot":
@@ -501,7 +496,7 @@ func pose_weapon(frame_delta: float=1.0/60.0) -> void:
 			var pose:=skeleton.get_bone_global_pose(spine)
 			pose.basis=Basis(Vector3.RIGHT,routine_blend*.6)*pose.basis
 			skeleton.set_bone_global_pose(spine,pose)
-	var aiming: bool=actor.state==actor.AIState.COMBAT and is_instance_valid(actor.target)
+	var aiming: bool=actor.weapon_up()
 	var pitch:=lerpf(.26,.85,search_blend)
 	var yaw:=0.0
 	if aiming:
@@ -512,7 +507,7 @@ func pose_weapon(frame_delta: float=1.0/60.0) -> void:
 	var right: Vector3=weapon.get_node("GripRight").position
 	# Carry the relaxed rifle clear of the jacket instead of pinning both
 	# forearms against the chest. Aimed/search/gesture placement stays authored.
-	var relaxed: bool=not aiming and not actor.crouching and search_blend<.001 and routine_blend<.001
+	var relaxed: bool=not aiming and not actor.crouching and search_blend<.001 and routine_blend<.001 and reload_blend<.001
 	var anchor:=Vector3(-.08,1.28 if aiming else 1.10 if relaxed else 1.14,(.24 if relaxed else .16)-float(actor.muzzle_timer)*.3)
 	if routine_blend>0 and last_routine in ["tie_boot","stretch"]:
 		turn=turn.slerp(Basis.from_euler(Vector3(-.6,PI*.5,.15)),routine_blend)
@@ -529,6 +524,11 @@ func pose_weapon(frame_delta: float=1.0/60.0) -> void:
 		if search_blend>0 and side=="Left":
 			var searching: Vector3=skeleton.to_local(actor.search_focus)+Vector3(sin(time*3.5)*.025,.02+sin(time*5)*.025,0)
 			wrist=wrist.lerp(searching,search_blend)
+		if reload_blend>0 and side=="Left":
+			# Down to the belt pouch for a fresh magazine and back up to the rifle.
+			var fetch: float=sin(PI*clampf(actor.magazine_reload_remaining/actor.RELOAD_SECONDS,0.0,1.0))
+			var pouch: Vector3=skeleton.get_bone_global_pose(torso_bone).origin+Vector3(.13,-.22,.15)
+			wrist=wrist.lerp(pouch,reload_blend*fetch)
 		if routine_blend>0:
 			var gesture:=wrist
 			if last_routine=="tie_boot" and not foot_bones.is_empty():

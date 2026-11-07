@@ -3,7 +3,7 @@ extends "res://scripts/midori_2050_identity.gd"
 ## Installation/source-revision owner must check this compatibility hash before
 ## replacing Midori2050Identity's script, before it enters the scene tree.
 
-const COMPATIBILITY_SOURCE_SHA256 := "5897e7dbeb8f49e668d97241a8a548916f6e1f617b3456f4a538bead7a703d5a"
+const COMPATIBILITY_SOURCE_SHA256 := "7d45e3f45e63c74e11b725c117ad818860580f53d1e48b46ed69e791c6e30345"
 
 func _bench(group: Node3D, pos: Vector3, label: String) -> void:
 	# Exact source constructor, with the warm strip owned by its bench instead

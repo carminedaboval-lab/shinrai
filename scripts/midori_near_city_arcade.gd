@@ -731,7 +731,8 @@ func _solids() -> void:
 	_solid(WALK_X0, -.2, -.1, 3.0, 1.1, 1.3)
 	_solid(-.2, 0, -.1, 3.0, 0, 1.3)
 	_solid(WIDE, WALK_X1, -.1, 3.0, -.2, 0)
-	_solid(WALK_X1, WALK_X1 + .2, -.1, 3.0, -.2, WALK_Z)
+	# The pavement continues east to Fukumaru's residential stair.
+	_solid(WALK_X1, WALK_X1 + .2, -.1, 3.0, 3.4, WALK_Z)
 	_solid(WALK_X0 - .2, WALK_X0, -.1, 3.0, 1.1, WALK_Z)
 	for run: Vector2 in [Vector2(WALK_X0, -25.6), Vector2(-1.6, 8.4), Vector2(8.9, WALK_X1)]:
 		_solid(run.x, run.y, -.1, .86, 9.55, 9.65)

@@ -1,0 +1,145 @@
+{
+  "scope": "Single streamed near-city tile. 1600x900. 70 settling frames, then 3 intervals of 40 rendered frames.",
+  "timing_limitations": "The baseline and final room runs did not monitor other Godot processes. A separate weapon task used the same GPU during this work. Treat interval deltas as indicative; the report measures this isolated fixture.",
+  "before": "concept_before",
+  "now": "final",
+  "array_mesh_base_triangles": {
+    "before": 26616,
+    "now": 51236
+  },
+  "views": {
+    "01_north_street": {
+      "before_ms": 6.417725,
+      "now_ms": 5.5374,
+      "delta_ms": -0.880325,
+      "before_trials_ms": [
+        5.639075,
+        6.417725,
+        6.5867
+      ],
+      "now_trials_ms": [
+        5.43645,
+        5.5374,
+        6.5415
+      ],
+      "before_draws": 441,
+      "now_draws": 447,
+      "before_primitives": 1051656,
+      "now_primitives": 1076276
+    },
+    "02_apartment_stairs": {
+      "before_ms": 5.651825,
+      "now_ms": 5.13435,
+      "delta_ms": -0.5174749999999992,
+      "before_trials_ms": [
+        5.532475,
+        5.651825,
+        6.176525
+      ],
+      "now_trials_ms": [
+        5.1303,
+        5.13435,
+        6.181275
+      ],
+      "before_draws": 346,
+      "now_draws": 352,
+      "before_primitives": 889186,
+      "now_primitives": 913806
+    },
+    "03_201_front_studio": {
+      "before_ms": 3.75525,
+      "now_ms": 4.387475,
+      "delta_ms": 0.632225,
+      "before_trials_ms": [
+        3.8019,
+        3.74125,
+        3.75525
+      ],
+      "now_trials_ms": [
+        4.387475,
+        4.37075,
+        4.5117
+      ],
+      "before_draws": 136,
+      "now_draws": 141,
+      "before_primitives": 783428,
+      "now_primitives": 808044
+    },
+    "04_202_rear_studio": {
+      "before_ms": 4.110375,
+      "now_ms": 5.06945,
+      "delta_ms": 0.9590749999999995,
+      "before_trials_ms": [
+        4.101125,
+        4.110375,
+        4.14725
+      ],
+      "now_trials_ms": [
+        5.06945,
+        4.706075,
+        5.31895
+      ],
+      "before_draws": 60,
+      "now_draws": 66,
+      "before_primitives": 690352,
+      "now_primitives": 714972
+    },
+    "05_301_living_kitchen": {
+      "before_ms": 4.59945,
+      "now_ms": 5.2802,
+      "delta_ms": 0.6807499999999997,
+      "before_trials_ms": [
+        4.49605,
+        4.59945,
+        4.8794
+      ],
+      "now_trials_ms": [
+        5.25865,
+        5.2802,
+        5.60495
+      ],
+      "before_draws": 184,
+      "now_draws": 190,
+      "before_primitives": 753988,
+      "now_primitives": 778608
+    },
+    "06_301_front_bedroom": {
+      "before_ms": 4.5852,
+      "now_ms": 4.7814,
+      "delta_ms": 0.19619999999999926,
+      "before_trials_ms": [
+        4.584475,
+        4.5852,
+        5.272025
+      ],
+      "now_trials_ms": [
+        4.7084,
+        4.7814,
+        5.442225
+      ],
+      "before_draws": 326,
+      "now_draws": 331,
+      "before_primitives": 918792,
+      "now_primitives": 943408
+    },
+    "07_301_bathroom": {
+      "before_ms": 4.4208,
+      "now_ms": 4.3921,
+      "delta_ms": -0.028699999999999726,
+      "before_trials_ms": [
+        4.422075,
+        4.4208,
+        4.3981
+      ],
+      "now_trials_ms": [
+        4.3921,
+        4.3351,
+        4.395725
+      ],
+      "before_draws": 302,
+      "now_draws": 308,
+      "before_primitives": 863254,
+      "now_primitives": 887874
+    }
+  }
+}

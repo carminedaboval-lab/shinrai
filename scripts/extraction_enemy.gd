@@ -1,6 +1,8 @@
 extends "res://scripts/enemy.gd"
 
 signal defeated(position: Vector3)
+const K17Look := preload("res://scripts/fx/k17_look.gd")
+var look: K17Look
 var approved_visual: PackedScene
 var defeat_reported := false
 var pistol_muzzle: Marker3D
@@ -79,6 +81,8 @@ func _build_visual_socket() -> void:
 	visual_root.position.y = -0.22
 	add_child(visual_root)
 	visual_root.add_child(approved_visual.instantiate())
+	look = K17Look.new()
+	look.apply(visual_root)
 	_setup_muzzle_light()
 	pistol_muzzle = Marker3D.new()
 	pistol_muzzle.name = "PistolMuzzle"
@@ -103,14 +107,16 @@ func _make_tracer_material(color: Color) -> StandardMaterial3D:
 func _update_timers(delta: float) -> void:
 	super._update_timers(delta)
 	stun_cooldown = maxf(0.0, stun_cooldown - delta)
+	var park_node: Node = get_parent()
+	var night: bool = park_node != null and bool(park_node.get("is_night_mode"))
+	if look != null:
+		look.update(delta, state, attack_cooldown, night)
 	if not is_instance_valid(muzzle_light):
 		return
 	if muzzle_timer > 0.0:
 		muzzle_light.light_color = shot_color
 		muzzle_light.omni_range = 5.0 if last_weapon == "stun" else 4.5
 		return
-	var park_node: Node = get_parent()
-	var night: bool = park_node != null and bool(park_node.get("is_night_mode"))
 	muzzle_light.light_color = Color("#79a9c4")
 	muzzle_light.omni_range = 3.2
 	muzzle_light.light_energy = 0.55 if night else 0.0
@@ -166,6 +172,8 @@ func _shoot_at_player(distance: float) -> void:
 	_show_tracer(shot_origin, tracer_end, use_stun)
 	if hit.get("collider") != target:
 		return
+	if target.has_method("register_damage_source"):
+		target.call("register_damage_source", global_position, 0.6 if use_stun else 1.0)
 	if use_stun:
 		target.call("apply_stun", 1.1)
 	elif target.has_method("take_damage"):
@@ -204,6 +212,8 @@ func _show_tracer(start_point: Vector3, end_point: Vector3, use_stun: bool) -> v
 func take_damage(amount: float, source: Node = null) -> void:
 	if defeat_reported:
 		return
+	if look != null:
+		look.notify_hit()
 	super.take_damage(amount, source)
 	if health <= 0.0:
 		defeat_reported = true

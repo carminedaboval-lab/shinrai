@@ -43,7 +43,7 @@ func setup(owner_crew: Node3D) -> void:
 func quiet() -> bool:
 	if not ready or crew.hostile or crew.morale_broken:return false
 	for actor: CharacterBody3D in crew.members:
-		if not is_instance_valid(actor) or actor.dead or actor.surrendered or actor.fleeing or actor.pinned_time>0:return false
+		if not is_instance_valid(actor) or actor.dead or actor.fleeing or actor.pinned_time>0:return false
 		if actor.state==actor.AIState.SEARCH or actor.state==actor.AIState.COMBAT or actor.own_visual_time<3.0:return false
 		if not crew.tactics.contact(actor).is_empty():return false
 	return true
@@ -149,6 +149,10 @@ func tick(delta: float) -> void:
 func _clear_caption() -> void:
 	if is_instance_valid(caption):caption.queue_free()
 	caption=null
+
+func forget(actor: CharacterBody3D) -> void:
+	if voices.get(actor)==active_voice: active_voice=null
+	voices.erase(actor);looks.erase(actor);next_look.erase(actor)
 
 func interrupt() -> void:
 	for player: AudioStreamPlayer3D in voices.values():

@@ -7,3 +7,4 @@
 script = ExtResource("1")
 weapon_key = "shigure"
 assembly_scene = ExtResource("2")
+magazine_grip = Vector3(-0.105, -0.11, 0)

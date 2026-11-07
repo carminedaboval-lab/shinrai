@@ -458,7 +458,7 @@ func _build_upright_material(mesh: Mesh, use_thin_source_texture: bool) -> Mater
 		# This blade uses its own cutout texture. Reusing the broad blade texture
 		# here changes the alpha silhouette and makes it look like a leafy tuft.
 		material.resource_name = "SHINRAI_ThinUprightLawnGrass"
-		material.albedo_color = Color(0.84, 0.88, 0.80, 1.0)
+		material.albedo_color = Color(0.84, 0.84, 0.76, 1.0)
 	else:
 		# Preserve the established broad grass material and its greener variant.
 		var source_root := UprightGrassScene.instantiate()
@@ -617,11 +617,11 @@ void fragment() {
 	code += """
     // Mostly living green: restrained olive variation, shaded roots and a few
     // tawny distal ends. Retain the photographed variation within every blade.
-    leaf *= mix(vec3(.92, .98, .93), vec3(1.08, .98, .80), tuft_variation.x);
+    leaf *= mix(vec3(.98, .96, .88), vec3(1.08, .98, .80), tuft_variation.x);
     leaf *= mix(.90, 1.04, tuft_variation.y);
     // Lush low pockets and sun-dried rises across the lawn.
-    leaf *= mix(vec3(.86, 1.02, .88), vec3(1.10, 1.02, .78), smoothstep(.30, .75, lawn_field));
-    leaf *= 1.12;
+    leaf *= mix(vec3(.94, .97, .86), vec3(1.10, 1.02, .78), smoothstep(.30, .75, lawn_field));
+    leaf *= 0.96;
     float blade_height = tip_direction > 0.0 ? UV.y : 1.0 - UV.y;
     leaf *= mix(.88, 1.0, smoothstep(.01, .20, blade_height));
     float older_tip = smoothstep(.74, .98, blade_height) * smoothstep(.55, .95, tuft_variation.x);
@@ -700,7 +700,7 @@ func _mesh_has_material(mesh: Mesh) -> bool:
 func _build_fallback_material() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.resource_name = "SHINRAI_MeshyGroundClump_Fallback"
-	material.albedo_color = Color(0.28, 0.50, 0.16, 1.0)
+	material.albedo_color = Color(0.24, 0.30, 0.14, 1.0)
 	material.roughness = 0.92
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
@@ -901,7 +901,10 @@ func _add_forest_grass_drifts(root: Node3D, mesh: Mesh, scene: Node) -> void:
 		var angle := rng.randf_range(0,TAU)
 		for z in range(-5,6):
 			for x in range(-7,8):
-				var offset := Vector2(x*0.50+rng.randf_range(-0.15,0.15),z*0.48+rng.randf_range(-0.15,0.15))
+				# Scattered, not planted in rows: wide jitter and random gaps.
+				var offset := Vector2(x*0.50+rng.randf_range(-0.38,0.38),z*0.48+rng.randf_range(-0.38,0.38))
+				if rng.randf()<0.28:
+					continue
 				var edge := pow(offset.x/3.5,2)+pow(offset.y/2.4,2)
 				if edge>rng.randf_range(0.75,1.05):
 					continue
@@ -918,7 +921,7 @@ func _add_forest_grass_drifts(root: Node3D, mesh: Mesh, scene: Node) -> void:
 				var h := rng.randf_range(0.45,0.62)*lerpf(1.0,0.8,clampf(edge,0,1))
 				var sy := h/bounds.size.y
 				var sx := rng.randf_range(0.82,1.12)/maxf(bounds.size.x,bounds.size.z)
-				var basis := Basis(Vector3.UP,angle+rng.randf_range(-0.75,0.75)).scaled(Vector3(sx,sy,sx))
+				var basis := Basis(Vector3.UP,rng.randf_range(0,TAU)).scaled(Vector3(sx,sy,sx))
 				transforms.append(Transform3D(basis,Vector3(p.x-centre.x,GROUND_SURFACE_Y+0.004,p.y-centre.y)-basis*anchor))
 		if transforms.size()<15:
 			continue
@@ -985,7 +988,8 @@ func _forest_grass_mesh(leaves:int,segments:int) -> ArrayMesh:
 		var reach:=rng.randf_range(0.22,0.42)
 		var rise:=rng.randf_range(0.40,0.65)
 		var width:=rng.randf_range(0.010,0.019)
-		var color:=Color(0.14,0.30,0.045).lerp(Color(0.29,0.46,0.11),rng.randf())
+		# Hakonechloa in a city park: olive and khaki, never lime.
+		var color:=Color(0.12,0.17,0.055).lerp(Color(0.23,0.27,0.1),rng.randf())
 		var rows:Array[PackedVector3Array]=[]
 		for j in range(segments+1):
 			var t:=float(j)/float(segments)
@@ -1060,7 +1064,7 @@ void fragment() {
     float photographed_light = dot(photograph, vec3(.2126, .7152, .0722));
     // Preserve the real broad surface variation through its source mipmaps.
     // Only the extra fine vein emphasis fades when individual texels disappear.
-    float photo_contrast = clamp(1.0 + (photographed_light - .235) * 3.4, .65, 1.45);
+    float photo_contrast = clamp(1.0 + (photographed_light - .235) * 3.4, .75, 1.15);
     vec3 leaf = COLOR.rgb * vec3(.64, .76, .74) * photo_contrast;
     leaf *= mix(vec3(.82, .92, .90), vec3(1.12, .98, .82), tuft_variation.x);
     leaf *= mix(.93, 1.07, blade_age);
@@ -1079,7 +1083,7 @@ void fragment() {
     SPECULAR = .24;
     AO = mix(.52, 1.0, root);
     AO_LIGHT_AFFECT = .35;
-    BACKLIGHT = leaf * .10 * root;
+    BACKLIGHT = leaf * .05 * root;
 }
 """
 	var result := ShaderMaterial.new()
@@ -1141,7 +1145,7 @@ void fragment() {
     float mature=smoothstep(0.40,0.73,age);
     float fresh=1.0-smoothstep(0.24,0.49,age);
     vec3 varied=ALBEDO*mix(vec3(0.83,0.89,0.79),vec3(1.12,1.07,0.91),soil_zone);
-    varied=mix(varied,varied*vec3(0.85,1.07,0.85),fresh*0.55);
+    varied=mix(varied,varied*vec3(0.92,0.98,0.90),fresh*0.55);
     varied=mix(varied,vec3(0.155,0.171,0.052),mature*0.32);
     // Older individual blades retain green bases and acquire tawny tips.
     float tired=smoothstep(0.52,0.79,age)*smoothstep(0.40,0.86,tuft);
@@ -1159,7 +1163,7 @@ void fragment() {
 	AO_LIGHT_AFFECT=0.35;
 	NORMAL_MAP=vec3(0.5+veins*0.035,0.5+(grain-0.5)*0.025,1.0);
 	NORMAL_MAP_DEPTH=0.28;
-	BACKLIGHT=green*0.10*root;
+	BACKLIGHT=green*0.05*root;
 }
 """
 	var material:=ShaderMaterial.new()

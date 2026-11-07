@@ -43,7 +43,10 @@ func run_walks() -> void:
 		if site.kind == "relay":
 			destinations.append(site.position)
 	destinations.append(raid.exits[0].position)
-	var origin: Vector3 = raid.player.position
+	# Raids now start outside the fence on the north shop street; the park's
+	# internal connectivity is measured from the south entry, inside the fence.
+	var origin: Vector3 = raid.navigation.nearest(Vector3(0, 0.2, 160))
+	raid.player.position = origin
 	for goal: Vector3 in destinations:
 		raid.player.position = origin
 		raid.player.velocity = Vector3.ZERO

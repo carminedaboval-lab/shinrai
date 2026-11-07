@@ -1,0 +1,10 @@
+{
+  "scripts\\midori_near_city_ramen.gd": "9e9df6b47cc16b918355a25c8d70121c7c8cdbd43b402d3106fbef76a69f3504",
+  "scripts\\midori_near_city.gd": "bc900e4f22d35154533755ac0d7a97a7f83d91e5be42c4d1aade4d9d20afcc3c",
+  "scripts\\midori_fukumaru_apartments.gd": "60e19e5676b181d999d228c320e48e61716abccb07b7f510ec5fefcc0e092e5d",
+  "scripts\\midori_fukumaru_furniture.gd": "3853bf7fe8efd67615b9f8f67c3e4cd114439fb89c8c3824ffe9ec483728e2d4",
+  "scripts\\midori_fukumaru_household.gd": "3e1d1479b71d5f58496e0b49397f07c5c6179425e59cef7ebd9ed771cbb445ed",
+  "scripts\\midori_fukumaru_soft_furnishings.gd": "0ca7c5d33ac631ed2655ac81bb5e38df6b130dce1f7e4ae025c5e5a3f5777ea0",
+  "scripts\\midori_fukumaru_stairs.gd": "3ffaffc6861c03f2e0fa93fb9d26653fb3740eb325284ceec275e2aed892d80c",
+  "scripts\\midori_fukumaru_finish.gdshader": "f4f4bfe9d03d59ddb842ae6d6cf14090de1ee046c1d6c046eac82dbc54d2a203"
+}

@@ -380,6 +380,18 @@ func _view_rect() -> Rect2:
 	var draw_size := Vector2(VIEW_SIZE) * scale_factor
 	return Rect2(Vector2((size.x - draw_size.x) * 0.5, 0), draw_size)
 
+## The inventory shows the same scan at a larger size.
+func scan_texture() -> Texture2D:
+	return _viewport.get_texture()
+
+func scan_anchor(part: String) -> Vector2:
+	if not _anchors.has(part):
+		_update_anchors()
+	var rect := _view_rect()
+	if not _anchors.has(part) or not rect.has_area():
+		return Vector2(-1, -1)
+	return (Vector2(_anchors[part]) - rect.position) / rect.size
+
 func _update_anchors() -> void:
 	if _skeleton == null or _camera == null: return
 	var rect := _view_rect()

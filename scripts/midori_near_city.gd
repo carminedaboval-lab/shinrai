@@ -1104,10 +1104,20 @@ func _dress_corridor(b: Dictionary) -> void:
 	var back: Vector3 = -b.out
 	for floor_index: int in range(1, int(b.floors)):
 		var y := float(floor_index) * STOREY
-		var at := Vector3(pos.x, y, pos.y) + back * (depth * .5 + .6)
-		_put("trim", at, Transform3D(Basis(right * width, Vector3.UP * .18, back * 1.2), at), Color(), pale.darkened(.12))
+		var span := width
+		var centre := pos
+		# This fixed-layout mansion's lower rear galleries otherwise penetrate
+		# Fukumaru's 202 bedroom and 301 bath. Stop at its rear masonry, keeping
+		# the rest of each gallery and all floors above Fukumaru's roof.
+		if floor_index <= 2 and pos.distance_squared_to(Vector2(84.2028, -218.0927)) < .01:
+			var north_end := pos.y - width * .5
+			var south_end := minf(pos.y + width * .5, -215.30)
+			span = south_end - north_end
+			centre.y = (north_end + south_end) * .5
+		var at := Vector3(centre.x, y, centre.y) + back * (depth * .5 + .6)
+		_put("trim", at, Transform3D(Basis(right * span, Vector3.UP * .18, back * 1.2), at), Color(), pale.darkened(.12))
 		var rail := at + back * .6 + Vector3.UP * .58
-		_put("trim", rail, Transform3D(Basis(-right * width, Vector3.UP * 1.1, back * .06), rail), Color(Pattern.BARS, width, 1.1, 0), pale.darkened(.25))
+		_put("trim", rail, Transform3D(Basis(-right * span, Vector3.UP * 1.1, back * .06), rail), Color(Pattern.BARS, span, 1.1, 0), pale.darkened(.25))
 
 func _dress_side_walls(b: Dictionary) -> void:
 	# Pipes, outdoor units and a fire stair on the exposed flanks.

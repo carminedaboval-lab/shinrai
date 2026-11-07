@@ -165,6 +165,8 @@ const WEAPONS := {
     "assembly_scene": "res://assets/weapons/tobikage/tobikage_weapon.tscn",
     "ammo_type": "6.5×48 mm fictional",
     "closed_bolt": true,
+    # SVD-pattern tangent rear sight sits on the trunnion, well ahead of the eye.
+    "iron_eye_relief_m": 0.34,
     "presentation_profile": "kite",
     "action_travel_m": 0.032,
     "action_duration_s": 0.1,

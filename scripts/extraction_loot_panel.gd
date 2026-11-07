@@ -94,7 +94,7 @@ func configure(run: Node, source: Dictionary) -> void:
 		tile.pressed.connect(func() -> void: action_requested.emit(action))
 	_refresh_food_rows()
 	var can_take: bool = raid.can_take_site(site)
-	label(body, "BAG  %d / %d    ·    %.1f / %.1f kg" % [raid.bag.size(), raid.capacity(), raid.cargo_mass_kg(), raid.cargo_limit_kg()], 18, MUTED)
+	label(body, "STORAGE  %d / %d CELLS    ·    %.1f / %.1f kg" % [raid.cargo_cells_used(), raid.capacity(), raid.cargo_mass_kg(), raid.cargo_limit_kg()], 18, MUTED)
 	var weight := ProgressBar.new()
 	weight.custom_minimum_size.y = 4
 	weight.show_percentage = false

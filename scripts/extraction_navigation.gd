@@ -14,6 +14,7 @@ var shoreline := PackedVector2Array()
 var ready := false
 var _park: Node3D
 var _floor_heights: Dictionary = {}
+var _paving_cells: Dictionary = {}
 var _space: PhysicsDirectSpaceState3D
 var _edge_query: PhysicsShapeQueryParameters3D
 
@@ -21,6 +22,7 @@ func build(park: Node3D) -> void:
 	var _boot_tick := StartupTrace.begin()
 	_park = park
 	_floor_heights.clear()
+	_paving_cells.clear()
 	ready = false
 	walk_graph.clear()
 	shoreline.clear()
@@ -46,8 +48,7 @@ func build(park: Node3D) -> void:
 		if support is StaticBody3D and park.is_ancestor_of(support):
 			excluded.append(support.get_rid())
 	query.exclude = excluded
-	var space := park.get_world_3d().direct_space_state
-	_space = space
+	_space = park.get_world_3d().direct_space_state
 	# The graph only depends on the built park, so it is cached on disk. The key
 	# changes whenever any project file or the Creator layout changes.
 	var cache_key := _cache_key()
@@ -65,17 +66,7 @@ func build(park: Node3D) -> void:
 		for x: int in range(111):
 			await LoadingBudget.checkpoint(park)
 			var cell := Vector2i(x, y)
-			var p := grid.get_point_position(cell)
-			var blocked := x < 2 or y < 2 or x > 108 or y > 88 or is_water(p)
-			if not blocked:
-				query.transform = Transform3D(Basis.IDENTITY, Vector3(p.x, _floor_height(p)+0.85, p.y))
-				blocked = not space.intersect_shape(query, 1).is_empty()
-			grid.set_point_solid(cell, blocked)
-			if not blocked:
-				# Prefer the authored park paths without forbidding grass flanks.
-				var on_path: bool = is_finite(float(park.bridge_surface_height(p))) or park._is_near_destination_path(p / park.LAYOUT_SCALE, 0.4)
-				grid.set_point_weight_scale(cell, 1.0 if on_path else 1.65)
-				_add_walk_point(_cell_id(cell), p, grid.get_point_weight_scale(cell))
+			_sample_ground_cell(cell, query)
 	_boot_tick = StartupTrace.finish("navigation.vertices",_boot_tick)
 	# Clear endpoints do not imply a clear edge: sweep a player-sized capsule
 	# between cells so routes cannot cut through a lamp, tree or boulder.
@@ -89,24 +80,133 @@ func build(park: Node3D) -> void:
 		for x: int in range(2, 109):
 			await LoadingBudget.checkpoint(park)
 			var cell := Vector2i(x, y)
-			if grid.is_point_solid(cell):
-				continue
-			var a := grid.get_point_position(cell)
-			for direction: Vector2i in [Vector2i.RIGHT, Vector2i.DOWN, Vector2i(1, 1), Vector2i(-1, 1)]:
-				var next := cell + direction
-				if not grid.region.has_point(next) or grid.is_point_solid(next):
-					continue
-				if direction.x != 0 and direction.y != 0:
-					if grid.is_point_solid(cell + Vector2i(direction.x, 0)) or grid.is_point_solid(cell + Vector2i(0, direction.y)):
-						continue
-				var b := grid.get_point_position(next)
-				if _can_walk_edge(a, b):
-					walk_graph.connect_points(_cell_id(cell), _cell_id(next))
+			for direction: Vector2i in GRID_EDGES:
+				if _ground_edge_open(cell, direction):
+					walk_graph.connect_points(_cell_id(cell), _cell_id(cell + direction))
 	_boot_tick = StartupTrace.finish("navigation.edges",_boot_tick)
 	await _add_bridge_floor_routes()
 	_boot_tick = StartupTrace.finish("navigation.bridge_links",_boot_tick)
 	_save_cache(cache_key)
 	ready = true
+
+const GRID_EDGES := [Vector2i.RIGHT, Vector2i.DOWN, Vector2i(1, 1), Vector2i(-1, 1)]
+
+func _sample_ground_cell(cell: Vector2i, query: PhysicsShapeQueryParameters3D) -> void:
+	var p := grid.get_point_position(cell)
+	var blocked := cell.x < 2 or cell.y < 2 or cell.x > 108 or cell.y > 88 or is_water(p)
+	if not blocked:
+		query.transform = Transform3D(Basis.IDENTITY, Vector3(p.x, _floor_height(p) + 0.85, p.y))
+		blocked = not _space.intersect_shape(query, 1).is_empty()
+	grid.set_point_solid(cell, blocked)
+	var id := _cell_id(cell)
+	if blocked:
+		if walk_graph.has_point(id): walk_graph.remove_point(id)
+		return
+	var on_path: bool = is_finite(float(_park.bridge_surface_height(p))) or _park._is_near_destination_path(p / _park.LAYOUT_SCALE, 0.4)
+	var weight := 1.0 if on_path else 1.65
+	grid.set_point_weight_scale(cell, weight)
+	if walk_graph.has_point(id): walk_graph.set_point_weight_scale(id, weight)
+	else: _add_walk_point(id, p, weight)
+
+func _ground_edge_open(cell: Vector2i, direction: Vector2i) -> bool:
+	var next := cell + direction
+	if not grid.region.has_point(next) or grid.is_point_solid(cell) or grid.is_point_solid(next): return false
+	if direction.x != 0 and direction.y != 0:
+		if grid.is_point_solid(cell + Vector2i(direction.x, 0)) or grid.is_point_solid(cell + Vector2i(0, direction.y)): return false
+	return _can_walk_edge(grid.get_point_position(cell), grid.get_point_position(next))
+
+## Sweep the real navigation capsule along the full straight, terrain-following
+## path. Short contiguous segments follow changes of terrain and paving elevation.
+func inspect_ground_corridor(start: Vector2, end: Vector2) -> Dictionary:
+	if not ready or _space == null: return {"pass": false, "error": "Navigation unavailable"}
+	var segments := maxi(1, ceili(start.distance_to(end)))
+	var supported := 0
+	for i in range(segments + 1):
+		var p := start.lerp(end, float(i) / segments)
+		var ground := _floor_height(p)
+		var ray := PhysicsRayQueryParameters3D.create(Vector3(p.x,ground + 0.5,p.y), Vector3(p.x,ground - 1.5,p.y),1)
+		var hit := _space.intersect_ray(ray)
+		if hit.is_empty() or absf(hit.position.y - ground) >= .36 or hit.normal.y <= .7:
+			return {"pass": false,"reason": "unsupported","point": str(p)}
+		supported += 1
+		if i == segments: break
+		var next := start.lerp(end, float(i + 1) / segments)
+		if not _can_walk_edge(p,next) or not _can_walk_edge(next,p):
+			return {"pass": false,"reason": "capsule or slope","point": str(p),"next": str(next)}
+	return {"pass": true,"from":str(start),"to":str(end),"metres":start.distance_to(end),"capsule_radius":0.42,"support_probes":supported,"swept_both_ways":true}
+
+## The shrine replaces two solid posts after the park graph is loaded. Re-sample the
+## footprint in memory, including every edge whose clearance or diagonal corner
+## can change. Other cells, links, bridge nodes and the on-disk boot cache persist.
+func refresh_plaza_gate(centre: Vector2) -> Dictionary:
+	if not ready or _space == null or _edge_query == null: return {"error": "Navigation unavailable"}
+	var middle := Vector2i(((centre - ORIGIN) / CELL).round())
+	var cells := Rect2i(middle - Vector2i(2, 2), Vector2i(5, 5))
+	var edge_cells := cells.grow(1)
+	if not grid.region.encloses(edge_cells.grow(2)): return {"error": "Gate outside park navigation grid"}
+	var reference: Array[int] = []
+	# On the west or east edge outside the refresh, find a genuinely traversable control link.
+	for x: int in [edge_cells.position.x - 1, edge_cells.end.x]:
+		for y: int in range(edge_cells.position.y, edge_cells.end.y):
+			var c := Vector2i(x, y)
+			var next := c + Vector2i.DOWN
+			if not walk_graph.has_point(_cell_id(c)) or not walk_graph.has_point(_cell_id(next)): continue
+			if walk_graph.are_points_connected(_cell_id(c), _cell_id(next)) and _ground_edge_open(c, Vector2i.DOWN):
+				reference = [_cell_id(c), _cell_id(next)]
+				break
+		if not reference.is_empty(): break
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.65
+	var sample := PhysicsShapeQueryParameters3D.new()
+	sample.shape = sphere
+	sample.collision_mask = _edge_query.collision_mask
+	sample.collide_with_areas = false
+	sample.exclude = _edge_query.exclude
+	for y: int in range(cells.position.y, cells.end.y):
+		for x: int in range(cells.position.x, cells.end.x):
+			_sample_ground_cell(Vector2i(x, y), sample)
+	var changed_edges := 0
+	for y: int in range(edge_cells.position.y, edge_cells.end.y):
+		for x: int in range(edge_cells.position.x, edge_cells.end.x):
+			var c := Vector2i(x, y)
+			for delta: Vector2i in GRID_EDGES:
+				var next := c + delta
+				if not cells.has_point(c) and not cells.has_point(next) and not cells.has_point(c + Vector2i(delta.x, 0)) and not cells.has_point(c + Vector2i(0, delta.y)): continue
+				var a := _cell_id(c)
+				var b := _cell_id(next)
+				if not walk_graph.has_point(a) or not walk_graph.has_point(b): continue
+				var connected := walk_graph.are_points_connected(a, b)
+				var open := _ground_edge_open(c, delta)
+				if connected == open: continue
+				if open: walk_graph.connect_points(a, b)
+				else: walk_graph.disconnect_points(a, b)
+				changed_edges += 1
+	var north := grid.get_point_position(middle - Vector2i(0, 1))
+	var south := grid.get_point_position(middle + Vector2i(0, 1))
+	var at_n := Vector3(north.x, _floor_height(north), north.y)
+	var at_s := Vector3(south.x, _floor_height(south), south.y)
+	var forward := path(at_n, at_s)
+	var reverse := path(at_s, at_n)
+	var corridor_ok := _can_walk_edge(north, south) and _can_walk_edge(south, north)
+	for outbound: bool in [true, false]:
+		var route := forward if outbound else reverse
+		if route.size() < 2:
+			corridor_ok = false
+			continue
+		var first := at_n if outbound else at_s
+		var last := at_s if outbound else at_n
+		corridor_ok = corridor_ok and first.distance_to(route[0]) < 0.5 and last.distance_to(route[-1]) < 0.5
+		for step: Vector3 in route:
+			if absf(step.x - centre.x) > 1.0: corridor_ok = false
+	var ground := _floor_height(centre)
+	var support := _space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(centre.x, ground + 0.5, centre.y), Vector3(centre.x, ground - 1.5, centre.y), 1))
+	var support_ok: bool = not support.is_empty() and absf(support.position.y - ground) < 0.36 and support.normal.y > 0.7
+	var reference_ok := reference.size() == 2 and walk_graph.are_points_connected(reference[0], reference[1])
+	if reference_ok:
+		reference_ok = _can_walk_edge(walk_graph.get_point_position(reference[0]), walk_graph.get_point_position(reference[1]))
+	return {"resampled_cells": cells.size.x * cells.size.y, "changed_edges": changed_edges,
+		"forward": str(forward), "reverse": str(reverse), "capsule_radius": 0.42,
+		"corridor_clear": corridor_ok, "supported": support_ok, "outer_edge_ids": reference, "outer_edge_passed": reference_ok}
 
 func _add_walk_point(id: int, p: Vector2, weight: float = 1.0) -> void:
 	walk_graph.add_point(id, p, weight)
@@ -282,17 +382,21 @@ func _nearest_graph_point(point: Vector3) -> int:
 	if not walk_graph.get_point_connections(closest).is_empty() and _can_walk_floor(p, walk_graph.get_point_position(closest)):
 		return closest
 	# A nearby floor node across a tall side cannot be the start of a walking route.
-	var best := -1
-	var best_distance := INF
+	# Nearest passing node wins, so test nearest-first and stop at the first pass;
+	# the floor check is far too expensive to run on every node in range.
+	var nearby: Array[Dictionary] = []
 	for id: int in walk_graph.get_point_ids():
 		var candidate := walk_graph.get_point_position(id)
 		var distance := p.distance_squared_to(candidate)
-		if distance >= best_distance or distance > CELL * CELL * 4.0 or walk_graph.get_point_connections(id).is_empty():
+		if distance <= CELL * CELL * 4.0:
+			nearby.append({"id": id, "point": candidate, "distance": distance})
+	nearby.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.distance < b.distance)
+	for row: Dictionary in nearby:
+		if walk_graph.get_point_connections(row.id).is_empty():
 			continue
-		if _can_walk_floor(p, candidate):
-			best = id
-			best_distance = distance
-	return best
+		if _can_walk_floor(p, row.point):
+			return row.id
+	return -1
 
 func _closest_graph_point(p: Vector2) -> int:
 	if walk_graph.get_point_count() == 0:
@@ -354,10 +458,41 @@ func _can_walk_floor_centre(a: Vector2, b: Vector2) -> bool:
 
 func _terrain_height(p: Vector2) -> float:
 	var terrain := _park.get_node_or_null("MidoriTerrain")
-	return terrain.height_at(p) if terrain != null and terrain.installed else 0.0
+	var base: float = terrain.height_at(p) if terrain != null and terrain.installed else 0.0
+	if _space == null:
+		return base
+	return maxf(base, _paving_height(p))
+
+# Draped paving stands about 0.1 m proud of the terrain it follows. Reading only
+# the terrain invents a step at every path edge. -INF means no paving here.
+func _paving_height(p: Vector2) -> float:
+	var cell := Vector2i((p * 4.0).round())
+	if _paving_cells.has(cell):
+		return _paving_cells[cell]
+	var height := -INF
+	# The path-edge scan is slow, so it runs once per cell, after the lookup above.
+	if float(_park.path_edge_distance_world(p)) > .3:
+		_paving_cells[cell] = height
+		return height
+	var query :=PhysicsRayQueryParameters3D.create(Vector3(p.x, 6.0, p.y), Vector3(p.x, -3.0, p.y), 1)
+	var excluded: Array[RID] = []
+	for attempt: int in range(5):
+		query.exclude = excluded
+		var hit := _space.intersect_ray(query)
+		if hit.is_empty():
+			break
+		var body: Object = hit.collider
+		if body is Node and (body as Node).is_in_group("midori_terrain_paving"):
+			height = hit.position.y
+			break
+		if body is Node and (body as Node).is_in_group("midori_terrain_floor"):
+			break
+		excluded.append(hit.rid)
+	_paving_cells[cell] = height
+	return height
 
 const NAV_CACHE_DIR := "user://shinrai_cache/"
-const NAV_CACHE_VERSION := 1
+const NAV_CACHE_VERSION := 2
 
 static func _cache_key() -> String:
 	var ctx := HashingContext.new()

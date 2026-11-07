@@ -1,7 +1,9 @@
 extends RefCounted
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
 ## Reuse supplied meshes and placements; cull distant detail in small spatial cells.
-const CELL := 4.0
+## 12 m cells keep culling well inside the 38-52 m fade while issuing roughly
+## a ninth of the draw calls that 4 m cells did (each cell is one draw per pass).
+const CELL := 12.0
 
 static func category(path: String) -> String:
 	var p := path.to_lower()

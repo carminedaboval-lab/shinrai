@@ -380,9 +380,9 @@ static func _leaf_finish(source: Node3D,sage: bool) -> void:
 				var leaf := original.duplicate() as StandardMaterial3D
 				leaf.resource_name="CourtSageLeafLocal" if sage else "CourtMediumGreenLeafLocal"
 				# Small texture-preserving linear gain plus physically lit transmitted light.
-				leaf.albedo_color=original.albedo_color*(Color(1.12,1.19,1.24) if sage else Color(1.12,1.28,1.02))
+				leaf.albedo_color=original.albedo_color*(Color(1.04,1.06,1.06) if sage else Color(1.02,1.06,0.94))
 				leaf.backlight_enabled=true
-				leaf.backlight=Color(.16,.22,.10) if not sage else Color(.17,.22,.18)
+				leaf.backlight=Color(.08,.10,.05) if not sage else Color(.09,.11,.09)
 				leaf.emission_enabled=false
 				copies[original]=leaf
 			visual.set_surface_override_material(surface,copies[original])

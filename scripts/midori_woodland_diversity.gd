@@ -11,8 +11,10 @@ func install() -> void:
 	var detail:Node=get_tree().root.get_node("MidoriGrassDetail")
 	var beds:=park.find_children("WoodlandFillLOD0_*","MultiMeshInstance3D",true,false)
 	var evergreen:Node3D=load("res://assets/shinrai/parks/midori_park/models/vegetation/midori_evergreen_shrub_v1.glb").instantiate()
-	var sources:Array[Node3D]=[park.forest_floor_bush_prototypes[0],evergreen,park.emerald_fountain_grass_prototype,park.lilac_prototypes[1],park.midnight_fern_prototype,park.deadwood_trunk_prototype]
-	var labels:=["woodland_bush","evergreen_shrub","fountain_grass","flowering_shrub","fern","fallen_wood"]
+	park._tone_foliage_prototype(evergreen,Color(0.62,0.64,0.5))
+	var stone:Node3D=load("res://assets/shinrai/parks/midori_park/models/forest_floor_20261026/stone_02.glb").instantiate()
+	var sources:Array[Node3D]=[park.forest_floor_bush_prototypes[0],evergreen,park.emerald_fountain_grass_prototype,park.lilac_prototypes[1],park.midnight_fern_prototype,park.deadwood_trunk_prototype,stone]
+	var labels:=["woodland_bush","evergreen_shrub","fountain_grass","flowering_shrub","fern","fallen_wood","stone"]
 	var parts:Array=[]
 	var boxes:Array[AABB]=[]
 	for source in sources:
@@ -34,18 +36,24 @@ func install() -> void:
 		boxes.append(box)
 	var rng:=RandomNumberGenerator.new()
 	rng.seed=205010063
-	var counts:=[0,0,0,0,0,0]
+	var counts:=[0,0,0,0,0,0,0]
 	var positions:Array[Vector3]=[]
 	var audit:Array=[]
 	var pockets:=0
-	for index in range(1,beds.size(),3):
+	# Every grass bed gets companions so no bed is one species edge to edge. The
+	# original third keep their fuller groups; the rest get a lighter mixed set.
+	for index in range(beds.size()):
+		# Every third bed (index%3==0) already has woodland companions.
+		if index%3==0:
+			continue
+		var full:=index%3==1
 		var bed:MultiMeshInstance3D=beds[index]
 		var centre:=Vector2(bed.global_position.x,bed.global_position.z)
-		var groups:Array=[[],[],[],[],[],[]]
+		var groups:Array=[[],[],[],[],[],[],[]]
 		var angle:=rng.randf_range(0,TAU)
 		var placed:=0
 		for attempt in range(200):
-			if placed>=26:
+			if placed>=(26 if full else 14):
 				break
 			# Each group has a dominant leaf form; flowers are concentrated, not confetti.
 			var pattern:=[0,0,1,0,1,4,4,2]
@@ -53,13 +61,15 @@ func install() -> void:
 				pattern=[4,4,4,0,0,1,2,2]
 			elif index%9==7:
 				pattern=[0,1,1,0,2,2,4,4]
+			if not full:
+				pattern=[4,6,2,4,3,6,4,0,2,6] if index%2==0 else [4,4,6,2,0,6,3,4,1,6]
 			var kind:int=pattern[placed%pattern.size()]
-			if index%5==1 and placed%4==0:
+			if full and index%5==1 and placed%4==0:
 				kind=3
-			if index%9==1 and placed==25:
+			if full and index%9==1 and placed==25:
 				kind=5
 			var box:=boxes[kind]
-			var height_ranges:=[Vector2(.85,1.35),Vector2(1.05,1.65),Vector2(.65,.95),Vector2(1.0,1.5),Vector2(.55,.85)]
+			var height_ranges:=[Vector2(.85,1.35),Vector2(1.05,1.65),Vector2(.65,.95),Vector2(1.0,1.5),Vector2(.55,.85),Vector2(1,1),Vector2(.12,.34)]
 			var basis:=Basis(Vector3.UP,rng.randf_range(0,TAU))
 			if kind==5:
 				basis=basis*Basis(Vector3.FORWARD,PI*.5)
@@ -89,7 +99,8 @@ func install() -> void:
 			if not clear:
 				continue
 			var anchor:=Vector3(footprint.get_center().x,footprint.position.y,footprint.get_center().z)
-			var t:=Transform3D(basis,Vector3(p.x,.014,p.y)-anchor)
+			# Stones sit a few centimetres into the soil.
+			var t:=Transform3D(basis,Vector3(p.x,.014-(footprint.size.y*.2 if kind==6 else 0.0),p.y)-anchor)
 			groups[kind].append(t)
 			positions.append(Vector3(p.x,radius,p.y))
 			audit.append({"kind":labels[kind],"p":[p.x,p.y],"radius":radius,"base_y":(t*box).position.y,"height":footprint.size.y})
@@ -113,12 +124,13 @@ func install() -> void:
 				batch.name="%s_%03d_%02d"%[labels[kind],index,get_child_count()]
 				batch.multimesh=mm
 				batch.position=Vector3(centre.x,0,centre.y)
-				batch.visibility_range_end=90 if kind<4 else 65
+				batch.visibility_range_end=90 if kind<4 else (55 if kind==6 else 65)
 				batch.visibility_range_end_margin=12
 				batch.visibility_range_fade_mode=GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 				add_child(batch)
 		pockets+=1
 	evergreen.free()
+	stone.free()
 	set_meta("placement_audit",audit)
 	if not positions.is_empty():
 		set_meta("review_anchor",Vector2(positions[0].x,positions[0].z))
