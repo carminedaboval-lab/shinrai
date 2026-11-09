@@ -1,5 +1,6 @@
 extends Node3D
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const StartupTrace = preload("res://scripts/startup_trace.gd")
 
 # Runtime-only surface overrides on the supplied small grass clumps. The mesh,
 # imported material, textures, collision and object transforms are not edited.
@@ -27,6 +28,7 @@ const SUPPORTED_PROPERTIES := [
 var installed := false
 var report: Dictionary = {}
 var _material_cache: Dictionary = {}
+var _shader_cache: Dictionary = {}
 var _default_material := StandardMaterial3D.new()
 
 func _ready() -> void:
@@ -37,16 +39,31 @@ func install() -> void:
 	if installed or get_parent() == null:
 		return
 	installed = true
+	var _bt := StartupTrace.begin()
 	report = {"target_roots": 0, "meshes": 0, "changed_surfaces": 0, "skipped_surfaces": 0, "unique_materials": 0, "skip_reasons": {}, "max_world_displacement_m": clampf(tip_displacement_m, 0.0, 0.04)}
 	for root_name: String in TARGET_ROOTS:
 		if root_name == "MainlandEmeraldGrassClusters" and not include_emerald_clumps:
 			continue
 		for target: Node in get_parent().find_children(root_name, "Node3D", true, false):
 			report.target_roots += 1
-			for node: Node in target.find_children("*", "MeshInstance3D", true, false):
-				_configure_mesh(node as MeshInstance3D)
+			var meshes := target.find_children("*", "MeshInstance3D", true, false)
+			for index: int in range(meshes.size()):
+				# Same meshes in the same order; the loading budget only splits frames.
+				if index % 8 == 7: await LoadingBudget.checkpoint(get_parent())
+				if is_instance_valid(meshes[index]): _configure_mesh(meshes[index] as MeshInstance3D)
+			await LoadingBudget.checkpoint(get_parent())
 	report.unique_materials = _material_cache.size()
+	StartupTrace.finish("breeze.install", _bt)
 	print("MIDORI_BREEZE: ", JSON.stringify(report))
+
+## End-of-boot hook (shinrai_world_complete.gd). The shader-code cache only
+## serves install() (its Shaders live on in the materials); the material cache
+## stays: the motion_amount setter updates the live materials through it.
+func release_build_data() -> Dictionary:
+	if not installed: return {"skipped": "not installed"}
+	var freed := {"shader_codes": _shader_cache.size()}
+	_shader_cache = {}
+	return freed
 
 func _skip(reason: String, count := 1) -> void:
 	report.skipped_surfaces += count
@@ -106,13 +123,22 @@ func _supported(source: StandardMaterial3D) -> bool:
 	return true
 
 func _build_material(source: Material) -> ShaderMaterial:
-	if not source is StandardMaterial3D or not _supported(source as StandardMaterial3D):
-		return null
+	# A cached source already passed _supported (materials do not change here):
+	# skip re-walking its whole property list for every mesh that shares it.
 	if _material_cache.has(source):
 		return _material_cache[source] as ShaderMaterial
+	if not source is StandardMaterial3D or not _supported(source as StandardMaterial3D):
+		return null
 	var original := source as StandardMaterial3D
-	var shader := Shader.new()
-	shader.code = _shader_code(original)
+	# Materials whose generated code is identical share one Shader: each new
+	# Shader compiled its code again (~0.1 s apiece, a ~0.75 s frame per eight
+	# meshes behind the menu). Same code, same uniforms, own material each.
+	var code := _shader_code(original)
+	var shader: Shader = _shader_cache.get(code)
+	if shader == null:
+		shader = Shader.new()
+		shader.code = code
+		_shader_cache[code] = shader
 	var material := ShaderMaterial.new()
 	material.resource_name = original.resource_name + "_RootedBreeze"
 	material.render_priority = original.render_priority

@@ -9,8 +9,23 @@ var footprints:Array[Dictionary]=[]
 var moss_instances=0
 var mainland_cover:Array[Dictionary]=[]
 func _ready():
+ # The rock and moss scenes are read on loader threads while the terrain is
+ # built; install() then takes the same resources (load() if a request failed).
+ for i in range(6):_request(ASSETS+"rock_%02d.glb"%i)
+ for i in range(12):_request(ASSETS+"moss_%02d.glb"%i)
  await LoadingBudget.wait_structure(get_parent())
  call_deferred("install")
+static func _request(path:String)->void:
+ if ResourceLoader.has_cached(path):return
+ if ResourceLoader.load_threaded_get_status(path)==ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+  ResourceLoader.load_threaded_request(path)
+## The requested resource once its loader thread is done (frames pass meanwhile).
+func _fetch(path:String)->Variant:
+ while ResourceLoader.load_threaded_get_status(path)==ResourceLoader.THREAD_LOAD_IN_PROGRESS:await get_tree().process_frame
+ if ResourceLoader.load_threaded_get_status(path)==ResourceLoader.THREAD_LOAD_LOADED:
+  var resource:=ResourceLoader.load_threaded_get(path)
+  if resource!=null:return resource
+ return load(path)
 func _land(p:Vector2,r:float,island:Dictionary,terrain:Node,park:Node3D)->bool:
  if not Geometry2D.is_point_in_polygon(p,island.points) or terrain.edge_distance(p,island.points)<r+.45:return false
  if park.any_trunk_within(p,r+1.15):return false
@@ -40,20 +55,26 @@ func install():
  var park=get_parent() as Node3D
  var terrain=park.get_node("MidoriTerrain")
  while not terrain.installed:await get_tree().process_frame
+ # Everything waiting on the terrain wakes in one frame: take a budget turn first.
+ await LoadingBudget.checkpoint(park)
  var _ft := preload("res://scripts/startup_trace.gd").begin()
  set_as_top_level(true);global_transform=Transform3D.IDENTITY
  var rocks:Array[Node3D]=[]
  var rock_material:Material
  var moss_material:StandardMaterial3D
  var moss:Array[Mesh]=[]
+ # Budget turns between model loads, islands and moss anchors (all local work in
+ # the same order and RNG sequence); the pass used to be one ~4 s frame.
  for i in range(6):
-  var model=load(ASSETS+"rock_%02d.glb"%i).instantiate()
+  await LoadingBudget.checkpoint(park)
+  var model=(await _fetch(ASSETS+"rock_%02d.glb"%i)).instantiate()
   for part:MeshInstance3D in model.find_children("*","MeshInstance3D",true,false):
    if rock_material==null:rock_material=part.get_active_material(0)
    part.material_override=rock_material
   rocks.append(model)
  for i in range(12):
-  var model=load(ASSETS+"moss_%02d.glb"%i).instantiate()
+  await LoadingBudget.checkpoint(park)
+  var model=(await _fetch(ASSETS+"moss_%02d.glb"%i)).instantiate()
   var mesh:Mesh=model.find_children("*","MeshInstance3D",true,false)[0].mesh
   mesh=mesh.duplicate()
   for surface in range(mesh.get_surface_count()):
@@ -66,6 +87,7 @@ func install():
   moss.append(mesh);model.free()
  var rng=RandomNumberGenerator.new();rng.seed=2050100631
  for index in range(terrain.islands.size()):
+  await LoadingBudget.checkpoint(park)
   var island:Dictionary=terrain.islands[index]
   var centre=Vector2.ZERO
   for p:Vector2 in island.points:centre+=p
@@ -119,6 +141,7 @@ func install():
   var batches:Array=[]
   for i in range(moss.size()):batches.append([])
   for anchor in anchors:
+   await LoadingBudget.checkpoint(park)
    for z in range(-25,26):
     for x in range(-25,26):
      var offset=Vector2(x*.035+rng.randf_range(-.012,.012),z*.035+rng.randf_range(-.012,.012))

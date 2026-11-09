@@ -46,6 +46,7 @@ var _lid_mat: ShaderMaterial
 var _signal_mat: ShaderMaterial
 var _metal_mat: StandardMaterial3D
 var _chunks: Dictionary = {}
+var _chunk_count := 0
 var _poles: StaticBody3D
 
 func _ready() -> void:
@@ -61,19 +62,24 @@ func _ready() -> void:
 		for zone: Rect2 in city.get("CLEAR_ZONES"): _clear.append(zone)
 	set_as_top_level(true)
 	global_transform = Transform3D.IDENTITY
+	# Same steps in the same order; checkpoints only split them across frames.
 	_make_materials()
 	_define_bands()
 	_find_boxes()
 	_split_segments()
+	await Budget.checkpoint(_park)
 	_build_surfaces()
+	await Budget.checkpoint(_park)
 	_build_manholes()
 	_build_stop_text()
+	await Budget.checkpoint(_park)
 	_build_signals()
+	await Budget.checkpoint(_park)
 	_build_verge()
 	installed = true
 	set_night_mode(bool(_park.get("is_night_mode")))
 	_resurface_existing()
-	report.merge({"bands":bands.size(), "boxes":boxes.size(), "segments":segments.size(), "chunks":_chunks.size(), "signalised":boxes.filter(func(b: Dictionary) -> bool: return b.signalised).size()})
+	report.merge({"bands":bands.size(), "boxes":boxes.size(), "segments":segments.size(), "chunks":_chunk_count, "signalised":boxes.filter(func(b: Dictionary) -> bool: return b.signalised).size()})
 	print("MIDORI_TOKYO_ROADS_READY ", JSON.stringify(report))
 
 func set_night_mode(value: bool) -> void:
@@ -84,20 +90,56 @@ func set_night_mode(value: bool) -> void:
 ## their own modules, with their own kerbs and paint. Once those modules finish,
 ## their asphalt takes this surface (asphalt only) and their paint wears in.
 func _resurface_existing() -> void:
-	# The raid reaching HQ is the one reliable "everything is built" signal; the
-	# review scene has no raid, so there the producers' own flags decide.
+	# With a raid, the world-complete step (scripts/shinrai_world_complete.gd)
+	# calls resurface_now() once everything is built, before HQ. The review scene
+	# and Creator have no raid, so there the producers' own flags decide.
+	# The deadline only applies without a raid: with one, resurfacing mid-build on
+	# a slow first launch would cache a result that misses the later roads.
 	var deadline := Time.get_ticks_msec() + 600000
-	while Time.get_ticks_msec() < deadline:
+	while is_inside_tree():
+		if _resurface_state != 0 or not is_instance_valid(_park): return
 		var raid: Node = _park.get_node_or_null("ExtractionRun")
-		if raid != null and int(raid.get("phase")) != 0: break
-		if raid == null:
+		if raid != null:
+			if _park.get_meta(WORLD_COMPLETE_STARTED, false): return
+			# A raid that reached HQ without the world-complete step (older flow).
+			if int(raid.get("phase")) != 0: break
+		elif Time.get_ticks_msec() >= deadline:
+			break
+		else:
 			var street: Node = _park.get_node_or_null("MidoriSouthStreet")
 			var corporate: Node = _park.get_node_or_null("MidoriCorporateDistrict")
 			if (street == null or street.get("installed") == true) and (corporate == null or corporate.get("installed") == true): break
 		await get_tree().process_frame
+	if not is_inside_tree(): return
+	await resurface_now()
+
+const WORLD_COMPLETE_STARTED := &"shinrai_world_complete_started"
+## 0 not started, 1 running, 2 done.
+var _resurface_state := 0
+
+## The main street, back lane and corporate roads take this surface. Runs once;
+## a second caller waits for the first. Yields on the shared loading budget.
+func resurface_now() -> Dictionary:
+	if _resurface_state == 2: return {"roads": report.get("resurfaced_roads", 0), "marks": report.get("repainted_marks", 0)}
+	if _resurface_state == 1:
+		while _resurface_state == 1 and is_inside_tree(): await get_tree().process_frame
+		return {"roads": report.get("resurfaced_roads", 0), "marks": report.get("repainted_marks", 0)}
+	_resurface_state = 1
+	# Its own materials must exist first (normally long done by now).
+	var wait_until := Time.get_ticks_msec() + 120000
+	while not installed and is_inside_tree() and Time.get_ticks_msec() < wait_until:
+		await get_tree().process_frame
+	if not installed:
+		_resurface_state = 2
+		return {"error": "roads not installed"}
 	var roads := 0
 	var paints := 0
-	for node: Node in _park.find_children("*", "MeshInstance3D", true, false):
+	var meshes := _park.find_children("*", "MeshInstance3D", true, false)
+	await Budget.checkpoint(_park, true)
+	for index: int in range(meshes.size()):
+		if index % 32 == 31: await Budget.checkpoint(_park, true)
+		var node: Node = meshes[index]
+		if not is_instance_valid(node): continue
 		var mesh := node as MeshInstance3D
 		if mesh.mesh == null: continue
 		if mesh.material_override == null:
@@ -122,7 +164,9 @@ func _resurface_existing() -> void:
 		roads += 1
 	report["resurfaced_roads"] = roads
 	report["repainted_marks"] = paints
+	_resurface_state = 2
 	print("MIDORI_TOKYO_ROADS_RESURFACED ", JSON.stringify({"roads":roads, "marks":paints}))
+	return {"roads": roads, "marks": paints}
 
 ## Batched meshes carry one material per surface. Returns (roads, marks) swapped.
 func _resurface_surfaces(mesh: MeshInstance3D) -> Vector2i:
@@ -350,9 +394,15 @@ func _build_surfaces() -> void:
 		var uvs: Array[Vector2] = [Vector2(-half, 0), Vector2(half, 0), Vector2(half, rect.size.y), Vector2(-half, rect.size.y)]
 		var lit := 0.85 if (box.a.ring or box.b.ring) else 0.5
 		_quad(_chunk(rect.get_center()), corners, uvs, Vector2(0.0, lit), Color(3.0 / 8.0, float(box.gutters) / 16.0, 0.0, 1.0), Color(rect.size.y, half, 1000.0, rect.size.y * 0.5))
+	_chunk_count = _chunks.size()
 	for key: Vector2i in _chunks:
 		var st: SurfaceTool = _chunks[key]
+		# Each quad was six loose vertices; indexing merges the identical pair
+		# (same position, uv, uv2, colour and custom data), same triangles drawn.
+		st.index()
 		var mesh := st.commit()
+		# The mesh owns the geometry now; drop the SurfaceTool's copy.
+		st.clear()
 		mesh.surface_set_material(0, _road_mat)
 		var instance := MeshInstance3D.new()
 		instance.name = "TokyoRoad_%d_%d" % [key.x, key.y]
@@ -361,6 +411,7 @@ func _build_surfaces() -> void:
 		instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		instance.custom_aabb = AABB(Vector3(key.x * CHUNK - 8.0, -1.0, key.y * CHUNK - 8.0), Vector3(CHUNK + 16.0, 2.0, CHUNK + 16.0))
 		add_child(instance)
+	_chunks.clear()
 
 # ------------------------------------------------------------- road details
 

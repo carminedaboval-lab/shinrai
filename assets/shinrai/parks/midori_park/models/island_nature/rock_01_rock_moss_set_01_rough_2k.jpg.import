@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bw8lnas78lwph"
-path="res://.godot/imported/rock_01_rock_moss_set_01_rough_2k.jpg-49e12930875313c0b7e9ad4928d5d770.ctex"
+path.bptc="res://.godot/imported/rock_01_rock_moss_set_01_rough_2k.jpg-49e12930875313c0b7e9ad4928d5d770.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "cca385ed19457dd25ddbc400c5c9df36"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/island_nature/rock_01_rock_moss_set_01_rough_2k.jpg"
-dest_files=["res://.godot/imported/rock_01_rock_moss_set_01_rough_2k.jpg-49e12930875313c0b7e9ad4928d5d770.ctex"]
+dest_files=["res://.godot/imported/rock_01_rock_moss_set_01_rough_2k.jpg-49e12930875313c0b7e9ad4928d5d770.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

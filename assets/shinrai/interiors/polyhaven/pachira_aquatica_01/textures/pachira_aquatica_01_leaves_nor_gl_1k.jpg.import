@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b2ihe5fvu0p0a"
-path="res://.godot/imported/pachira_aquatica_01_leaves_nor_gl_1k.jpg-09db666f76f747e50365929e846549bc.ctex"
+path.bptc="res://.godot/imported/pachira_aquatica_01_leaves_nor_gl_1k.jpg-09db666f76f747e50365929e846549bc.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/interiors/polyhaven/pachira_aquatica_01/textures/pachira_aquatica_01_leaves_nor_gl_1k.jpg"
-dest_files=["res://.godot/imported/pachira_aquatica_01_leaves_nor_gl_1k.jpg-09db666f76f747e50365929e846549bc.ctex"]
+dest_files=["res://.godot/imported/pachira_aquatica_01_leaves_nor_gl_1k.jpg-09db666f76f747e50365929e846549bc.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

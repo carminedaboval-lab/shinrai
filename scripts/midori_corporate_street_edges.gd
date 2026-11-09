@@ -8,6 +8,7 @@ extends RefCounted
 ## crossing, flush spine and drive opening. Geometry is batched into a few
 ## meshes per street edge; collision is one layer-1 box per unbroken run.
 const Kit = preload("res://scripts/midori_park_kit.gd")
+const PrimitiveSources = preload("res://scripts/midori_primitive_sources.gd")
 const UNIT := 0.918      # precast unit pitch, as on the main street
 const JOINT := 0.004
 const GULLY_EVERY := 16.0
@@ -219,9 +220,9 @@ static func _size(edge: Edge, along_s: float, height: float, across_s: float) ->
 	return Vector3(along_s, height, across_s) if edge.axis == 0 else Vector3(across_s, height, along_s)
 
 static func _box_into(tool: SurfaceTool, size: Vector3, centre: Vector3) -> void:
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	tool.append_from(mesh, 0, Transform3D(Basis.IDENTITY, centre))
+	# A BoxMesh of this size, read back from the GPU once per distinct size (see
+	# midori_primitive_sources.gd), not once per seal, gully bar and inlet.
+	tool.append_from(PrimitiveSources.box(size), 0, Transform3D(Basis.IDENTITY, centre))
 
 ## Extrude a closed (across, up) profile along `along` for `length`, centred on `base`.
 static func _extrude(tool: SurfaceTool, profile: Array[Vector2], base: Vector3, along: Vector3, across: Vector3, length: float) -> void:

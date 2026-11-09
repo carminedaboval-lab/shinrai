@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://daa2qm72ummou"
-path="res://.godot/imported/cat_cafe_face_weathering.png-31dda0e64e28d4bf7e1c8e0edf99b59b.ctex"
+path.bptc="res://.godot/imported/cat_cafe_face_weathering.png-31dda0e64e28d4bf7e1c8e0edf99b59b.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/signage/cat_cafe/cat_cafe_face_weathering.png"
-dest_files=["res://.godot/imported/cat_cafe_face_weathering.png-31dda0e64e28d4bf7e1c8e0edf99b59b.ctex"]
+dest_files=["res://.godot/imported/cat_cafe_face_weathering.png-31dda0e64e28d4bf7e1c8e0edf99b59b.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

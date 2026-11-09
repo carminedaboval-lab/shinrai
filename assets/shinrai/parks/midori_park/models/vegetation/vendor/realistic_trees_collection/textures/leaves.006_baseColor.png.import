@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dcwhw8b0p0w5k"
-path="res://.godot/imported/leaves.006_baseColor.png-fe73e1040c14999be0ff28917b4bef17.ctex"
+path.bptc="res://.godot/imported/leaves.006_baseColor.png-fe73e1040c14999be0ff28917b4bef17.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/vegetation/vendor/realistic_trees_collection/textures/leaves.006_baseColor.png"
-dest_files=["res://.godot/imported/leaves.006_baseColor.png-fe73e1040c14999be0ff28917b4bef17.ctex"]
+dest_files=["res://.godot/imported/leaves.006_baseColor.png-fe73e1040c14999be0ff28917b4bef17.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

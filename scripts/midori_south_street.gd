@@ -37,6 +37,7 @@ const ReferenceDetails = preload("res://scripts/building_access/reference_detail
 const HousePersonality = preload("res://scripts/midori_house_personality.gd")
 const ResidentParking = preload("res://scripts/midori_resident_parking.gd")
 const StreetFurniture = preload("res://scripts/midori_street_furniture.gd")
+const MeshArrays = preload("res://scripts/midori_south_street_mesh_arrays.gd")
 const TEXTURES := "res://assets/procedural_textures/"
 const FACADE_PROPS := "res://assets/shinrai/streets/midori_facade/"
 const MARKET_STALL := "res://assets/shinrai/streets/midori_market_stall/market_stall_lod0.glb"
@@ -57,12 +58,16 @@ func _ready() -> void:
 	var terrain := park.get_node_or_null("MidoriTerrain")
 	while terrain != null and terrain.get("installed") != true:
 		await get_tree().process_frame
+	# Everything waiting on the terrain wakes in one frame: take a budget turn first.
+	await Budget.checkpoint(park)
 	var _st := StartupTrace.begin()
+	# Keep committed mesh arrays until the merge below (see MeshArrays).
+	MeshArrays.begin()
 	_make_materials()
 	_st = StartupTrace.finish("south_street._make_materials", _st)
 	await Budget.checkpoint(park)
 	_st = StartupTrace.begin()
-	var architecture: Dictionary = Architecture.build(self)
+	var architecture: Dictionary = await Architecture.build(self)
 	_st = StartupTrace.finish("south_street.Architecture", _st)
 	await Budget.checkpoint(park)
 	_st = StartupTrace.begin()
@@ -102,7 +107,7 @@ func _ready() -> void:
 	_st = StartupTrace.begin()
 	details["artisan_models_loaded"] = interiors.get("artisan_models_loaded",0)
 	details["layout_replaced"] = true
-	var neighbourhood_buildings: Dictionary = NeighbourhoodBuildings.build(self)
+	var neighbourhood_buildings: Dictionary = await NeighbourhoodBuildings.build(self)
 	_st = StartupTrace.finish("south_street.NeighbourhoodBuildings", _st)
 	await Budget.checkpoint(park)
 	_st = StartupTrace.begin()
@@ -222,20 +227,30 @@ func _ready() -> void:
 	var shore := ShoreEcotone.new()
 	shore.name = "MidoriShoreEcotone"
 	park.add_child(shore)
-	while not shore.installed: await get_tree().process_frame
+	# The shore waits for the desire paths (often many seconds). It reads only the
+	# terrain, trails and trunks, and nothing below reads the shore, so the street
+	# finishes its own passes meanwhile and waits for the shore just before it
+	# reports installed: dependants still see street and shore both complete.
 	_assign_day_bounce_layers(self)
 	_st = StartupTrace.finish("south_street._assign_day_bounce_layers", _st)
 	await Budget.checkpoint(park)
 	_st = StartupTrace.begin()
-	set_meta("clipped_shrubs", ClippedShrubs.apply(self))
+	# The budgeted form of apply(): same items, same order, same result, split
+	# across frames (with the first batching pass it was a ~2.5 s frame).
+	set_meta("clipped_shrubs", await ClippedShrubs.apply_budgeted(self, park))
 	_st = StartupTrace.finish("south_street.ClippedShrubs", _st)
 	_st = StartupTrace.begin()
 	# Keep repeated trim/slab geometry economical without merging object ownership.
 	for anchor: Node in get_children():
-		if anchor is Node3D: _batch_tree(anchor)
+		if anchor is Node3D: await _batch_tree(anchor)
+	_surface_cache.clear()
+	MeshArrays.end()
 	_st = StartupTrace.finish("south_street.batch_tree", _st)
 	StartupTrace.finish("south_street.batch_stats sources=%d verts=%d" % [_batch_stats[0],_batch_stats[1]], StartupTrace.begin())
+	StartupTrace.finish("south_street.batch_reads kept=%d reused=%d boxes=%d read_back=%d" % [_batch_stats[2],_batch_stats[3],_batch_stats[4],_batch_stats[5]], StartupTrace.begin())
+	await Budget.checkpoint(park)
 	interiors["rendered_batches"] = Layouts.audit_after_batching(self)
+	await Budget.checkpoint(park)
 	_build_local_day_bounce()
 	_st = StartupTrace.finish("south_street._build_local_day_bounce", _st)
 	await Budget.checkpoint(park)
@@ -259,6 +274,10 @@ func _ready() -> void:
 	report["surface_readability"] = surface_readability
 	report["window_readability"] = window_readability
 	set_meta("south_street_report",report)
+	_st = StartupTrace.finish("south_street.report", _st)
+	_st = StartupTrace.begin()
+	while not shore.installed: await get_tree().process_frame
+	StartupTrace.finish("south_street.wait_shore", _st)
 	installed = true
 	print("MIDORI_SOUTH_STREET_READY: shops=4 frontage=55m lamps=3")
 
@@ -268,6 +287,18 @@ func _process(_delta: float) -> void:
 	if night != last_night:
 		last_night = night
 		_sync_lighting()
+
+## End-of-boot hook (scripts/shinrai_world_complete.gd calls it on every direct
+## park child that has it): the merge's read-back cache (the street's own entries
+## go at the end of _ready; other modules' rooms add primitive entries after) and
+## the primitive property lists only serve merges, and a later merge (Creator)
+## simply reads them again. Memory only, no node, mesh or material changes.
+func release_build_data() -> Dictionary:
+	if not installed: return {"skipped": "building"}
+	var freed := {"surface_cache": _surface_cache.size(), "primitive_props": _primitive_props.size()}
+	_surface_cache.clear()
+	_primitive_props.clear()
+	return freed
 
 func _material(key: String, color: Color, roughness: float, texture_name: String = "", tile_scale: float = 1.0) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
@@ -343,8 +374,113 @@ func _root(label: String, pos: Vector3, display_name: String, kind: String) -> N
 	add_child(anchor)
 	return anchor
 
-var _batch_stats := [0,0,0]
-func _batch_direct_geometry(anchor: Node3D) -> void:
+## sources, merged vertices, sources served from kept arrays, sources reusing a read,
+## distinct boxes generated from the unit box, distinct meshes read back.
+var _batch_stats := [0,0,0,0,0,0]
+
+## A BoxMesh without subdivisions or UV2 generates its 24 corners as +-size/2
+## (Godot: start = size * -0.5, then start + size), so its arrays are the unit
+## box's with every position multiplied by the size, bit for bit; normals,
+## tangents, UVs and indices do not depend on the size. One read of the unit box
+## (per face winding) serves every size. Null for any other box. Checked against
+## a real read-back of 400 distinct street box sizes: every array equal.
+func _box_surfaces(mesh: BoxMesh) -> MeshArrays.Surfaces:
+	if mesh.subdivide_width != 0 or mesh.subdivide_height != 0 or mesh.subdivide_depth != 0 or mesh.add_uv2: return null
+	var unit_key := ["UnitBoxArrays", mesh.flip_faces]
+	var unit: Variant = _surface_cache.get(unit_key)
+	if unit == null:
+		var reference := BoxMesh.new()
+		reference.flip_faces = mesh.flip_faces
+		unit = reference.surface_get_arrays(0)
+		if (unit as Array).size() != Mesh.ARRAY_MAX: return null
+		_surface_cache[unit_key] = unit
+	var arrays: Array = (unit as Array).duplicate()
+	var positions := PackedVector3Array(arrays[Mesh.ARRAY_VERTEX])
+	var size := mesh.size
+	for index: int in range(positions.size()): positions[index] = positions[index] * size
+	arrays[Mesh.ARRAY_VERTEX] = positions
+	var proxy := MeshArrays.Surfaces.new()
+	proxy.surfaces.append(arrays)
+	proxy.primitives.append(Mesh.PRIMITIVE_TRIANGLES)
+	return proxy
+
+## SurfaceTool.append_from reads every source back from the RenderingServer, a
+## GPU download that stalls the render device (0.15-2 ms per mesh, most of the
+## merge). Meshes the street committed through MeshArrays are served from the
+## arrays they were built from; any other mesh is read once and reused for every
+## piece showing it, keyed by the mesh or, for a primitive, by the properties that
+## generate it (equal BoxMesh sizes give equal arrays): same arrays, same order.
+## Key -> MeshArrays.Surfaces, or null when the mesh must be appended directly.
+var _surface_cache: Dictionary = {}
+## Primitive meshes that generate one triangle surface from their stored properties.
+const _TRIANGLE_PRIMITIVES := ["BoxMesh","CylinderMesh","SphereMesh","TorusMesh","PrismMesh","QuadMesh","PlaneMesh","CapsuleMesh"]
+var _primitive_props: Dictionary = {}
+
+func _primitive_key(mesh: PrimitiveMesh) -> Array:
+	var kind := mesh.get_class()
+	if not _primitive_props.has(kind):
+		# Every stored property except the material shapes the generated arrays.
+		var names: Array[String] = []
+		for prop: Dictionary in mesh.get_property_list():
+			if not int(prop.usage) & PROPERTY_USAGE_STORAGE: continue
+			if String(prop.name) in ["material","resource_name","resource_path","resource_local_to_scene","resource_scene_unique_id","script","custom_aabb"]: continue
+			names.append(String(prop.name))
+		_primitive_props[kind] = names
+	var key: Array = [kind]
+	for prop_name: String in _primitive_props[kind]: key.append(mesh.get(prop_name))
+	return key
+
+func _source_surfaces(mesh: Mesh) -> Mesh:
+	var kept := MeshArrays.source(mesh)
+	if kept != null:
+		_batch_stats[2] += 1
+		return kept
+	var key: Variant = mesh
+	if mesh is PrimitiveMesh:
+		if mesh.get_script() != null or not mesh.get_class() in _TRIANGLE_PRIMITIVES: return mesh
+		key = _primitive_key(mesh as PrimitiveMesh)
+	elif not mesh is ArrayMesh:
+		return mesh
+	var cached: Variant = _surface_cache.get(key)
+	if cached != null:
+		_batch_stats[3] += 1
+		return cached as Mesh
+	if _surface_cache.has(key): return mesh
+	if mesh is BoxMesh:
+		var box := _box_surfaces(mesh as BoxMesh)
+		if box != null:
+			_surface_cache[key] = box
+			_batch_stats[4] += 1
+			return box
+	_batch_stats[5] += 1
+	var proxy := MeshArrays.Surfaces.new()
+	for surface: int in range(mesh.get_surface_count()):
+		var arrays := mesh.surface_get_arrays(surface)
+		# Custom channels carry a format the arrays alone do not describe.
+		if arrays.size() != Mesh.ARRAY_MAX:
+			_surface_cache[key] = null
+			return mesh
+		for channel: int in range(Mesh.ARRAY_CUSTOM0, Mesh.ARRAY_CUSTOM3 + 1):
+			if arrays[channel] != null:
+				_surface_cache[key] = null
+				return mesh
+		proxy.surfaces.append(arrays)
+		proxy.primitives.append((mesh as ArrayMesh).surface_get_primitive_type(surface) if mesh is ArrayMesh else Mesh.PRIMITIVE_TRIANGLES)
+	_surface_cache[key] = proxy
+	return proxy
+
+func _batch_direct_geometry(anchor: Node3D, keep_cache: bool = false) -> void:
+	_merge_direct_geometry(anchor)
+	# Other modules call this once per root; only the street's own pass keeps the
+	# whole cache. Entries keyed by a mesh resource are dropped (that mesh could be
+	# rewritten or freed later); entries keyed by a primitive's generating
+	# properties (and the unit box) stay valid for good: equal properties generate
+	# equal arrays, so the next room reuses them instead of reading them back again.
+	if not keep_cache:
+		for key: Variant in _surface_cache.keys():
+			if not key is Array: _surface_cache.erase(key)
+
+func _merge_direct_geometry(anchor: Node3D) -> void:
 	var layers: Dictionary = {}
 	var sources: Array[MeshInstance3D] = []
 	for child: Node in anchor.get_children():
@@ -365,8 +501,9 @@ func _batch_direct_geometry(anchor: Node3D) -> void:
 			group_tool.set_material(mat)
 			groups[key] = group_tool
 		var tool: SurfaceTool = groups[key]
+		var source := _source_surfaces(visual.mesh)
 		for surface: int in range(visual.mesh.get_surface_count()):
-			tool.append_from(visual.mesh,surface,visual.transform)
+			tool.append_from(source,surface,visual.transform)
 		sources.append(visual)
 	if sources.is_empty(): return
 	_batch_stats[0]+=sources.size()
@@ -500,10 +637,13 @@ func _assign_day_bounce_layers(node: Node, indoors: bool = false, building: bool
 	for child: Node in node.get_children(): _assign_day_bounce_layers(child,room,exterior,gallery_scope)
 
 func _batch_tree(anchor: Node3D) -> void:
+	# Same anchors in the same order; the loading budget only splits the frames.
 	for child: Node in anchor.get_children():
 		if child is Node3D and not child is MeshInstance3D and not child is Light3D and not child is CollisionObject3D:
-			_batch_tree(child)
-	_batch_direct_geometry(anchor)
+			await _batch_tree(child)
+	# Stays synchronous: other modules call it through call() and expect it done.
+	_batch_direct_geometry(anchor, true)
+	await Budget.checkpoint(park)
 
 func _build_shared_stall() -> void:
 	var stall := _root("MarketStall",Vector3(-15.4,.08,196.7),"Neighbourhood Market Stall","stall")

@@ -1,5 +1,6 @@
 extends Node3D
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 
 # Sheltered freshwater: measured terrain depth, wind packets and a live planar
 # reflection. The supplied lake mesh, water level and swimming remain unchanged.
@@ -179,6 +180,9 @@ func install() -> void:
 	if installed or get_parent() == null: return
 	var terrain := get_parent().get_node_or_null("MidoriTerrain")
 	while terrain != null and not terrain.installed: await get_tree().process_frame
+	# Everything waiting on the terrain wakes in one frame: take a budget turn first.
+	await LoadingBudget.checkpoint(get_parent())
+	if get_parent() == null: return
 	var _ft := preload("res://scripts/startup_trace.gd").begin()
 	_water = get_parent().find_child("LakeWaterSurface",true,false) as MeshInstance3D
 	if _water == null or not _water.material_override is ShaderMaterial:
@@ -191,25 +195,36 @@ func install() -> void:
 	if _cached_probe != null: _cached_probe_mask = _cached_probe.reflection_mask
 	_water.layers = _water.layers | 2
 	_water.layers = _water.layers & ~1
-	_material = ShaderMaterial.new()
-	var shader := Shader.new()
-	shader.code = SURFACE_SHADER
-	_material.shader = shader
+	_material = ShaderPool.material(SURFACE_SHADER)
 	_material.resource_name = "MidoriFreshwater_DepthWindReflection"
 	_material.set_shader_parameter("lake_life_strength",strength)
 	_material.set_shader_parameter("lake_motion_speed",motion_speed)
 	_material.set_shader_parameter("lake_ripple_scale",ripple_scale)
 	_material.set_shader_parameter("lake_reflection_strength",reflection_strength)
 	_material.set_shader_parameter("water_y",_water_y)
-	var image := Image.create(441,361,false,Image.FORMAT_RF)
+	var image: Image
 	var maximum_depth := 0.0
-	for z: int in range(361):
-		for x: int in range(441):
-			var point := Vector2(x-220,z-180)
-			var height: float = terrain.height_at(point) if terrain != null else -3.0
-			var depth := maxf(0.0,_water_y-height)
-			maximum_depth = maxf(maximum_depth,depth)
-			image.set_pixel(x,z,Color(depth,0,0))
+	if _depth_on_worker(terrain):
+		# Pure maths on a copy of the finished height grid, on a worker thread:
+		# the same samples as terrain.height_at, written into a local Image.
+		var job := {"heights": terrain.heights, "origin": terrain.ORIGIN, "step": terrain.STEP, "nx": terrain.NX, "nz": terrain.NZ, "water_y": _water_y}
+		var task := WorkerThreadPool.add_task(_depth_job.bind(job), false, "MidoriLakeLife depth map")
+		while not WorkerThreadPool.is_task_completed(task): await get_tree().process_frame
+		WorkerThreadPool.wait_for_task_completion(task)
+		if get_parent() == null: return
+		image = job.image
+		maximum_depth = job.maximum_depth
+	else:
+		image = Image.create(441,361,false,Image.FORMAT_RF)
+		for z: int in range(361):
+			# Pure per-pixel maths; the loading budget only splits it across frames.
+			await LoadingBudget.checkpoint(get_parent())
+			for x: int in range(441):
+				var point := Vector2(x-220,z-180)
+				var height: float = terrain.height_at(point) if terrain != null else -3.0
+				var depth := maxf(0.0,_water_y-height)
+				maximum_depth = maxf(maximum_depth,depth)
+				image.set_pixel(x,z,Color(depth,0,0))
 	_material.set_shader_parameter("lake_depth",ImageTexture.create_from_image(image))
 	if RenderingServer.get_current_rendering_method() == "forward_plus": _create_reflection()
 	_install_shore_wash()
@@ -230,6 +245,43 @@ func install() -> void:
 	report["reflection_height_cap"] = int(REFLECTION_HEIGHT_CAP)
 	report["small_understory_reflection_policy"] = "existing small-plant exclusion includes sparse understory via shared classifier"
 	print("MIDORI_LAKE_LIFE: ",JSON.stringify(report))
+
+## The worker path needs the terrain's finished grid and its layout constants.
+func _depth_on_worker(terrain: Node) -> bool:
+	if terrain == null or not "heights" in terrain: return false
+	var heights: Variant = terrain.get("heights")
+	if not heights is PackedFloat32Array: return false
+	return (heights as PackedFloat32Array).size() == int(terrain.NX) * int(terrain.NZ)
+
+## WORKER: the depth map from a copy of the height grid. Same arithmetic, in the
+## same order, as MidoriTerrain.height_at for every pixel, so the same floats.
+static func _depth_job(job: Dictionary) -> void:
+	var heights: PackedFloat32Array = job.heights
+	var origin: Vector2 = job.origin
+	var step: float = job.step
+	var nx: int = job.nx
+	var nz: int = job.nz
+	var water_y: float = job.water_y
+	var image := Image.create(441,361,false,Image.FORMAT_RF)
+	var maximum_depth := 0.0
+	var high := Vector2(nx-1.001,nz-1.001)
+	for z: int in range(361):
+		for x: int in range(441):
+			var point := Vector2(x-220,z-180)
+			var q := ((point-origin)/step).clamp(Vector2.ZERO,high)
+			var ix := int(q.x)
+			var iz := int(q.y)
+			var f := q - Vector2(ix,iz)
+			var a := heights[iz*nx+ix]
+			var b := heights[iz*nx+ix+1]
+			var c := heights[(iz+1)*nx+ix]
+			var d := heights[(iz+1)*nx+ix+1]
+			var height: float = a+(b-a)*f.x+(c-a)*f.y if f.x+f.y<=1.0 else d+(c-d)*(1.0-f.x)+(b-d)*(1.0-f.y)
+			var depth := maxf(0.0,water_y-height)
+			maximum_depth = maxf(maximum_depth,depth)
+			image.set_pixel(x,z,Color(depth,0,0))
+	job["image"] = image
+	job["maximum_depth"] = maximum_depth
 
 func _create_reflection() -> void:
 	_reflection = SubViewport.new()
@@ -331,6 +383,13 @@ func _reflection_consumers_visible(source: Camera3D) -> bool:
 		if is_instance_valid(film) and film.is_visible_in_tree() and (source.cull_mask & film.layers) != 0: return true
 	return false
 
+## Banks built from the same source shader get the same swash code, and every
+## film gets the same film code: one Shader per distinct code string instead of
+## one per bank (each new Shader is a separate compile). Materials stay per bank.
+## The project-wide pool keys by the same code string.
+func _shared_shader(code: String) -> Shader:
+	return ShaderPool.shader(code)
+
 func _install_shore_wash() -> void:
 	var lake := _water.get_parent()
 	for node: Node in lake.get_children():
@@ -343,8 +402,7 @@ func _install_shore_wash() -> void:
 		code = code.replace("varying vec3 world_position;",SHORE_UNIFORMS+"\nvarying vec3 world_position;")
 		code = code.replace("void vertex()",SHORE_FUNCTIONS+"\nvoid vertex()")
 		code = code.insert(code.rfind("}"),SHORE_FRAGMENT)
-		var shader := Shader.new()
-		shader.code = code
+		var shader := _shared_shader(code)
 		var material := source.duplicate() as ShaderMaterial
 		material.shader = shader
 		material.resource_name = "MidoriShore_SwashAndDampSoil"
@@ -358,8 +416,7 @@ func _install_shore_wash() -> void:
 		film_code = film_code.replace("world_position=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;","VERTEX.y += .0012; world_position=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;")
 		var front_code := SHORE_FRAGMENT.substr(0,SHORE_FRAGMENT.find("    // Wet ground"))
 		film_code = film_code.insert(film_code.rfind("}"),front_code+"\n    ALPHA = shore_film * .32;\n    if (ALPHA < .002) discard;\n")
-		var film_shader := Shader.new()
-		film_shader.code = film_code
+		var film_shader := _shared_shader(film_code)
 		var film := _material.duplicate() as ShaderMaterial
 		film.shader = film_shader
 		film.resource_name = "MidoriShore_AdvancingWaterFilm"

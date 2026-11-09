@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c8wb1kjgeok68"
-path="res://.godot/imported/Bark_Albedo.jpg-ec43206ea0e77f421a3817e1e4545209.ctex"
+path.bptc="res://.godot/imported/Bark_Albedo.jpg-ec43206ea0e77f421a3817e1e4545209.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/vegetation/sakura/jogoss_sakura_01/Bark_Albedo.jpg"
-dest_files=["res://.godot/imported/Bark_Albedo.jpg-ec43206ea0e77f421a3817e1e4545209.ctex"]
+dest_files=["res://.godot/imported/Bark_Albedo.jpg-ec43206ea0e77f421a3817e1e4545209.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

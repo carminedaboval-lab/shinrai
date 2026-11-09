@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c7jrteibbdb8y"
-path="res://.godot/imported/yakitori_evening.png-55c3274ab625556f0f30ccd4f676c58b.ctex"
+path.bptc="res://.godot/imported/yakitori_evening.png-55c3274ab625556f0f30ccd4f676c58b.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/streets/interior_paintings/yakitori_evening.png"
-dest_files=["res://.godot/imported/yakitori_evening.png-55c3274ab625556f0f30ccd4f676c58b.ctex"]
+dest_files=["res://.godot/imported/yakitori_evening.png-55c3274ab625556f0f30ccd4f676c58b.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

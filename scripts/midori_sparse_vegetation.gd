@@ -1,5 +1,6 @@
 extends Node3D
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
 # Supplied assets only. Install after all original terrain and route services.
 var installed := false
 var park: Node3D
@@ -33,18 +34,52 @@ func clear(p: Vector2,radius: float) -> bool:
 	for side in range(8):
 		var q := p+Vector2(radius,0).rotated(side*TAU/8.0)
 		if not detail._is_lawn_position(q.x,q.y): return false
-	var sphere := SphereShape3D.new()
-	sphere.radius=minf(.35,radius)
+	# One probe sphere per radius (a new Shape3D per call created and freed a
+	# physics shape each time); the query itself is unchanged.
+	var probe_radius := minf(.35,radius)
+	if not _probe_spheres.has(probe_radius):
+		var sphere := SphereShape3D.new()
+		sphere.radius=probe_radius
+		_probe_spheres[probe_radius]=sphere
 	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape=sphere
+	query.shape=_probe_spheres[probe_radius]
 	query.collision_mask=1
 	query.transform.origin=Vector3(p.x,terrain.height_at(p)+.65,p.y)
 	return park.get_world_3d().direct_space_state.intersect_shape(query,1).is_empty()
 
+var _probe_spheres: Dictionary = {}
+## Ground positions of `trees`, read once when each tree joins the list (nothing
+## moves them while this synchronous install runs), plus a 8 m grid of them.
+var tree_points := PackedVector2Array()
+var _tree_grid: Dictionary = {}
+var _tree_grid_count := -1
+const TREE_CELL_M := 8.0
+
+func _add_tree(tree: Node3D) -> void:
+	trees.append(tree)
+	tree_points.append(Vector2(tree.global_position.x,tree.global_position.z))
+
 func nearest_tree(p: Vector2) -> float:
 	var nearest := INF
-	for tree in trees: nearest=minf(nearest,p.distance_to(Vector2(tree.global_position.x,tree.global_position.z)))
+	for q: Vector2 in tree_points: nearest=minf(nearest,p.distance_to(q))
 	return nearest
+
+## nearest_tree(p) < limit, from the grid: a tree closer than `limit` lies in a
+## cell of the square of half-side limit + 1 m round p. Same distances compared.
+func tree_within(p: Vector2, limit: float) -> bool:
+	if _tree_grid_count != tree_points.size():
+		_tree_grid.clear()
+		for q: Vector2 in tree_points:
+			var key := Vector2i(floori(q.x/TREE_CELL_M),floori(q.y/TREE_CELL_M))
+			if not _tree_grid.has(key): _tree_grid[key]=[]
+			_tree_grid[key].append(q)
+		_tree_grid_count = tree_points.size()
+	var reach := limit+1.0
+	for z in range(floori((p.y-reach)/TREE_CELL_M),floori((p.y+reach)/TREE_CELL_M)+1):
+		for x in range(floori((p.x-reach)/TREE_CELL_M),floori((p.x+reach)/TREE_CELL_M)+1):
+			for q: Vector2 in _tree_grid.get(Vector2i(x,z),[]):
+				if p.distance_to(q)<limit: return true
+	return false
 
 func install() -> void:
 	park=get_parent()
@@ -54,11 +89,19 @@ func install() -> void:
 	while park.get_node_or_null("MidoriDesirePaths")==null: await get_tree().process_frame
 	trails=park.get_node("MidoriDesirePaths")
 	while not trails.finished: await get_tree().process_frame
-	# Flowers and island roots also finish before we measure sparse areas.
-	for frame in range(20): await get_tree().physics_frame
+	# Flowers and island roots also finish before we measure sparse areas. This
+	# used to be 20 physics frames (one per frame while loading, ~10 s behind a
+	# busy menu); wait for the two producers themselves, then let their stone
+	# collisions reach the physics space before the overlap queries below.
+	for producer_name: String in ["MidoriJapaneseFlowers", "MidoriIslandNature"]:
+		var producer := park.get_node_or_null(producer_name)
+		var deadline := Time.get_ticks_msec() + 180000
+		while is_instance_valid(producer) and producer.get("installed") != true and Time.get_ticks_msec() < deadline:
+			await get_tree().process_frame
+	for frame in range(3): await get_tree().physics_frame
 	rng.seed=205010067
 	for node: Node3D in park.find_children("*","Node3D",true,false):
-		if tree_root(node) and not node.is_queued_for_deletion(): trees.append(node)
+		if tree_root(node) and not node.is_queued_for_deletion(): _add_tree(node)
 	baseline_trees=trees.size()
 	var candidates: Array[Dictionary] = []
 	for z in range(-154,155,10):
@@ -101,7 +144,7 @@ func install() -> void:
 		shape.position.y=1.25
 		body.add_child(shape)
 		tree.add_child(body)
-		trees.append(tree)
+		_add_tree(tree)
 		park.occupied_tree_positions.append(Vector2(local.x,local.z))
 		park.occupied_tree_is_skinny.append(pine)
 		park._occupied_tree_crowns[Vector2(local.x,local.z)]=radius
@@ -156,7 +199,7 @@ func add_understory() -> void:
 			var footprint := Transform3D(basis,Vector3.ZERO)*box
 			var radius := Vector2(footprint.size.x,footprint.size.z).length()*.5
 			var p := centre+Vector2(rng.randf_range(-6.5,6.5),rng.randf_range(-5,5))
-			if nearest_tree(p)<radius+.8 or not clear(p,radius+.15): continue
+			if tree_within(p,radius+.8) or not clear(p,radius+.15): continue
 			var crowded := false
 			for prior in plant_audit:
 				if p.distance_to(prior.p)<maxf(.7,(radius+prior.radius)*.58): crowded=true; break
@@ -174,8 +217,8 @@ func add_understory() -> void:
 			cells[cell].append(t)
 		for part: MeshInstance3D in sources[kind].find_children("*","MeshInstance3D",true,false):
 			if part.mesh==null or groups[kind].is_empty(): continue
-			var shared := part.mesh.duplicate() as Mesh
-			for surface in range(shared.get_surface_count()): shared.surface_set_material(surface,part.get_active_material(surface))
+			var shared := BakeCache.baked_from(part)
+			var bake_key := BakeCache.group_key()
 			var relative: Transform3D = park._vegetation_relative_transform(part,sources[kind])
 			for cell: Vector2i in cells:
 				var origin := Vector3(cell.x*32+16,0,cell.y*32+16)
@@ -190,6 +233,7 @@ func add_understory() -> void:
 				var batch := MultiMeshInstance3D.new()
 				batch.name="SparseUnderstory_%s_%d"%[kind,get_child_count()]
 				batch.multimesh=mm
+				BakeCache.tag(batch,bake_key)
 				batch.position=origin
 				batch.visibility_range_end=115
 				batch.visibility_range_end_margin=15
@@ -222,7 +266,7 @@ func naturalize_review_grove() -> void:
 				removed+=1
 				continue
 			var q := p+Vector2(generator.randf_range(-.27,.27),generator.randf_range(-.27,.27))
-			if q.distance_to(pivot)>24.0 or not clear(q,.62) or nearest_tree(q)<1.35:
+			if q.distance_to(pivot)>24.0 or not clear(q,.62) or tree_within(q,1.35):
 				# Keep a safe authored root when a displaced candidate fails.
 				q=p
 			var yaw := generator.randf_range(-PI,PI)

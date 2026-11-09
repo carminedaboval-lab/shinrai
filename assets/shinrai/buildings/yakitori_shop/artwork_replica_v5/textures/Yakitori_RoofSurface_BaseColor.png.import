@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://brvwu82cjeb0y"
-path="res://.godot/imported/Yakitori_RoofSurface_BaseColor.png-5725ca987b2fe9d1dd0743dee6baa064.ctex"
+path.bptc="res://.godot/imported/Yakitori_RoofSurface_BaseColor.png-5725ca987b2fe9d1dd0743dee6baa064.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/textures/Yakitori_RoofSurface_BaseColor.png"
-dest_files=["res://.godot/imported/Yakitori_RoofSurface_BaseColor.png-5725ca987b2fe9d1dd0743dee6baa064.ctex"]
+dest_files=["res://.godot/imported/Yakitori_RoofSurface_BaseColor.png-5725ca987b2fe9d1dd0743dee6baa064.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

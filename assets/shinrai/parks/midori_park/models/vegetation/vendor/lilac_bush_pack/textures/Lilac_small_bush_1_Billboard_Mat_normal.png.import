@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ltxrtf8ia1dt"
-path="res://.godot/imported/Lilac_small_bush_1_Billboard_Mat_normal.png-9d9db565edb257ca8513987ead7256ee.ctex"
+path.bptc="res://.godot/imported/Lilac_small_bush_1_Billboard_Mat_normal.png-9d9db565edb257ca8513987ead7256ee.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/vegetation/vendor/lilac_bush_pack/textures/Lilac_small_bush_1_Billboard_Mat_normal.png"
-dest_files=["res://.godot/imported/Lilac_small_bush_1_Billboard_Mat_normal.png-9d9db565edb257ca8513987ead7256ee.ctex"]
+dest_files=["res://.godot/imported/Lilac_small_bush_1_Billboard_Mat_normal.png-9d9db565edb257ca8513987ead7256ee.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

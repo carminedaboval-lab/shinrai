@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dpw31ogjkw64m"
-path="res://.godot/imported/cones_lod1_Image_0.jpg-f60b491389d156e5d8cc5f1a4674f8c3.ctex"
+path.bptc="res://.godot/imported/cones_lod1_Image_0.jpg-f60b491389d156e5d8cc5f1a4674f8c3.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0b9d1133c2627fe7573dc2c6b63e4a30"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/props/football_training/cones_lod1_Image_0.jpg"
-dest_files=["res://.godot/imported/cones_lod1_Image_0.jpg-f60b491389d156e5d8cc5f1a4674f8c3.ctex"]
+dest_files=["res://.godot/imported/cones_lod1_Image_0.jpg-f60b491389d156e5d8cc5f1a4674f8c3.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dd7niif7ssvdn"
-path="res://.godot/imported/sunpole_pa114sk_installed_steel_normal.png-42bf5c169d3b51af8402f0467c1330bf.ctex"
+path.bptc="res://.godot/imported/sunpole_pa114sk_installed_steel_normal.png-42bf5c169d3b51af8402f0467c1330bf.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "fe63cfcc7678fcfa7f4ce109b3ee6e99"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/furniture/ambient/entrance_bollards/sunpole_pa114sk_installed_steel_normal.png"
-dest_files=["res://.godot/imported/sunpole_pa114sk_installed_steel_normal.png-42bf5c169d3b51af8402f0467c1330bf.ctex"]
+dest_files=["res://.godot/imported/sunpole_pa114sk_installed_steel_normal.png-42bf5c169d3b51af8402f0467c1330bf.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

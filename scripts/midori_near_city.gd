@@ -27,6 +27,9 @@ const BUILDING_SHADER := preload("res://scripts/midori_near_city_building.gdshad
 const SHELL_SHADER := preload("res://scripts/midori_near_city_shell.gdshader")
 const GLASS_SHADER := preload("res://scripts/midori_near_city_glass.gdshader")
 const Hero := preload("res://scripts/midori_near_city_hero.gd")
+const Budget := preload("res://scripts/shinrai_loading_budget.gd")
+const StartupTrace := preload("res://scripts/startup_trace.gd")
+const Prefetch := preload("res://scripts/midori_near_city_prefetch.gd")
 const GyozaShop := preload("res://scripts/midori_near_city_gyoza.gd")
 const PencilBuilding := preload("res://scripts/midori_near_city_pencil.gd")
 const KonbiniBlock := preload("res://scripts/midori_near_city_konbini.gd")
@@ -305,27 +308,111 @@ var _next_check := 0.0
 var _night := false
 var _pinned := {}
 
+## False while the boot build is still laying tiles in budgeted slices. Alley
+## life (reads alleys and the hand-built list) and the distance boot (scans the
+## finished park) wait for it.
+var built := false
+## Steps laid per slice before the shared loading budget decides whether to yield.
+const BOOT_SLICE_MS := 6.0
+var _boot_park: Node = null
+## Boot only: real shells are generated on WorkerThreadPool, a tile at a time. Each lot
+## step queues its shell here; the tile waits in _parked (with its MultiMesh rows) until
+## its worker is done, then commits exactly what a synchronous build would have.
+var _defer_hero := false
+var _hero_jobs: Array = []
+var _parked: Array[Dictionary] = []
+var _layout_task := -1
+var _layout_data: Array = [null]
+## Textures the build will load, loaded ahead on a worker (Prefetch.PATHS); held until
+## the tiles are laid, so the build's own load() calls find them cached.
+var _prefetch_thread: Thread = null
+var _prefetched: Array = []
+var _prefetch_stop: Array = [false]
+
 func _ready() -> void:
 	add_to_group("midori_horizon")
 	var started := Time.get_ticks_msec()
 	var memory := OS.get_static_memory_usage()
+	var horizon := get_parent()
+	var park := horizon.get_parent() if horizon != null else null
+	# Without incremental loading (tests, tools) checkpoint() never yields, so the
+	# city is built in this call exactly as before.
+	_boot_park = park
+	# Streaming must not lay or begin tiles between the boot slices.
+	set_process(false)
 	_rng.seed = RNG_SEED
 	for i: int in range(BUSINESSES): _deck.append(i)
 	_tile = self
-	_prepare_looks()
+	var from_file := not record_layout and FileAccess.file_exists(LAYOUT_PATH)
+	# A Thread of its own, not a WorkerThreadPool task: the loader leaks its load tokens
+	# for loads made from inside a pool task (74 at exit, measured).
+	_prefetch_thread = Thread.new()
+	_prefetch_thread.start(Prefetch.run.bind(_prefetched, _prefetch_stop))
+	# The layout file is parsed on a worker while the looks are prepared.
+	if from_file: _layout_task = WorkerThreadPool.add_task(_parse_layout.bind(_layout_data), false, "near_city.layout_parse")
+	var tick := StartupTrace.begin()
+	await _prepare_looks()
+	StartupTrace.finish("near_city.looks", tick)
 	_build_ground()
-	if record_layout or not FileAccess.file_exists(LAYOUT_PATH): _build_blocks()
-	else: _build_from_layout()
+	await _boot_checkpoint()
+	tick = StartupTrace.begin()
+	if not from_file: _build_blocks()
+	else: await _build_from_layout()
+	StartupTrace.finish("near_city.tiles", tick)
+	if not is_inside_tree(): return
+	# Everything that loads them has been built: the cache keeps what is still in use.
+	if _sliced():
+		while is_inside_tree() and _prefetch_thread.is_alive(): await get_tree().process_frame
+	_prefetch_thread.wait_to_finish()
+	_prefetch_thread = null
+	_prefetched.clear()
+	if not is_inside_tree(): return
 	var laid_out := Time.get_ticks_msec()
+	tick = StartupTrace.begin()
 	_build_ring_street()
+	await _boot_checkpoint()
 	_build_expressway()
+	await _boot_checkpoint()
 	_build_viaduct()
+	await _boot_checkpoint()
 	_build_landmark()
+	await _boot_checkpoint()
 	_commit_layers()
-	var horizon := get_parent()
-	var park := horizon.get_parent() if horizon != null else null
+	StartupTrace.finish("near_city.extras", tick)
+	if not is_inside_tree(): return
 	set_night_mode(park != null and park.get("is_night_mode") == true)
+	built = true
+	set_process(true)
 	print("MIDORI_NEAR_CITY: buildings %d, lots laid out in %d ms, built in %d ms, %d MB" % [_count, laid_out - started, Time.get_ticks_msec() - started, (OS.get_static_memory_usage() - memory) / 1048576])
+
+func _notification(what: int) -> void:
+	# Every WorkerThreadPool task must be waited for, even if the city is freed mid-boot.
+	if what == NOTIFICATION_PREDELETE:
+		_prefetch_stop[0] = true
+		if _prefetch_thread != null: _prefetch_thread.wait_to_finish()
+		_prefetch_thread = null
+		if _layout_task >= 0: WorkerThreadPool.wait_for_task_completion(_layout_task)
+		_layout_task = -1
+		for job: Dictionary in _parked:
+			if int(job.task) >= 0: WorkerThreadPool.wait_for_task_completion(int(job.task))
+		_parked.clear()
+
+func _boot_checkpoint() -> void:
+	if is_instance_valid(_boot_park): await Budget.checkpoint(_boot_park)
+
+func _sliced() -> bool:
+	return is_instance_valid(_boot_park) and bool(_boot_park.get_meta("shinrai_incremental_loading", false))
+
+static func _parse_layout(out: Array) -> void:
+	# Worker: pure file read and JSON parse; the result is only read after the task is waited for.
+	out[0] = JSON.parse_string(FileAccess.get_file_as_string(LAYOUT_PATH))
+
+func _wait_task(task: int) -> void:
+	# Lets the frame go while a worker runs (the budget is not spent on spinning), then joins it.
+	if _sliced():
+		while is_inside_tree() and not WorkerThreadPool.is_task_completed(task):
+			await get_tree().process_frame
+	WorkerThreadPool.wait_for_task_completion(task)
 
 func _process(delta: float) -> void:
 	if _steps_by_tile.is_empty(): return
@@ -358,6 +445,19 @@ func update_streaming(focus: Vector2) -> void:
 func is_streaming_idle() -> bool:
 	return _building < 0 and _queue.is_empty()
 
+## End-of-boot hook (shinrai_world_complete.gd): drops the layout steps and business decks.
+## Every tile lies within ~680 m of the centre while load_radius is 900 and unload_radius
+## 1100, so once the boot build is done nothing ever streams in or out again and the parsed
+## layout (10-30x the 2.6 MB JSON as Dictionaries) is dead weight. Re-parse LAYOUT_PATH from
+## disk if streaming is ever needed. Returns the counts freed, for the record only.
+func release_build_data() -> Dictionary:
+	if not built or _building >= 0 or not _queue.is_empty() or not _parked.is_empty(): return {"skipped": "building"}
+	var freed := {"steps_by_tile": _steps_by_tile.size(), "decks": _decks.size()}
+	_steps_by_tile = {}
+	_decks = []
+	set_process(false) # _process only ever streamed tiles from _steps_by_tile.
+	return freed
+
 func _tile_distance(key: int, focus: Vector2) -> float:
 	var centre := _tile_centre(key)
 	var d := (focus - centre).abs() - Vector2(CHUNK, CHUNK) * .5
@@ -389,19 +489,36 @@ func _shader_material(shader: Shader, label: String) -> ShaderMaterial:
 	_materials.append(material)
 	return material
 
-func _mipped(path: String) -> Image:
-	var image: Image = (load(path) as Texture2D).get_image()
+static func _mip(image: Image) -> void:
+	# Pure Image work, safe on a worker: the same steps on the same pixels give the same maps.
+	# The wall textures and sign atlas are imported BC7 with mipmaps (fix 2), which is exactly
+	# what the arrays need: nothing to do. Anything else is decoded, mipmapped and then BC7
+	# compressed here, so the GPU holds a quarter of the RGBA8 bytes either way.
+	if image.is_compressed() and image.has_mipmaps(): return
 	if image.is_compressed(): image.decompress()
 	image.convert(Image.FORMAT_RGBA8)
 	image.generate_mipmaps()
-	return image
+	image.compress(Image.COMPRESS_BPTC)
 
-func _wall_array(suffix: String) -> Texture2DArray:
-	var images: Array[Image] = []
-	for id: String in WALLS:
-		images.append(_mipped(TEXTURES + id + "_" + suffix + ".jpg"))
+func _mipped_all(paths: Array[String]) -> Array:
+	# Textures are fetched on the main thread (that talks to the renderer); decompressing,
+	# converting and mipping them runs on workers while the next ones are fetched. The
+	# main thread leaves each image alone until its task is joined.
+	var images: Array = []
+	var tasks: Array[int] = []
+	for path: String in paths:
+		var image: Image = (load(path) as Texture2D).get_image()
+		images.append(image)
+		tasks.append(WorkerThreadPool.add_task(_mip.bind(image), false, "near_city.mip"))
+		await _boot_checkpoint()
+	for task: int in tasks: await _wait_task(task)
+	return images
+
+func _wall_array(images: Array) -> Texture2DArray:
+	var typed: Array[Image] = []
+	for image: Image in images: typed.append(image)
 	var array := Texture2DArray.new()
-	array.create_from_images(images)
+	array.create_from_images(typed)
 	return array
 
 func _chunk_key(at: Vector2) -> int:
@@ -429,6 +546,10 @@ func _audit(layer: String, row: Array) -> void:
 	build_audit[layer] = sums
 
 func _prepare_looks() -> void:
+	var paths: Array[String] = [SIGN_ATLAS]
+	for id: String in WALLS: paths.append(TEXTURES + id + "_diff.jpg")
+	for id: String in WALLS: paths.append(TEXTURES + id + "_nor.jpg")
+	var images: Array = await _mipped_all(paths)
 	var trim_look := _material(TRIM_SHADER, "SHINRAI_NearCityTrim")
 	var slab_look := StandardMaterial3D.new()
 	slab_look.albedo_texture = load(PAVER_ALBEDO)
@@ -438,10 +559,13 @@ func _prepare_looks() -> void:
 	slab_look.uv1_scale = Vector3.ONE * .4
 	slab_look.roughness = .86
 	var sign_look := _material(SIGN_SHADER, "SHINRAI_NearCitySigns")
-	sign_look.set_shader_parameter("atlas", ImageTexture.create_from_image(_mipped(SIGN_ATLAS)))
+	sign_look.set_shader_parameter("atlas", ImageTexture.create_from_image(images[0]))
 	var body_look := _shader_material(BUILDING_SHADER, "SHINRAI_NearCityBuildings")
-	var wall_maps := _wall_array("diff")
-	var wall_normals := _wall_array("nor")
+	await _boot_checkpoint()
+	var wall_maps: Texture2DArray = _wall_array(images.slice(1, 1 + WALLS.size()))
+	await _boot_checkpoint()
+	var wall_normals: Texture2DArray = _wall_array(images.slice(1 + WALLS.size()))
+	images.clear() # The GPU has them; the CPU copies go before the tiles start.
 	body_look.set_shader_parameter("wall_maps", wall_maps)
 	body_look.set_shader_parameter("wall_normals", wall_normals)
 	_shell_look = _shader_material(SHELL_SHADER, "SHINRAI_NearCityShell")
@@ -475,13 +599,55 @@ func _commit_layers(parent: Node3D = self) -> void:
 		_rows[layer] = {}
 
 func _commit_hero(parent: Node3D) -> void:
-	var walls: Dictionary = _hero.walls()
-	var panes: Dictionary = _hero.glass()
+	_commit_shells(_hero, parent)
+	_hero = Hero.new()
+
+static func _run_shells(job: Dictionary) -> void:
+	# Worker: a fresh Hero over the tile's shells in the order the steps queued them, so
+	# its arrays are exactly what adding them one by one on the main thread made.
+	var hero: Hero = job.hero
+	for row: Array in job.adds:
+		hero.add(row[0], row[1], row[2], row[3], row[4], row[5])
+
+func _park_tile() -> void:
+	# The tile's steps are laid; its shells go to a worker and the tile commits once they are done.
+	var job := {"tile":_tile, "key":_building, "rows":_rows, "adds":_hero_jobs, "hero":Hero.new()}
+	job.task = WorkerThreadPool.add_task(_run_shells.bind(job), false, "near_city.shells")
+	_parked.append(job)
+	_hero_jobs = []
+	_rows = {}
+	for layer: String in _layer_looks: _rows[layer] = {}
+
+func _commit_parked(wait: bool, at_most := 1 << 30) -> void:
+	# Commits parked tiles whose shells are done (waiting for them when wait is set), in the
+	# order they were parked: shells first, then each layer, as _commit_layers does.
+	var left := at_most
+	while not _parked.is_empty() and left > 0:
+		left -= 1
+		var job: Dictionary = _parked[0]
+		if not wait and not WorkerThreadPool.is_task_completed(int(job.task)): return
+		WorkerThreadPool.wait_for_task_completion(int(job.task))
+		job.task = -1
+		_parked.pop_front()
+		var tile: Node3D = job.tile
+		if not is_instance_valid(tile): continue
+		var commit_started := Time.get_ticks_usec()
+		var live_rows := _rows
+		_rows = job.rows
+		_commit_shells(job.hero, tile)
+		for layer: String in _layer_looks:
+			var look: Array = _layer_looks[layer]
+			_commit_layer(layer, look[0], look[1], look[2], tile)
+		_rows = live_rows
+		if keep_build_data: _note_slow("tile %d commit" % int(job.key), commit_started)
+
+func _commit_shells(hero: Hero, parent: Node3D) -> void:
+	var walls: Dictionary = hero.walls()
+	var panes: Dictionary = hero.glass()
 	for key: int in walls:
 		_commit_part("NearCityShell_%d" % key, Hero.mesh_of(walls[key]), _shell_look, true, parent)
 		if panes.has(key) and not panes[key].v.is_empty():
 			_commit_part("NearCityPanes_%d" % key, Hero.mesh_of(panes[key]), _glass_look, false, parent)
-	_hero = Hero.new()
 
 func _commit_part(label: String, mesh: Mesh, material: Material, shadows: bool, parent: Node3D = self) -> void:
 	var instance := MeshInstance3D.new()
@@ -585,7 +751,8 @@ func _place_body(centre: Vector2, base: float, size: Vector3, kind: int, front: 
 	spec.parapet = spec.get("parapet", .9) if flat_roof else 0.0
 	if not _muted:
 		if keep_build_data: _audit("shells", [centre, base, size, front, spec])
-		_hero.add(centre, base, size, front, key, spec)
+		if _defer_hero: _hero_jobs.append([centre, base, size, front, key, spec])
+		else: _hero.add(centre, base, size, front, key, spec)
 	return true
 
 func _commit_layer(layer: String, mesh: Mesh, material: Material, shadows: bool, parent: Node3D = self) -> void:
@@ -750,7 +917,10 @@ func _record(step: Dictionary) -> void:
 	layout.append(step)
 
 func _build_from_layout() -> void:
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(LAYOUT_PATH))
+	await _wait_task(_layout_task)
+	_layout_task = -1
+	var data: Variant = _layout_data[0]
+	_layout_data[0] = null
 	if not data is Dictionary:
 		push_error("City layout unreadable, laying the city out live: " + LAYOUT_PATH)
 		_build_blocks()
@@ -769,10 +939,35 @@ func _build_from_layout() -> void:
 		alleys.append({"rect":_rect_of(alley.rect), "commercial":bool(alley.commercial)})
 	# Everything in reach of the park is built now, nearest first, so the city is whole
 	# when the raid starts; the rest streams in as the camera moves.
+	# Steps restore their own random state and deck, so laying a tile across
+	# several frames builds exactly what one call did (same tiles, same order).
 	update_streaming(Vector2.ZERO)
+	# Shells are generated on workers while the main thread lays the next tiles.
+	_defer_hero = true
 	while not _queue.is_empty():
 		_begin_tile(_queue.pop_front())
-		_lay_tile(0.0)
+		var sliced := _sliced()
+		while _building >= 0:
+			_lay_tile(BOOT_SLICE_MS if sliced else 0.0)
+			if _building >= 0: await _boot_checkpoint()
+			if not is_inside_tree():
+				_defer_hero = false
+				return
+		# A finished tile commits between slices; unsliced builds (tests, tools) commit at the end.
+		if sliced: _commit_parked(false, 1)
+		await _boot_checkpoint()
+	_defer_hero = false
+	# The last tiles' shells: let frames go while the workers finish, then commit.
+	while not _parked.is_empty():
+		if not _sliced():
+			_commit_parked(true)
+			break
+		if not WorkerThreadPool.is_task_completed(int(_parked[0].task)):
+			await get_tree().process_frame
+			if not is_inside_tree(): return
+			continue
+		_commit_parked(false, 1)
+		await _boot_checkpoint()
 
 func _tile_centre(key: int) -> Vector2:
 	return Vector2((float(key % 100) + .5) * CHUNK - HALF_EXTENT, (floorf(key / 100.0) + .5) * CHUNK - HALF_EXTENT)
@@ -807,9 +1002,12 @@ func _lay_tile(budget_ms: float) -> void:
 			var design := _design_for(_rect_of(step.rect)) if step.t == "lot" else null
 			_note_slow("tile %d %s %s" % [_building, step.t, design.resource_path.get_file() if design != null else "generic"], step_started)
 		if budget_ms > 0.0 and Time.get_ticks_usec() > until: return
-	var commit_started := Time.get_ticks_usec()
-	_commit_layers(_tile)
-	if keep_build_data: _note_slow("tile %d commit" % _building, commit_started)
+	if _defer_hero:
+		_park_tile()
+	else:
+		var commit_started := Time.get_ticks_usec()
+		_commit_layers(_tile)
+		if keep_build_data: _note_slow("tile %d commit" % _building, commit_started)
 	_tile = self
 	_tile_key = -1
 	_building = -1

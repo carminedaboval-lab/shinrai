@@ -3,27 +3,28 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c3efr4m4o0acc"
-path="res://.godot/imported/signs_atlas.png-4eaeefa8a04ab12682e8e65e62ec252a.ctex"
+path.bptc="res://.godot/imported/signs_atlas.png-4eaeefa8a04ab12682e8e65e62ec252a.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/near_city/signs_atlas.png"
-dest_files=["res://.godot/imported/signs_atlas.png-4eaeefa8a04ab12682e8e65e62ec252a.ctex"]
+dest_files=["res://.godot/imported/signs_atlas.png-4eaeefa8a04ab12682e8e65e62ec252a.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

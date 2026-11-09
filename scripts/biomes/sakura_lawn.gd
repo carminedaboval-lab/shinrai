@@ -10,6 +10,7 @@ extends RefCounted
 ## lawn is a cherry. Paths, plaza and props stay.
 const Biomes := preload("res://scripts/midori_biomes.gd")
 const Kit := preload("res://scripts/biomes/biome_kit.gd")
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 const ID := "hanami"
 const THIN_ALL := "res://scripts/biomes/thin_all.gd"
 # Grove centres from docs/PARK_BIOME_PLAN.md; each takes 3-5 trees, loosely.
@@ -260,10 +261,16 @@ static func build(park: Node3D, terrain: Node) -> Dictionary:
 	park.add_child(root)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20501106
+	# The cherry variants grow on worker threads while the main thread takes the
+	# inventory and lays the weight grid (they share nothing).
+	var growing := _early if not _early.is_empty() else _grow_variants()
+	_early = {}
 	var inventory_before := Kit.inventory(park, AREA)
 	var grid: PackedFloat32Array = await _weight_grid(park, terrain)
-	if not _alive(park): return {"error": "park freed"}
-	var kit: Dictionary = await _cherry_kit(park)
+	if not _alive(park):
+		WorkerThreadPool.wait_for_group_task_completion(int(growing.task))
+		return {"error": "park freed"}
+	var kit: Dictionary = await _cherry_kit(park, growing)
 	if kit.is_empty(): return {"error": "sakura source missing"}
 	var cherries: Array = []
 	var thinned: Dictionary = _thin_understory(park, grid)
@@ -288,13 +295,25 @@ static func build(park: Node3D, terrain: Node) -> Dictionary:
 static func _weight_grid(park: Node3D, terrain: Node) -> PackedFloat32Array:
 	var grid := PackedFloat32Array()
 	grid.resize(GRID.size.x * GRID.size.y)
-	for z: int in range(GRID.size.y):
+	var since := Kit.frames_now()
+	# Pure maths per row, on WorkerThreadPool; same floats in the same cells.
+	Biomes.noise()
+	# Each row reads its own copy of the weight kernel (Biomes.Kernel: the same
+	# floats as Biomes.weight, nothing shared between the threads).
+	var kernel := Biomes.terrain_kernel(terrain)
+	var id_index := Biomes.region_index(ID)
+	var job := func(z: int) -> PackedFloat32Array:
+		var k := kernel.clone()
+		var row := PackedFloat32Array()
+		row.resize(GRID.size.x)
 		for x: int in range(GRID.size.x):
-			var p := Vector2(GRID.position.x + x + 0.5, GRID.position.y + z + 0.5)
-			grid[z * GRID.size.x + x] = Biomes.weight(p, ID, terrain)
-		if z % 6 == 0:
-			await park.get_tree().process_frame
-			if not _alive(park): return grid
+			row[x] = k.weight(Vector2(GRID.position.x + x + 0.5, GRID.position.y + z + 0.5), id_index)
+		return row
+	var rows := Kit.parallel(GRID.size.y, job, "sakura_lawn weights")
+	for z: int in range(GRID.size.y):
+		var row: PackedFloat32Array = rows[z]
+		for x: int in range(GRID.size.x): grid[z * GRID.size.x + x] = row[x]
+	await Kit.settle(park, since)
 	return grid
 
 ## The park can be freed (raid ends, scene change) while a builder yields.
@@ -352,21 +371,52 @@ static func _is_blossom(material: Material) -> bool:
 ## goes by between variants. Returns the variants, the tree-space box (foot at
 ## the origin, its height the variants' mean, so a tree scaled to `height`
 ## stands that tall), the crown frame and the trunk radius.
-static func _cherry_kit(park: Node3D) -> Dictionary:
+## Starts Generator.grow (pure data) for every variant on WorkerThreadPool.
+## Each task writes only its own slot. _cherry_kit() waits for them.
+## The last slot draws the blossom atlas image (Generator.cluster_image).
+static var _early: Dictionary = {}
+
+## midori_biomes.prefetch(): starts the variants growing when the world-complete
+## step begins, so they are ready by the time this builder runs (same seeds,
+## same arrays; build() takes them over, or grows them itself if not started).
+static func start_early() -> void:
+	if _early.is_empty(): _early = _grow_variants()
+
+static func _grow_variants() -> Dictionary:
+	var slots: Array = []
+	for v: int in range(VARIANTS + 1): slots.append({})
+	var grow_one := func(v: int) -> void:
+		if v == VARIANTS: (slots[v] as Dictionary)["image"] = Generator.cluster_image()
+		else: (slots[v] as Dictionary)["grown"] = Generator.grow(TREE_SEED + v * 7919)
+	var task := WorkerThreadPool.add_group_task(grow_one, VARIANTS + 1, -1, true, "sakura_lawn cherry variants")
+	return {"task": task, "slots": slots}
+
+static func _cherry_kit(park: Node3D, growing: Dictionary) -> Dictionary:
+	var since := Kit.frames_now()
 	var bark := Generator.bark_material()
-	var bloom := _blossom_material(Generator.cluster_texture(), false)
-	bloom.set_shader_parameter("crown_centre", Vector3(0.0, Generator.H * 0.66, 0.0))
-	bloom.set_shader_parameter("crown_radii", Vector3(Generator.R, Generator.H * 0.3, Generator.R))
-	bloom.set_shader_parameter("alpha_cut", 0.45)
-	bloom.set_shader_parameter("keep_texture", 0.7)
-	bloom.set_shader_parameter("shadow_gaps", 0.0)
 	var variants: Array = []
 	var stats: Array = []
 	var box := AABB()
 	var height := 0.0
 	var started := Time.get_ticks_msec()
+	var task := int(growing.task)
+	while not WorkerThreadPool.is_group_task_completed(task):
+		await park.get_tree().process_frame
+		if not _alive(park): break
+	WorkerThreadPool.wait_for_group_task_completion(task)
+	if not _alive(park): return {}
+	var slots: Array = growing.slots
+	var atlas: Variant = (slots[VARIANTS] as Dictionary).get("image")
+	var bloom := _blossom_material(ImageTexture.create_from_image(atlas) if atlas is Image else Generator.cluster_texture(), false)
+	bloom.set_shader_parameter("crown_centre", Vector3(0.0, Generator.H * 0.66, 0.0))
+	bloom.set_shader_parameter("crown_radii", Vector3(Generator.R, Generator.H * 0.3, Generator.R))
+	bloom.set_shader_parameter("alpha_cut", 0.45)
+	bloom.set_shader_parameter("keep_texture", 0.7)
+	bloom.set_shader_parameter("shadow_gaps", 0.0)
 	for v: int in range(VARIANTS):
-		var tree := Generator.build(TREE_SEED + v * 7919)
+		# A variant whose task failed on its thread grows here instead.
+		if not (slots[v] as Dictionary).has("grown"): slots[v]["grown"] = Generator.grow(TREE_SEED + v * 7919)
+		var tree := Generator.finish(slots[v].grown)
 		for key: String in ["near", "mid", "far"]:
 			var mesh: ArrayMesh = tree[key]
 			mesh.surface_set_material(0, bark)
@@ -376,8 +426,9 @@ static func _cherry_kit(park: Node3D) -> Dictionary:
 		var b: AABB = tree.box
 		box = b if v == 0 else box.merge(b)
 		height += b.end.y
-		await park.get_tree().process_frame
-		if not _alive(park): return {}
+	# The frame boundary and physics steps the per-variant yields always gave.
+	await Kit.settle(park, since)
+	if not _alive(park): return {}
 	height /= float(VARIANTS)
 	box = AABB(Vector3(box.position.x, 0.0, box.position.z), Vector3(box.size.x, height, box.size.z))
 	var radii := Vector3(Generator.R, Generator.H * 0.3, Generator.R)
@@ -421,10 +472,7 @@ static func _find(parent: PackedInt32Array, i: int) -> int:
 	return r
 
 static func _blossom_material(texture: Texture2D, from_instance: bool) -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = BLOSSOM_SHADER
-	var material := ShaderMaterial.new()
-	material.shader = shader
+	var material := ShaderPool.material(BLOSSOM_SHADER)
 	material.set_shader_parameter("blossom", texture)
 	material.set_shader_parameter("from_instance", from_instance)
 	return material
@@ -535,8 +583,10 @@ static func _swap_to_cherries(park: Node3D, terrain: Node, grid: PackedFloat32Ar
 	var step := 0
 	for node: Node in trees:
 		step += 1
+		# Only reads the trees (the swap itself comes after the frame below):
+		# yield on time, not every 48 trees.
 		if step % 48 == 0:
-			await park.get_tree().process_frame
+			await Kit.slice(park)
 			if not _alive(park): return out
 		var tree := node as Node3D
 		if tree == null or not is_instance_valid(tree) or not tree.is_visible_in_tree(): continue
@@ -999,11 +1049,7 @@ static func _petal_mesh(tilt: float = 0.0, centred: bool = false) -> ArrayMesh:
 	return st.commit()
 
 static func _petal_material() -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = PETAL_SHADER
-	var material := ShaderMaterial.new()
-	material.shader = shader
-	return material
+	return ShaderPool.material(PETAL_SHADER)
 
 static func _petal_colour(rng: RandomNumberGenerator) -> Color:
 	var roll := rng.randf()
@@ -1110,6 +1156,7 @@ static func _petal_drifts(root: Node3D, terrain: Node, rng: RandomNumberGenerato
 ## and the plaza.
 static func _petal_floor(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberGenerator, grid: PackedFloat32Array, cherries: Array) -> int:
 	var rows: Array = []
+	var since := Kit.frames_now()
 	for z: int in range(GRID.size.y):
 		var cz := float(GRID.position.y + z) + 0.5
 		var near: Array = []
@@ -1158,9 +1205,12 @@ static func _petal_floor(park: Node3D, terrain: Node, root: Node3D, rng: RandomN
 				# Some lie on the soil, some rest on the mown blades.
 				var y: float = terrain.height_at(p) + rest + 0.015 + rng.randf() * rng.randf() * 0.06
 				rows.append([Transform3D(basis.scaled(Vector3.ONE * rng.randf_range(1.25, 1.8)), Vector3(p.x, y, p.y)), _petal_colour(rng)])
-		if z % 4 == 0:
-			await park.get_tree().process_frame
-			if not _alive(park): return 0
+		# The first row runs before any frame (as it always did) right after the
+		# trunks joined the space; then a frame and physics steps, then the rows
+		# yield on time (nothing joins the scene in this loop).
+		if z == 0: await Kit.settle(park, since)
+		else: await Kit.slice(park)
+		if not _alive(park): return 0
 	if rows.size() > MAX_PETALS:
 		var keep_share := float(MAX_PETALS) / float(rows.size())
 		rows = rows.filter(func(_r: Array) -> bool: return rng.randf() < keep_share)
@@ -1203,7 +1253,7 @@ static func _thin_understory(park: Node3D, grid: PackedFloat32Array) -> Dictiona
 		var helper: Resource = load(THIN_ALL)
 		var label_filter := func(label: String) -> bool: return _is_low_planting(label.to_lower())
 		# The area only skips far nodes for speed; keep() still decides inside it.
-		report["batched"] = helper.call("hide_low_planting", park, label_filter, keep, AREA)
+		report["batched"] = helper.call("hide_low_planting", park, label_filter, keep, AREA, true)
 	else:
 		var filter := func(node: MultiMeshInstance3D) -> bool:
 			if String(node.get_path()).contains("/Biome"): return false

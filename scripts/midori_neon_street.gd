@@ -4,9 +4,12 @@ extends Node3D
 ## Shop facades sit at local Z 0 and face local -Z. Signs stay in the band between
 ## the awning (Y 2.95) and the balcony soffit (Y 3.7), never across a balcony.
 const Kit = preload("res://scripts/midori_park_kit.gd")
+const Budget = preload("res://scripts/shinrai_loading_budget.gd")
+const StartupTrace = preload("res://scripts/startup_trace.gd")
 const Retrofit = preload("res://scripts/midori_street_retrofit.gd")
 const Interiors = preload("res://scripts/midori_interiors.gd")
 const Facades = preload("res://scripts/midori_building_facades.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 const WASH := {"UedaBooks":Color("#2fd4ff"), "MoriCoffee":Color("#ff3d82"), "HinataDaily":Color("#ffb03a"), "YakitoriShop":Color("#ff6a2a")}
 const POLES: Array[Vector3] = [Vector3(-16.5,.09,190.9), Vector3(3.4,.09,190.9), Vector3(13.6,.09,190.9)]
 
@@ -69,14 +72,28 @@ func _ready() -> void:
 	_steel = Kit.mat(Color("#3a3f45"), .5, .7)
 	_concrete = Kit.mat(Color("#77756e"), .92)
 	_cable = Kit.mat(Color("#101214"), .7)
+	# Woke from a plain frame wait in the frame the street finished, with every
+	# other producer that waits for it: take a budget turn per step (the whole
+	# body ran unbroken, a ~6 s frame behind the menu). Same steps, same order.
+	await Budget.checkpoint(park)
+	var _nt := StartupTrace.begin()
 	_dress_ueda(_shop_root("UedaBooks"))
 	_dress_mori(_shop_root("MoriCoffee"))
 	_dress_hinata(_shop_root("HinataDaily"))
 	_dress_yakitori(_shop_root("YakitoriShop"))
+	_nt = StartupTrace.finish("neon_street.shops", _nt)
+	await Budget.checkpoint(park)
 	_build_utility_lines()
+	_nt = StartupTrace.finish("neon_street.utility_lines", _nt)
+	await Budget.checkpoint(park)
 	print("MIDORI_STREET_RETROFIT: ", JSON.stringify(Retrofit.build(self)))
+	_nt = StartupTrace.finish("neon_street.retrofit", _nt)
+	await Budget.checkpoint(park)
 	print("MIDORI_INTERIORS: ", JSON.stringify(Interiors.build(self)))
+	_nt = StartupTrace.finish("neon_street.interiors", _nt)
+	await Budget.checkpoint(park)
 	print("MIDORI_HOME_EXTERIORS: ", Facades.dress_homes(self, street))
+	_nt = StartupTrace.finish("neon_street.home_exteriors", _nt)
 	installed = true
 	set_night_mode(park.get("is_night_mode") == true)
 
@@ -164,10 +181,9 @@ func _halo(parent: Node3D, centre: Vector3, size: Vector2, color: Color) -> void
 func _screen(parent: Node3D, label: String, at: Vector3, yaw: float, size: Vector2, a: Color, b: Color, is_ticker := false) -> MeshInstance3D:
 	var quad := QuadMesh.new()
 	quad.size = size
-	var shader := Shader.new()
-	shader.code = SCREEN_SHADER
-	var material := ShaderMaterial.new()
-	material.shader = shader
+	# Every screen (shops, interiors, vending, park) shares one pooled shader;
+	# colours, pixel pitch and the ticker switch are uniforms per material.
+	var material := ShaderPool.material(SCREEN_SHADER)
 	material.set_shader_parameter("color_a", Vector3(a.r, a.g, a.b))
 	material.set_shader_parameter("color_b", Vector3(b.r, b.g, b.b))
 	material.set_shader_parameter("ticker", 1.0 if is_ticker else 0.0)

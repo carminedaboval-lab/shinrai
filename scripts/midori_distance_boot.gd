@@ -1,6 +1,7 @@
 extends RefCounted
 ## Boot integration only. Geometry/material/range policy belongs to the renderer.
 const RESULT_META := &"midori_distance_boot"
+const StartupTrace := preload("res://scripts/startup_trace.gd")
 const DETAIL_PATH := "res://scripts/midori_distance_detail.gd"
 const WAIT_LIMIT_MS := 120000
 const COMPLETE_NODES := [
@@ -18,8 +19,16 @@ static func pending_producers(park: Node3D) -> Array[String]:
 	var street := park.get_node_or_null("MidoriSouthStreet")
 	if street != null and street.get("installed") != true: pending.append("MidoriSouthStreet")
 	# Civic fixtures must exist before geometry caches and Creator scanning.
+	# The near city lays its tiles in budgeted slices; the partition scans it.
+	var city := park.get_node_or_null("MidoriHorizon/NearCity")
+	if city != null and city.get("built") == false: pending.append("MidoriHorizon/NearCity")
 	var civic := park.get_node_or_null("MidoriCivicLighting")
 	if civic != null and civic.get("installed") != true: pending.append("MidoriCivicLighting")
+	# Emergency fixtures and park cover (camps, fires) too: Creator scans the world
+	# once after this list empties. The game already waits for both before navigation.
+	for optional_name: String in ["MidoriAftermath", "MidoriParkCover"]:
+		var producer := park.get_node_or_null(NodePath(optional_name))
+		if producer != null and producer.get("installed") != true: pending.append(optional_name)
 	var grass := park.get_tree().root.get_node_or_null("MidoriGrassDetail")
 	# The autoload sets this only after all synchronous grass batches are built.
 	if grass == null or int(grass.get("_installed_scene_id")) != park.get_instance_id():
@@ -78,7 +87,9 @@ static func install_before_hq(park: Node3D) -> Dictionary:
 		return park.get_meta(RESULT_META)
 	park.set_meta("shinrai_distance_preparing",true)
 	var ready_at := Time.get_ticks_msec()
+	var trace := StartupTrace.begin()
 	var result: Dictionary = await detail.install(park, "distance")
+	trace = StartupTrace.finish("distance.partition", trace)
 	result["boot_wait_ms"] = ready_at - started
 	result["partition_ms"] = Time.get_ticks_msec() - ready_at
 	result["before_hq"] = true
@@ -89,11 +100,12 @@ static func install_before_hq(park: Node3D) -> Dictionary:
 	for owner_name: String in ["MidoriDistanceDetail", "MidoriJapaneseFlowers"]:
 		var owner := park.get_node_or_null(owner_name) as Node3D
 		if owner != null: result["clipped_shrubs_" + owner_name] = shrubs.apply(owner)
-	shrubs.apply_after_boot(park)
-	load("res://scripts/midori_worn_paths.gd").install(park)
-	# Themed grounds (docs/PARK_BIOME_PLAN.md), after everything is placed.
-	load("res://scripts/midori_biomes.gd").install(park)
+	trace = StartupTrace.finish("distance.clipped_shrubs", trace)
 	park.set_meta(RESULT_META, result)
+	# The late whole-world sweep, worn paths and biomes (docs/PARK_BIOME_PLAN.md)
+	# run in the world-complete step, which the raid calls next, before HQ.
+	# The watcher only covers a raid that reaches HQ without calling it.
+	load("res://scripts/shinrai_world_complete.gd").run_if_skipped(park)
 	return result
 
 static func _fallback(park: Node3D, message: String, pending: Array) -> Dictionary:

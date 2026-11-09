@@ -20,6 +20,7 @@ extends RefCounted
 ## in a line, and all thinning is a dithered pick by weight, so edges feather.
 const Biomes := preload("res://scripts/midori_biomes.gd")
 const Kit := preload("res://scripts/biomes/biome_kit.gd")
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 const ClippedShrubs := preload("res://scripts/midori_clipped_shrubs.gd")
 const ID := "sando"
 const CENTRE := Vector2(168, 128)
@@ -695,9 +696,7 @@ static func _paving(park: Node3D, ap: Dictionary) -> bool:
 		var previous := {}
 		for entry: Dictionary in material.shader.get_shader_uniform_list():
 			previous[entry.name] = material.get_shader_parameter(entry.name)
-		var shader := Shader.new()
-		shader.code = code
-		material.shader = shader
+		material.shader = ShaderPool.shader(code)
 		for key: StringName in previous: material.set_shader_parameter(key, previous[key])
 	material.set_shader_parameter("sando_stone", load(STONE_ROOT + "BaseColor.png"))
 	material.set_shader_parameter("sando_a", ap.a)
@@ -1350,8 +1349,7 @@ static func _place_stone(park: Node3D, terrain: Node, root: Node3D, rng: RandomN
 	return reach
 
 static func _batch_mounds(root: Node3D, green_rows: Array, red_rows: Array, pale_rows: Array) -> void:
-	var bloom_shader := Shader.new()
-	bloom_shader.code = BLOOM_SHADER
+	var bloom_shader := ShaderPool.shader(BLOOM_SHADER)
 	for s: int in range(2):
 		var mesh := ClippedShrubs._mound(float(ClippedShrubs.SHELLS[s]))
 		var range_end: float = SHELL_RANGES[s]

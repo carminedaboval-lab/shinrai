@@ -1,9 +1,11 @@
 extends Node3D
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
 
 # Existing CC0 Iris japonica scan; metre-scale stems and leaves, never primitive heads.
 const MODEL_PATH := "res://assets/shinrai/parks/midori_park/models/plants/iris_japonica/iris_japonica_lod%d.glb"
 const Woodland := preload("res://scripts/midori_woodland_layout.gd")
+const Trace := preload("res://scripts/startup_trace.gd")
 var installed := false
 var colony_roots: Array[Vector3] = []
 var colony_cells: Dictionary = {}
@@ -18,28 +20,45 @@ var patch_centres: Array[Vector3] = []
 var azalea_positions: Array[Vector3] = []
 var desire_paths: Node
 
+const AZALEA_PATH := "res://assets/shinrai/parks/midori_park/models/plants/iris_japonica/red_azalea_lod%d.glb"
+const EVERGREEN_PATH := "res://assets/shinrai/parks/midori_park/models/vegetation/midori_evergreen_shrub_v1.glb"
+
 func _ready() -> void:
+	# Scenes read on loader threads while the terrain builds; the same resources
+	# are taken where they were loaded before (load() if a request failed).
+	for lod in range(2):
+		_request(MODEL_PATH % lod)
+		_request(AZALEA_PATH % lod)
+	_request(EVERGREEN_PATH)
 	await LoadingBudget.wait_structure(get_parent())
 	call_deferred("install")
+
+static func _request(path: String) -> void:
+	if ResourceLoader.has_cached(path): return
+	if ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+		ResourceLoader.load_threaded_request(path)
+
+## The requested resource; blocks only if its loader thread is still busy.
+static func _fetch(path: String) -> Resource:
+	var status := ResourceLoader.load_threaded_get_status(path)
+	if status == ResourceLoader.THREAD_LOAD_LOADED or status == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+		var resource := ResourceLoader.load_threaded_get(path)
+		if resource != null: return resource
+	return load(path)
 
 func install() -> void:
 	var park := get_parent() as Node3D
 	var terrain: Node = park.get_node("MidoriTerrain")
 	while not terrain.installed: await get_tree().process_frame
+	# Everything waiting on the terrain wakes in one frame: take a budget turn first.
+	await LoadingBudget.checkpoint(park)
 	var _ft := preload("res://scripts/startup_trace.gd").begin()
 	var _fs := _ft
-	desire_paths = park.get_node_or_null("MidoriDesirePaths")
-	if desire_paths != null:
-		for frame in range(600):
-			if desire_paths.get("installed") == true or desire_paths.get("finished") == true: break
-			await get_tree().process_frame
-	# Terrain has already draped the established vegetation. New roots use its height.
-	set_as_top_level(true)
-	global_transform = Transform3D.IDENTITY
-	var detail: Node = get_tree().root.get_node("MidoriGrassDetail")
+	# The iris templates do not depend on the trails: read them before waiting,
+	# so the planting below starts the moment the trails are cut.
 	var templates: Array[Dictionary] = []
 	for lod in range(2):
-		var model: Node = load(MODEL_PATH % lod).instantiate()
+		var model: Node = (_fetch(MODEL_PATH % lod) as PackedScene).instantiate()
 		var parts := {}
 		for mesh_node: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 			parts[String(mesh_node.name)] = mesh_node.mesh
@@ -47,6 +66,19 @@ func install() -> void:
 		templates.append(parts)
 		model.free()
 	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.templates", _fs)
+	desire_paths = park.get_node_or_null("MidoriDesirePaths")
+	if desire_paths != null:
+		# Time-based cap, not 600 frames: budgeted loading splits work into many
+		# more (shorter) frames, and the trails must be cut before flowers root.
+		var desire_deadline := Time.get_ticks_msec() + 180000
+		while Time.get_ticks_msec() < desire_deadline and is_instance_valid(desire_paths):
+			if desire_paths.get("installed") == true or desire_paths.get("finished") == true: break
+			await get_tree().process_frame
+	# Terrain has already draped the established vegetation. New roots use its height.
+	set_as_top_level(true)
+	global_transform = Transform3D.IDENTITY
+	var detail: Node = get_tree().root.get_node("MidoriGrassDetail")
+	_fs = preload("res://scripts/startup_trace.gd").finish("flowers.wait_desire", _fs)
 	var sockets: Array[Vector2] = []
 	var planned := park.find_child("PlannedPropSockets", true, false)
 	if planned:
@@ -133,7 +165,7 @@ func install() -> void:
 func _install_azaleas(park: Node3D, terrain: Node, detail: Node, sockets: Array[Vector2], rng: RandomNumberGenerator) -> void:
 	var sprigs: Array[Mesh] = []
 	for lod in range(2):
-		var model: Node = load("res://assets/shinrai/parks/midori_park/models/plants/iris_japonica/red_azalea_lod%d.glb" % lod).instantiate()
+		var model: Node = (_fetch(AZALEA_PATH % lod) as PackedScene).instantiate()
 		sprigs.append(model.find_child("AzaleaSprig", true, false).mesh)
 		model.free()
 	# Reuse the supplied shrub's woody/leafy structure under the scanned flowering tips.
@@ -142,8 +174,7 @@ func _install_azaleas(park: Node3D, terrain: Node, detail: Node, sockets: Array[
 	var box := AABB()
 	for part: MeshInstance3D in prototype.find_children("*", "MeshInstance3D", true, false):
 		var relative: Transform3D = park._vegetation_relative_transform(part, prototype)
-		var mesh := part.mesh.duplicate() as Mesh
-		for surface in range(mesh.get_surface_count()): mesh.surface_set_material(surface, part.get_active_material(surface))
+		var mesh := BakeCache.baked_from(part)
 		var bounds: AABB = relative * mesh.get_aabb()
 		box = bounds if parts.is_empty() else box.merge(bounds)
 		parts.append({"mesh": mesh, "relative": relative})
@@ -244,14 +275,65 @@ func _index_root(root: Vector3, extra_radius: float) -> void:
 			colony_cells[key].append(Vector3(root.x, root.z, extra_radius))
 
 func _inside_colony(p: Vector2, radius: float) -> bool:
+	return _inside_cells(colony_cells, p, radius)
+
+## _inside_colony on a given index (read-only, so trim workers can share it).
+static func _inside_cells(cells: Dictionary, p: Vector2, radius: float) -> bool:
 	var cell := Vector2i(floori(p.x), floori(p.y))
-	for root: Vector3 in colony_cells.get(cell, []):
+	for root: Vector3 in cells.get(cell, []):
 		var distance := radius + root.z
 		if p.distance_squared_to(Vector2(root.x, root.y)) < distance * distance: return true
 	return false
 
+## Coarse 16 m index of the colony cells: a batch whose world bounds touch no
+## coarse cell cannot have an instance inside a colony (see _may_touch_colony).
+var _colony_coarse: Dictionary = {}
+
+func _build_colony_coarse() -> void:
+	_colony_coarse.clear()
+	for key: Vector2i in colony_cells: _colony_coarse[Vector2i(floori(key.x / 16.0), floori(key.y / 16.0))] = true
+
+## Grass instances are tested at t * anchor, a point inside the instance's mesh
+## box, so inside the MultiMesh's world AABB (the merge of every instance box).
+## _inside_colony only finds roots indexed in that point's own 1 m cell. When no
+## coarse cell under the (grown) bounds holds a colony cell, every instance is
+## kept, exactly as the full walk would decide. Unknown bounds (custom AABB, or a
+## renderer that does not compute them) always take the full walk.
+func _may_touch_colony(batch: MultiMeshInstance3D, mm: MultiMesh) -> bool:
+	if mm.custom_aabb != AABB(): return true
+	var local := mm.get_aabb()
+	if local.size == Vector3.ZERO: return true
+	var box: AABB = (batch.global_transform * local).grow(1.0)
+	var x0 := floori(box.position.x)
+	var x1 := floori(box.end.x)
+	var z0 := floori(box.position.z)
+	var z1 := floori(box.end.z)
+	var coarse := false
+	for z: int in range(floori(z0 / 16.0), floori(z1 / 16.0) + 1):
+		for x: int in range(floori(x0 / 16.0), floori(x1 / 16.0) + 1):
+			if _colony_coarse.has(Vector2i(x, z)): coarse = true
+	if not coarse: return false
+	# Then the 1 m cells themselves, while the bounds are a few hundred cells.
+	# (Cheaper than walking: reading a batch's transforms can mean a GPU read-back.)
+	if (x1 - x0 + 1) * (z1 - z0 + 1) > 40000: return true
+	for z: int in range(z0, z1 + 1):
+		for x: int in range(x0, x1 + 1):
+			if colony_cells.has(Vector2i(x, z)): return true
+	return false
+
+## Removes grass and companion instances that stand inside the iris colonies.
+## The per-instance tests run on worker threads (one batch each) while this
+## main thread waits, so the pass is still one synchronous step. Each batch's
+## transforms are read in one buffer call and decoded as get_instance_transform
+## does; the tests are the original code on the same floats, and the batches
+## are rebuilt here, in tree order (checked bit-for-bit against the old serial
+## loop: same kept instances in every batch).
 func _trim_colony_grass(park: Node3D) -> void:
+	var _tick := Trace.begin()
 	var companion_frames := _companion_frames(park)
+	_build_colony_coarse()
+	var work: Array = []
+	var jobs: Array = []
 	for batch: MultiMeshInstance3D in park.find_children("*", "MultiMeshInstance3D", true, false):
 		var label := String(batch.name)
 		var grass := label.begins_with("JapaneseForestGrass") or label.begins_with("ForestGrassLOD") or label.begins_with("WoodlandFillLOD") or label.contains("UprightGrass")
@@ -259,7 +341,9 @@ func _trim_colony_grass(park: Node3D) -> void:
 		if not grass and not companion: continue
 		var mm := batch.multimesh
 		if mm == null: continue
-		var kept: Array[int] = []
+		# Companion parts are tested at their whole plant's centre, which can lie
+		# outside the part's own bounds: those always take the full walk.
+		if not companion and not _may_touch_colony(batch, mm): continue
 		var box := mm.mesh.get_aabb()
 		var anchor := Vector3(box.get_center().x, box.position.y, box.get_center().z)
 		var companion_frame := {}
@@ -271,22 +355,47 @@ func _trim_colony_grass(park: Node3D) -> void:
 			if companion_frame.is_empty():
 				push_warning("FLOWER_BED: unmatched companion mesh kept: " + label)
 				continue
-		for i in range(mm.instance_count):
-			var t := batch.global_transform * mm.get_instance_transform(i)
-			var p3 := t * anchor
-			var footprint := t.basis.x.abs() * box.size.x + t.basis.z.abs() * box.size.z
-			var radius := .42 + minf(.65, maxf(footprint.x, footprint.z) * .5)
-			if companion:
-				# Recover the shared plant root from each mesh part. All parts then
-				# use the same whole-plant footprint, avoiding floating leaf fragments.
-				var root_transform: Transform3D = t * companion_frame.relative.affine_inverse()
-				var plant_box: AABB = root_transform * companion_frame.plant_bounds
-				p3 = plant_box.get_center()
-				radius = minf(2.2, maxf(plant_box.size.x, plant_box.size.z) * .5) + .2
-			if _inside_colony(Vector2(p3.x, p3.z), radius):
-				if companion: removed_companion_instances += 1
-				else: removed_grass_instances += 1
-			else: kept.append(i)
+		var job := {"companion": companion, "box": box, "anchor": anchor, "xform": batch.global_transform, "count": mm.instance_count,
+			"to_root": companion_frame.relative.affine_inverse() if companion else Transform3D.IDENTITY,
+			"plant_bounds": companion_frame.plant_bounds if companion else AABB()}
+		var stride := 12 + (4 if mm.use_colors else 0) + (4 if mm.use_custom_data else 0)
+		var buffer := PackedFloat32Array()
+		if mm.transform_format == MultiMesh.TRANSFORM_3D and mm.instance_count > 0: buffer = mm.buffer
+		if mm.instance_count > 0 and buffer.size() == stride * mm.instance_count:
+			job["buffer"] = buffer
+			job["stride"] = stride
+		else:
+			# Any other layout: the transforms exactly as get_instance_transform gives them.
+			var transforms: Array[Transform3D] = []
+			for i in range(mm.instance_count): transforms.append(mm.get_instance_transform(i))
+			job["transforms"] = transforms
+		work.append([batch, mm])
+		jobs.append(job)
+	_tick = Trace.finish("flowers.trim_read", _tick)
+	if not jobs.is_empty():
+		# The batches are shared out by a counter between this thread and a few
+		# threads of its own, not WorkerThreadPool: a pool wait from the main thread
+		# can sit behind other modules' long tasks (a threaded scene load, the
+		# distance-detail runs) and freeze the menu for seconds. Here the main
+		# thread keeps taking batches itself and only ever waits for batches that
+		# are already running. Each job still writes only its own slot, so the
+		# result is the same whichever thread ran it.
+		var claim := Mutex.new()
+		var next: Array = [0]
+		var helpers: Array[Thread] = []
+		for _h in range(mini(jobs.size() - 1, clampi(OS.get_processor_count() / 2 - 1, 1, 5))):
+			var thread := Thread.new()
+			if thread.start(_trim_runner.bind(jobs, colony_cells, claim, next)) == OK: helpers.append(thread)
+		_trim_runner(jobs, colony_cells, claim, next)
+		for thread in helpers: thread.wait_to_finish()
+	_tick = Trace.finish("flowers.trim_wait", _tick)
+	for index in range(jobs.size()):
+		var job: Dictionary = jobs[index]
+		var batch: MultiMeshInstance3D = work[index][0]
+		var mm: MultiMesh = work[index][1]
+		if job.companion: removed_companion_instances += int(job.removed)
+		else: removed_grass_instances += int(job.removed)
+		var kept: PackedInt32Array = job.kept
 		if kept.size() == mm.instance_count: continue
 		var trimmed := MultiMesh.new()
 		trimmed.transform_format = mm.transform_format
@@ -294,11 +403,81 @@ func _trim_colony_grass(park: Node3D) -> void:
 		trimmed.use_custom_data = mm.use_custom_data
 		trimmed.mesh = mm.mesh
 		trimmed.instance_count = kept.size()
-		for j in range(kept.size()):
-			trimmed.set_instance_transform(j, mm.get_instance_transform(kept[j]))
-			if mm.use_colors: trimmed.set_instance_color(j, mm.get_instance_color(kept[j]))
-			if mm.use_custom_data: trimmed.set_instance_custom_data(j, mm.get_instance_custom_data(kept[j]))
+		if kept.size() > 0 and job.has("buffer"):
+			# The kept rows (transform, colour and custom data: the whole stride) are
+			# copied float for float from the buffer read above and assigned once:
+			# the same float32 values the per-instance setters wrote, without the
+			# renderer keeping a CPU copy of either batch's buffer for its life.
+			var stride: int = job.stride
+			var source: PackedFloat32Array = job.buffer
+			var rows := PackedFloat32Array()
+			rows.resize(kept.size() * stride)
+			for j in range(kept.size()):
+				var from: int = kept[j] * stride
+				var to: int = j * stride
+				for k in range(stride): rows[to + k] = source[from + k]
+			trimmed.buffer = rows
+		else:
+			for j in range(kept.size()):
+				trimmed.set_instance_transform(j, mm.get_instance_transform(kept[j]))
+				if mm.use_colors: trimmed.set_instance_color(j, mm.get_instance_color(kept[j]))
+				if mm.use_custom_data: trimmed.set_instance_custom_data(j, mm.get_instance_custom_data(kept[j]))
 		batch.multimesh = trimmed
+	Trace.finish("flowers.trim_apply", _tick)
+
+## Runs trim jobs until none is left; the counter hands each index out once.
+static func _trim_runner(jobs: Array, cells: Dictionary, claim: Mutex, next: Array) -> void:
+	while true:
+		claim.lock()
+		var index: int = next[0]
+		next[0] = index + 1
+		claim.unlock()
+		if index >= jobs.size(): return
+		_trim_job(index, jobs, cells)
+
+## WORKER (one batch): the per-instance tests of the colony trim.
+## Reads only its job and the colony index; writes only its own job.
+static func _trim_job(index: int, jobs: Array, cells: Dictionary) -> void:
+	var job: Dictionary = jobs[index]
+	var companion: bool = job.companion
+	var box: AABB = job.box
+	var anchor: Vector3 = job.anchor
+	var batch_transform: Transform3D = job.xform
+	var to_root: Transform3D = job.to_root
+	var plant_bounds: AABB = job.plant_bounds
+	var count: int = job.count
+	var has_buffer := job.has("buffer")
+	var b: PackedFloat32Array = job.buffer if has_buffer else PackedFloat32Array()
+	var stride: int = job.stride if has_buffer else 0
+	var transforms: Array = [] if has_buffer else job.transforms
+	var kept := PackedInt32Array()
+	var removed := 0
+	for i in range(count):
+		var local: Transform3D
+		if has_buffer:
+			# get_instance_transform's layout: three basis rows, each ending in an origin component.
+			var o := i * stride
+			local = Transform3D(Vector3(b[o], b[o + 4], b[o + 8]), Vector3(b[o + 1], b[o + 5], b[o + 9]), Vector3(b[o + 2], b[o + 6], b[o + 10]), Vector3(b[o + 3], b[o + 7], b[o + 11]))
+		else: local = transforms[i]
+		var t := batch_transform * local
+		var p3 := t * anchor
+		# _inside_colony only looks in the point's own cell: no roots there, kept.
+		if not companion and not cells.has(Vector2i(floori(p3.x), floori(p3.z))):
+			kept.append(i)
+			continue
+		var footprint := t.basis.x.abs() * box.size.x + t.basis.z.abs() * box.size.z
+		var radius := .42 + minf(.65, maxf(footprint.x, footprint.z) * .5)
+		if companion:
+			# Recover the shared plant root from each mesh part. All parts then
+			# use the same whole-plant footprint, avoiding floating leaf fragments.
+			var root_transform: Transform3D = t * to_root
+			var plant_box: AABB = root_transform * plant_bounds
+			p3 = plant_box.get_center()
+			radius = minf(2.2, maxf(plant_box.size.x, plant_box.size.z) * .5) + .2
+		if _inside_cells(cells, Vector2(p3.x, p3.z), radius): removed += 1
+		else: kept.append(i)
+	job["kept"] = kept
+	job["removed"] = removed
 
 func _canopy_cover(p: Vector2, park: Node3D, shoulder: float) -> int:
 	var cover := 0
@@ -307,7 +486,7 @@ func _canopy_cover(p: Vector2, park: Node3D, shoulder: float) -> int:
 	return cover
 
 func _companion_frames(park: Node3D) -> Array[Dictionary]:
-	var evergreen: Node3D = load("res://assets/shinrai/parks/midori_park/models/vegetation/midori_evergreen_shrub_v1.glb").instantiate()
+	var evergreen: Node3D = (_fetch(EVERGREEN_PATH) as PackedScene).instantiate()
 	# Its supplied leaf texture reads pale lime in sun; tone it like the other foliage.
 	park._tone_foliage_prototype(evergreen, Color(0.62, 0.64, 0.5))
 	var sources: Array[Node3D] = [park.midnight_fern_prototype, park.lilac_prototypes[0], park.lilac_prototypes[1], park.forest_floor_bush_prototypes[0], park.emerald_fountain_grass_prototype, evergreen]

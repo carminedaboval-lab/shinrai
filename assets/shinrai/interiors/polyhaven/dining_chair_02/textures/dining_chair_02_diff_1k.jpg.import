@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://jwakwip28b0j"
-path="res://.godot/imported/dining_chair_02_diff_1k.jpg-0df9f16f09c9dfa569ba73e9cbd447cb.ctex"
+path.bptc="res://.godot/imported/dining_chair_02_diff_1k.jpg-0df9f16f09c9dfa569ba73e9cbd447cb.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/interiors/polyhaven/dining_chair_02/textures/dining_chair_02_diff_1k.jpg"
-dest_files=["res://.godot/imported/dining_chair_02_diff_1k.jpg-0df9f16f09c9dfa569ba73e9cbd447cb.ctex"]
+dest_files=["res://.godot/imported/dining_chair_02_diff_1k.jpg-0df9f16f09c9dfa569ba73e9cbd447cb.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

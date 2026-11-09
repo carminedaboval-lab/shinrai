@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dlkqpn5dg6htp"
-path="res://.godot/imported/forrest_ground_01_rough_2k.jpg-e87b795c4f21d1dce7ca2f21286fb580.ctex"
+path.bptc="res://.godot/imported/forrest_ground_01_rough_2k.jpg-e87b795c4f21d1dce7ca2f21286fb580.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_rough_2k.jpg"
-dest_files=["res://.godot/imported/forrest_ground_01_rough_2k.jpg-e87b795c4f21d1dce7ca2f21286fb580.ctex"]
+dest_files=["res://.godot/imported/forrest_ground_01_rough_2k.jpg-e87b795c4f21d1dce7ca2f21286fb580.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

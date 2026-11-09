@@ -1,6 +1,9 @@
 extends Node
 const LoadingUI = preload("res://scripts/shinrai_loading_screen.gd")
+const LoadState = preload("res://scripts/shinrai_load_state.gd")
 const CreatorPark = preload("./creator_park.gd")
+## Loading-screen owner token for the creator boot.
+const OWNER := &"creator"
 const IdentityAdapter = preload("./creator_identity_adapter.gd")
 const WORLD := "res://scenes/shinrai_extraction.tscn"
 var loading: CanvasLayer
@@ -21,7 +24,7 @@ func _start() -> void:
 		loading = LoadingUI.new()
 		get_tree().root.add_child(loading)
 		loading.retry_requested.connect(_retry)
-	loading.begin("Opening your park")
+	LoadState.ui_begin(loading, "Opening your park", OWNER)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	old_disable_3d = get_viewport().disable_3d
 	old_max_fps = Engine.max_fps
@@ -31,7 +34,11 @@ func _start() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	await get_tree().process_frame
 	if DisplayServer.get_name() != "headless": await RenderingServer.frame_post_draw
-	var error := ResourceLoader.load_threaded_request(WORLD, "PackedScene", false)
+	# Same pipeline feature latch as the game boot, before any park material exists.
+	var warmup := LoadState.warmup_script()
+	if LoadState.script_has(warmup, "latch_features") and DisplayServer.get_name() != "headless":
+		await warmup.call("latch_features", get_tree().root)
+	var error :=ResourceLoader.load_threaded_request(WORLD, "PackedScene", false)
 	if error != OK:
 		_fail("The park resources could not be opened.")
 		return
@@ -79,9 +86,24 @@ func _start() -> void:
 	if not is_instance_valid(park):
 		_fail("Park loading was interrupted.")
 		return
+	# Warm the editor view offscreen, then draw the first 3D frames under the
+	# loading screen, so the first-frame cost never shows as a frozen editor.
+	loading.set_stage("Preparing the view")
+	if LoadState.script_has(warmup, "warm") and DisplayServer.get_name() != "headless":
+		var camera := get_viewport().get_camera_3d()
+		var poses: Array[Transform3D] = []
+		if camera != null: poses.append(camera.global_transform)
+		await warmup.call("warm", park, poses, park.get("is_night_mode") == true, park.get("high_render_quality") == true)
+		if not is_instance_valid(park):
+			_fail("Park loading was interrupted.")
+			return
 	_restore_display()
+	if DisplayServer.get_name() != "headless":
+		await RenderingServer.frame_post_draw
+		await get_tree().process_frame
+		await RenderingServer.frame_post_draw
 	park.set_meta("shinrai_incremental_loading", false)
-	loading.finish()
+	LoadState.ui_finish(loading, OWNER)
 	requesting = false
 	queue_free()
 

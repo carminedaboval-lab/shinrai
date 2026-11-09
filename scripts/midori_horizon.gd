@@ -23,12 +23,21 @@ func _ready() -> void:
 func _build() -> void:
 	var tick := StartupTrace.begin()
 	_build_sea()
+	# Behind the boot menu each piece gets its own frame (it all ran in the park's
+	# add_child frame, the worst frame behind the menu). Same pieces, same order,
+	# each with its own seed; a no-op outside the boot.
+	await _budget_turn()
 	_build_hill_ring("FarHills", FAR_HILL_RADIUS_M, 260.0, 620.0, 384, 28, Color("#45536a"))
+	await _budget_turn()
 	_build_hill_ring("NearHills", NEAR_HILL_RADIUS_M, 70.0, 230.0, 448, 44, Color("#33472f"))
+	await _budget_turn()
+	if not is_inside_tree(): return
 	var city := Node3D.new()
 	city.name = "NeonCity"
 	city.set_script(preload("res://scripts/midori_neon_city.gd"))
 	add_child(city)
+	await _budget_turn()
+	if not is_inside_tree(): return
 	var near_city := Node3D.new()
 	near_city.name = "NearCity"
 	near_city.set_script(preload("res://scripts/midori_near_city.gd"))
@@ -37,6 +46,14 @@ func _build() -> void:
 	if park != null and park.get("is_night_mode") != null:
 		set_night_mode(bool(park.get("is_night_mode")))
 	StartupTrace.finish("horizon.build", tick)
+
+## One frame, not a loading-budget turn: the budget is first come, first served and
+## the park's own build (resumed first every frame) would hold the city back for
+## ~15 s (measured), moving when the near city builds relative to everything else.
+func _budget_turn() -> void:
+	var park := get_parent()
+	if park != null and park.is_inside_tree() and park.get_meta("shinrai_incremental_loading", false):
+		await get_tree().process_frame
 
 func set_night_mode(value: bool) -> void:
 	_night = value

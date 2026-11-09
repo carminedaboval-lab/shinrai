@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d1gqmuam5lj4l"
-path="res://.godot/imported/ladder_v2_lod1_Image_0.jpg-b21766615eb3fc614ee44554ae96c119.ctex"
+path.bptc="res://.godot/imported/ladder_v2_lod1_Image_0.jpg-b21766615eb3fc614ee44554ae96c119.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "82ced62e6cfb83013ad034e1821a3b35"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/props/football_training/ladder_v2_lod1_Image_0.jpg"
-dest_files=["res://.godot/imported/ladder_v2_lod1_Image_0.jpg-b21766615eb3fc614ee44554ae96c119.ctex"]
+dest_files=["res://.godot/imported/ladder_v2_lod1_Image_0.jpg-b21766615eb3fc614ee44554ae96c119.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

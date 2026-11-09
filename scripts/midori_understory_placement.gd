@@ -8,7 +8,9 @@ const MAX_ADDED_BEDS := 620
 func _ready() -> void:
 	await LoadingBudget.wait_structure(get_parent())
 	var park := get_parent() as Node3D
-	for frame in range(180):
+	# Time-based cap, not 180 frames: budgeted loading splits work into many more frames.
+	var deadline := Time.get_ticks_msec() + 120000
+	while Time.get_ticks_msec() < deadline:
 		if not park.find_children("JapaneseForestGrassDrift_*","MultiMeshInstance3D",true,false).is_empty():
 			await apply(park)
 			var companions := preload("res://scripts/midori_woodland_companions.gd").new()

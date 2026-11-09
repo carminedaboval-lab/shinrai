@@ -1,5 +1,6 @@
 extends Node3D
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
 
 @export_file("*.gd") var lily_source_path := "res://scripts/midori_water_lily.gd"
 
@@ -465,11 +466,9 @@ func _batch_source(source: Node3D, transforms: Array, bed_index: int, source_ind
 	for part: MeshInstance3D in source.find_children("*","MeshInstance3D",true,false):
 		if part.mesh == null:
 			continue
-		var mesh: Mesh = part.mesh
-		# Preserve supplied geometry and the configured material of every surface.
-		var shared_mesh := mesh.duplicate() as Mesh
-		for surface in range(mesh.get_surface_count()):
-			shared_mesh.surface_set_material(surface,part.get_active_material(surface))
+		# Preserve supplied geometry and the configured material of every surface:
+		# one baked copy per (mesh, materials), shared by every bed of this plant.
+		var shared_mesh := BakeCache.baked_from(part)
 		var relative: Transform3D = park._vegetation_relative_transform(part,source)
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -480,6 +479,7 @@ func _batch_source(source: Node3D, transforms: Array, bed_index: int, source_ind
 		var batch := MultiMeshInstance3D.new()
 		batch.name = "Bed_%02d_Plant_%d_%d" % [bed_index,source_index,batch_count]
 		batch.multimesh = mm
+		BakeCache.tag(batch,BakeCache.group_key())
 		batch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		batch.visibility_range_end = 95.0
 		batch.visibility_range_end_margin = 15.0

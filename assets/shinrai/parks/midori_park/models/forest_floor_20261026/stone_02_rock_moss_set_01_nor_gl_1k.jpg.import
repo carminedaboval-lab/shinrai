@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://digmtw2sd1r6c"
-path="res://.godot/imported/stone_02_rock_moss_set_01_nor_gl_1k.jpg-acbd61aa1b88406f28c7ee392db68d7f.ctex"
+path.bptc="res://.godot/imported/stone_02_rock_moss_set_01_nor_gl_1k.jpg-acbd61aa1b88406f28c7ee392db68d7f.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b7aa9f4ea80a668050aa7312ebec982c"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/forest_floor_20261026/stone_02_rock_moss_set_01_nor_gl_1k.jpg"
-dest_files=["res://.godot/imported/stone_02_rock_moss_set_01_nor_gl_1k.jpg-acbd61aa1b88406f28c7ee392db68d7f.ctex"]
+dest_files=["res://.godot/imported/stone_02_rock_moss_set_01_nor_gl_1k.jpg-acbd61aa1b88406f28c7ee392db68d7f.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

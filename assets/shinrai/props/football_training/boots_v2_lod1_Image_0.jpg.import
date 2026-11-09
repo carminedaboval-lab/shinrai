@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cp4tffmcw71ss"
-path="res://.godot/imported/boots_v2_lod1_Image_0.jpg-dec86c43040ad8a5d00dfbc1ead792c9.ctex"
+path.bptc="res://.godot/imported/boots_v2_lod1_Image_0.jpg-dec86c43040ad8a5d00dfbc1ead792c9.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "475253fed16f657501fff56bd5dcf198"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/props/football_training/boots_v2_lod1_Image_0.jpg"
-dest_files=["res://.godot/imported/boots_v2_lod1_Image_0.jpg-dec86c43040ad8a5d00dfbc1ead792c9.ctex"]
+dest_files=["res://.godot/imported/boots_v2_lod1_Image_0.jpg-dec86c43040ad8a5d00dfbc1ead792c9.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

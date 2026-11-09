@@ -43,6 +43,12 @@ var vitals_check := false
 var _notice_text := ""
 var _notice_started_at := 0.0
 var _notice_remaining := 0.0
+const MenuKit = preload("res://scripts/ui/shinrai_menu_kit.gd")
+const OperationsMenu = preload("res://scripts/ui/shinrai_operations_menu.gd")
+var menu_backdrop: Control
+var menu_screen: Control
+var operations_menu: Control
+var _screen_fit: Callable
 
 func _ready() -> void:
 	layer = 60
@@ -189,6 +195,10 @@ func _ready() -> void:
 	inventory_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	inventory_backdrop.hide()
 	overlay.add_child(inventory_backdrop)
+	# Menus (operations, pause, dialogs, results) blur and grade the live scene
+	# toward the inventory's teal; the plaza art stands in while 3D is off.
+	menu_backdrop = MenuKit.backdrop(overlay, 3.0, 0.62, 0.50)
+	menu_backdrop.hide()
 	menu_center = CenterContainer.new()
 	menu_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(menu_center)
@@ -215,6 +225,15 @@ func _label(parent: Node, text: String, size_value: int, color: Color) -> Label:
 
 func _clear_panel() -> void:
 	inventory_backdrop.hide()
+	if is_instance_valid(menu_backdrop): menu_backdrop.hide()
+	# The see-through body is part of the live raid HUD only; menus drawn over
+	# a translucent backdrop must not show it (it used to leak through at the
+	# left of Operations and Pause). show_raid/update_raid bring it back.
+	if is_instance_valid(body_status): body_status.hide()
+	if _screen_fit.is_valid() and root.resized.is_connected(_screen_fit): root.resized.disconnect(_screen_fit)
+	_screen_fit = Callable()
+	menu_screen = null
+	operations_menu = null
 	_set_menu_scrolling(true)
 	call_deferred("_fit_menu_scroll")
 	_close_loot_view()
@@ -235,102 +254,64 @@ func _clear_panel() -> void:
 	panel_tween = create_tween()
 	panel_tween.tween_property(panel_content, "modulate:a", 1.0, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
+## Menu screens own the whole view like the inventory: the overlay turns
+## clear and the blurred, teal-graded backdrop shows the scene behind.
 func _translucent_menu_theme() -> void:
-	# Local to operations and pause screens; each panel rebuild resets this.
-	overlay.color = Color(0.035, 0.040, 0.038, 0.32)
-	var menu_theme := Theme.new()
-	menu_theme.default_font_size = 23
-	menu_theme.set_color("font_color", "Button", Color("#eeeeee"))
-	menu_theme.set_color("font_disabled_color", "Button", Color("#c3c3c3"))
-	for state: String in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color("#161616a6")
-		style.border_color = Color("#b8c3bf60")
-		if state == "hover": style.bg_color = Color("#93aaa48c")
-		elif state == "pressed": style.bg_color = Color("#aec5bc99")
-		elif state == "disabled": style.bg_color = Color("#16161670")
-		elif state == "focus":
-			style.bg_color = Color.TRANSPARENT
-			style.border_color = Color("#eeeeee")
-		style.set_border_width_all(1)
-		style.content_margin_left = 22
-		style.content_margin_right = 22
-		style.content_margin_top = 13
-		style.content_margin_bottom = 13
-		menu_theme.set_stylebox(state, "Button", style)
-	panel_content.theme = menu_theme
+	overlay.color = Color(0, 0, 0, 0)
+	if is_instance_valid(menu_backdrop): menu_backdrop.show()
+	_set_menu_scrolling(false)
+	var fit := func() -> void:
+		panel_content.custom_minimum_size = Vector2(maxf(0.0, root.size.x - 24.0), maxf(0.0, root.size.y - 28.0))
+	fit.call()
+	_screen_fit = fit
+	root.resized.connect(fit)
+
+func _menu_screen(title: String, chip: String) -> MenuKit.MenuScreen:
+	_translucent_menu_theme()
+	var screen := MenuKit.screen(panel_content, title, chip)
+	menu_screen = screen
+	return screen
 
 func _button(text: String, action: String, disabled: bool = false) -> Button:
-	var button := Button.new()
-	button.text = text
+	var button := MenuKit.secondary_button(panel_content, text)
 	button.disabled = disabled
 	button.pressed.connect(func() -> void: action_requested.emit(action))
-	panel_content.add_child(button)
 	return button
 
+func _action_button(parent: Node, text: String, action: String, primary: bool = false) -> Button:
+	var button := MenuKit.primary_button(parent, text, 22) if primary else MenuKit.secondary_button(parent, text, 18)
+	button.pressed.connect(func() -> void: action_requested.emit(action))
+	return button
+
+func _raid_clock(raid: Node) -> String:
+	var left: Variant = raid.get("remaining")
+	if left == null: return ""
+	var seconds := maxi(0, ceili(float(left)))
+	return "%02d:%02d" % [seconds / 60, seconds % 60]
+
 func show_hq(raid: Node) -> void:
+	# Refresh in place when Operations is already up (time toggle, market,
+	# world-ready): labels change, focus stays where the player left it.
+	if is_instance_valid(operations_menu) and operations_menu.source == raid and overlay.visible and operations_menu.is_inside_tree():
+		operations_menu.refresh()
+		return
 	_clear_panel()
 	_translucent_menu_theme()
-	_label(panel_content, "SHINRAI  /  FIELD OPERATIONS", 19, Color("#c6d7d2"))
-	_label(panel_content, "THE QUIET EXIT", 58, PAPER)
-	_label(panel_content, "01   SHINRAI PARK", 26, Color("#ddd4bd"))
-	_label(panel_content, "Recover the park's telemetry. Search for salvage. Get out alive.\nOne relay opens extraction. All three earn the full contract bonus.", 23, PAPER)
-	_label(panel_content, "UP TO 2 HOURS   /   SOLO PvE   /   BASE CARGO 6–10 SLOTS", 19, Color("#c6d7d2"))
-	var d: Dictionary = raid.profile.data
-	var stash_count := 0
-	for amount: Variant in d.stash.values():
-		stash_count += int(amount)
-	_label(panel_content, "CREDITS  %d     STASH  %d     EXTRACTS  %d / %d" % [d.credits, stash_count, d.extracts, d.runs], 23, PAPER)
-	_label(panel_content, LoadoutSummary.describe(d), 21, PAPER)
-	if raid.enemy_visual == null:
-		_label(panel_content, "RECON BUILD: K17 model pending. Hostile spawning is disabled.", 20, Color("#ddd4bd"))
-	if raid.profile.recovered_interrupted_run:
-		_label(panel_content, "Last run was interrupted. Unbanked cargo was lost; your stash is safe.", 18, Color("#ddd4bd"))
-	if not raid.profile.last_error.is_empty():
-		_label(panel_content, raid.profile.last_error, 19, Color("#ef9b8c"))
-	var retry_deploy: bool = raid.can_retry_deployment_save()
-	_button("RETRY SAVE & DEPLOY" if retry_deploy else "DEPLOY  →  " + ("NIGHT" if raid.night_deployment else "GOLDEN HOUR"), "retry_deploy" if retry_deploy else "deploy", not raid.navigation.ready or (not raid.profile.last_error.is_empty() and not retry_deploy)).grab_focus()
-	_button("LOADOUT & INVENTORY  ·  %d banked item%s" % [stash_count, "s" if stash_count != 1 else ""], "inventory")
-	_graphics_button(raid)
-	_controls_help()
-	var action_error := str(raid.profile.last_error)
-	if action_error.is_empty() and bool(d.active_run):
-		action_error = "Available after the current run ends."
-	var sell_value := 0
-	for item_id: String in d.stash:
-		var price := int(raid.PRICES.get(item_id, 0))
-		if price > 0: sell_value += int(d.stash[item_id]) * price
-	var row := HBoxContainer.new()
-	panel_content.add_child(row)
-	for spec: Array in [["Change time of day", "time"], ["Sell stash", "sell"], ["Extra medkit · 120", "medkit"]]:
-		var button := Button.new()
-		button.text = spec[0]
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var event: String = spec[1]
-		var reason := action_error if event != "time" else ""
-		if event == "sell":
-			if reason.is_empty() and sell_value <= 0: reason = "No sellable items in your stash."
-			button.tooltip_text = "Sell items worth %d credits. Unpriced items stay banked." % sell_value
-		elif event == "medkit":
-			if bool(d.prepared_medkit): button.text = "Extra medkit · READY"
-			if reason.is_empty():
-				if bool(d.prepared_medkit): reason = "Extra medkit prepared for the next deployment."
-				elif int(d.credits) < 120: reason = "Need 120 credits; you have %d." % int(d.credits)
-			button.tooltip_text = "Prepare one extra medkit for the next deployment."
-		button.disabled = not reason.is_empty()
-		if not reason.is_empty(): button.tooltip_text = reason
-		button.pressed.connect(func() -> void: action_requested.emit(event))
-		row.add_child(button)
-	var level: int = d.pack_level
-	var upgrade_price := 450 * (level + 1)
-	var upgrade_reason := action_error
-	if upgrade_reason.is_empty():
-		if level >= 2: upgrade_reason = "Base cargo capacity is fully upgraded."
-		elif int(d.credits) < upgrade_price: upgrade_reason = "Need %d credits; you have %d." % [upgrade_price, int(d.credits)]
-	var upgrade := _button("Cargo upgrade · %d credits" % upgrade_price if level < 2 else "Cargo fully upgraded", "upgrade", not upgrade_reason.is_empty())
-	upgrade.tooltip_text = upgrade_reason if not upgrade_reason.is_empty() else "Adds 2 base cargo slots."
-	_button("QUIT TO DESKTOP", "quit_confirm")
-	_label(panel_content, "Starter kit is free. Carried items are lost on death. Controls help is above.", 18, Color("#aabbbd"))
+	var menu: Control = OperationsMenu.new()
+	menu.with_backdrop = false
+	panel_content.add_child(menu)
+	menu.configure(raid)
+	menu.action_requested.connect(func(action: String) -> void:
+		if action == "graphics":
+			# Held while the boot / deploy warm-up renders the current variant.
+			if raid.has_method("view_settings_locked") and bool(raid.call("view_settings_locked")): return
+			_toggle_graphics(raid)
+			if is_instance_valid(menu): menu.refresh()
+		else:
+			action_requested.emit(action))
+	operations_menu = menu
+	menu_screen = menu.screen
+
 
 func show_inventory(raid: Node) -> void:
 	# Only a refresh of this same inventory inherits filters and cargo identity.
@@ -404,84 +385,165 @@ func show_cache_choice(raid: Node, site: Dictionary) -> void:
 
 func show_pause(raid: Node, map_open: bool) -> void:
 	_clear_panel()
-	_translucent_menu_theme()
-	_label(panel_content, "SHINRAI PARK  /  " + ("FIELD MAP" if map_open else "PAUSED"), 32, PAPER)
+	var screen := _menu_screen("FIELD", "RAID")
+	MenuKit.status_text(screen, "MIDORI PARK  ·  " + ("FIELD MAP" if map_open else "PAUSED"))
+	var clock := _raid_clock(raid)
+	if not clock.is_empty(): MenuKit.status_text(screen, clock, MenuKit.AMBER, 18)
+	var settings := MenuKit.bar_button(screen, "SETTINGS")
+	settings.pressed.connect(func() -> void: screen.open_side())
+	MenuKit.caption(screen, "PAUSED  /  The raid clock and patrols are paused.", "Abandoning or quitting loses unbanked cargo. Your banked stash is kept.")
+	MenuKit.key_hints(screen, [["Enter / A", "Select"], ["Esc / Menu", "Resume"], ["Dpad / Arrows", "Navigate"]])
+	var left := MenuKit.column(screen.body, 520, 8)
+	MenuKit.section(left, "PAUSED")
+	var status := MenuKit.card(left, "RAID STATUS", 14, 8)
+	var tiles := MenuKit.hbox(status, 8)
+	var relays: Variant = raid.get("relays")
+	MenuKit.stat_tile(tiles, "TIME LEFT", clock if not clock.is_empty() else "—", "", MenuKit.AMBER)
+	MenuKit.stat_tile(tiles, "RELAYS", str(int(relays)) if relays != null else "0", "/ 3")
+	MenuKit.stat_tile(tiles, "CARGO", str(raid.cargo_cells_used()), "/ %d" % raid.capacity())
+	MenuKit.section(left, "ACTIONS", 16)
+	var actions := MenuKit.vbox(left, 8)
+	_action_button(actions, "RESUME", "resume", true).grab_focus()
+	_action_button(actions, "INVENTORY  ·  %d / %d cargo cells" % [raid.cargo_cells_used(), raid.capacity()], "inventory")
+	var map_button := MenuKit.secondary_button(actions, "HIDE FIELD MAP" if map_open else "FIELD MAP", 18)
+	map_button.pressed.connect(func() -> void:
+		raid.map_open = not map_open
+		show_pause(raid, not map_open))
+	var settings_row := MenuKit.secondary_button(actions, "SETTINGS  ·  GRAPHICS AND CONTROLS", 18)
+	settings_row.pressed.connect(func() -> void: screen.open_side())
+	_action_button(actions, "ABANDON RUN…", "abandon_confirm")
+	_action_button(actions, "QUIT TO DESKTOP", "quit_confirm")
 	if map_open:
+		var right := MenuKit.vbox(screen.body, 8)
+		right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		right.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		MenuKit.section(right, "FIELD MAP", 0, "RELAYS  /  SEARCH  /  EXITS")
+		var sheet := MenuKit.card(right, "MIDORI PARK", 12, 8)
+		var sheet_panel: Control = sheet.get_meta("panel")
+		sheet_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		sheet.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		var frame := AspectRatioContainer.new()
+		frame.ratio = 440.0 / 360.0
+		frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sheet.add_child(frame)
 		var chart := FieldMap.new()
 		chart.raid = raid
-		chart.focus_mode=Control.FOCUS_ALL
-		chart.tooltip_text="Left / right: destination - A: track - Up / down: menu"
+		chart.focus_mode = Control.FOCUS_ALL
+		chart.tooltip_text = "Left / right: destination - A: track - Up / down: back to the menu"
 		chart.destination_selected.connect(func(id: String) -> void: action_requested.emit("track:" + id))
-		chart.custom_minimum_size = Vector2(780,clampf(get_viewport().get_visible_rect().size.y*.38,280,470))
-		panel_content.add_child(chart)
+		chart.custom_minimum_size = Vector2(440, 360)
+		# Routes and far markers project past the sheet; keep them on the map.
+		chart.clip_contents = true
+		frame.add_child(chart)
+		# Pad left/right cycle destinations on the map, so up/down lead back to the
+		# action column (the HIDE FIELD MAP button), and right from there enters it.
+		chart.focus_neighbor_top = chart.get_path_to(map_button)
+		chart.focus_neighbor_bottom = chart.get_path_to(map_button)
+		map_button.focus_neighbor_right = map_button.get_path_to(chart)
 		map_view = chart
-		_label(panel_content, "RELAYS / SEARCH / EXITS   ·   Pad: Left-Right + A   ·   Mouse: click", 18, Color("#c6d7d2"))
 		var target: Dictionary = raid.tracked_objective()
+		var info := MenuKit.hbox(sheet, 16)
 		if not target.is_empty():
-			_label(panel_content, "%s  ·  ~%dm suggested route" % [target.title, int(raid.guidance_distance)], 18, Color("#ddd4bd"))
+			MenuKit.text(info, "TRACKING  %s  ·  ~%dm suggested route" % [str(target.title).to_upper(), int(raid.guidance_distance)], 16, MenuKit.AMBER)
+		var hint := MenuKit.text(info, "Pad: Left-Right + A, Up-Down back   ·   Mouse: click a marker", 14, MenuKit.DIM)
+		hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		var names: Array[String] = []
 		for item: Dictionary in raid.bag:
-			names.append(item.title)
-		var cargo := _label(panel_content, "CARGO %d/%d CELLS  ·  %s" % [raid.cargo_cells_used(), raid.capacity(), ", ".join(names) if not names.is_empty() else "Empty"], 18, PAPER)
+			names.append(str(item.title))
+		var cargo := MenuKit.text(sheet, "CARGO %d/%d CELLS  ·  %s" % [raid.cargo_cells_used(), raid.capacity(), ", ".join(names) if not names.is_empty() else "Empty"], 15, MenuKit.PAPER)
 		cargo.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cargo.max_lines_visible = 2
 		cargo.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		cargo.custom_minimum_size.x = 780
-	_button("INVENTORY  ·  %d / %d cargo cells" % [raid.cargo_cells_used(), raid.capacity()], "inventory")
-	_label(panel_content, "The raid clock and patrols are paused.", 19, Color("#ddd4bd"))
-	_button("RESUME", "resume").grab_focus()
-	var map_button:=Button.new();map_button.text="PAUSE MENU" if map_open else "FIELD MAP"
-	map_button.pressed.connect(func() -> void:
-		raid.map_open=not map_open
-		show_pause(raid,not map_open))
-	panel_content.add_child(map_button)
-	_graphics_button(raid)
-	_controls_help()
-	_button("Abandon run…", "abandon_confirm")
-	_button("QUIT TO DESKTOP", "quit_confirm")
+	else:
+		MenuKit.spacer(screen.body, 0, true)
+	_settings_drawer(screen, raid)
 
 func show_quit_confirmation(raid: Node) -> void:
 	_clear_panel()
-	_translucent_menu_theme()
-	_label(panel_content, "QUIT TO DESKTOP?", 40, PAPER)
+	var paused: bool = raid.get("phase") != null and raid.phase == raid.Phase.PAUSED
+	var screen := _menu_screen("QUIT", "RAID" if paused else "HQ")
+	MenuKit.status_text(screen, "MIDORI PARK  ·  PAUSED" if paused else "HQ  ·  SECURED")
+	MenuKit.caption(screen, "QUIT  /  Close Shinrai and return to the desktop.")
+	MenuKit.key_hints(screen, [["Enter / A", "Select"], ["Esc / B", "Back"]])
+	var box := MenuKit.dialog(screen, "CONFIRM", "QUIT TO DESKTOP?")
 	var message := "Close Shinrai and return to the desktop."
-	if raid.phase == raid.Phase.PAUSED:
+	if paused:
 		message = "Leaving ends this raid. Unbanked cargo will be lost.\nYour banked stash is kept."
-	var warning := _label(panel_content, message, 22, Color("#ddd4bd"))
-	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	warning.custom_minimum_size.x = 780
+	MenuKit.wrapped(MenuKit.text(box, message, 20, MenuKit.AMBER if paused else MenuKit.PAPER))
 	if not raid.profile.last_error.is_empty():
-		var save_warning := _label(panel_content, "Some changes could not be saved.\n" + raid.profile.last_error, 20, Color("#ef9b8c"))
-		save_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_button("BACK", "quit_cancel").grab_focus()
-	_button("QUIT TO DESKTOP", "quit_desktop")
+		MenuKit.wrapped(MenuKit.text(box, "Some changes could not be saved.\n" + raid.profile.last_error, 17, MenuKit.DANGER))
+	MenuKit.spacer(box, 6)
+	var row := MenuKit.button_row(box)
+	var back := _action_button(row, "BACK", "quit_cancel")
+	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var quit := MenuKit.danger_button(row, "QUIT TO DESKTOP")
+	quit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quit.pressed.connect(func() -> void: action_requested.emit("quit_desktop"))
+	back.grab_focus()
 
 func show_abandon() -> void:
 	_clear_panel()
-	_label(panel_content, "ABANDON THIS RUN?", 40, PAPER)
-	_label(panel_content, "You will lose everything you are carrying. Your banked stash is safe.", 22, GOLD)
-	_button("Keep playing", "resume").grab_focus()
-	_button("Abandon run", "abandon")
+	var screen := _menu_screen("FIELD", "RAID")
+	MenuKit.status_text(screen, "MIDORI PARK  ·  PAUSED")
+	MenuKit.caption(screen, "ABANDON  /  Ends the raid without extracting.")
+	MenuKit.key_hints(screen, [["Enter / A", "Select"], ["Esc / B", "Back"]])
+	var box := MenuKit.dialog(screen, "CONFIRM", "ABANDON THIS RUN?")
+	MenuKit.wrapped(MenuKit.text(box, "You will lose everything you are carrying. Your banked stash is safe.", 20, MenuKit.AMBER))
+	MenuKit.spacer(box, 6)
+	var row := MenuKit.button_row(box)
+	var keep := _action_button(row, "KEEP PLAYING", "resume")
+	keep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var leave := MenuKit.danger_button(row, "ABANDON RUN")
+	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	leave.pressed.connect(func() -> void: action_requested.emit("abandon"))
+	keep.grab_focus()
 
 func show_pending_result(raid: Node) -> void:
 	_clear_panel()
-	_label(panel_content,"RESULT NOT SAVED",40,GOLD)
-	_label(panel_content,"Your cargo is held in this session. Rewards have not been banked.",22,PAPER)
-	_label(panel_content,raid.profile.last_error,20,GOLD)
-	_label(panel_content,"Restore save-file access, then retry. Keep the game open until saving succeeds.",18,PAPER)
-	var retry := _button("RETRY SAVE","retry_result_save")
-	retry.disabled=not raid.can_retry_result_save()
+	var screen := _menu_screen("DEBRIEF", "RAID")
+	MenuKit.status_text(screen, "RESULT HELD IN THIS SESSION", MenuKit.AMBER)
+	MenuKit.caption(screen, "SAVE  /  Keep the game open until saving succeeds.")
+	MenuKit.key_hints(screen, [["Enter / A", "Retry save"]])
+	var box := MenuKit.dialog(screen, "SAVE PENDING", "RESULT NOT SAVED", MenuKit.AMBER, 820)
+	MenuKit.wrapped(MenuKit.text(box, "Your cargo is held in this session. Rewards have not been banked.", 20, MenuKit.PAPER))
+	MenuKit.wrapped(MenuKit.text(box, str(raid.profile.last_error), 17, MenuKit.DANGER))
+	MenuKit.wrapped(MenuKit.text(box, "Restore save-file access, then retry. Keep the game open until saving succeeds.", 16, MenuKit.MUTED))
+	MenuKit.spacer(box, 6)
+	var retry := _action_button(box, "RETRY SAVE", "retry_result_save", true)
+	retry.disabled = not raid.can_retry_result_save()
 	if not retry.disabled: retry.grab_focus()
 
 func show_result(raid: Node, won: bool, reason: String, bonus: int) -> void:
 	_clear_panel()
-	_label(panel_content, "EXTRACTION CONFIRMED" if won else "SIGNAL LOST", 47, MINT if won else GOLD)
-	_label(panel_content, reason, 24, PAPER)
-	_label(panel_content, "RELAYS %d   /   HOSTILES %d   /   %s %d" % [raid.relays, raid.player.kills, "ITEMS BANKED" if won else "ITEMS LOST", raid.bag.size()], 23, PAPER)
-	_label(panel_content, "CONTRACT BONUS  +%d credits" % bonus if won else "Your banked stash and upgrades are safe.", 23, MINT)
+	var screen := _menu_screen("DEBRIEF", "RAID")
+	MenuKit.status_text(screen, "MIDORI PARK  ·  RUN ENDED")
+	MenuKit.caption(screen, "DEBRIEF  /  " + ("Cargo banked to your stash." if won else "Carried items were lost."), "Banked stash and upgrades are safe.")
+	MenuKit.key_hints(screen, [["Enter / A", "Return to operations"]])
+	var accent := MenuKit.TEAL if won else MenuKit.AMBER
+	var box := MenuKit.dialog(screen, "EXTRACTION CONFIRMED" if won else "SIGNAL LOST", "EXTRACTION CONFIRMED" if won else "SIGNAL LOST", accent, 980)
+	var chrome := MenuKit.chrome_of(box)
+	chrome.accent = accent
+	chrome.tab_tint = Color(accent, 0.42)
+	MenuKit.wrapped(MenuKit.text(box, reason, 22, MenuKit.PAPER))
+	MenuKit.spacer(box, 4)
+	var tiles := MenuKit.hbox(box, 8)
+	var kills := 0
+	if is_instance_valid(raid.get("player")) and raid.player.get("kills") != null: kills = int(raid.player.kills)
+	MenuKit.stat_tile(tiles, "RELAYS", str(int(raid.relays)), "/ 3")
+	MenuKit.stat_tile(tiles, "HOSTILES", str(kills))
+	MenuKit.stat_tile(tiles, "ITEMS BANKED" if won else "ITEMS LOST", str(raid.bag.size()), "", MenuKit.PAPER if won else MenuKit.AMBER)
+	if won:
+		MenuKit.stat_tile(tiles, "CONTRACT BONUS", "+%d" % bonus, "CR", MenuKit.TEAL)
+	else:
+		MenuKit.stat_tile(tiles, "STASH", "SAFE", "", MenuKit.MINT)
 	if not raid.profile.last_error.is_empty():
-		_label(panel_content, "SAVE FAILED: " + raid.profile.last_error, 20, GOLD)
-	_button("RETURN TO OPERATIONS", "hq").grab_focus()
+		MenuKit.wrapped(MenuKit.text(box, "SAVE FAILED: " + raid.profile.last_error, 17, MenuKit.DANGER))
+	MenuKit.spacer(box, 6)
+	_action_button(box, "RETURN TO OPERATIONS", "hq", true).grab_focus()
+
 
 func update_raid(raid: Node) -> void:
 	vitals_check=GameInput.down("inspect") and (overlay==null or not overlay.visible) and not raid.player.field_handling.check.active
@@ -1031,11 +1093,36 @@ class FieldMap extends Control:
 		if not selected.is_empty():
 			accept_event()
 			destination_selected.emit(selected)
+	## The park rectangle, widened (same 440:360 aspect) to keep the player and the
+	## tracked route on the chart: every raid starts on the north street, outside it.
+	const PARK_AREA := Rect2(-220, -180, 440, 360)
+	var view_area := PARK_AREA
+	func _update_view_area() -> void:
+		var area := PARK_AREA
+		if is_instance_valid(raid):
+			if show_player and is_instance_valid(raid.player):
+				var at: Vector3 = raid.player.global_position
+				area = area.expand(Vector2(at.x, at.z))
+			for point: Vector3 in raid.guidance_path:
+				area = area.expand(Vector2(point.x, point.z))
+		if area != PARK_AREA:
+			area = area.grow(12.0)
+			var aspect := PARK_AREA.size.x / PARK_AREA.size.y
+			if area.size.x / area.size.y > aspect:
+				var height := area.size.x / aspect
+				area.position.y -= (height - area.size.y) * 0.5
+				area.size.y = height
+			else:
+				var width := area.size.y * aspect
+				area.position.x -= (width - area.size.x) * 0.5
+				area.size.x = width
+		view_area = area
 	func project(p: Vector2) -> Vector2:
 		if printed_map:
 			return (Vector2(79,219)+(p+Vector2(220,180))/Vector2(440,360)*Vector2(865,690))/1024.0*size
-		return Vector2(28, 20) + (p + Vector2(220, 180)) / Vector2(440, 360) * Vector2(size.x - 56, size.y - 40)
+		return Vector2(28, 20) + (p - view_area.position) / view_area.size * Vector2(size.x - 56, size.y - 40)
 	func _draw() -> void:
+		if not printed_map: _update_view_area()
 		if printed_map:
 			var texture:=preload("res://assets/shinrai/parks/midori_park/models/furniture/ambient/information_board/midori_information_board_midori_information_map_draft_v2_1k.png")
 			draw_texture_rect(texture,Rect2(Vector2.ZERO,size),false)
@@ -1101,19 +1188,27 @@ func show_collected_map(raid: Node) -> void:
 			return_view = child.view_state()
 			break
 	_clear_panel()
-	_label(panel_content,"MIDORI PARK  /  COLLECTED VISITOR MAP",30,PAPER)
+	var in_hq: bool = raid.phase == raid.Phase.HQ
+	var screen := _menu_screen("FIELD KIT", "HQ" if in_hq else "RAID")
+	MenuKit.status_text(screen, "HQ  ·  SECURED" if in_hq else "MIDORI PARK  ·  PAUSED")
+	MenuKit.caption(screen, "COLLECTED VISITOR MAP  /  Printed at the park's information board.")
+	MenuKit.key_hints(screen, [["Enter / A", "Back to inventory"]])
+	MenuKit.spacer(screen.body, 0, true)
+	var middle := MenuKit.vbox(screen.body, 8)
+	middle.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	MenuKit.section(middle, "MIDORI PARK  /  COLLECTED VISITOR MAP")
+	var sheet := MenuKit.card(middle, "PRINTED MAP", 12, 8)
 	var chart:=FieldMap.new()
 	chart.raid=raid
 	chart.show_player=raid.phase != raid.Phase.HQ
 	chart.printed_map=true
-	chart.custom_minimum_size=Vector2(620,620)
+	chart.custom_minimum_size=Vector2(700,700)
 	chart.size_flags_horizontal=Control.SIZE_SHRINK_CENTER
-	panel_content.add_child(chart)
+	sheet.add_child(chart)
 	map_view=chart
-	_label(panel_content,"YOU  △  ·  Red printed marker: information board" if chart.show_player else "Saved park map · No active deployment",18,MINT)
+	MenuKit.text(sheet,"YOU  △  ·  Red printed marker: information board" if chart.show_player else "Saved park map · No active deployment",16,MenuKit.MINT)
 	# Only this Back button owns the snapshot; other exits cannot replay it.
-	var back := Button.new()
-	back.text = "BACK TO INVENTORY"
+	var back := MenuKit.primary_button(middle, "BACK TO INVENTORY", 20)
 	back.pressed.connect(func() -> void:
 		action_requested.emit("inventory")
 		if return_view.is_empty(): return
@@ -1121,21 +1216,23 @@ func show_collected_map(raid: Node) -> void:
 			if child is InventoryPanel and is_instance_valid(child.raid) and child.raid.get_instance_id() == owner_id:
 				child.restore_view_state(return_view)
 				break)
-	panel_content.add_child(back)
+	MenuKit.spacer(screen.body, 0, true)
 	back.grab_focus()
 
+## Settings drawer (graphics + controls help) on Pause; Operations builds the
+## same drawer itself and reports "graphics" through its action signal.
 func _controls_help() -> void:
-	var button:=Button.new();button.text="CONTROLS HELP"
-	panel_content.add_child(button)
-	var help:=VBoxContainer.new();panel_content.add_child(help);help.hide()
-	var pad:=_label(help,"Xbox: LS move / RS look / L3 sprint / A jump / B crouch / X reload / Y weapons\nRT fire / LT aim / RB interact / LB heal / Dpad Up eat / Dpad Down lower weapon\nView inventory / Menu pause / Hold R3 vitals / R3 + X check magazine\nMenus: Dpad or LS navigate / A select / B back\nInventory: LB-RB categories or tabs / Y cargo-actions",16,Color("aabbbd"))
-	pad.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
-	var keys:=_label(help,"Keyboard: WASD move / Shift sprint / Ctrl crouch / Space jump\nLMB fire / RMB aim / R reload / J check magazine / B lower weapon\nHold E interact / Hold H heal / Hold V vitals\nI inventory / Tab map / Esc pause / T target / F7 graphics",16,Color("aabbbd"))
-	keys.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
-	button.pressed.connect(func() -> void:
-		help.visible=not help.visible
-		button.text="HIDE CONTROLS HELP" if help.visible else "CONTROLS HELP"
-		call_deferred("_fit_menu_scroll"))
+	if menu_screen is MenuKit.MenuScreen: (menu_screen as MenuKit.MenuScreen).open_side()
+
+func _settings_drawer(screen: MenuKit.MenuScreen, raid: Node) -> void:
+	var drawer := MenuKit.side_panel(screen, "SETTINGS", 600)
+	var choice: Array = []
+	var picked := MenuKit.settings_contents(drawer, _high_quality(raid), func() -> void:
+		_toggle_graphics(raid)
+		if not choice.is_empty(): (choice[0] as MenuKit.Segmented).select(1 if _high_quality(raid) else 0))
+	choice.append(picked)
+	if not _can_toggle_graphics(raid):
+		for button: Button in picked.buttons: button.disabled = true
 
 func _set_menu_scrolling(enabled: bool) -> void:
 	if not is_instance_valid(menu_scroll) or not is_instance_valid(panel_content):return
@@ -1152,16 +1249,30 @@ func _fit_menu_scroll() -> void:
 	var focused:=get_viewport().gui_get_focus_owner()
 	if is_instance_valid(focused) and panel_content.is_ancestor_of(focused):menu_scroll.ensure_control_visible(focused)
 
+func _park_of(raid: Node) -> Node:
+	return raid.get_parent() if is_instance_valid(raid) else null
+
+func _can_toggle_graphics(raid: Node) -> bool:
+	var park := _park_of(raid)
+	return park != null and park.has_method("_apply_render_quality")
+
+func _high_quality(raid: Node) -> bool:
+	var park := _park_of(raid)
+	return park != null and park.get("high_render_quality") == true
+
+func _toggle_graphics(raid: Node) -> void:
+	var park := _park_of(raid)
+	if park == null or not park.has_method("_apply_render_quality"): return
+	park.set("high_render_quality", not _high_quality(raid))
+	park.call("_apply_render_quality")
+	if park.has_method("_update_time_label"): park.call("_update_time_label")
+
+## Kept for callers of the old screens: opens the settings drawer, where the
+## graphics choice now lives.
 func _graphics_button(raid: Node) -> void:
-	var park: Node=raid.get_parent()
-	if not park.has_method("_apply_render_quality"):return
-	var button:=Button.new();button.text="GRAPHICS: "+("HIGH" if bool(park.get("high_render_quality")) else "BALANCED")
-	button.pressed.connect(func() -> void:
-		park.set("high_render_quality",not bool(park.get("high_render_quality")))
-		park.call("_apply_render_quality")
-		if park.has_method("_update_time_label"):park.call("_update_time_label")
-		button.text="GRAPHICS: "+("HIGH" if bool(park.get("high_render_quality")) else "BALANCED"))
-	panel_content.add_child(button)
+	if menu_screen is MenuKit.MenuScreen: (menu_screen as MenuKit.MenuScreen).open_side()
+	elif _can_toggle_graphics(raid): _toggle_graphics(raid)
+
 
 ## A soft, dark edge frames the view and pulls the eye to the centre. Drawn
 ## beneath every HUD element; never blocks input.

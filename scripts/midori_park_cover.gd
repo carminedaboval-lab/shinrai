@@ -126,10 +126,11 @@ func _build() -> void:
 	await _place_camps()
 	await _place_cover()
 	await _place_strewn_items()
+	var batch_count := _batches.size()
 	_commit()
 	installed = true
 	set_night_mode(_night)
-	report = {"cover":placements.size(), "camps":camps.size(), "fires":_fires.size(), "batches":_batches.size(), "tall":placements.filter(func(p: Dictionary) -> bool: return p.tall).size()}
+	report = {"cover":placements.size(), "camps":camps.size(), "fires":_fires.size(), "batches":batch_count, "tall":placements.filter(func(p: Dictionary) -> bool: return p.tall).size()}
 	print("MIDORI_PARK_COVER_READY ", JSON.stringify(report))
 	StartupTrace.finish("park_cover.build", tick)
 
@@ -239,13 +240,20 @@ func _commit() -> void:
 	for key: Vector2i in _batches:
 		var st: SurfaceTool = _batches[key]
 		st.generate_normals()
+		# Flat normals are set; indexing then merges only vertices identical in
+		# position, normal and colour (the two triangles of each quad share two),
+		# so the same triangles draw from fewer vertex bytes.
+		st.index()
 		var mesh := st.commit()
+		# The mesh owns the geometry now; drop the SurfaceTool's copy.
+		st.clear()
 		mesh.surface_set_material(0, _material)
 		var instance := MeshInstance3D.new()
 		instance.name = "CoverBatch_%d_%d" % [key.x, key.y]
 		instance.mesh = mesh
 		instance.visibility_range_end = 240.0
 		add_child(instance)
+	_batches.clear()
 
 func _tri(st: SurfaceTool, xf: Transform3D, a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
 	st.set_color(color)

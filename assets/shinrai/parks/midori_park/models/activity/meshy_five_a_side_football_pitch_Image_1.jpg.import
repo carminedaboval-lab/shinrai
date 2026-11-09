@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bm5l422exted2"
-path="res://.godot/imported/meshy_five_a_side_football_pitch_Image_1.jpg-a42f605094fcb6d306514ddc0a600cd3.ctex"
+path.bptc="res://.godot/imported/meshy_five_a_side_football_pitch_Image_1.jpg-a42f605094fcb6d306514ddc0a600cd3.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e3c1b965a34b2e55d8edf93a8f17849b"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/activity/meshy_five_a_side_football_pitch_Image_1.jpg"
-dest_files=["res://.godot/imported/meshy_five_a_side_football_pitch_Image_1.jpg-a42f605094fcb6d306514ddc0a600cd3.ctex"]
+dest_files=["res://.godot/imported/meshy_five_a_side_football_pitch_Image_1.jpg-a42f605094fcb6d306514ddc0a600cd3.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

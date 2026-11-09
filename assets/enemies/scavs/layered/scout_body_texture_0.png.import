@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cvs0opaign7rf"
-path="res://.godot/imported/scout_body_texture_0.png-784dadefea923e08bf6622e339f8be40.ctex"
+path.bptc="res://.godot/imported/scout_body_texture_0.png-784dadefea923e08bf6622e339f8be40.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "4365ab70585ef7ee26470ec2aed90231"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/enemies/scavs/layered/scout_body_texture_0.png"
-dest_files=["res://.godot/imported/scout_body_texture_0.png-784dadefea923e08bf6622e339f8be40.ctex"]
+dest_files=["res://.godot/imported/scout_body_texture_0.png-784dadefea923e08bf6622e339f8be40.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

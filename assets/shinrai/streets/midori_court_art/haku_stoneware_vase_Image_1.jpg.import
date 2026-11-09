@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b52hofle76avb"
-path="res://.godot/imported/haku_stoneware_vase_Image_1.jpg-5830261cad90b89222db85a83271ade5.ctex"
+path.bptc="res://.godot/imported/haku_stoneware_vase_Image_1.jpg-5830261cad90b89222db85a83271ade5.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c4cf3999bb75dbe709e0d37aa47e95ec"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/streets/midori_court_art/haku_stoneware_vase_Image_1.jpg"
-dest_files=["res://.godot/imported/haku_stoneware_vase_Image_1.jpg-5830261cad90b89222db85a83271ade5.ctex"]
+dest_files=["res://.godot/imported/haku_stoneware_vase_Image_1.jpg-5830261cad90b89222db85a83271ade5.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

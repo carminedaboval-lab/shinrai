@@ -31,6 +31,8 @@ var native_shadow_materials: Dictionary = {}
 # before validation. Never rely on Resource.changed for builtin setter coverage.
 var native_material_validation: Dictionary = {}
 var native_coverage_signatures: Dictionary = {}
+## Shadow shader code -> its one Shader (see _sync_native_shadow_material).
+var _shadow_shaders: Dictionary = {}
 var native_validation_max := 0
 var native_coverage_refreshes := 0
 var native_material_poll_passes := 0
@@ -88,12 +90,18 @@ func install(park: Node3D) -> Dictionary:
 	var forest_meshes: Dictionary={}
 	var thin_fingerprints: Dictionary={}
 	var mesh_fingerprints: Dictionary={}
+	# Digest headers of the prototype meshes (see _mesh_header).
+	var prototype_headers: Dictionary={}
 	var species_counts: Dictionary={}
 	var selected_species: Dictionary={}
 	for original: MultiMeshInstance3D in park.find_children("JapaneseForestGrassDrift_*","MultiMeshInstance3D",true,false):
 		if original.multimesh!=null and original.multimesh.mesh!=null and original.visibility_range_begin==0.0 and original.visibility_range_end==18.0 and original.visibility_range_fade_mode==GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF:
 			var material: ShaderMaterial=original.material_override as ShaderMaterial
-			if material!=null and material.shader!=null and _forest_shader_accepted(material.shader):forest_meshes[original.multimesh.mesh.get_instance_id()]=true
+			# One shader-code digest per shader (thousands of drifts share a few).
+			if material!=null and material.shader!=null:
+				var drift_shader_id: int=material.shader.get_instance_id()
+				if not shader_eligibility.has(drift_shader_id):shader_eligibility[drift_shader_id]=_forest_shader_accepted(material.shader)
+				if shader_eligibility[drift_shader_id]:forest_meshes[original.multimesh.mesh.get_instance_id()]=true
 	# Exact mesh resources of the supplied fern/fountain prototypes, not material names.
 	for property: String in ["midnight_fern_prototype","emerald_fountain_grass_prototype"]:
 		var prototype: Node=park.get(property)
@@ -107,6 +115,7 @@ func install(park: Node3D) -> Dictionary:
 						thin_fingerprints[fingerprint].ambiguous=true
 					elif not thin_fingerprints.has(fingerprint):thin_fingerprints[fingerprint]={"species":property,"materials":materials,"ambiguous":false}
 					mesh_fingerprints[part.mesh.get_instance_id()]=fingerprint
+					if part.mesh is ArrayMesh:prototype_headers[_mesh_header(part.mesh)]=true
 	var container:=park.get_node_or_null("MidoriDistanceDetail")
 	if container==null: return {"error":"Requires reviewed spatial planting candidate"}
 	camera=park.get_viewport().get_camera_3d()
@@ -135,7 +144,14 @@ func install(park: Node3D) -> Dictionary:
 			soft=shader_eligibility[shader_id] and forest_meshes.has(geometry.multimesh.mesh.get_instance_id()) and str(geometry.name).begins_with("grass_Cell_") and geometry.visibility_range_end==18.0 and geometry.visibility_range_end_margin==2.0 and geometry.visibility_range_fade_mode==GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF and geometry.visibility_parent==NodePath() and not geometry.top_level and (not geometry.multimesh.mesh is ArrayMesh or geometry.multimesh.mesh.shadow_mesh==null)
 			if soft:source_shader=material.shader
 		var mesh_id: int=geometry.multimesh.mesh.get_instance_id()
-		if not soft and not mesh_fingerprints.has(mesh_id):mesh_fingerprints[mesh_id]=_mesh_geometry_fingerprint(geometry.multimesh.mesh)
+		if not soft and not mesh_fingerprints.has(mesh_id):
+			# The digest starts with this header: a mesh whose header no supplied
+			# prototype has can never match one, so its full surface read-back
+			# (a GPU download per mesh) is skipped; it stays unmatched as before.
+			var candidate: Mesh=geometry.multimesh.mesh
+			if candidate is ArrayMesh and candidate.shadow_mesh!=candidate and not prototype_headers.has(_mesh_header(candidate)):
+				mesh_fingerprints[mesh_id]="unmatched:%d"%mesh_id
+			else:mesh_fingerprints[mesh_id]=_mesh_geometry_fingerprint(candidate)
 		var trusted: Dictionary=thin_fingerprints.get(mesh_fingerprints.get(mesh_id,""),{})
 		var materials_match: bool=not trusted.is_empty() and not trusted.ambiguous
 		if materials_match:
@@ -229,7 +245,15 @@ func _sync_native_shadow_material(original: StandardMaterial3D, shadow: ShaderMa
 	var filters: Array[String]=["filter_nearest","filter_linear","filter_nearest_mipmap","filter_linear_mipmap","filter_nearest_mipmap_anisotropic","filter_linear_mipmap_anisotropic"]
 	var code: String=OpaqueShadowShader.code.replace("filter_linear_mipmap, repeat_enable",filters[original.texture_filter]+", "+("repeat_enable" if original.texture_repeat else "repeat_disable"))
 	if shadow.shader==null or shadow.shader.code!=code:
-		var shader:=Shader.new();shader.code=code;shadow.shader=shader
+		# Materials whose shadow code is identical share one Shader: each new one
+		# compiled the same code again (16 compiles, ~1.2 s of the one frame this
+		# install runs in). A cached Shader's code is never changed; a material
+		# that needs other code takes (or makes) the Shader for that code.
+		var shader: Shader=_shadow_shaders.get(code)
+		if shader==null:
+			shader=Shader.new();shader.code=code
+			_shadow_shaders[code]=shader
+		shadow.shader=shader
 	shadow.set_shader_parameter("cutout_enabled",original.transparency==BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR)
 	shadow.set_shader_parameter("texture_albedo",original.albedo_texture)
 	shadow.set_shader_parameter("albedo_alpha",original.albedo_color.a)
@@ -297,6 +321,10 @@ func _on_opaque_material_changed() -> void:
 		if not _native_material_compatible(material):_invalidate_soft();return
 		if native_shadow_materials.has(material.get_instance_id()):_sync_native_shadow_material(material,native_shadow_materials[material.get_instance_id()])
 
+## The first block _mesh_geometry_fingerprint hashes (cheap: no surface data).
+static func _mesh_header(mesh: ArrayMesh) -> PackedByteArray:
+	return var_to_bytes([mesh.get_surface_count(),mesh.get_blend_shape_count(),mesh.get_aabb(),mesh.custom_aabb,mesh.blend_shape_mode])
+
 static func _mesh_geometry_fingerprint(mesh: Mesh, include_shadow: bool = true) -> String:
 	# Native producers copy geometry before assigning effective surface materials.
 	# Hash each unique resource once during capture, including every native surface
@@ -304,7 +332,7 @@ static func _mesh_geometry_fingerprint(mesh: Mesh, include_shadow: bool = true) 
 	if not mesh is ArrayMesh:return ""
 	var digest:=HashingContext.new()
 	digest.start(HashingContext.HASH_SHA256)
-	digest.update(var_to_bytes([mesh.get_surface_count(),mesh.get_blend_shape_count(),mesh.get_aabb(),mesh.custom_aabb,mesh.blend_shape_mode]))
+	digest.update(_mesh_header(mesh))
 	for shape: int in mesh.get_blend_shape_count():digest.update(var_to_bytes(mesh.get_blend_shape_name(shape)))
 	for surface: int in mesh.get_surface_count():
 		var data: Dictionary=RenderingServer.mesh_get_surface(mesh.get_rid(),surface)

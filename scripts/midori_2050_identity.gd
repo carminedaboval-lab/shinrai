@@ -2,6 +2,8 @@ extends Node3D
 ## Real Meshy furniture and measured Midori 2050 finishes, in world metres.
 ## Original supplied meshes stay untouched; planters batch plants per rest garden.
 const Budget = preload("res://scripts/shinrai_loading_budget.gd")
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
+const StartupTrace = preload("res://scripts/startup_trace.gd")
 const IRIS = preload("res://assets/shinrai/parks/midori_park/models/plants/iris_japonica/iris_japonica_lod0.glb")
 const PLAZA_CENTRE := Vector2(164,136)
 @export var complete_plaza := true
@@ -69,6 +71,10 @@ func install() -> void:
 	park=get_parent()
 	var gardens: Node=park.get_node("MidoriGardenSpots")
 	while not gardens.installed: await get_tree().process_frame
+	# This wakes in the frame the garden spots finish, from a plain frame wait:
+	# take a budget turn before the setup (it ran ~2 s unbroken into that frame).
+	await Budget.checkpoint(park)
+	var _st := StartupTrace.begin()
 	set_as_top_level(true)
 	global_transform=Transform3D.IDENTITY
 	_make_materials()
@@ -78,9 +84,13 @@ func install() -> void:
 	shrub_source=Node3D.new()
 	shrub_source.add_child(park.forest_floor_bush_prototypes[0].duplicate())
 	fern_source=park.midnight_fern_prototype
+	_st = StartupTrace.finish("identity.setup", _st)
+	await Budget.checkpoint(park)
+	_st = StartupTrace.begin()
 	# The east court is the first completed area. Other pockets are enabled only
 	# after its complete geometry, planting, lighting and circulation review.
 	await _plaza_pocket("East",Vector2(190,147),true,"PlazaBench_02")
+	_st = StartupTrace.finish("identity.pocket_east", _st)
 	if complete_plaza:
 		await _plaza_pocket("West",Vector2(143,123),true,"")
 		await _plaza_pocket("North",_north_rest_bay(),false,"PlazaBench_03")
@@ -753,8 +763,8 @@ func _flush_plants(origin: Vector3=Vector3.ZERO) -> void:
 	for key: String in plant_batches:
 		var row: Dictionary=plant_batches[key]
 		var node:=MultiMeshInstance3D.new();node.name="PocketFlowerDrift_%02d"%plant_batch_serial
-		var mesh: Mesh=row.mesh.duplicate()
-		for i: int in range(row.overrides.size()): mesh.surface_set_material(i,row.overrides[i])
+		# One baked copy per (mesh, materials), shared with every other batch of the same part.
+		var mesh: Mesh=BakeCache.baked(row.mesh,row.overrides);BakeCache.tag(node,BakeCache.group_key())
 		var mm:=MultiMesh.new();mm.transform_format=MultiMesh.TRANSFORM_3D;mm.mesh=mesh
 		mm.instance_count=row.transforms.size()
 		for i: int in range(mm.instance_count):
@@ -914,8 +924,7 @@ func _south_approach_drift(spec: Dictionary,bed_index: int,entrance: Node3D,sour
 	for key: String in owned:
 		var row: Dictionary=owned[key]
 		var node:=MultiMeshInstance3D.new();node.name="ApproachVisuals_%02d"%serial
-		var mesh: Mesh=row.mesh.duplicate()
-		for surface: int in range(row.overrides.size()): mesh.surface_set_material(surface,row.overrides[surface])
+		var mesh: Mesh=BakeCache.baked(row.mesh,row.overrides);BakeCache.tag(node,BakeCache.group_key())
 		var mm:=MultiMesh.new();mm.transform_format=MultiMesh.TRANSFORM_3D;mm.mesh=mesh;mm.instance_count=row.transforms.size()
 		var transforms: Array[Transform3D]=[]
 		for i: int in range(mm.instance_count):
@@ -1041,8 +1050,7 @@ func _entrance_landscape_bed(entrance: Node3D,spec: Dictionary,sources: Dictiona
 	for key: String in owned:
 		var row: Dictionary=owned[key]
 		var node:=MultiMeshInstance3D.new();node.name="LandscapePlants_%02d"%serial
-		var mesh: Mesh=row.mesh.duplicate()
-		for surface: int in range(row.overrides.size()): mesh.surface_set_material(surface,row.overrides[surface])
+		var mesh: Mesh=BakeCache.baked(row.mesh,row.overrides);BakeCache.tag(node,BakeCache.group_key())
 		var mm:=MultiMesh.new();mm.transform_format=MultiMesh.TRANSFORM_3D;mm.mesh=mesh;mm.instance_count=row.transforms.size()
 		var transforms: Array[Transform3D]=[]
 		for i: int in range(mm.instance_count):

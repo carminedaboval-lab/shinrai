@@ -17,6 +17,7 @@ extends RefCounted
 ## so nothing runs per frame. Grass casts no shadows.
 const Biomes := preload("res://scripts/midori_biomes.gd")
 const Kit := preload("res://scripts/biomes/biome_kit.gd")
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 const THIN_ALL := "res://scripts/biomes/thin_all.gd"
 const ID := "harappa"
 const CENTRE := Vector2(-152, 104)
@@ -385,7 +386,7 @@ static func _shrubs(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumber
 			var a := rng.randf() * TAU
 			var tp: Vector2 = m.p
 			centres.append(tp + Vector2(cos(a), sin(a)) * rng.randf_range(2.0, 4.0))
-	var row := 0
+	var since := Kit.frames_now()
 	for z: int in range(int(RECT.position.y), int(RECT.end.y), 3):
 		for x: int in range(int(RECT.position.x), int(RECT.end.x), 3):
 			var p := Vector2(x + rng.randf() * 3.0, z + rng.randf() * 3.0)
@@ -394,10 +395,12 @@ static func _shrubs(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumber
 			var patch := _n(p, 1.4, Vector2(-31, 77))
 			var chance := w * (0.05 * smoothstep(0.25, 0.6, patch) + 0.004)
 			if rng.randf() < chance: centres.append(p)
-		row += 1
-		if row % 4 == 0:
-			await park.get_tree().process_frame
-			if not is_instance_valid(root): return 0
+		# Pure noise and weights: yield on time, not on a row count.
+		await Kit.slice(park)
+		if not is_instance_valid(root): return 0
+	# The lone trees' trunks (just added) are in the space before the rays below.
+	await Kit.settle(park, since)
+	if not is_instance_valid(root): return 0
 	var made := 0
 	for c: Vector2 in centres:
 		var members := rng.randi_range(2, 4)
@@ -441,10 +444,28 @@ static func _grass(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberG
 	# The park's own trunks as well as the new lone trees (already appended to
 	# occupied_tree_positions by _trees).
 	var trunks := _trunk_grid(park)
+	var since := Kit.frames_now()
+	# The meadow weight at every cell centre (pure maths, no RNG) is worked out
+	# on WorkerThreadPool first, a row per task; the loop reads the same floats.
+	var x0 := int(RECT.position.x)
+	var cols := int(RECT.end.x) - x0
+	Biomes.noise()
+	# Each row reads its own copy of the weight kernel (Biomes.Kernel: the same
+	# floats as _w / Biomes.weight, nothing shared between the threads).
+	var kernel := Biomes.terrain_kernel(terrain)
+	var id_index := Biomes.region_index(ID)
+	var cell_w := Kit.parallel(int(RECT.end.y) - int(RECT.position.y), func(r: int) -> PackedFloat64Array:
+		var k := kernel.clone()
+		var row := PackedFloat64Array()
+		row.resize(cols)
+		var z := int(RECT.position.y) + r
+		for c: int in range(cols): row[c] = k.weight(Vector2(x0 + c + 0.5, z + 0.5), id_index)
+		return row, "meadow cell weights")
 	for z: int in range(int(RECT.position.y), int(RECT.end.y)):
+		var w_row: PackedFloat64Array = cell_w[z - int(RECT.position.y)]
 		for x: int in range(int(RECT.position.x), int(RECT.end.x)):
 			var cell := Vector2(x + 0.5, z + 0.5)
-			var w := _w(cell, terrain)
+			var w := w_row[x - x0]
 			if w < 0.03: continue
 			# Plants jitter up to 0.71 m from the cell centre, so cells near the
 			# paving or the floor are kept here and checked per plant in _scatter.
@@ -504,18 +525,19 @@ static func _grass(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberG
 							# instead of being stretched into upright spikes.
 							var spread := h * rng.randf_range(0.72, 0.92)
 							susuki.append(_row(rng, terrain, p, h / susuki_unit, clampf(straw + 0.3, 0.3, 1.0), 0.07, spread))
-		if z % 3 == 0:
-			await park.get_tree().process_frame
-			if not is_instance_valid(root): return {"aborted": true}
+		# Rows only collect transforms (nothing joins the scene or the physics
+		# space here): yield on time, not on a row count.
+		await Kit.slice(park)
+		if not is_instance_valid(root): return {"aborted": true}
+	await Kit.settle(park, since)
+	if not is_instance_valid(root): return {"aborted": true}
 	_keep_at_most(clumps, MAX_CLUMPS, rng)
 	_keep_at_most(tufts, MAX_TUFTS, rng)
 	_keep_at_most(susuki, MAX_SUSUKI, rng)
-	var shader := Shader.new()
-	shader.code = GRASS_SHADER
+	var shader := ShaderPool.shader(GRASS_SHADER)
 	var grass_look := _material(shader, 0.045, 0.55)
 	var sward_look := _material(shader, 0.03, 0.72)
-	var susuki_shader := Shader.new()
-	susuki_shader.code = SUSUKI_SHADER
+	var susuki_shader := ShaderPool.shader(SUSUKI_SHADER)
 	var susuki_look := _material(susuki_shader, 0.085, 0.6)
 	susuki_look.set_shader_parameter("panicle", load(PANICLE_TEXTURE))
 	# Near and far versions of each layer over the same cells: the far ones
@@ -595,7 +617,10 @@ static func _cells(parent: Node3D, name: String, mesh: Mesh, material: Material,
 		if not groups.has(key): groups[key] = []
 		(groups[key] as Array).append(row)
 	var made := 0
-	for key: Vector2i in groups:
+	var keys: Array = groups.keys()
+	var buffers := Kit.pack_cells(groups, keys, cell, true, false, rows.size())
+	for index: int in range(keys.size()):
+		var key: Vector2i = keys[index]
 		var list: Array = groups[key]
 		var centre := Vector3((key.x + 0.5) * cell, 0.0, (key.y + 0.5) * cell)
 		var many := MultiMesh.new()
@@ -603,12 +628,7 @@ static func _cells(parent: Node3D, name: String, mesh: Mesh, material: Material,
 		many.use_colors = true
 		many.mesh = mesh
 		many.instance_count = list.size()
-		for i: int in range(list.size()):
-			var row: Array = list[i]
-			var t: Transform3D = row[0]
-			t.origin -= centre
-			many.set_instance_transform(i, t)
-			many.set_instance_color(i, row[1])
+		many.buffer = buffers[index]
 		var node := MultiMeshInstance3D.new()
 		node.name = "%s_%d_%d" % [name, key.x, key.y]
 		node.multimesh = many
@@ -623,9 +643,9 @@ static func _cells(parent: Node3D, name: String, mesh: Mesh, material: Material,
 		node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		parent.add_child(node)
 		made += 1
-		if made % 8 == 0:
-			await parent.get_tree().process_frame
-			if not is_instance_valid(parent): return made
+		# Visual batches only (no bodies): yield on time, not every eighth cell.
+		await Kit.slice(parent)
+		if not is_instance_valid(parent): return made
 	return made
 
 # --- Procedural meshes --------------------------------------------------------

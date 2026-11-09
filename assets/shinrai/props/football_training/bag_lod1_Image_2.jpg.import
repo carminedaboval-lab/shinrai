@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cwqowqe60qkt8"
-path="res://.godot/imported/bag_lod1_Image_2.jpg-dba9e437e78ed9c54d69e7ed01260a56.ctex"
+path.bptc="res://.godot/imported/bag_lod1_Image_2.jpg-dba9e437e78ed9c54d69e7ed01260a56.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8aee6ac2ca83e1f08ac5daf02fd66a3d"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/props/football_training/bag_lod1_Image_2.jpg"
-dest_files=["res://.godot/imported/bag_lod1_Image_2.jpg-dba9e437e78ed9c54d69e7ed01260a56.ctex"]
+dest_files=["res://.godot/imported/bag_lod1_Image_2.jpg-dba9e437e78ed9c54d69e7ed01260a56.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

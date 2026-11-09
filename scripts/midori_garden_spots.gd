@@ -1,5 +1,6 @@
 extends Node3D
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const StartupTrace = preload("res://scripts/startup_trace.gd")
 
 # Small authored compositions in world metres, using the supplied park models.
 # Keep the open side facing the walking line and the planting behind the stones.
@@ -29,10 +30,12 @@ func _ready() -> void:
 func install() -> void:
 	if installed: return
 	park = get_parent()
+	var _gt := StartupTrace.begin()
 	terrain = park.get_node("MidoriTerrain")
 	while not terrain.installed: await get_tree().process_frame
 	var nature := park.get_node("MidoriIslandNature")
 	while not nature.installed: await get_tree().process_frame
+	_gt = StartupTrace.finish("garden_spots.wait_nature", _gt)
 	desire_paths = park.get_node_or_null("MidoriDesirePaths")
 	set_as_top_level(true)
 	global_transform = Transform3D.IDENTITY
@@ -92,11 +95,14 @@ func install() -> void:
 			footprints.append({"p":p,"radius":radius,"stone":false,"node":root.get_path()})
 			plant_count += 1
 		report.append({"name":spec.name,"centre":spec.centre,"stones":stone_count,"plants":plant_count})
+	_gt = StartupTrace.finish("garden_spots.gardens", _gt)
 	await _install_plaza_canopy(plaza_shrub,iris)
+	_gt = StartupTrace.finish("garden_spots.canopy", _gt)
 	for source in sources: source.free()
 	iris.free()
 	plaza_shrub.free()
 	await _trim_stone_grass()
+	_gt = StartupTrace.finish("garden_spots.trim_grass", _gt)
 	installed = true
 	print("GARDEN_SPOTS_READY ",JSON.stringify({"gardens":report,"removed_grass":removed_grass}))
 
@@ -196,6 +202,16 @@ func _install_plaza_canopy(shrub_source: Node3D, iris: Node3D) -> void:
 		await LoadingBudget.checkpoint(park)
 
 
+## park.find_child("OpenLawnBoulderCover") walked the whole park tree (~67k nodes)
+## for every candidate that reached this test. The park build makes that one node
+## and nothing renames, adds or frees it while the gardens install, so the first
+## lookup's node is kept (looked up again while missing, or if it left the tree).
+var _boulder_cover: Node
+func _old_boulder_cover() -> Node:
+	if _boulder_cover == null or not is_instance_valid(_boulder_cover) or not _boulder_cover.is_inside_tree() or _boulder_cover.name != &"OpenLawnBoulderCover":
+		_boulder_cover = park.find_child("OpenLawnBoulderCover",true,false)
+	return _boulder_cover
+
 func _find_position(target: Vector2,radius: float,search_radius: float,stone: bool) -> Dictionary:
 	for attempt in range(60):
 		var p := target + Vector2(1,0).rotated(attempt*2.399963)*sqrt(float(attempt)/60.0)*search_radius
@@ -220,7 +236,7 @@ func _clear(p: Vector2,radius: float,stone: bool) -> bool:
 		if p.distance_to(Vector2(root.x,root.z))<radius+1.0: return false
 	for cover: Dictionary in park.get_node("MidoriIslandNature").mainland_cover:
 		if p.distance_to(cover.p)<radius+float(cover.radius)+1.0: return false
-	var old_cover := park.find_child("OpenLawnBoulderCover",true,false)
+	var old_cover := _old_boulder_cover()
 	if old_cover != null:
 		for old: Node3D in old_cover.get_children():
 			if String(old.name).begins_with("OpenBoulder_") and p.distance_to(Vector2(old.global_position.x,old.global_position.z))<radius+3.5: return false
@@ -272,19 +288,43 @@ func _trim_stone_grass() -> void:
 		if not footprint.stone and not str(footprint.node).contains("/Plaza"): continue
 		var radius: float = float(footprint.radius)+.2 if footprint.stone else float(footprint.radius)*.72
 		trim_regions.append(Vector3(footprint.p.x,footprint.p.y,radius))
-	for batch: MultiMeshInstance3D in park.find_children("*","MultiMeshInstance3D",true,false):
+	for found: Node in park.find_children("*","MultiMeshInstance3D",true,false):
+		# A budget turn per grass batch, kept or trimmed: scanning the untouched
+		# batches back to back used to run ~2 s in one frame. Same batches, same
+		# order; trims only remove instances, so the result does not depend on when
+		# another producer's trim lands in between.
+		await LoadingBudget.checkpoint(park)
+		if not is_instance_valid(found): continue
+		var batch := found as MultiMeshInstance3D
 		var label := String(batch.name)
 		if not (label.begins_with("JapaneseForestGrass") or label.begins_with("ForestGrassLOD") or label.begins_with("WoodlandFillLOD") or label.contains("UprightGrass")): continue
 		var mm := batch.multimesh
 		if mm==null: continue
 		var box := mm.mesh.get_aabb()
 		var anchor := Vector3(box.get_center().x,box.position.y,box.get_center().z)
-		var kept: Array[int] = []
+		# Test each tuft only against the regions that can reach this batch (its
+		# tuft points' bounds grown by the region radius): one large batch against
+		# every region was a 2 s frame. The distance test itself is unchanged, so
+		# exactly the same tufts are removed.
+		var points := PackedVector2Array()
+		points.resize(mm.instance_count)
+		var low := Vector2(INF,INF)
+		var high := Vector2(-INF,-INF)
 		for index in range(mm.instance_count):
 			var p3 := batch.global_transform*mm.get_instance_transform(index)*anchor
 			var p := Vector2(p3.x,p3.z)
+			points[index] = p
+			low = low.min(p)
+			high = high.max(p)
+		var reach: Array[Vector3] = []
+		for region: Vector3 in trim_regions:
+			var margin := region.z+.01
+			if region.x>=low.x-margin and region.x<=high.x+margin and region.y>=low.y-margin and region.y<=high.y+margin: reach.append(region)
+		var kept: Array[int] = []
+		for index in range(mm.instance_count):
+			var p := points[index]
 			var remove := false
-			for region: Vector3 in trim_regions:
+			for region: Vector3 in reach:
 				if p.distance_to(Vector2(region.x,region.y))<region.z: remove=true;break
 			if remove: removed_grass+=1
 			else: kept.append(index)
@@ -301,4 +341,3 @@ func _trim_stone_grass() -> void:
 			if mm.use_colors: trimmed.set_instance_color(index,mm.get_instance_color(kept[index]))
 			if mm.use_custom_data: trimmed.set_instance_custom_data(index,mm.get_instance_custom_data(kept[index]))
 		batch.multimesh=trimmed
-		await LoadingBudget.checkpoint(park)

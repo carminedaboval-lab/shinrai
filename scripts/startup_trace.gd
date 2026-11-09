@@ -35,9 +35,12 @@ static func watch(park: Node) -> void:
 	_watch_last_sample = now
 	var pending: Array[String] = []
 	for child: Node in park.get_children():
-		var state = child.get("installed")
-		if state != null and state == false: pending.append(child.name)
-		elif child.get("finished") != null and child.get("finished") == false: pending.append(child.name)
+		# Only bool flags count: some nodes have a `finished` signal, and comparing a
+		# Signal with a bool raises an error that aborted every sample.
+		var state: Variant = child.get("installed")
+		var done: Variant = child.get("finished")
+		if state is bool and not state: pending.append(child.name)
+		elif done is bool and not done: pending.append(child.name)
 	var ui := park.get_tree().get_first_node_in_group("shinrai_loading_ui")
 	var stage := str(ui.stage_label.text) if ui != null and ui.get("stage_label") != null else ""
 	var event := {"watch": true, "engine_elapsed_ms": float(now) / 1000.0, "worst_frame_ms": _watch_worst_frame, "stage": stage, "pending": pending}

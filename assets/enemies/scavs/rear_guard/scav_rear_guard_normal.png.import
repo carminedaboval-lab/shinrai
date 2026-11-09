@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b3kkoef647y1a"
-path="res://.godot/imported/scav_rear_guard_normal.png-2ba78b3caf46cd7b09514c5eb46ee4a8.ctex"
+path.bptc="res://.godot/imported/scav_rear_guard_normal.png-2ba78b3caf46cd7b09514c5eb46ee4a8.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "75f9e477141c954ce05943e578f31a50"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/enemies/scavs/rear_guard/scav_rear_guard_normal.png"
-dest_files=["res://.godot/imported/scav_rear_guard_normal.png-2ba78b3caf46cd7b09514c5eb46ee4a8.ctex"]
+dest_files=["res://.godot/imported/scav_rear_guard_normal.png-2ba78b3caf46cd7b09514c5eb46ee4a8.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

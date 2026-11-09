@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dorw4f0e4d5rg"
-path="res://.godot/imported/cat_cafe_neon_text.png-e058eaa6228c16bcf7af769ef9daab59.ctex"
+path.bptc="res://.godot/imported/cat_cafe_neon_text.png-e058eaa6228c16bcf7af769ef9daab59.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/signage/cat_cafe/cat_cafe_neon_text.png"
-dest_files=["res://.godot/imported/cat_cafe_neon_text.png-e058eaa6228c16bcf7af769ef9daab59.ctex"]
+dest_files=["res://.godot/imported/cat_cafe_neon_text.png-e058eaa6228c16bcf7af769ef9daab59.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

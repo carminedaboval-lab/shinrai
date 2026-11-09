@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dicvyqrdo4phs"
-path="res://.godot/imported/Pine_large_2_Billboard_Mat_baseColor.png-13f8fbc75eb8f90e28ef7565aec6a18e.ctex"
+path.bptc="res://.godot/imported/Pine_large_2_Billboard_Mat_baseColor.png-13f8fbc75eb8f90e28ef7565aec6a18e.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/textures/Pine_large_2_Billboard_Mat_baseColor.png"
-dest_files=["res://.godot/imported/Pine_large_2_Billboard_Mat_baseColor.png-13f8fbc75eb8f90e28ef7565aec6a18e.ctex"]
+dest_files=["res://.godot/imported/Pine_large_2_Billboard_Mat_baseColor.png-13f8fbc75eb8f90e28ef7565aec6a18e.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

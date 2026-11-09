@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ple43id1kmqo"
-path="res://.godot/imported/regular_Image_2.jpg-e151062f104cdb42e186fb085dfc880c.ctex"
+path.bptc="res://.godot/imported/regular_Image_2.jpg-e151062f104cdb42e186fb085dfc880c.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0ec0362e467d6b3ce319852a399647a2"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/gear/backpacks/regular_Image_2.jpg"
-dest_files=["res://.godot/imported/regular_Image_2.jpg-e151062f104cdb42e186fb085dfc880c.ctex"]
+dest_files=["res://.godot/imported/regular_Image_2.jpg-e151062f104cdb42e186fb085dfc880c.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

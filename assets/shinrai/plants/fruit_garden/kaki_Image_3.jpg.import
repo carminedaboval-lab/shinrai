@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://io4o7ykegwce"
-path="res://.godot/imported/kaki_Image_3.jpg-d02ffc1e4169dfc5502f1b9ff8917422.ctex"
+path.bptc="res://.godot/imported/kaki_Image_3.jpg-d02ffc1e4169dfc5502f1b9ff8917422.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "94ee67d3d841dfdaac0b2b01549d6a7f"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/plants/fruit_garden/kaki_Image_3.jpg"
-dest_files=["res://.godot/imported/kaki_Image_3.jpg-d02ffc1e4169dfc5502f1b9ff8917422.ctex"]
+dest_files=["res://.godot/imported/kaki_Image_3.jpg-d02ffc1e4169dfc5502f1b9ff8917422.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

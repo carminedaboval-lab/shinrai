@@ -2,7 +2,9 @@ extends RefCounted
 ## Additive metre-scale garden continuity. Call after plant_context and before
 ## street batching. Existing soil, plants, materials and collisions are retained.
 const Landscape = preload("res://scripts/midori_south_street_landscape.gd")
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
 const Ground = preload("res://scripts/midori_neighbourhood_ground.gd")
+const MeshArrays = preload("res://scripts/midori_south_street_mesh_arrays.gd")
 const LOW_SOURCE: String = "Tree EZTree1.Bush006_leaves.006_0"
 const TRIANGLE_BUDGET: int = 1800000
 const CELL_SIZE: float = 18.0
@@ -246,7 +248,7 @@ static func _measure_source(source: Node3D, index: int) -> Dictionary:
 		var referenced: AABB = AABB()
 		var first_mesh: bool = true
 		for surface: int in range(visual.mesh.get_surface_count()):
-			var arrays: Array = visual.mesh.surface_get_arrays(surface)
+			var arrays: Array = MeshArrays.read(visual.mesh,surface)
 			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 			var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 			var count: int = indices.size() if not indices.is_empty() else vertices.size()
@@ -404,23 +406,21 @@ static func _make_batches(parent: Node3D, sources: Array[Node3D], buckets: Dicti
 			var visual: MeshInstance3D = child as MeshInstance3D
 			if visual == null or visual.mesh == null:
 				continue
-			var render_mesh: ArrayMesh = visual.mesh.duplicate() as ArrayMesh
-			for surface: int in range(render_mesh.get_surface_count()):
-				render_mesh.surface_set_material(surface, visual.get_active_material(surface))
+			# One baked copy (mesh + the part's active materials) shared by every
+			# bucket of this part, instead of a GPU copy per bucket.
+			var render_mesh: ArrayMesh = BakeCache.baked_from(visual) as ArrayMesh
 			var multimesh: MultiMesh = MultiMesh.new()
 			multimesh.transform_format = MultiMesh.TRANSFORM_3D
 			multimesh.mesh = render_mesh
 			multimesh.instance_count = rows.size()
 			var custom_bounds: AABB = AABB()
 			var first: bool = true
-			var authored: Array[Transform3D] = []
 			var plant_ids: Array[int] = []
 			for index: int in range(rows.size()):
 				var row: Dictionary = rows[index]
 				var placement: Transform3D = row.ground_transform
 				var local: Transform3D = Transform3D(Basis.IDENTITY, -cell_origin) * placement * visual.transform
 				multimesh.set_instance_transform(index, local)
-				authored.append(local)
 				plant_ids.append(int(row.plant_id))
 				var referenced: AABB = visual.get_meta("garden_referenced_bounds")
 				var box: AABB = local * referenced
@@ -431,11 +431,13 @@ static func _make_batches(parent: Node3D, sources: Array[Node3D], buckets: Dicti
 			batch.name = "GardenContinuity_%03d" % result.size()
 			batch.position = cell_origin
 			batch.multimesh = multimesh
+			BakeCache.tag(batch, BakeCache.group_key())
 			batch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			batch.visibility_range_end = 160.0
 			batch.visibility_range_end_margin = 12.0
 			batch.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-			batch.set_meta("authored_instance_transforms", authored)
+			# (No "authored_instance_transforms" meta: nothing read it, and it kept a
+			# second copy of every instance transform alive; the MultiMesh has them.)
 			batch.set_meta("garden_continuity_plant_ids", plant_ids)
 			batch.set_meta("garden_continuity_source_index", source_index)
 			batch.set_meta("creator_protected", true)

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dxpko13h6nwxu"
-path="res://.godot/imported/market_stall_lod0_Image_0.jpg-83e76228e433f5eed036b94e4cf45bcc.ctex"
+path.bptc="res://.godot/imported/market_stall_lod0_Image_0.jpg-83e76228e433f5eed036b94e4cf45bcc.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "6cfb3604c3eb2ee9fcde97fa4cedc608"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/streets/midori_market_stall/market_stall_lod0_Image_0.jpg"
-dest_files=["res://.godot/imported/market_stall_lod0_Image_0.jpg-83e76228e433f5eed036b94e4cf45bcc.ctex"]
+dest_files=["res://.godot/imported/market_stall_lod0_Image_0.jpg-83e76228e433f5eed036b94e4cf45bcc.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

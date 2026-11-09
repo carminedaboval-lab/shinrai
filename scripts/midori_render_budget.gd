@@ -1,21 +1,42 @@
 extends RefCounted
 ## Complete secondary rendering preparation before HQ unlocks deployment.
 const RESULT:=&"midori_render_budget"
+const Budget:=preload("res://scripts/shinrai_loading_budget.gd")
+const StartupTrace:=preload("res://scripts/startup_trace.gd")
 static func install_before_hq(park: Node3D) -> Dictionary:
 	if park.has_meta(RESULT): return park.get_meta(RESULT)
 	var report: Dictionary={"status":"installed","native_main_resolution":true,"native_near_geometry":true}
 	if not park.has_meta("midori_distance_detail"):
 		return {"error":"Spatial planting is unavailable", "status":"native_fallback"}
+	# Each install is a whole-park scan; under the boot menu they used to share one
+	# ~2.8 s frame. Same order, one shared loading budget each (no-op outside boot).
+	await Budget.checkpoint(park)
+	if not is_instance_valid(park): return {"status":"cancelled"}
+	var trace:=StartupTrace.begin()
 	var reflection=preload("res://scripts/midori_reflection_content.gd").new()
 	reflection.name="MidoriReflectionContent"
 	report["reflection"]=reflection.install(park)
 	if report.reflection.has("error"): reflection.free();report["error"]=report.reflection.error
+	trace=StartupTrace.finish("render.reflection",trace)
+	await Budget.checkpoint(park)
+	if not is_instance_valid(park): return {"status":"cancelled"}
+	trace=StartupTrace.begin()
 	var shadows=preload("res://scripts/midori_near_plant_shadows.gd").new()
 	shadows.name="MidoriNearPlantShadows"
 	report["plant_shadows"]=shadows.install(park)
+	trace=StartupTrace.finish("render.plant_shadows",trace)
 	if report.plant_shadows.has("error"): shadows.free();report["error"]=report.plant_shadows.error
-	else: shadows.apply(true)
+	else:
+		await Budget.checkpoint(park)
+		if not is_instance_valid(park): return {"status":"cancelled"}
+		trace=StartupTrace.begin()
+		shadows.apply(true)
+		trace=StartupTrace.finish("render.plant_shadows_apply",trace)
+	await Budget.checkpoint(park)
+	if not is_instance_valid(park): return {"status":"cancelled"}
+	trace=StartupTrace.begin()
 	report["draw_distance"]=await preload("res://scripts/midori_draw_distance.gd").apply(park)
+	trace=StartupTrace.finish("render.draw_distance",trace)
 	if not is_instance_valid(park): return {"status":"cancelled"}
 	if RenderingServer.get_current_rendering_method()=="gl_compatibility":
 		report["clouds"]={"status":"native_fallback","reason":"Compute rendering unavailable"}
@@ -34,6 +55,7 @@ static func install_before_hq(park: Node3D) -> Dictionary:
 			report["error"]="Cloud cache unavailable; original cloud material retained"
 			cache.dispose();cache.queue_free()
 		else: report.clouds["ready_before_hq"]=true
+	trace=StartupTrace.finish("render.clouds",trace)
 	if report.has("error"): report.status="partial_native_fallback"
 	park.set_meta(RESULT,report)
 	return report

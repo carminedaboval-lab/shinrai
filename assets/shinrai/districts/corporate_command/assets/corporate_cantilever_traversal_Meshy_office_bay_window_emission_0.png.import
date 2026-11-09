@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ctx0yq81t152l"
-path="res://.godot/imported/corporate_cantilever_traversal_Meshy_office_bay_window_emission_0.png-b8917472dfeb3afc37ea28ebabf593bf.ctex"
+path.bptc="res://.godot/imported/corporate_cantilever_traversal_Meshy_office_bay_window_emission_0.png-b8917472dfeb3afc37ea28ebabf593bf.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e325573b99a090a307ef002ec1ac4fc8"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/districts/corporate_command/assets/corporate_cantilever_traversal_Meshy_office_bay_window_emission_0.png"
-dest_files=["res://.godot/imported/corporate_cantilever_traversal_Meshy_office_bay_window_emission_0.png-b8917472dfeb3afc37ea28ebabf593bf.ctex"]
+dest_files=["res://.godot/imported/corporate_cantilever_traversal_Meshy_office_bay_window_emission_0.png-b8917472dfeb3afc37ea28ebabf593bf.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

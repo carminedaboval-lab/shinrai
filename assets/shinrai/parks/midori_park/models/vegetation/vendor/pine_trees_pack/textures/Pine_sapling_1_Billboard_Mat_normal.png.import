@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://j2yvxnse4fga"
-path="res://.godot/imported/Pine_sapling_1_Billboard_Mat_normal.png-da44d3f51d85b99caa04e3f53a18bc24.ctex"
+path.bptc="res://.godot/imported/Pine_sapling_1_Billboard_Mat_normal.png-da44d3f51d85b99caa04e3f53a18bc24.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/vegetation/vendor/pine_trees_pack/textures/Pine_sapling_1_Billboard_Mat_normal.png"
-dest_files=["res://.godot/imported/Pine_sapling_1_Billboard_Mat_normal.png-da44d3f51d85b99caa04e3f53a18bc24.ctex"]
+dest_files=["res://.godot/imported/Pine_sapling_1_Billboard_Mat_normal.png-da44d3f51d85b99caa04e3f53a18bc24.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

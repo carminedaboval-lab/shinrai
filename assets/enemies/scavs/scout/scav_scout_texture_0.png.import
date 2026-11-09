@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ca0lmic71xflm"
-path="res://.godot/imported/scav_scout_texture_0.png-607121f10d9a68cc1678ef6bbce257eb.ctex"
+path.bptc="res://.godot/imported/scav_scout_texture_0.png-607121f10d9a68cc1678ef6bbce257eb.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "4365ab70585ef7ee26470ec2aed90231"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/enemies/scavs/scout/scav_scout_texture_0.png"
-dest_files=["res://.godot/imported/scav_scout_texture_0.png-607121f10d9a68cc1678ef6bbce257eb.ctex"]
+dest_files=["res://.godot/imported/scav_scout_texture_0.png-607121f10d9a68cc1678ef6bbce257eb.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

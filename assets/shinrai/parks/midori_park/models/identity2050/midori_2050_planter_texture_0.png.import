@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dtn1ry5vyq6qo"
-path="res://.godot/imported/midori_2050_planter_texture_0.png-b8272471a85dbf83d9b1ec5811e53427.ctex"
+path.bptc="res://.godot/imported/midori_2050_planter_texture_0.png-b8272471a85dbf83d9b1ec5811e53427.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "4f0a23f7599d40ddb4288c68a5ad6c42"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/identity2050/midori_2050_planter_texture_0.png"
-dest_files=["res://.godot/imported/midori_2050_planter_texture_0.png-b8272471a85dbf83d9b1ec5811e53427.ctex"]
+dest_files=["res://.godot/imported/midori_2050_planter_texture_0.png-b8272471a85dbf83d9b1ec5811e53427.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

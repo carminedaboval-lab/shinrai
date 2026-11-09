@@ -231,6 +231,11 @@ var occupied_tree_is_skinny: Array[bool] = []
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE:
+		# A Retry or quit mid-build: the bank worker only touches its own copies.
+		if _bank_fit_task >= 0: WorkerThreadPool.wait_for_task_completion(_bank_fit_task)
+		_bank_fit_task = -1
+		if _path_strip_task >= 0: WorkerThreadPool.wait_for_group_task_completion(_path_strip_task)
+		_path_strip_task = -1
 		_free_owned_park_prototypes()
 
 func _free_owned_park_prototypes() -> void:
@@ -263,7 +268,13 @@ func _free_owned_park_prototypes() -> void:
 func _ready() -> void:
 	var _boot_tick := StartupTrace.begin()
 	is_night_mode = start_at_night
-	_create_materials()
+	# Behind the boot menu (incremental loading only): the add_child frame already
+	# runs every child's first slice and the deferred horizon / court / playground
+	# builds, which read only is_night_mode (set above). The materials start in the
+	# next frame instead of adding ~1 s to that one (the worst frame behind the menu).
+	if get_meta("shinrai_incremental_loading", false): await get_tree().process_frame
+	_boot_tick = StartupTrace.begin()
+	await _create_materials()
 	_boot_tick = StartupTrace.finish("park._create_materials",_boot_tick)
 	await LoadingBudget.checkpoint(self)
 	_create_environment()
@@ -288,14 +299,25 @@ func _ready() -> void:
 	_boot_tick = StartupTrace.finish("park._validate_plaza_centerpiece_clearance",_boot_tick)
 	await LoadingBudget.checkpoint(self)
 	_spawn_scale_review_player()
+	# Mouse look during the one live frame below would turn the player by however
+	# far the mouse moved, so its pose (and the fingerprint) varied between runs.
+	# Input is restored at the end of this function, before anything can use it.
+	var review_player := get_node_or_null("ParkScaleReviewPlayer")
+	if review_player != null: review_player.set_process_unhandled_input(false)
 	_boot_tick = StartupTrace.finish("park._spawn_scale_review_player",_boot_tick)
-	await LoadingBudget.checkpoint(self)
+	# The review player falls under gravity until the run (created right after
+	# this function) disables it, so its resting height is the number of physics
+	# steps in between. Behind the menu that is exactly one: one frame here (the
+	# spawn alone is ~0.6 s, so the next frame always steps physics once), then the
+	# HUD and the end of the structure without yielding. Budget turns here could take
+	# zero to several frames, which made the player's height vary from run to run.
+	if get_meta("shinrai_incremental_loading", false): await get_tree().process_frame
 	_build_size_hud()
 	_boot_tick = StartupTrace.finish("park._build_size_hud",_boot_tick)
-	await LoadingBudget.checkpoint(self)
 	print("Midori Park size blockout: %.0f m x %.0f m | diagonal %.1f m" % [
 		PARK_SIZE_M.x, PARK_SIZE_M.y, PARK_SIZE_M.length()
 	])
+	if is_instance_valid(review_player): review_player.set_process_unhandled_input(true)
 	set_meta("shinrai_structure_pending",false)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -314,13 +336,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		is_night_mode = not is_night_mode
 		_apply_time_of_day()
 
+## Same materials in the same order; the loading budget may end the frame between
+## the shader materials (each is compiled when its frame is drawn).
 func _create_materials() -> void:
 	mat_grass = _make_material(Color("#344f38"), 0.98)
 	mat_path = _make_material(Color("#77786f"), 0.94)
 	mat_water = _make_lake_water_material()
+	await LoadingBudget.checkpoint(self)
 	mat_playground = _make_material(Color("#8b6255"), 0.91)
 	mat_plaza = CourtMaterials.build(false)
+	await LoadingBudget.checkpoint(self)
 	mat_plaza_border = CourtMaterials.build(true)
+	await LoadingBudget.checkpoint(self)
 	mat_plaza_inlay = _make_material(Color("#356f7c"), 0.34, 0.34)
 	mat_plaza_inlay.emission_enabled = true
 	mat_plaza_inlay.emission = Color("#42b9d4")
@@ -330,19 +357,43 @@ func _create_materials() -> void:
 	mat_boundary = _make_material(Color("#d6d0bf"), 0.82)
 	mat_entry = _make_material(Color("#a99f8a"), 0.88)
 	mat_island = _make_lake_ground_material(false, false)
+	await LoadingBudget.checkpoint(self)
 	mat_shore_bank = _make_lake_ground_material(true, false)
+	await LoadingBudget.checkpoint(self)
 	mat_island_bank = _make_lake_ground_material(true, true)
+	await LoadingBudget.checkpoint(self)
 	mat_shore_promenade = _make_material(Color("#77776d"), 0.94)
 	mat_shore_landing = _make_material(Color("#aaa28d"), 0.88)
 	mat_plan_marker = _make_material(Color(0.20, 0.78, 0.92, 0.55), 0.76, 0.08)
 	mat_path_light_streak = _make_path_light_streak_material()
 	modular_path_shader = _make_modular_path_shader()
+	await LoadingBudget.checkpoint(self)
 	mat_paved_surface = _make_continuous_paving_material()
+	await LoadingBudget.checkpoint(self)
 	mat_lake_paved_surface = _make_continuous_paving_material(false)
 
+## The three lake-ground materials share one Shader: the code is identical (only
+## uniforms differ) and each Shader.code assignment compiles it on the main thread
+## (~110 ms; it used to be set twice per material, base then with the palette).
+## Same final code, same uniforms; iris_shore still swaps a duplicate onto the bank.
+var _lake_ground_shader: Shader
+
 func _make_lake_ground_material(is_bank: bool, water_at_outer_edge: bool) -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = """
+	if _lake_ground_shader == null:
+		_lake_ground_shader = Shader.new()
+		_lake_ground_shader.code = LAKE_GROUND_SHADER_CODE.replace("void vertex()", preload("res://scripts/midori_ground_texture.gd").EARTH_PALETTE_GLSL + "\nvoid vertex()")
+	var shader := _lake_ground_shader
+	var material := ShaderMaterial.new()
+	material.resource_name = "Midori_IslandDampBank" if water_at_outer_edge else ("Midori_MainlandDampBank" if is_bank else "Midori_IslandForestGround")
+	material.shader = shader
+	material.set_shader_parameter("albedo_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_diff_2k.jpg"))
+	material.set_shader_parameter("normal_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_nor_gl_2k.jpg"))
+	material.set_shader_parameter("roughness_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_rough_2k.jpg"))
+	material.set_shader_parameter("is_bank", is_bank)
+	material.set_shader_parameter("water_at_outer_edge", water_at_outer_edge)
+	return material
+
+const LAKE_GROUND_SHADER_CODE := """
 shader_type spatial;
 render_mode depth_draw_opaque, cull_disabled;
 
@@ -387,16 +438,6 @@ void fragment() {
     NORMAL = normalize((VIEW_MATRIX * vec4(ground_normal, 0.0)).xyz);
 }
 """
-	shader.code = shader.code.replace("void vertex()", preload("res://scripts/midori_ground_texture.gd").EARTH_PALETTE_GLSL + "\nvoid vertex()")
-	var material := ShaderMaterial.new()
-	material.resource_name = "Midori_IslandDampBank" if water_at_outer_edge else ("Midori_MainlandDampBank" if is_bank else "Midori_IslandForestGround")
-	material.shader = shader
-	material.set_shader_parameter("albedo_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_diff_2k.jpg"))
-	material.set_shader_parameter("normal_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_nor_gl_2k.jpg"))
-	material.set_shader_parameter("roughness_tex", load("res://assets/shinrai/parks/midori_park/materials/forrest_ground_01/forrest_ground_01_rough_2k.jpg"))
-	material.set_shader_parameter("is_bank", is_bank)
-	material.set_shader_parameter("water_at_outer_edge", water_at_outer_edge)
-	return material
 
 func _make_material(color_value: Color, roughness_value: float, metallic_value: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -748,10 +789,10 @@ func _build_park_footprint() -> void:
 	_build_boundary(root)
 	_boot_tick = StartupTrace.finish("park._build_boundary",_boot_tick)
 	await LoadingBudget.checkpoint(self)
-	_build_paths(root)
+	await _build_paths(root)
 	_boot_tick = StartupTrace.finish("park._build_paths",_boot_tick)
 	await LoadingBudget.checkpoint(self)
-	_build_curved_promenades(root)
+	await _build_curved_promenades(root)
 	_boot_tick = StartupTrace.finish("park._build_curved_promenades",_boot_tick)
 	await LoadingBudget.checkpoint(self)
 	# Continuous paving replaces disconnected decorative modules.
@@ -877,27 +918,49 @@ func _build_paths(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "FinalDestinationLedPathHierarchy"
 	parent.add_child(root)
-	_add_path_strip_2d(root, "OuterWalkingCircuit", OUTER_CIRCUIT, 3.8, 0.108)
-	_add_path_strip_2d(root, "SouthEntranceToLake", SOUTH_ARRIVAL_ROUTE, 4.0, 0.111)
-	_add_path_strip_2d(root, "SouthEntranceToPlaza", PLAZA_PAVED_ROUTE, 4.0, 0.112)
-	_add_path_strip_2d(root, "WestEntranceToBridgeLanding", WEST_DESTINATION_ROUTE, 4.0, 0.112)
-	_add_path_strip_2d(root, "NorthEntranceToLake", NORTH_ENTRY_ROUTE, 3.8, 0.110)
-	_add_path_strip_2d(root, "EastEntranceToBridgeLanding", EAST_DECK_ROUTE, 3.8, 0.110)
-	_add_path_strip_2d(root, "SportsConnector", SPORTS_LINK_ROUTE, 3.0, 0.109)
-	_add_path_strip_2d(root, "PlaygroundWoodlandLoop", PLAYGROUND_LOOP, 2.7, 0.109)
-	_add_path_strip_2d(root, "NorthWoodlandLoop", NORTH_WOODLAND_LOOP, 2.5, 0.109)
-	_add_path_strip_2d(root, "PlazaToSouthBridgeLanding", SOUTH_BRIDGE_APPROACH, 3.2, 0.111)
-	_add_path_strip_2d(root, "PavilionGardenLink", PAVILION_LINK_ROUTE, 2.8, 0.110)
-	_add_path_strip_2d(root, "EastPromenadeToViewingDeck", VIEWING_DECK_APPROACH_ROUTE, 3.0, 0.112)
+	await _add_path_strips_2d(root, [
+		["OuterWalkingCircuit", OUTER_CIRCUIT, 3.8, 0.108],
+		["SouthEntranceToLake", SOUTH_ARRIVAL_ROUTE, 4.0, 0.111],
+		["SouthEntranceToPlaza", PLAZA_PAVED_ROUTE, 4.0, 0.112],
+		["WestEntranceToBridgeLanding", WEST_DESTINATION_ROUTE, 4.0, 0.112],
+		["NorthEntranceToLake", NORTH_ENTRY_ROUTE, 3.8, 0.110],
+		["EastEntranceToBridgeLanding", EAST_DECK_ROUTE, 3.8, 0.110],
+		["SportsConnector", SPORTS_LINK_ROUTE, 3.0, 0.109],
+		["PlaygroundWoodlandLoop", PLAYGROUND_LOOP, 2.7, 0.109],
+		["NorthWoodlandLoop", NORTH_WOODLAND_LOOP, 2.5, 0.109],
+		["PlazaToSouthBridgeLanding", SOUTH_BRIDGE_APPROACH, 3.2, 0.111],
+		["PavilionGardenLink", PAVILION_LINK_ROUTE, 2.8, 0.110],
+		["EastPromenadeToViewingDeck", VIEWING_DECK_APPROACH_ROUTE, 3.0, 0.112],
+	])
 	# Bridge branches are fitted to the supplied front treads in the lake pass.
 
-func _add_path_strip_2d(
-	parent: Node3D,
+## Path strips in one batch. The routes and paving materials are made on the main
+## thread in the original order; the vertex loop of every strip (pure maths on its
+## route points, width and material kind) runs on workers at once; then the mesh
+## nodes, metas and the path-edge table are made on the main thread in the original
+## order. Same functions on the same inputs as the one-by-one build.
+var _path_strip_task := -1
+
+func _add_path_strips_2d(parent: Node3D, specs: Array) -> void:
+	var jobs: Array = []
+	for spec: Array in specs:
+		jobs.append(_prepare_path_strip(spec[0], spec[1], spec[2], spec[3]))
+	# All worker threads, waited for at once (a short parallel burst; a frame per
+	# wait costs more on this, the critical path, than it gives back).
+	await LoadingBudget.checkpoint(self)
+	_path_strip_task = WorkerThreadPool.add_group_task(_path_strip_job.bind(jobs), jobs.size(), -1, true, "park.path_strips")
+	WorkerThreadPool.wait_for_group_task_completion(_path_strip_task)
+	_path_strip_task = -1
+	for job: Dictionary in jobs:
+		_commit_path_strip(parent, job)
+		await LoadingBudget.checkpoint(self)
+
+func _prepare_path_strip(
 	node_name: String,
 	points_2d: Array[Vector2],
 	width: float,
 	y_value: float
-) -> void:
+) -> Dictionary:
 	# Widths are explicit world metres; scene layout scale affects positions only.
 	width = _path_width_world(node_name,width) / LAYOUT_SCALE
 	var route: Array[Vector2] = points_2d.duplicate()
@@ -926,7 +989,9 @@ func _add_path_strip_2d(
 	paving_material.set_shader_parameter("night_emission",1.0 if is_night_mode else 0.0)
 	if not modular_path_emissive_materials.has(paving_material):
 		modular_path_emissive_materials.append(paving_material)
-	_add_path_strip(parent, node_name, points_3d, width, paving_material)
+	# Gravel side walks flare where feet spread onto the walk they join.
+	var masado := paving_material is ShaderMaterial and String(paving_material.resource_name).begins_with("Midori_MasadoWalk")
+	return {"name": node_name, "points": points_3d, "width": width, "material": paving_material, "masado": masado}
 
 ## A side walk as people actually wear it: one flowing curve through the
 ## route's anchors (Chaikin corner cutting), with no straight runs or kinks.
@@ -951,10 +1016,40 @@ func _build_curved_promenades(parent: Node3D) -> void:
 	var root := Node3D.new()
 	root.name = "ApprovedLakePromenadeLoop"
 	parent.add_child(root)
-	_add_path_strip_2d(root, "ContinuousLakePromenade", LAKE_PROMENADE_LOOP, LAKE_PROMENADE_WIDTH_M, 0.114)
+	await _add_path_strips_2d(root, [["ContinuousLakePromenade", LAKE_PROMENADE_LOOP, LAKE_PROMENADE_WIDTH_M, 0.114]])
 
-func _add_path_strip(parent: Node3D, node_name: String, points: Array[Vector3], width: float, material: Material) -> void:
+## Main thread, in order: the strip's mesh node, metas and path-edge cells.
+func _commit_path_strip(parent: Node3D, job: Dictionary) -> void:
+	if not job.has("arrays"): return # fewer than two points: no strip, as before
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = job.name
+	# What SurfaceTool.commit() makes from these arrays (no custom formats, no flags).
+	var mesh := ArrayMesh.new()
+	var arrays: Array = job.arrays
+	if arrays.size() > Mesh.ARRAY_VERTEX and arrays[Mesh.ARRAY_VERTEX] is PackedVector3Array and (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 0:
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh_instance.mesh = mesh
+	mesh_instance.material_override = job.material
+	parent.add_child(mesh_instance)
+	var points: Array[Vector3] = job.points
+	var width: float = job.width
+	var widths: PackedFloat32Array = job.widths
+	var node_name: String = job.name
+	var centres := PackedVector3Array()
+	for point:Vector3 in points: centres.append(mesh_instance.to_global(point))
+	mesh_instance.set_meta("midori_path_centres_world",centres)
+	mesh_instance.set_meta("midori_path_width_m",width*LAYOUT_SCALE)
+	mesh_instance.set_meta("midori_path_widths_world",widths)
+	mesh_instance.set_meta("midori_path_role","main" if MAIN_PATH_WIDTHS_M.has(node_name) else ("promenade" if node_name=="ContinuousLakePromenade" else "secondary"))
+	_index_path_edges(centres,widths)
+
+## Worker: the strip's vertex loop (was _add_path_strip). Touches only its own job.
+static func _path_strip_job(index: int, jobs: Array) -> void:
+	var job: Dictionary = jobs[index]
+	var points: Array[Vector3] = job.points
 	if points.size() < 2: return
+	var node_name: String = job.name
+	var width: float = job.width
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var sides: Array[Vector3] = []
@@ -976,7 +1071,7 @@ func _add_path_strip(parent: Node3D, node_name: String, points: Array[Vector3], 
 	for i:int in range(points.size()-1):remaining+=points[i].distance_to(points[i+1])*LAYOUT_SCALE
 	var total:=remaining
 	# Gravel side walks flare where feet spread onto the walk they join.
-	var flared:=material is ShaderMaterial and String(material.resource_name).begins_with("Midori_MasadoWalk") and not closed
+	var flared:=bool(job.masado) and not closed
 	for i:int in range(points.size()):
 		if i>0:remaining-=points[i-1].distance_to(points[i])*LAYOUT_SCALE
 		# The north terminus already sits 11 cm from the smoothed shoreline.
@@ -1011,19 +1106,9 @@ func _add_path_strip(parent: Node3D, node_name: String, points: Array[Vector3], 
 				for k:int in ([0,2,1] if normal.y>0.0 else [0,1,2]):
 					_add_path_vertex(surface,vertices[k],uvs[k])
 		travelled+=length
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.name=node_name
 	surface.generate_normals()
-	mesh_instance.mesh=surface.commit()
-	mesh_instance.material_override=material
-	parent.add_child(mesh_instance)
-	var centres := PackedVector3Array()
-	for point:Vector3 in points: centres.append(mesh_instance.to_global(point))
-	mesh_instance.set_meta("midori_path_centres_world",centres)
-	mesh_instance.set_meta("midori_path_width_m",width*LAYOUT_SCALE)
-	mesh_instance.set_meta("midori_path_widths_world",widths)
-	mesh_instance.set_meta("midori_path_role","main" if MAIN_PATH_WIDTHS_M.has(node_name) else ("promenade" if node_name=="ContinuousLakePromenade" else "secondary"))
-	_index_path_edges(centres,widths)
+	job.widths = widths
+	job.arrays = surface.commit_to_arrays()
 
 func _add_walk_edge(surface: SurfaceTool, a: Vector3, b: Vector3, uv_a: Vector2, uv_b: Vector2, normal: Vector3) -> void:
 	var ground_a := Vector3(a.x,0.0,a.z)
@@ -1036,7 +1121,7 @@ func _add_walk_edge(surface: SurfaceTool, a: Vector3, b: Vector3, uv_a: Vector2,
 		surface.set_uv(item[1])
 		surface.add_vertex(point)
 
-func _add_path_vertex(surface: SurfaceTool, position_value: Vector3, uv_value: Vector2) -> void:
+static func _add_path_vertex(surface: SurfaceTool, position_value: Vector3, uv_value: Vector2) -> void:
 	position_value.x = clampf(position_value.x, -PARK_HALF.x, PARK_HALF.x)
 	position_value.z = clampf(position_value.z, -PARK_HALF.y, PARK_HALF.y)
 	surface.set_normal(Vector3.UP)
@@ -1197,18 +1282,21 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 		Vector2(60,40),
 	], 0.151)
 	await _build_future_bridge_sockets(lake_root)
-	await _fit_bank_below_bridge_floors(lake_root)
+	var bank_fit := _start_bank_fit(lake_root)
 	_add_zone_label(parent, "ARTWORK LAKE | 7 ISLANDS", Vector3(47.4, 1.0, -7.8), Color("#d4eff7"))
+	await LoadingBudget.checkpoint(self)
 
 	# Modular metric turf/goals replace the warped render instance only.
 	# Keep the supplied source files and the established gate/floor contracts.
 	PitchRemasterScript.build_visuals(parent)
+	await LoadingBudget.checkpoint(self)
 	var fence := PitchFenceScript.new()
 	fence.name = "ACT03_FiveASideSteelFence"
 	fence.position = Vector3(-70.0, 0.15, -43.0)
 	fence.scale = Vector3(1.0 / LAYOUT_SCALE, 1.0, 1.0 / LAYOUT_SCALE)
 	parent.add_child(fence)
 	fence.build()
+	await LoadingBudget.checkpoint(self)
 	# The existing floor datum is shared by the level turf and cafe landing.
 	_add_invisible_collision_box(
 		parent, "ACT03_PitchWalkableFloor",
@@ -1219,11 +1307,13 @@ func _build_zone_placeholders(parent: Node3D) -> void:
 	_add_zone_box(parent, "PlaygroundZone", Vector3(-72.0, 0.106, 45.0), Vector2(32.0, 26.0), mat_playground)
 	_add_zone_label(parent, "PLAYGROUND 32 x 26 m", Vector3(-72.0, 1.0, 45.0), Color.WHITE)
 
+	await LoadingBudget.checkpoint(self)
 	_build_landmark_plaza(parent)
 	_add_zone_label(parent, "PLAZA 34 x 26 m", Vector3(82.0, 1.0, 68.0), Color("#252525"))
 
 	_add_zone_box(parent, "PavilionZone", Vector3(76.0, 0.108, -73.0), Vector2(20.0, 14.0), mat_pavilion)
 	_add_zone_label(parent, "PAVILION 20 x 14 m", Vector3(76.0, 1.0, -73.0), Color.WHITE)
+	await _finish_bank_fit(bank_fit)
 
 func _add_pitch_contact_shadow(parent: Node3D) -> void:
 	# A feathered, unlit footprint grounds the supplied mesh without rendering
@@ -3916,24 +4006,58 @@ func _add_shoreline_ribbon(
 	mesh_instance.material_override = material
 	parent.add_child(mesh_instance)
 
-func _fit_bank_below_bridge_floors(lake_root: Node3D) -> void:
+## The bank is recessed under the bridge floors on a worker (pure maths on copies:
+## the bank's vertex arrays, its transform and the walk-surface specs, all final
+## once the bridges are built), while the rest of the zone placeholders (pitch,
+## fence, plaza; none of them reads the bank) build on the main thread. The fitted
+## mesh replaces the bank's at the end of the placeholders, before anything reads
+## it (lake life and the terrain, after the structure). Same maths, same order.
+var _bank_fit_task := -1
+
+func _start_bank_fit(lake_root: Node3D) -> Array:
 	var bank := lake_root.get_node("ContinuousNaturalBank") as MeshInstance3D
-	var arrays := bank.mesh.surface_get_arrays(0)
+	var job := {"arrays": bank.mesh.surface_get_arrays(0), "xform": bank.global_transform,
+		"surfaces": _bridge_walk_surfaces.duplicate(), "recessed": 0}
+	_bank_fit_task = WorkerThreadPool.add_task(_fit_bank_job.bind(job), false, "park.bank_fit")
+	return [bank, job]
+
+func _finish_bank_fit(fit: Array) -> void:
+	var _bt := StartupTrace.begin()
+	if get_meta("shinrai_incremental_loading", false):
+		while is_inside_tree() and not WorkerThreadPool.is_task_completed(_bank_fit_task):
+			await get_tree().process_frame
+	WorkerThreadPool.wait_for_task_completion(_bank_fit_task)
+	_bank_fit_task = -1
+	StartupTrace.finish("park.bank_fit_wait", _bt)
+	var bank: MeshInstance3D = fit[0]
+	var job: Dictionary = fit[1]
+	var fitted := ArrayMesh.new()
+	fitted.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,job.arrays)
+	bank.mesh = fitted
+	print("BRIDGE_BANK_CLEARANCE: recessed_vertices=%d total_vertices=%d" % [int(job.recessed),(job.arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()])
+
+## Worker: what the main-thread loop did per vertex (bridge_surface_height on the
+## same specs). Touches nothing but `job`.
+static func _fit_bank_job(job: Dictionary) -> void:
+	var arrays: Array = job.arrays
 	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var xform: Transform3D = job.xform
+	var inverse := xform.affine_inverse()
+	var surfaces: Array = job.surfaces
 	var recessed := 0
 	for index: int in range(vertices.size()):
-		await LoadingBudget.checkpoint(self)
-		var world := bank.global_transform*vertices[index]
-		var floor_height := bridge_surface_height(Vector2(world.x,world.z))
+		var world := xform*vertices[index]
+		var p := Vector2(world.x,world.z)
+		var floor_height := -INF
+		for surface: Dictionary in surfaces:
+			var height: float = BridgeWalks.height_at(surface.spec,p) if surface.kind == "deck" else BridgeLandings.height_at(surface.spec,p)
+			floor_height = maxf(floor_height,height)
 		if is_finite(floor_height) and world.y > floor_height-0.015:
 			world.y = floor_height-0.015
-			vertices[index] = bank.global_transform.affine_inverse()*world
+			vertices[index] = inverse*world
 			recessed += 1
 	arrays[Mesh.ARRAY_VERTEX] = vertices
-	var fitted := ArrayMesh.new()
-	fitted.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
-	bank.mesh = fitted
-	print("BRIDGE_BANK_CLEARANCE: recessed_vertices=%d total_vertices=%d" % [recessed,vertices.size()])
+	job.recessed = recessed
 
 func _add_shoreline_vertex(surface: SurfaceTool, point: Vector2, y_value: float, uv_value: Vector2) -> void:
 	surface.set_normal(Vector3.UP)

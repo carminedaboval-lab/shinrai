@@ -144,13 +144,40 @@ static func _abort() -> Dictionary:
 	return {}
 
 static func _prewarm(park: Node3D) -> bool:
+	var since := Kit.frames_now()
+	# Every cell _w() would fill, in the order it would fill them; the weights
+	# (pure maths) are worked out on WorkerThreadPool in chunks and stored as
+	# the same float values _w() stores.
+	var keys: Array[Vector2i] = []
+	var seen := {}
 	for rect: Rect2 in AREAS:
 		for z: int in range(floori(rect.position.y), ceili(rect.end.y)):
 			for x: int in range(floori(rect.position.x), ceili(rect.end.x)):
-				_w(Vector2(x, z))
-			await park.get_tree().process_frame
-			if not is_instance_valid(park): return false
-	return true
+				var p := Vector2(x, z)
+				if not _in_areas(p): continue
+				var key := Vector2i(floori(p.x), floori(p.y))
+				if _cache.has(key) or seen.has(key): continue
+				seen[key] = true
+				keys.append(key)
+	var terrain := _terrain
+	Biomes.noise() # made before the threads read it
+	var chunk := 512
+	# Each chunk reads its own copy of the weight kernel (Biomes.Kernel: the
+	# same floats as Biomes.weight, nothing shared between the threads).
+	var kernel := Biomes.terrain_kernel(terrain)
+	var id_index := Biomes.region_index(ID)
+	var job := func(c: int) -> PackedFloat64Array:
+		var k := kernel.clone()
+		var out := PackedFloat64Array()
+		for i: int in range(c * chunk, mini((c + 1) * chunk, keys.size())):
+			out.append(k.weight(Vector2(keys[i]) + Vector2(0.5, 0.5), id_index))
+		return out
+	var parts := Kit.parallel(ceili(float(keys.size()) / float(chunk)), job, "pine_woods weights")
+	for c: int in range(parts.size()):
+		var values: PackedFloat64Array = parts[c]
+		for k: int in range(values.size()): _cache[keys[c * chunk + k]] = values[k]
+	await Kit.settle(park, since)
+	return is_instance_valid(park)
 
 ## World footprints of the clubhouse and the basketball court, from their own
 ## meshes (the court node sits at its centre, the clubhouse at its anchor).
@@ -723,11 +750,7 @@ static func _batch_lod(parent: Node3D, label: String, lod: Dictionary, rows: Arr
 			many.transform_format = MultiMesh.TRANSFORM_3D
 			many.mesh = part.mesh
 			many.instance_count = list.size()
-			var relative: Transform3D = part.relative
-			for i: int in range(list.size()):
-				var t: Transform3D = (list[i] as Transform3D) * relative
-				t.origin -= centre
-				many.set_instance_transform(i, t)
+			many.buffer = Kit.pack_transforms(list, part.relative, centre)
 			var node := MultiMeshInstance3D.new()
 			node.name = "%s_%d_%d" % [label, key.x, key.y]
 			node.multimesh = many
@@ -933,14 +956,13 @@ static func _floor_litter(park: Node3D, terrain: Node, root: Node3D, rng: Random
 	var branch_rows := {}
 	var stone_count := 0
 	var branch_count := 0
-	var scan_rows := 0
+	var since := Kit.frames_now()
 	for scan: Rect2 in SCANS:
 		for z: int in range(int(scan.position.y), int(scan.end.y), 3):
-			# A row counter: z itself steps from -188 by 3 and never hits a multiple of 12.
-			scan_rows += 1
-			if scan_rows % 4 == 0:
-				await park.get_tree().process_frame
-				if not is_instance_valid(park): return {"stones": 0, "branches": 0}
+			# Placement only reads the ground, paths and physics (nothing is added
+			# inside this loop), so it yields on time, not on a row count.
+			await Kit.slice(park)
+			if not is_instance_valid(park): return {"stones": 0, "branches": 0}
 			for x: int in range(int(scan.position.x), int(scan.end.x), 3):
 				var p := Vector2(x + rng.randf() * 3.0, z + rng.randf() * 3.0)
 				var roll := rng.randf()
@@ -963,6 +985,8 @@ static func _floor_litter(park: Node3D, terrain: Node, root: Node3D, rng: Random
 					if not branch_rows.has(k): branch_rows[k] = []
 					branch_rows[k].append(_lay(branches[k], terrain, p, rng.randf_range(0.8, 2.1), rng.randf() * TAU, 0.02))
 					branch_count += 1
+	await Kit.settle(park, since)
+	if not is_instance_valid(park): return {"stones": 0, "branches": 0}
 	for k: int in stone_rows: Kit.batch_parts(root, "PineFloorStones%d" % k, stones[k], stone_rows[k], 32.0, 70.0)
 	for k: int in branch_rows: Kit.batch_parts(root, "PineFloorBranches%d" % k, branches[k], branch_rows[k], 32.0, 60.0, false)
 	return {"stones": stone_count, "branches": branch_count}

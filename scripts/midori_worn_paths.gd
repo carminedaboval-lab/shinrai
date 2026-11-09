@@ -6,6 +6,7 @@ extends RefCounted
 ## lighting, no separate strip, so the walk reads as part of the ground.
 ## The old walk and trail meshes stay for collision and for the systems that
 ## read their shapes, but no camera draws them.
+const Budget := preload("res://scripts/shinrai_loading_budget.gd")
 const RES := 4.0 # path map pixels per metre
 const ORIGIN := Vector2(-220.0, -180.0)
 const SIZE := Vector2(440.0, 360.0)
@@ -61,12 +62,30 @@ const FRAGMENT := """
 	}
 """
 
+## With a raid, the world-complete step (scripts/shinrai_world_complete.gd)
+## calls install_now() before HQ; this legacy entry only runs for a raid that
+## left BOOT without that step, or with no raid at all.
 static func install(park: Node3D) -> void:
 	var tree := park.get_tree()
 	var raid := park.get_node_or_null("ExtractionRun")
 	while is_instance_valid(raid) and raid.phase == raid.Phase.BOOT:
+		if is_instance_valid(park) and park.get_meta(&"shinrai_world_complete_started", false): return
 		await tree.process_frame
 	if not is_instance_valid(park): return
+	await install_now(park)
+
+## Paints the map and injects it, once per park, on the shared loading budget.
+static func install_now(park: Node3D) -> Dictionary:
+	if not is_instance_valid(park): return {}
+	if park.has_meta("worn_paths"): return park.get_meta("worn_paths")
+	if park.get_meta(&"worn_paths_running", false):
+		while is_instance_valid(park) and not park.has_meta("worn_paths"): await park.get_tree().process_frame
+		return park.get_meta("worn_paths", {}) if is_instance_valid(park) else {}
+	park.set_meta(&"worn_paths_running", true)
+	await _paint(park)
+	return park.get_meta("worn_paths", {}) if is_instance_valid(park) else {}
+
+static func _paint(park: Node3D) -> void:
 	var terrain := park.get_node_or_null("MidoriTerrain")
 	var material: ShaderMaterial = null
 	if terrain != null:
@@ -75,9 +94,31 @@ static func install(park: Node3D) -> void:
 				material = child.material_override
 				break
 	if material == null or not material.shader.code.contains("float inside") and not material.shader.code.contains("uniform sampler2D soil_albedo_tex"):
+		_drop_prepaint()
 		park.set_meta("worn_paths", {"error":"ground shader unavailable"})
 		return
-	# Path centre lines and half-widths, in world metres.
+	var gathered := _gather(park)
+	var lines: Array = gathered.lines
+	var walks: Array[GeometryInstance3D] = gathered.walks
+	# Painted ahead on a worker (prepaint) from equal lines: the same map.
+	var map: Image = await _take_prepaint(park, lines)
+	if not is_instance_valid(park): return
+	if map == null:
+		map = Image.create(int(SIZE.x * RES), int(SIZE.y * RES), false, Image.FORMAT_L8)
+		map.fill(Color(0, 0, 0))
+		for line: Array in lines:
+			var centres: PackedVector3Array = line[0]
+			for i: int in range(centres.size() - 1):
+				_paint_segment(map, line, i)
+				# Time-based: the map is the same however the segments split across frames.
+				await Budget.checkpoint(park, true)
+				if not is_instance_valid(park): return
+	_inject(park, material, map, lines, walks)
+
+## Path centre lines and half-widths in world metres ({lines, walks}): read from
+## the path layout's metas and the desire-path routes (both final once the
+## desire paths have finished), plus the walk and trail meshes to hide.
+static func _gather(park: Node3D) -> Dictionary:
 	var lines: Array = []
 	var walks: Array[GeometryInstance3D] = []
 	var layout := park.get_node_or_null("MidoriPark_440x360m_ProceduralLayout/FinalDestinationLedPathHierarchy")
@@ -111,31 +152,78 @@ static func install(park: Node3D) -> void:
 			lines.append([centres, widths, 0.8])
 		for trail: Node in trails.get_children():
 			if trail is GeometryInstance3D: walks.append(trail)
+	return {"lines": lines, "walks": walks}
+
+## One centre-line segment `i` of `line` into the map (the brush the map has
+## always used; segments in order give the same pixels on any thread).
+static func _paint_segment(map: Image, line: Array, i: int) -> void:
+	var centres: PackedVector3Array = line[0]
+	var widths: PackedFloat32Array = line[1]
+	var a := Vector2(centres[i].x, centres[i].z)
+	var b := Vector2(centres[i + 1].x, centres[i + 1].z)
+	var half := maxf(widths[i], widths[i + 1]) * 0.5 * float(line[2])
+	var low := (a.min(b) - Vector2.ONE * (half + RANGE) - ORIGIN) * RES
+	var high := (a.max(b) + Vector2.ONE * (half + RANGE) - ORIGIN) * RES
+	for y: int in range(maxi(0, floori(low.y)), mini(map.get_height(), ceili(high.y))):
+		for x: int in range(maxi(0, floori(low.x)), mini(map.get_width(), ceili(high.x))):
+			var p := Vector2(x + 0.5, y + 0.5) / RES + ORIGIN
+			var closest := Geometry2D.get_closest_point_to_segment(p, a, b)
+			var t := clampf(a.distance_to(closest) / maxf(0.001, a.distance_to(b)), 0.0, 1.0)
+			var h := lerpf(widths[i], widths[i + 1], t) * 0.5 * float(line[2])
+			var inside := clampf(h - p.distance_to(closest), -RANGE, RANGE)
+			var value := (inside + RANGE) / (RANGE * 2.0)
+			if value > map.get_pixel(x, y).r: map.set_pixel(x, y, Color(value, value, value))
+
+## The whole map from `lines`, segments in order (worker side of prepaint).
+static func _paint_map(lines: Array) -> Image:
 	var map := Image.create(int(SIZE.x * RES), int(SIZE.y * RES), false, Image.FORMAT_L8)
 	map.fill(Color(0, 0, 0))
-	var counter := 0
 	for line: Array in lines:
 		var centres: PackedVector3Array = line[0]
-		var widths: PackedFloat32Array = line[1]
-		for i: int in range(centres.size() - 1):
-			var a := Vector2(centres[i].x, centres[i].z)
-			var b := Vector2(centres[i + 1].x, centres[i + 1].z)
-			var half := maxf(widths[i], widths[i + 1]) * 0.5 * float(line[2])
-			var low := (a.min(b) - Vector2.ONE * (half + RANGE) - ORIGIN) * RES
-			var high := (a.max(b) + Vector2.ONE * (half + RANGE) - ORIGIN) * RES
-			for y: int in range(maxi(0, floori(low.y)), mini(map.get_height(), ceili(high.y))):
-				for x: int in range(maxi(0, floori(low.x)), mini(map.get_width(), ceili(high.x))):
-					var p := Vector2(x + 0.5, y + 0.5) / RES + ORIGIN
-					var closest := Geometry2D.get_closest_point_to_segment(p, a, b)
-					var t := clampf(a.distance_to(closest) / maxf(0.001, a.distance_to(b)), 0.0, 1.0)
-					var h := lerpf(widths[i], widths[i + 1], t) * 0.5 * float(line[2])
-					var inside := clampf(h - p.distance_to(closest), -RANGE, RANGE)
-					var value := (inside + RANGE) / (RANGE * 2.0)
-					if value > map.get_pixel(x, y).r: map.set_pixel(x, y, Color(value, value, value))
-			counter += 1
-			if counter % 24 == 0:
-				await tree.process_frame
-				if not is_instance_valid(park): return
+		for i: int in range(centres.size() - 1): _paint_segment(map, line, i)
+	return map
+
+# ------------------------------------------------------------ early paint
+## The map reads only the lines above. The raid calls prepaint() once the desire
+## paths have finished (about 25 s before the world-complete step): the lines
+## are gathered then and one WorkerThreadPool task paints the map from a copy.
+## _paint() gathers the lines again and takes that map only when they are equal;
+## otherwise it paints as before. The shader injection and the hidden strips
+## stay where they always were.
+static var _pre: Dictionary = {}
+
+static func prepaint(park: Node3D) -> void:
+	# The raid wakes here in a busy frame (several producers wait for the desire
+	# paths): take a budget turn first. The caller does not wait for this.
+	await Budget.checkpoint(park, true)
+	if not is_instance_valid(park) or park.has_meta("worn_paths") or park.get_meta(&"worn_paths_running", false): return
+	_drop_prepaint()
+	var lines: Array = _gather(park).lines
+	var copy: Array = lines.duplicate(true)
+	var out := {}
+	var job := func() -> void: out["map"] = _paint_map(copy)
+	_pre = {"park": park.get_instance_id(), "lines": lines, "out": out, "task": WorkerThreadPool.add_task(job, false, "midori_worn_paths prepaint")}
+
+## The prepainted map when it was painted for this park from equal lines
+## (waits for the task on frames, never blocking the main thread), else null.
+static func _take_prepaint(park: Node3D, lines: Array) -> Image:
+	if _pre.is_empty(): return null
+	var pre := _pre
+	var same: bool = int(pre.park) == park.get_instance_id() and pre.lines == lines
+	if same:
+		while not WorkerThreadPool.is_task_completed(int(pre.task)):
+			await park.get_tree().process_frame
+			if not is_instance_valid(park): break
+	_drop_prepaint()
+	var map: Image = (pre.out as Dictionary).get("map", null)
+	if preload("res://scripts/startup_trace.gd").enabled: print("MIDORI_WORN_PATHS_PREPAINT ", "hit" if same and map != null else "stale, painting again")
+	return map if same and is_instance_valid(park) else null
+
+static func _drop_prepaint() -> void:
+	if _pre.has("task"): WorkerThreadPool.wait_for_task_completion(int(_pre.task))
+	_pre = {}
+
+static func _inject(park: Node3D, material: ShaderMaterial, map: Image, lines: Array, walks: Array[GeometryInstance3D]) -> void:
 	# Inject once into the shared ground shader, keeping every parameter.
 	if not material.shader.code.contains("uniform bool worn_ready"):
 		var parameters := {}

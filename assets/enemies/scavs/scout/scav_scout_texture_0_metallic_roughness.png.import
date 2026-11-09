@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cwjdjeat5jxmd"
-path="res://.godot/imported/scav_scout_texture_0_metallic_roughness.png-d3c5542731e94537767effb4ac795b65.ctex"
+path.bptc="res://.godot/imported/scav_scout_texture_0_metallic_roughness.png-d3c5542731e94537767effb4ac795b65.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "61f917ba34befef16eec2d495c6d83a9"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/enemies/scavs/scout/scav_scout_texture_0_metallic_roughness.png"
-dest_files=["res://.godot/imported/scav_scout_texture_0_metallic_roughness.png-d3c5542731e94537767effb4ac795b65.ctex"]
+dest_files=["res://.godot/imported/scav_scout_texture_0_metallic_roughness.png-d3c5542731e94537767effb4ac795b65.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

@@ -12,6 +12,7 @@ extends RefCounted
 ## cell batch. The low, opaque foliage borrows the shadows of the existing canopy.
 const Biomes := preload("res://scripts/midori_biomes.gd")
 const Kit := preload("res://scripts/biomes/biome_kit.gd")
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 const Shore := preload("res://scripts/biomes/iris_shore.gd")
 const ID := "zoki"
 const RECT := Rect2(-100, -192, 154, 156)
@@ -81,6 +82,7 @@ static func build(park: Node3D, terrain: Node) -> Dictionary:
 	var branch_rows: Array = []
 	for i: int in range(twigs.size()): branch_rows.append([])
 	var trunks: Dictionary = grid.trunks
+	var since := Kit.frames_now()
 	for z: int in range(int(RECT.position.y), int(RECT.end.y)):
 		for x: int in range(int(RECT.position.x), int(RECT.end.x)):
 			var c := Vector2(x + 0.5, z + 0.5)
@@ -143,7 +145,10 @@ static func build(park: Node3D, terrain: Node) -> Dictionary:
 					var proto: Dictionary = twigs[which]
 					var tilt := Basis(Vector3.FORWARD, rng.randf_range(-0.08, 0.08))
 					branch_rows[which].append(Kit.seat(proto, terrain, c + Vector2(rng.randf() - 0.5, rng.randf() - 0.5), proto.box.size.y * rng.randf_range(0.7, 1.3), rng.randf() * TAU, 0.03, tilt))
-		if z % 4 == 0: await park.get_tree().process_frame
+		# Rows only collect transforms (nothing joins the scene or the physics
+		# space inside this loop): yield on time, not on a row count.
+		await Kit.slice(park)
+	await Kit.settle(park, since)
 	# Periwinkle hugging the logs, both sides, so they sit in the floor.
 	for line: Array in log_lines:
 		var a: Vector2 = line[0]
@@ -171,9 +176,7 @@ static func build(park: Node3D, terrain: Node) -> Dictionary:
 		var part := {"mesh": windfalls[variant].mesh, "relative": Transform3D.IDENTITY}
 		_batch(root, "CoppiceLogs%d" % variant, [part], timber_rows, 32.0, 90.0, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 	for i: int in range(twigs.size()): _batch(root, "CoppiceBranches%d" % i, twigs[i].parts, branch_rows[i], 12.0, 30.0, off)
-	var material := ShaderMaterial.new()
-	material.shader = Shader.new()
-	material.shader.code = SPRIG_SHADER
+	var material := ShaderPool.material(SPRIG_SHADER)
 	material.set_shader_parameter("leaves", PERIWINKLE)
 	for i: int in range(ferns.size()):
 		var card := _fern_material(i)
@@ -208,12 +211,33 @@ static func _grids(park: Node3D, terrain: Node) -> Dictionary:
 	var w := PackedFloat32Array()
 	w.resize(cols * rows)
 	var trunk := w.duplicate()
-	for r: int in range(rows):
+	var since := Kit.frames_now()
+	# Pure maths per row (weights, and distances over the trunk table built
+	# above, read only), on WorkerThreadPool; same floats in the same cells.
+	Biomes.noise()
+	# Each row reads its own copy of the weight kernel (Biomes.Kernel: the same
+	# floats as Biomes.weight, nothing shared between the threads).
+	var kernel := Biomes.terrain_kernel(terrain)
+	var id_index := Biomes.region_index(ID)
+	var job := func(r: int) -> Array:
+		var k := kernel.clone()
+		var wr := PackedFloat32Array()
+		var tr := PackedFloat32Array()
+		wr.resize(cols)
+		tr.resize(cols)
 		for c: int in range(cols):
 			var p := RECT.position + Vector2(c, r) * GRID_M
-			w[r * cols + c] = Biomes.weight(p, ID, terrain)
-			trunk[r * cols + c] = _trunk_distance(trunks, p, 12.0)
-		if r % 6 == 0: await park.get_tree().process_frame
+			wr[c] = k.weight(p, id_index)
+			tr[c] = _trunk_distance(trunks, p, 12.0)
+		return [wr, tr]
+	var done := Kit.parallel(rows, job, "north_coppice grids")
+	for r: int in range(rows):
+		var wr: PackedFloat32Array = done[r][0]
+		var tr: PackedFloat32Array = done[r][1]
+		for c: int in range(cols):
+			w[r * cols + c] = wr[c]
+			trunk[r * cols + c] = tr[c]
+	await Kit.settle(park, since)
 	return {"cols": cols, "rows": rows, "w": w, "trunk": trunk, "trunks": trunks}
 
 static func _at(grid: Dictionary, key: String, p: Vector2) -> float:
@@ -463,9 +487,7 @@ static func _timber_shell(st: SurfaceTool, centres: Array[Vector3], radii: Array
 					st.add_vertex(pts[vi])
 
 static func _log_material() -> ShaderMaterial:
-	var material := ShaderMaterial.new()
-	material.shader = Shader.new()
-	material.shader.code = """
+	var material := ShaderPool.material("""
 shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D bark : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
@@ -509,7 +531,7 @@ void fragment() {
 	SPECULAR = 0.06;
 	ROUGHNESS = 0.97;
 }
-"""
+""")
 	material.set_shader_parameter("bark", preload("res://assets/shinrai/parks/midori_park/materials/coppice_litter/coppice_bark.png"))
 	return material
 
@@ -564,7 +586,10 @@ static func _batch(parent: Node3D, name: String, parts: Array, rows: Array, cell
 		var key := Vector2i(floori(t.origin.x / cell), floori(t.origin.z / cell))
 		if not cells.has(key): cells[key] = []
 		cells[key].append(t)
-	for key: Vector2i in cells:
+	var keys: Array = cells.keys()
+	var buffers := Kit.pack_part_cells(cells, keys, cell, parts, rows.size())
+	var at := 0
+	for key: Vector2i in keys:
 		var list: Array = cells[key]
 		var centre := Vector3((key.x + 0.5) * cell, 0.0, (key.y + 0.5) * cell)
 		for part: Dictionary in parts:
@@ -572,10 +597,8 @@ static func _batch(parent: Node3D, name: String, parts: Array, rows: Array, cell
 			many.transform_format = MultiMesh.TRANSFORM_3D
 			many.mesh = part.mesh
 			many.instance_count = list.size()
-			for i: int in range(list.size()):
-				var t: Transform3D = list[i] * part.relative
-				t.origin -= centre
-				many.set_instance_transform(i, t)
+			many.buffer = buffers[at]
+			at += 1
 			var node := MultiMeshInstance3D.new()
 			node.name = "%s_%d_%d" % [name, key.x, key.y]
 			node.multimesh = many
@@ -612,9 +635,8 @@ static func _fern_crown(variant: int) -> ArrayMesh:
 	return surface.commit()
 
 static func _fern_material(index: int) -> ShaderMaterial:
-	var mat := ShaderMaterial.new()
-	mat.shader = Shader.new()
-	mat.shader.code = """
+	# Every fern index shares one pooled shader; the atlas quadrant is a uniform.
+	var mat := ShaderPool.material("""
 shader_type spatial;
 render_mode cull_disabled, specular_disabled;
 uniform sampler2D fronds : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
@@ -631,7 +653,7 @@ void fragment() {
 	ROUGHNESS = 0.98;
 	BACKLIGHT = ALBEDO * 0.14;
 }
-"""
+""")
 	mat.set_shader_parameter("fronds", FERN_ATLAS)
 	mat.set_shader_parameter("quadrant", Vector2(index % 2, floorf(float(index) * 0.5)) * 0.5)
 	return mat
@@ -672,9 +694,7 @@ static func _sapling_mesh() -> ArrayMesh:
 	bark.roughness = 0.98
 	wood.set_material(bark)
 	var result := wood.commit()
-	var leaves := ShaderMaterial.new()
-	leaves.shader = Shader.new()
-	leaves.shader.code = """
+	var leaves := ShaderPool.material("""
 shader_type spatial;
 render_mode cull_disabled, specular_disabled;
 uniform sampler2D leaf_spray : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
@@ -689,7 +709,7 @@ void fragment() {
 	ROUGHNESS = 1.0;
 	BACKLIGHT = ALBEDO * 0.11;
 }
-"""
+""")
 	leaves.set_shader_parameter("leaf_spray", OAK_SPRAY)
 	foliage.set_material(leaves)
 	foliage.index()
@@ -812,6 +832,7 @@ static func _tuft_spec() -> Dictionary:
 ## floor, so they are dimmed here).
 static func _leaves(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberGenerator, grid: Dictionary, gap_at: Callable) -> int:
 	var rows: Array = []
+	var since := Kit.frames_now()
 	for z: int in range(int(RECT.position.y), int(RECT.end.y)):
 		for x: int in range(int(RECT.position.x), int(RECT.end.x)):
 			var c := Vector2(x + 0.5, z + 0.5)
@@ -824,7 +845,8 @@ static func _leaves(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumber
 				var basis := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.25, 0.25)) * Basis(Vector3.FORWARD, rng.randf_range(-0.25, 0.25))
 				var colour := Kit.leaf_colour(rng, 0.45) * 0.6
 				rows.append([Transform3D(basis.scaled(Vector3.ONE * rng.randf_range(0.8, 1.3)), Vector3(p.x, terrain.height_at(p) + 0.012 + rng.randf() * 0.01, p.y)), colour])
-		if z % 6 == 0: await park.get_tree().process_frame
+		await Kit.slice(park)
+	await Kit.settle(park, since)
 	Kit.cell_batches(root, "CoppiceLeaves", Kit.leaf_mesh(), Kit.leaf_material(), rows, 12.0, 20.0, false)
 	return rows.size()
 
@@ -846,5 +868,5 @@ static func _thin(park: Node3D, grid: Dictionary) -> Dictionary:
 		if not RECT.has_point(p): return true
 		return not Biomes.pick(p, smoothstep(0.25, 0.75, _at(grid, "w", p)) * 0.94, 23)
 	if ResourceLoader.exists("res://scripts/biomes/thin_all.gd"):
-		return load("res://scripts/biomes/thin_all.gd").hide_low_planting(park, filter, keep, RECT)
+		return load("res://scripts/biomes/thin_all.gd").hide_low_planting(park, filter, keep, RECT, true)
 	return {"fallback": Kit.thin_multimeshes([park], func(n: MultiMeshInstance3D) -> bool: return filter.call(String(n.name) + " " + (n.multimesh.mesh.resource_name if n.multimesh.mesh else "")), keep)}

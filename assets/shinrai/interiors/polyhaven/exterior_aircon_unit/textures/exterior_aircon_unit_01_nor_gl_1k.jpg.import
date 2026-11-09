@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bbxb7mwp2b1n8"
-path="res://.godot/imported/exterior_aircon_unit_01_nor_gl_1k.jpg-ad3db9d335c2e56514ac477e68b2791c.ctex"
+path.bptc="res://.godot/imported/exterior_aircon_unit_01_nor_gl_1k.jpg-ad3db9d335c2e56514ac477e68b2791c.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/interiors/polyhaven/exterior_aircon_unit/textures/exterior_aircon_unit_01_nor_gl_1k.jpg"
-dest_files=["res://.godot/imported/exterior_aircon_unit_01_nor_gl_1k.jpg-ad3db9d335c2e56514ac477e68b2791c.ctex"]
+dest_files=["res://.godot/imported/exterior_aircon_unit_01_nor_gl_1k.jpg-ad3db9d335c2e56514ac477e68b2791c.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

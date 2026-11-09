@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b4hti478thqb8"
-path="res://.godot/imported/urban_explorer_2050_body_texture_0.png-5faf88d947994cb9643290ebf3b1da74.ctex"
+path.bptc="res://.godot/imported/urban_explorer_2050_body_texture_0.png-5faf88d947994cb9643290ebf3b1da74.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "871dca69f1bc00397409d164eb477e32"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/urban_explorer_2050/urban_explorer_2050_body_texture_0.png"
-dest_files=["res://.godot/imported/urban_explorer_2050_body_texture_0.png-5faf88d947994cb9643290ebf3b1da74.ctex"]
+dest_files=["res://.godot/imported/urban_explorer_2050_body_texture_0.png-5faf88d947994cb9643290ebf3b1da74.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

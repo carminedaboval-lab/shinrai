@@ -119,26 +119,17 @@ static func _build_artwork_collision(bridge: Node3D, parent: Node3D, id: String,
 	# separate fitted floor closes plank gaps without changing the visible art.
 	var faces := PackedVector3Array()
 	var lateral := Vector2(-axis.y,axis.x)
+	# Each mesh's faces are read here; the per-triangle filter runs on workers, one
+	# mesh per task, and the kept faces are joined in mesh order (as the serial loop).
+	var units: Array = []
 	for node: Node in bridge.find_children("*", "MeshInstance3D", true, false):
 		var visual := node as MeshInstance3D
 		if visual.mesh == null:
 			continue
-		var source := visual.mesh.get_faces()
-		for index: int in range(0,source.size(),3):
-			if index % 1536 == 0: await LoadingBudget.checkpoint(boot_park)
-			var triangle := PackedVector3Array()
-			var min_side := INF
-			var max_side := -INF
-			for corner: int in range(3):
-				var p := visual.global_transform*source[index+corner]
-				var side := (Vector2(p.x,p.z)-start).dot(lateral)
-				min_side = minf(min_side,side)
-				max_side = maxf(max_side,side)
-				triangle.append(p)
-			# Keep exact side rail/post geometry; the central tread remains on
-			# its smooth fitted floor instead of catching individual plank edges.
-			if min_side >= width*0.32 or max_side <= -width*0.32:
-				faces.append_array(triangle)
+		units.append({"source": visual.mesh.get_faces(), "xform": visual.global_transform, "start": start, "lateral": lateral, "width": width, "faces": PackedVector3Array()})
+	await _run_group(_artwork_unit.bind(units), units.size(), boot_park, "bridge.artwork_collision")
+	for unit: Dictionary in units:
+		faces.append_array(unit.faces)
 	var body := StaticBody3D.new()
 	body.name = "Bridge_%s_ArtworkBarriers" % id
 	body.top_level = true
@@ -183,50 +174,104 @@ static func _collect_triangles(bridge: Node3D, origin: Vector2, axis: Vector2, b
 	for child: Node in bridge.find_children("*", "MeshInstance3D", true, false):
 		visuals.append(child as MeshInstance3D)
 	var perpendicular := Vector2(-axis.y, axis.x)
+	# Each surface's arrays and its mesh's transform are read here; the triangle loop
+	# runs on workers, one surface per task, and the results are joined in surface
+	# order (as the serial loop produced them).
+	var units: Array = []
 	for visual: MeshInstance3D in visuals:
 		if visual.mesh == null:
 			continue
-		var normal_basis := visual.global_transform.basis.inverse().transposed()
+		var xform := visual.global_transform
+		var normal_basis := xform.basis.inverse().transposed()
 		for surface: int in range(visual.mesh.get_surface_count()):
-			var arrays := visual.mesh.surface_get_arrays(surface)
-			var positions: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-			var normals := PackedVector3Array()
-			var indices := PackedInt32Array()
-			if arrays[Mesh.ARRAY_NORMAL] is PackedVector3Array:
-				normals = arrays[Mesh.ARRAY_NORMAL]
-			if arrays[Mesh.ARRAY_INDEX] is PackedInt32Array:
-				indices = arrays[Mesh.ARRAY_INDEX]
-			var count := indices.size() if not indices.is_empty() else positions.size()
-			for first: int in range(0, count - 2, 3):
-				if first % 1536 == 0: await LoadingBudget.checkpoint(boot_park)
-				var ia := indices[first] if not indices.is_empty() else first
-				var ib := indices[first + 1] if not indices.is_empty() else first + 1
-				var ic := indices[first + 2] if not indices.is_empty() else first + 2
-				var a_world := visual.global_transform * positions[ia]
-				var b_world := visual.global_transform * positions[ib]
-				var c_world := visual.global_transform * positions[ic]
-				var normal: Vector3
-				if normals.size() == positions.size():
-					normal = (normal_basis * (normals[ia] + normals[ib] + normals[ic])).normalized()
-				else:
-					# Godot's front-face index winding is clockwise.
-					normal = (c_world - a_world).cross(b_world - a_world).normalized()
-				if normal.y < 0.60:
-					continue
-				var a := _project_vertex(a_world, origin, axis, perpendicular)
-				var b := _project_vertex(b_world, origin, axis, perpendicular)
-				var c := _project_vertex(c_world, origin, axis, perpendicular)
-				var denominator := (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z)
-				if absf(denominator) < 0.00000001:
-					continue
-				result.append({
-					"a": a, "b": b, "c": c, "denominator": denominator,
-					"min_along": minf(a.x, minf(b.x, c.x)),
-					"max_along": maxf(a.x, maxf(b.x, c.x)),
-					"min_lateral": minf(a.z, minf(b.z, c.z)),
-					"max_lateral": maxf(a.z, maxf(b.z, c.z)),
-				})
+			var triangles: Array[Dictionary] = []
+			units.append({"arrays": visual.mesh.surface_get_arrays(surface), "xform": xform, "normal_basis": normal_basis,
+				"origin": origin, "axis": axis, "perpendicular": perpendicular, "triangles": triangles})
+	await _run_group(_collect_unit.bind(units), units.size(), boot_park, "bridge.collect_triangles")
+	for unit: Dictionary in units:
+		result.append_array(unit.triangles)
 	return result
+
+## Worker: the upward triangles of one surface (the former loop body). Only `unit`.
+static func _collect_unit(index: int, units: Array) -> void:
+	var unit: Dictionary = units[index]
+	var arrays: Array = unit.arrays
+	var xform: Transform3D = unit.xform
+	var normal_basis: Basis = unit.normal_basis
+	var origin: Vector2 = unit.origin
+	var axis: Vector2 = unit.axis
+	var perpendicular: Vector2 = unit.perpendicular
+	var result: Array[Dictionary] = unit.triangles
+	var positions: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	if arrays[Mesh.ARRAY_NORMAL] is PackedVector3Array:
+		normals = arrays[Mesh.ARRAY_NORMAL]
+	if arrays[Mesh.ARRAY_INDEX] is PackedInt32Array:
+		indices = arrays[Mesh.ARRAY_INDEX]
+	var count := indices.size() if not indices.is_empty() else positions.size()
+	for first: int in range(0, count - 2, 3):
+		var ia := indices[first] if not indices.is_empty() else first
+		var ib := indices[first + 1] if not indices.is_empty() else first + 1
+		var ic := indices[first + 2] if not indices.is_empty() else first + 2
+		var a_world := xform * positions[ia]
+		var b_world := xform * positions[ib]
+		var c_world := xform * positions[ic]
+		var normal: Vector3
+		if normals.size() == positions.size():
+			normal = (normal_basis * (normals[ia] + normals[ib] + normals[ic])).normalized()
+		else:
+			# Godot's front-face index winding is clockwise.
+			normal = (c_world - a_world).cross(b_world - a_world).normalized()
+		if normal.y < 0.60:
+			continue
+		var a := _project_vertex(a_world, origin, axis, perpendicular)
+		var b := _project_vertex(b_world, origin, axis, perpendicular)
+		var c := _project_vertex(c_world, origin, axis, perpendicular)
+		var denominator := (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z)
+		if absf(denominator) < 0.00000001:
+			continue
+		result.append({
+			"a": a, "b": b, "c": c, "denominator": denominator,
+			"min_along": minf(a.x, minf(b.x, c.x)),
+			"max_along": maxf(a.x, maxf(b.x, c.x)),
+			"min_lateral": minf(a.z, minf(b.z, c.z)),
+			"max_lateral": maxf(a.z, maxf(b.z, c.z)),
+		})
+
+## Worker: one mesh's rail/post faces for the barrier collision (the former loop body).
+static func _artwork_unit(index: int, units: Array) -> void:
+	var unit: Dictionary = units[index]
+	var source: PackedVector3Array = unit.source
+	var xform: Transform3D = unit.xform
+	var start: Vector2 = unit.start
+	var lateral: Vector2 = unit.lateral
+	var width: float = unit.width
+	var faces: PackedVector3Array = unit.faces
+	for index_face: int in range(0,source.size(),3):
+		var triangle := PackedVector3Array()
+		var min_side := INF
+		var max_side := -INF
+		for corner: int in range(3):
+			var p := xform*source[index_face+corner]
+			var side := (Vector2(p.x,p.z)-start).dot(lateral)
+			min_side = minf(min_side,side)
+			max_side = maxf(max_side,side)
+			triangle.append(p)
+		# Keep exact side rail/post geometry; the central tread remains on
+		# its smooth fitted floor instead of catching individual plank edges.
+		if min_side >= width*0.32 or max_side <= -width*0.32:
+			faces.append_array(triangle)
+	unit.faces = faces
+
+## fn(index) for index in [0, count) on all worker threads, waited for at once:
+## the parallel loop is short (~0.1 s), and yielding a frame per wait cost more
+## (measured: +1.1 s over the three bridges) than it gave back. A budget turn first.
+static func _run_group(fn: Callable, count: int, boot_park: Node, label: String) -> void:
+	if count <= 0: return
+	await LoadingBudget.checkpoint(boot_park)
+	var task := WorkerThreadPool.add_group_task(fn, count, -1, true, label)
+	WorkerThreadPool.wait_for_group_task_completion(task)
 
 static func _project_vertex(point: Vector3, origin: Vector2, axis: Vector2, perpendicular: Vector2) -> Vector3:
 	var relative := Vector2(point.x, point.z) - origin

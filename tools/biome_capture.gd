@@ -129,6 +129,12 @@ func run() -> void:
 		return
 	raid.hud.hide()
 	if raid.get("player") != null and is_instance_valid(raid.player): raid.player.visible = false
+	# BIOME_NIGHT=1 / =0 forces night or day for the shots (unset: as the park booted).
+	var night := OS.get_environment("BIOME_NIGHT")
+	if night == "1" or night == "0":
+		scene.set("is_night_mode", night == "1")
+		scene.call("_apply_time_of_day")
+		print("BIOME_NIGHT ", scene.get("is_night_mode"))
 	await frames(90)
 	var camera := Camera3D.new()
 	scene.add_child(camera)

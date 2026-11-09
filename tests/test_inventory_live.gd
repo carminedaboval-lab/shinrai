@@ -24,7 +24,8 @@ func run_checks() -> void:
 	root.add_child(scene)
 	current_scene = scene
 	var raid: Node = scene.get_node("ExtractionRun")
-	var deadline := Time.get_ticks_msec() + 120000
+	# The world-complete step (biomes etc.) now finishes before HQ: ~150-190 s.
+	var deadline := Time.get_ticks_msec() + 360000
 	while raid.phase == raid.Phase.BOOT and Time.get_ticks_msec() < deadline:
 		await process_frame
 	check(raid.phase == raid.Phase.HQ, "Configured main reaches operations")

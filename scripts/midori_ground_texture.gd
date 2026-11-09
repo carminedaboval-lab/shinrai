@@ -6,6 +6,7 @@ extends Node
 # real-world size. The previous procedural material remains as a safe fallback
 # while Godot is importing the downloaded images.
 
+const StartupTrace = preload("res://scripts/startup_trace.gd")
 const TARGET_SCENE_NAME := "MidoriParkSizeBlockout"
 const TARGET_GROUND_NAME := "ParkGround_220x180m"
 const TEXTURE_WORLD_SIZE_M := 2.0
@@ -369,52 +370,153 @@ func _install_landscape_mask(scene: Node3D) -> void:
 		landscape_report={"version":0,"fallback":true,"reason":"Supplied ground maps unavailable"}
 		landscape_ready=true
 		return
+	var _mt := StartupTrace.begin()
 	var trees:Dictionary={}
 	for local:Vector2 in scene.occupied_tree_positions:
 		var p:Vector2=local*2.0
 		var cell:=Vector2i(floori(p.x/12.0),floori(p.y/12.0))
 		if not trees.has(cell):trees[cell]=[]
 		trees[cell].append(p)
+	# The mask uses the trees listed now; later producers (sparse gap trees, the
+	# plaza shade trees) add theirs after it. Report the count the mask used.
+	var tree_count:int=scene.occupied_tree_positions.size()
+	# The per-pixel maths reads only data that is final here: the park's path-edge
+	# table, the trails' route and paving tables, the shoreline and islands, and the
+	# tree cells above. It runs on worker bands from those (never the nodes), with
+	# the same expressions in the same order per pixel, then the bands are copied
+	# into the map row for row. It was ~15 unbudgeted 0.3-0.7 s frames behind the menu.
+	var job:={"trees":trees,"edge_cells":scene.get("_path_edge_cells"),"route_cells":trails.route_cells,"paving_cells":trails.paving_cells,
+		"shore":terrain.shoreline,"islands":terrain.islands,"bands":[]}
+	var band_count:=ceili(360.0/MASK_BAND_ROWS)
+	for band:int in range(band_count):(job.bands as Array).append({})
+	# At most MASK_THREADS pool threads: the main thread and the other producers'
+	# loader/worker tasks keep their cores (all twelve starved them in a trial).
+	var task:=WorkerThreadPool.add_group_task(_mask_band.bind(job),band_count,MASK_THREADS,true,"MidoriGroundTexture landscape mask")
+	while not WorkerThreadPool.is_group_task_completed(task):
+		await get_tree().process_frame
+		if not is_instance_valid(scene) or not is_instance_valid(terrain) or not is_instance_valid(trails):
+			WorkerThreadPool.wait_for_group_task_completion(task)
+			return
+	WorkerThreadPool.wait_for_group_task_completion(task)
 	var map:=Image.create(440,360,false,Image.FORMAT_RGBA8)
 	var lawn:=0;var woodland:=0;var worn:=0
 	var held_shoulders:=0;var blended_shoulders:=0
-	var apron_rects:Array[Rect2]=[Rect2(-133,-66,14,22),Rect2(-168,-110,56,48),Rect2(123,105,85,63),Rect2(127,-167,50,42)]
-	for z:int in range(360):
+	for band:int in range(band_count):
+		var out:Dictionary=job.bands[band]
+		var part:Image=out.image
+		map.blit_rect(part,Rect2i(0,0,part.get_width(),part.get_height()),Vector2i(0,band*MASK_BAND_ROWS))
+		lawn+=int(out.lawn);woodland+=int(out.woodland);worn+=int(out.worn)
+		held_shoulders+=int(out.held);blended_shoulders+=int(out.blended)
+	_active_ground_material.set_shader_parameter("landscape_tex",ImageTexture.create_from_image(map))
+	_active_ground_material.set_shader_parameter("landscape_ready",true)
+	landscape_report={"version":4,"independent_ground_layers":_active_ground_material.get_shader_parameter("independent_layers_ready") == true,"map_resolution":Vector2i(440,360),"lawn_samples":lawn,"woodland_samples":woodland,"worn_or_protected_samples":worn,"source_world_scale_m":TEXTURE_WORLD_SIZE_M,"geometry_changes":0,"tree_count":tree_count,"held_shoulder_samples":held_shoulders,"blended_shoulder_samples":blended_shoulders,"path_layer_fade_m":PATH_LAYER_FADE_M,"trail_layer_fade_m":TRAIL_LAYER_FADE_M}
+	landscape_ready=true
+	StartupTrace.finish("ground.landscape_mask",_mt)
+	print("MIDORI_GROUND_LANDSCAPE_READY ",JSON.stringify(landscape_report))
+
+
+const MASK_BAND_ROWS := 24
+const MASK_THREADS := 3
+const MASK_APRONS: Array[Rect2] = [Rect2(-133,-66,14,22),Rect2(-168,-110,56,48),Rect2(123,105,85,63),Rect2(127,-167,50,42)]
+
+## WORKER (one band of MASK_BAND_ROWS rows): the mask loop on the captured tables.
+## Each helper below is the same expression as the node method it stands for:
+## park.path_edge_distance_world, trails.distance_to_path / paving_distance,
+## terrain.edge_distance / water_at.
+static func _mask_band(band: int, job: Dictionary) -> void:
+	var trees: Dictionary = job.trees
+	var edge_cells: Dictionary = job.edge_cells
+	var route_cells: Dictionary = job.route_cells
+	var paving_cells: Dictionary = job.paving_cells
+	var shoreline: PackedVector2Array = job.shore
+	var islands: Array = job.islands
+	var z0 := band*MASK_BAND_ROWS
+	var rows := mini(MASK_BAND_ROWS,360-z0)
+	var map:=Image.create(440,rows,false,Image.FORMAT_RGBA8)
+	var lawn:=0;var woodland:=0;var worn:=0
+	var held_shoulders:=0;var blended_shoulders:=0
+	for row:int in range(rows):
+		var z:=z0+row
 		for x:int in range(440):
 			var p:=Vector2(x-219.5,z-179.5)
 			var cell:=Vector2i(floori(p.x/12.0),floori(p.y/12.0))
 			var tree_distance:=20.0
 			for dz:int in range(-1,2):
 				for dx:int in range(-1,2):
-					for tree:Vector2 in trees.get(cell+Vector2i(dx,dz),[]):tree_distance=minf(tree_distance,p.distance_to(tree))
+					# (A missing cell has no trees; no empty default array per lookup.)
+					var near:Variant=trees.get(cell+Vector2i(dx,dz))
+					if near!=null:
+						for tree:Vector2 in near:tree_distance=minf(tree_distance,p.distance_to(tree))
 			var canopy:=1.0-smoothstep(1.0,6.5,tree_distance)
 			var cover:=lerpf(.94,.26,canopy)
-			var edge:float=scene.path_edge_distance_world(p)
+			var edge:float=_path_edge_distance(edge_cells,p)
 			# Narrow worn shoulder, then a soft transition into the planted ground.
 			cover*=smoothstep(.15,1.65,edge)
-			var trail_distance:float=trails.distance_to_path(p)
+			var trail_distance:float=_trail_distance(route_cells,p)
 			cover*=smoothstep(.90,1.80,trail_distance)
-			var shore:float=terrain.edge_distance(p,terrain.shoreline)
+			var shore:float=_polygon_edge_distance(p,shoreline)
 			var material_support:=smoothstep(2.0,7.0,shore)
-			if terrain.water_at(p):material_support=0.0
-			for rect:Rect2 in apron_rects:
+			if _water_at(p,shoreline,islands):material_support=0.0
+			for rect:Rect2 in MASK_APRONS:
 				var d:=p.distance_to(p.clamp(rect.position,rect.end))
 				material_support*=smoothstep(0.0,2.5,d)
 			cover*=material_support
 			# Reuse the completed trail producer's spatial index of actual paving.
 			# Old RGB mask values are untouched; only optional layer support uses A.
-			var layer_support:=independent_layer_support(edge,trail_distance,trails.paving_distance(p))
-			map.set_pixel(x,z,Color(cover,canopy,1.0-material_support,layer_support))
+			var layer_support:=_layer_support(edge,trail_distance,_paving_distance(paving_cells,p))
+			map.set_pixel(x,row,Color(cover,canopy,1.0-material_support,layer_support))
 			if layer_support<=0.0:held_shoulders+=1
 			elif layer_support<1.0:blended_shoulders+=1
 			if cover>.6:lawn+=1
 			elif canopy>.5:woodland+=1
 			else:worn+=1
-		if z%24==0:
-			await get_tree().process_frame
-			if not is_instance_valid(scene) or not is_instance_valid(terrain) or not is_instance_valid(trails):return
-	_active_ground_material.set_shader_parameter("landscape_tex",ImageTexture.create_from_image(map))
-	_active_ground_material.set_shader_parameter("landscape_ready",true)
-	landscape_report={"version":4,"independent_ground_layers":_active_ground_material.get_shader_parameter("independent_layers_ready") == true,"map_resolution":Vector2i(440,360),"lawn_samples":lawn,"woodland_samples":woodland,"worn_or_protected_samples":worn,"source_world_scale_m":TEXTURE_WORLD_SIZE_M,"geometry_changes":0,"tree_count":scene.occupied_tree_positions.size(),"held_shoulder_samples":held_shoulders,"blended_shoulder_samples":blended_shoulders,"path_layer_fade_m":PATH_LAYER_FADE_M,"trail_layer_fade_m":TRAIL_LAYER_FADE_M}
-	landscape_ready=true
-	print("MIDORI_GROUND_LANDSCAPE_READY ",JSON.stringify(landscape_report))
+	var out: Dictionary = job.bands[band]
+	out["image"]=map
+	out["lawn"]=lawn;out["woodland"]=woodland;out["worn"]=worn
+	out["held"]=held_shoulders;out["blended"]=blended_shoulders
+
+static func _layer_support(path_edge: float, trail_centre: float, paving_edge: float = INF) -> float:
+	var shoulder := minf(path_edge, paving_edge)
+	return smoothstep(PATH_LAYER_FADE_M.x, PATH_LAYER_FADE_M.y, shoulder) * smoothstep(TRAIL_LAYER_FADE_M.x, TRAIL_LAYER_FADE_M.y, trail_centre)
+
+static func _path_edge_distance(cells: Dictionary, point: Vector2) -> float:
+	var result := INF
+	var cell := Vector2i(floori(point.x/8.0),floori(point.y/8.0))
+	var segments:Variant=cells.get(cell)
+	if segments==null: return result
+	for segment:Dictionary in segments:
+		var nearest := Geometry2D.get_closest_point_to_segment(point,segment.a,segment.b)
+		var t := clampf((nearest-segment.a).length()/maxf(.001,segment.a.distance_to(segment.b)),0.0,1.0)
+		result=minf(result,point.distance_to(nearest)-lerpf(segment.wa,segment.wb,t)*.5)
+	return result
+
+static func _trail_distance(route_cells: Dictionary, p: Vector2) -> float:
+	var cell := Vector2i(floori(p.x/4),floori(p.y/4))
+	var result := INF
+	var segments:Variant=route_cells.get(cell)
+	if segments==null: return result
+	for segment: PackedVector2Array in segments:
+		result=minf(result,p.distance_to(Geometry2D.get_closest_point_to_segment(p,segment[0],segment[1])))
+	return result
+
+static func _paving_distance(paving_cells: Dictionary, p: Vector2) -> float:
+	var result := INF
+	var tris:Variant=paving_cells.get(Vector2i(floori(p.x/4),floori(p.y/4)))
+	if tris==null: return result
+	for tri: PackedVector2Array in tris:
+		if Geometry2D.is_point_in_polygon(p,tri): return 0.0
+		for j in range(3):
+			result=minf(result,p.distance_to(Geometry2D.get_closest_point_to_segment(p,tri[j],tri[(j+1)%3])))
+	return result
+
+static func _polygon_edge_distance(p: Vector2, polygon: PackedVector2Array) -> float:
+	var distance := INF
+	for i in range(polygon.size()):
+		distance = minf(distance,p.distance_to(Geometry2D.get_closest_point_to_segment(p,polygon[i],polygon[(i+1)%polygon.size()])))
+	return distance
+
+static func _water_at(p: Vector2, shoreline: PackedVector2Array, islands: Array) -> bool:
+	if not Geometry2D.is_point_in_polygon(p,shoreline): return false
+	for island in islands:
+		if Geometry2D.is_point_in_polygon(p,island.points): return false
+	return true

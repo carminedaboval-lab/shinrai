@@ -3,9 +3,11 @@ extends RefCounted
 # Formal plaza finish uses the park's existing stone maps at metre scale.
 # No new mesh, texture, collision, lighting pass or scatter is added.
 const STONE_ROOT := "res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/ProjectShinrai_YakitoriShop_ArtworkReplica_v5_Stone_"
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
+# Both plaza finishes (warm stone, charcoal border) share one pooled shader; the
+# tint and slab size are uniforms on their own materials.
 static func build(dark_border: bool = false) -> ShaderMaterial:
- var shader := Shader.new()
- shader.code = """
+ var shader := ShaderPool.shader("""
 shader_type spatial;
 uniform sampler2D stone_albedo : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
 uniform sampler2D stone_normal : hint_normal, repeat_enable, filter_linear_mipmap_anisotropic;
@@ -50,7 +52,7 @@ void fragment() {
  SPECULAR=mix(SPECULAR,.62,film);
  NORMAL=normalize(mix(NORMAL,(VIEW_MATRIX*vec4(0.0,1.0,0.0,0.0)).xyz,wetness*pool*.9));
 }
-"""
+""")
  var mat := ShaderMaterial.new()
  mat.shader=shader
  mat.resource_name="MidoriPlaza_CharcoalMineral" if dark_border else "MidoriPlaza_WarmHonedStone"

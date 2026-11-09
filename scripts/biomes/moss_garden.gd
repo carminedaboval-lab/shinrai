@@ -17,6 +17,7 @@ extends RefCounted
 ## clustered, and all thinning is a dithered pick by weight, so edges feather.
 const Biomes := preload("res://scripts/midori_biomes.gd")
 const Kit := preload("res://scripts/biomes/biome_kit.gd")
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 const ClippedShrubs := preload("res://scripts/midori_clipped_shrubs.gd")
 const ID := "koke"
 const MAIN_C := Vector2(-14, 20)
@@ -392,10 +393,7 @@ static func _plant_maples(park: Node3D, terrain: Node, root: Node3D, rng: Random
 		await park.get_tree().process_frame
 		if not is_instance_valid(park): return []
 	if placed.is_empty(): return placed
-	var leaf_shader := Shader.new()
-	leaf_shader.code = MAPLE_LEAF_SHADER
-	var leaf_look := ShaderMaterial.new()
-	leaf_look.shader = leaf_shader
+	var leaf_look := ShaderPool.material(MAPLE_LEAF_SHADER)
 	var source_leaf := mesh.surface_get_material(1)
 	if source_leaf is BaseMaterial3D: leaf_look.set_shader_parameter("leaf_tex", source_leaf.albedo_texture)
 	var tree_mesh := mesh.duplicate() as ArrayMesh
@@ -515,10 +513,8 @@ static func _lanterns(park: Node3D, terrain: Node, root: Node3D, taken: Dictiona
 static func _static_flame(phase: float) -> Node3D:
 	var fire := Node3D.new()
 	fire.name = "LanternFlame"
-	var shader := Shader.new()
-	shader.code = FLAME_SHADER
-	var material := ShaderMaterial.new()
-	material.shader = shader
+	# One pooled flame shader for every lantern; the phase is a uniform.
+	var material := ShaderPool.material(FLAME_SHADER)
 	material.set_shader_parameter("phase", phase)
 	var flame := MeshInstance3D.new()
 	flame.name = "SmallOilFlame"
@@ -937,8 +933,7 @@ static func _collider(root: Node3D, terrain: Node, p: Vector2, radius: float, he
 	body.global_position = Vector3(p.x, float(terrain.height_at(p)) + height * 0.5 - 0.1, p.y)
 
 static func _batch_mounds(root: Node3D, green_rows: Array, bloom_rows: Array) -> void:
-	var bloom_shader := Shader.new()
-	bloom_shader.code = BLOOM_SHADER
+	var bloom_shader := ShaderPool.shader(BLOOM_SHADER)
 	for s: int in range(ClippedShrubs.SHELLS.size()):
 		var mesh := ClippedShrubs._mound(float(ClippedShrubs.SHELLS[s]))
 		var range_end: float = SHELL_RANGES[s]

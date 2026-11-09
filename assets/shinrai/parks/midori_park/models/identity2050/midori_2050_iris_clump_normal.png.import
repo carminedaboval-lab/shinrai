@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b4p2qoep4cckv"
-path="res://.godot/imported/midori_2050_iris_clump_normal.png-4aece863d63c33848ff44cd325bf1efd.ctex"
+path.bptc="res://.godot/imported/midori_2050_iris_clump_normal.png-4aece863d63c33848ff44cd325bf1efd.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "680e21e4cf260e9e9f1e347d60cefc51"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/identity2050/midori_2050_iris_clump_normal.png"
-dest_files=["res://.godot/imported/midori_2050_iris_clump_normal.png-4aece863d63c33848ff44cd325bf1efd.ctex"]
+dest_files=["res://.godot/imported/midori_2050_iris_clump_normal.png-4aece863d63c33848ff44cd325bf1efd.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

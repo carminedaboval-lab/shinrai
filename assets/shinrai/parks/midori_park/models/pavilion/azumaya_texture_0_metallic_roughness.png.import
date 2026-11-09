@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cs5clefgwttle"
-path="res://.godot/imported/azumaya_texture_0_metallic_roughness.png-fb7bfdb314d3916043fa8b6ea7503f27.ctex"
+path.bptc="res://.godot/imported/azumaya_texture_0_metallic_roughness.png-fb7bfdb314d3916043fa8b6ea7503f27.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bd4be2d32efccffda8a48475050e41e3"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/pavilion/azumaya_texture_0_metallic_roughness.png"
-dest_files=["res://.godot/imported/azumaya_texture_0_metallic_roughness.png-fb7bfdb314d3916043fa8b6ea7503f27.ctex"]
+dest_files=["res://.godot/imported/azumaya_texture_0_metallic_roughness.png-fb7bfdb314d3916043fa8b6ea7503f27.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

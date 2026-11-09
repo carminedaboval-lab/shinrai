@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cvmjclcwspbbo"
-path="res://.godot/imported/tourniquet_Image_2.png-5a8ecc65325e5270f6959ae4041c8f8a.ctex"
+path.bptc="res://.godot/imported/tourniquet_Image_2.png-5a8ecc65325e5270f6959ae4041c8f8a.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "9850bef2463b8f2830dca8c7192c18fe"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/medical/tourniquet_Image_2.png"
-dest_files=["res://.godot/imported/tourniquet_Image_2.png-5a8ecc65325e5270f6959ae4041c8f8a.ctex"]
+dest_files=["res://.godot/imported/tourniquet_Image_2.png-5a8ecc65325e5270f6959ae4041c8f8a.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://boyi46wxhuqnc"
-path="res://.godot/imported/modern_wooden_cabinet_arm_1k.jpg-fa32a9adee4c11bbd61df2c1e0078643.ctex"
+path.bptc="res://.godot/imported/modern_wooden_cabinet_arm_1k.jpg-fa32a9adee4c11bbd61df2c1e0078643.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/interiors/polyhaven/modern_wooden_cabinet/textures/modern_wooden_cabinet_arm_1k.jpg"
-dest_files=["res://.godot/imported/modern_wooden_cabinet_arm_1k.jpg-fa32a9adee4c11bbd61df2c1e0078643.ctex"]
+dest_files=["res://.godot/imported/modern_wooden_cabinet_arm_1k.jpg-fa32a9adee4c11bbd61df2c1e0078643.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

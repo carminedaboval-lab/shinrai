@@ -25,4 +25,7 @@ func _spawn_scale_review_player() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	# Time of day is selected before insertion, not changed during a raid.
 	if event is InputEventKey and event.physical_keycode == KEY_F7:
+		# Not while a warm-up renders the current variant (its restore would undo it).
+		var raid := get_node_or_null("ExtractionRun")
+		if raid != null and raid.has_method("view_settings_locked") and bool(raid.call("view_settings_locked")): return
 		super._unhandled_input(event)

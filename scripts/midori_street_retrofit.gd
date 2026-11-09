@@ -3,6 +3,7 @@ extends RefCounted
 ## across every building, then lit coves, conduit, plant and vending machines.
 ## Called by the neon street once the shops exist, so it can reuse its screens.
 const Kit = preload("res://scripts/midori_park_kit.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 # Width and eave height of each shop, as built by the street architecture.
 const SHOPS := {
 	"UedaBooks":{"w":11.0, "eave":6.35}, "MoriCoffee":{"w":10.0, "eave":6.8},
@@ -106,10 +107,8 @@ static func _indoor_rects(street: Node3D) -> PackedVector4Array:
 	return rects
 
 static func _grime(tone: Vector3) -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = GRIME_SHADER
-	var grime := ShaderMaterial.new()
-	grime.shader = shader
+	# Wall, timber and park grime share one pooled shader; the tone is a uniform.
+	var grime := ShaderPool.material(GRIME_SHADER)
 	grime.resource_name = "SHINRAI_BuildingGrime"
 	grime.set_shader_parameter("tone", tone)
 	return grime

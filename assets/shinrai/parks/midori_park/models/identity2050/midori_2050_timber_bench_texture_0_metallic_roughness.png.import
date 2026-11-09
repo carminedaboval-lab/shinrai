@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cfegpno8twqj0"
-path="res://.godot/imported/midori_2050_timber_bench_texture_0_metallic_roughness.png-503c1e7243e1b098fdcf2834491ae8a9.ctex"
+path.bptc="res://.godot/imported/midori_2050_timber_bench_texture_0_metallic_roughness.png-503c1e7243e1b098fdcf2834491ae8a9.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "76d7bb40be6cdeac60e24b6d8aa8bf4b"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/identity2050/midori_2050_timber_bench_texture_0_metallic_roughness.png"
-dest_files=["res://.godot/imported/midori_2050_timber_bench_texture_0_metallic_roughness.png-503c1e7243e1b098fdcf2834491ae8a9.ctex"]
+dest_files=["res://.godot/imported/midori_2050_timber_bench_texture_0_metallic_roughness.png-503c1e7243e1b098fdcf2834491ae8a9.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

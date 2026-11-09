@@ -10,6 +10,7 @@ extends RefCounted
 ## too; there the copies render as flat brown discs, so the same swap runs on
 ## those cells once they are built.
 const SHADER := preload("res://shaders/midori_clipped_shrub.gdshader")
+const Budget := preload("res://scripts/shinrai_loading_budget.gd")
 const LEAF_TEXTURE := "scene_9.png"
 const CELL := 24.0
 const SHELLS := [0.0, 0.035, 0.075]
@@ -26,45 +27,91 @@ const SPECIES := [
 ## Last sweep once the raid has finished booting: some planting (the plaza
 ## azalea beds among it) is built after the earlier passes, so anything still
 ## showing Bush006 anywhere in the world is swapped then.
+## With a raid, the world-complete step (scripts/shinrai_world_complete.gd)
+## calls apply_after_boot_now() before HQ; this legacy entry only runs the sweep
+## for a raid that left BOOT without that step, or with no raid at all.
 static func apply_after_boot(park: Node3D) -> void:
 	var raid := park.get_node_or_null("ExtractionRun")
 	while is_instance_valid(raid) and raid.phase == raid.Phase.BOOT:
+		if is_instance_valid(park) and park.get_meta(&"shinrai_world_complete_started", false): return
 		await park.get_tree().process_frame
-	if is_instance_valid(park): park.set_meta("clipped_shrubs_after_boot", apply(park))
+	if is_instance_valid(park): await apply_after_boot_now(park)
+
+## The whole-world sweep, once per park, on the shared loading budget.
+static func apply_after_boot_now(park: Node3D) -> Dictionary:
+	if not is_instance_valid(park): return {}
+	if park.has_meta("clipped_shrubs_after_boot"): return park.get_meta("clipped_shrubs_after_boot")
+	if park.get_meta(&"clipped_shrubs_after_boot_running", false):
+		while is_instance_valid(park) and not park.has_meta("clipped_shrubs_after_boot"): await park.get_tree().process_frame
+		return park.get_meta("clipped_shrubs_after_boot", {}) if is_instance_valid(park) else {}
+	park.set_meta(&"clipped_shrubs_after_boot_running", true)
+	var result: Dictionary = await apply_budgeted(park, park)
+	if is_instance_valid(park): park.set_meta("clipped_shrubs_after_boot", result)
+	return result
 
 static func apply(street: Node3D) -> Dictionary:
+	var state := _collect_begin(street)
+	for geometry: GeometryInstance3D in street.find_children("*", "GeometryInstance3D", true, false):
+		_collect_one(geometry, state)
+	return _place_and_build(street, state)
+
+## apply(), split across frames on the shared loading budget: the same items in
+## the same order through the same code, so the result is identical.
+static func apply_budgeted(street: Node3D, park: Node) -> Dictionary:
+	var state := _collect_begin(street)
+	await Budget.checkpoint(park, true)
+	var geometries := street.find_children("*", "GeometryInstance3D", true, false)
+	await Budget.checkpoint(park, true)
+	for index: int in range(geometries.size()):
+		if index % 64 == 63: await Budget.checkpoint(park, true)
+		if not is_instance_valid(street): return {}
+		var geometry := geometries[index] as GeometryInstance3D
+		if is_instance_valid(geometry): _collect_one(geometry, state)
+	await Budget.checkpoint(park, true)
+	if not is_instance_valid(street): return {}
+	return _place_and_build(street, state)
+
+static func _collect_begin(street: Node3D) -> Dictionary:
 	var parts: Dictionary = {}
 	var leaves: Dictionary = {}
 	for visual: MeshInstance3D in street.find_children("*", "MeshInstance3D", true, false):
 		if visual.mesh == null or not String(visual.name).contains("Bush006"): continue
 		parts[visual.mesh] = true
 		if String(visual.name).contains("leaves"): leaves[visual.mesh] = true
-	var bounds: Dictionary = {}
 	var spots: Array[AABB] = []
-	var hidden := 0
-	var layers := 1
-	for geometry: GeometryInstance3D in street.find_children("*", "GeometryInstance3D", true, false):
-		# Already swapped (or a hidden source prototype): leave it alone.
-		if not geometry.is_visible_in_tree(): continue
-		var mesh: Mesh = null
-		if geometry is MeshInstance3D: mesh = geometry.mesh
-		elif geometry is MultiMeshInstance3D and geometry.multimesh != null: mesh = geometry.multimesh.mesh
-		if mesh == null: continue
-		# Copies keep the source mesh's name even where the node is renamed.
-		var named := mesh.resource_name.contains("Bush006")
-		var leafy := leaves.has(mesh) or _texture(geometry, mesh) == LEAF_TEXTURE or (named and mesh.resource_name.contains("leaves"))
-		if not leafy and not parts.has(mesh) and not named: continue
-		if leafy:
-			if not bounds.has(mesh): bounds[mesh] = _drawn_bounds(mesh)
-			if geometry is MultiMeshInstance3D:
-				var many: MultiMesh = geometry.multimesh
-				for i: int in range(many.instance_count):
-					spots.append(geometry.global_transform * many.get_instance_transform(i) * bounds[mesh])
-			else:
-				spots.append(geometry.global_transform * bounds[mesh])
-		if geometry.visible and hidden == 0: layers = geometry.layers
-		geometry.visible = false
-		hidden += 1
+	return {"parts": parts, "leaves": leaves, "bounds": {}, "spots": spots, "hidden": 0, "layers": 1}
+
+static func _collect_one(geometry: GeometryInstance3D, state: Dictionary) -> void:
+	# Already swapped (or a hidden source prototype): leave it alone.
+	if not geometry.is_visible_in_tree(): return
+	var mesh: Mesh = null
+	if geometry is MeshInstance3D: mesh = geometry.mesh
+	elif geometry is MultiMeshInstance3D and geometry.multimesh != null: mesh = geometry.multimesh.mesh
+	if mesh == null: return
+	var parts: Dictionary = state.parts
+	var leaves: Dictionary = state.leaves
+	var bounds: Dictionary = state.bounds
+	var spots: Array[AABB] = state.spots
+	# Copies keep the source mesh's name even where the node is renamed.
+	var named := mesh.resource_name.contains("Bush006")
+	var leafy := leaves.has(mesh) or _texture(geometry, mesh) == LEAF_TEXTURE or (named and mesh.resource_name.contains("leaves"))
+	if not leafy and not parts.has(mesh) and not named: return
+	if leafy:
+		if not bounds.has(mesh): bounds[mesh] = _drawn_bounds(mesh)
+		if geometry is MultiMeshInstance3D:
+			var many: MultiMesh = geometry.multimesh
+			for i: int in range(many.instance_count):
+				spots.append(geometry.global_transform * many.get_instance_transform(i) * bounds[mesh])
+		else:
+			spots.append(geometry.global_transform * bounds[mesh])
+	if geometry.visible and int(state.hidden) == 0: state.layers = geometry.layers
+	geometry.visible = false
+	state.hidden = int(state.hidden) + 1
+
+static func _place_and_build(street: Node3D, state: Dictionary) -> Dictionary:
+	var spots: Array[AABB] = state.spots
+	var hidden: int = state.hidden
+	var layers: int = state.layers
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7351
 	var cells: Dictionary = {}
@@ -190,16 +237,63 @@ static func _texture(geometry: GeometryInstance3D, mesh: Mesh) -> String:
 
 ## Bounds of the vertices the mesh actually draws; the source pack carries
 ## unused LOD vertices that inflate its AABB.
+## The garden and park copies of Bush006 are per-plant duplicates of a few
+## source meshes, so the same vertex/index data is measured many times. Results
+## are cached by content: hashed, then verified array for array (== on packed
+## arrays), so a hit is only ever the same data and the same result.
+static var _bounds_cache: Dictionary = {}
+
+## End-of-boot hook (scripts/shinrai_world_complete.gd finds this static method
+## by name): the drawn-bounds cache only serves the swap passes of the build;
+## a later pass (Creator) measures again and refills it. Memory only, no look change.
+static func release_build_data() -> Dictionary:
+	var freed := {"bounds_cache": _bounds_cache.size()}
+	_bounds_cache = {}
+	return freed
+
 static func _drawn_bounds(mesh: Mesh) -> AABB:
-	var box := AABB()
-	var first := true
+	var surfaces: Array = []
+	var key := mesh.get_surface_count()
 	for s: int in range(mesh.get_surface_count()):
 		var arrays := mesh.surface_get_arrays(s)
 		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var indices = arrays[Mesh.ARRAY_INDEX]
-		var count: int = indices.size() if indices != null and indices.size() > 0 else points.size()
-		for k: int in range(count):
-			var p := points[indices[k] if indices != null and indices.size() > 0 else k]
-			box = AABB(p, Vector3.ZERO) if first else box.expand(p)
-			first = false
+		var index_array := PackedInt32Array(indices) if indices != null else PackedInt32Array()
+		surfaces.append([points, index_array])
+		key = hash([key, points.size(), index_array.size(), hash(points), hash(index_array)])
+	for entry: Array in _bounds_cache.get(key, []):
+		var same: bool = (entry[0] as Array).size() == surfaces.size()
+		for s: int in range(surfaces.size()):
+			if not same: break
+			same = entry[0][s][0] == surfaces[s][0] and entry[0][s][1] == surfaces[s][1]
+		if same: return entry[1]
+	var box := _measure_drawn(surfaces)
+	# Bounded: distinct source meshes are few; stop remembering past the cap.
+	if _bounds_cache.size() < 256:
+		if not _bounds_cache.has(key): _bounds_cache[key] = []
+		_bounds_cache[key].append([surfaces, box])
+	return box
+
+## The original measuring loop, with the per-index "is it indexed" test hoisted
+## out of the loop: the same points are expanded in the same order.
+static func _measure_drawn(surfaces: Array) -> AABB:
+	var box := AABB()
+	var first := true
+	for surface: Array in surfaces:
+		var points: PackedVector3Array = surface[0]
+		var indices: PackedInt32Array = surface[1]
+		if indices.size() > 0:
+			for k: int in range(indices.size()):
+				var p := points[indices[k]]
+				if first:
+					box = AABB(p, Vector3.ZERO)
+					first = false
+				else: box = box.expand(p)
+		else:
+			for k: int in range(points.size()):
+				var p := points[k]
+				if first:
+					box = AABB(p, Vector3.ZERO)
+					first = false
+				else: box = box.expand(p)
 	return box

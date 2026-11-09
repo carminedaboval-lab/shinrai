@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://7b2l4y0mr4n0"
-path="res://.godot/imported/mori_bentwood_chair_smoked_walnut_veneer_rough_2k.png-78b115cc5c368c853e9d9c8345f521f8.ctex"
+path.bptc="res://.godot/imported/mori_bentwood_chair_smoked_walnut_veneer_rough_2k.png-78b115cc5c368c853e9d9c8345f521f8.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "33cf9af6c3bbf06c98980ffd2952e68c"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/streets/midori_frontage_construction/mori_bentwood_chair_smoked_walnut_veneer_rough_2k.png"
-dest_files=["res://.godot/imported/mori_bentwood_chair_smoked_walnut_veneer_rough_2k.png-78b115cc5c368c853e9d9c8345f521f8.ctex"]
+dest_files=["res://.godot/imported/mori_bentwood_chair_smoked_walnut_veneer_rough_2k.png-78b115cc5c368c853e9d9c8345f521f8.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

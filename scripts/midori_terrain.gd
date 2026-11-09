@@ -29,6 +29,17 @@ func _ready() -> void:
 func install() -> void:
 	var _boot_tick := StartupTrace.begin()
 	park = get_parent()
+	# The height grid only reads the finished park structure (lake, routes, bridge
+	# landings, islands), not the planting the waits below are for. It is pure
+	# math, so it runs on a worker while those services finish. Its inputs are
+	# gathered again at the original point; the worker's grid is used only when
+	# they are identical (else the grid is computed here, as before).
+	var early := _height_inputs()
+	early["heights"] = PackedFloat32Array()
+	early["queued_usec"] = Time.get_ticks_usec()
+	# High priority: every producer waits for the terrain, and low-priority pool
+	# work (near-city mips and shells) otherwise queued ahead of it for ~8 s.
+	_height_task = WorkerThreadPool.add_task(_compute_heights.bind(early), true, "MidoriTerrain height grid")
 	# Let the supplied planting/groundcover services finish on the original datum.
 	for frame in range(16): await get_tree().process_frame
 	# Incremental planting can span more than sixteen frames; its datum must precede draping.
@@ -36,40 +47,39 @@ func install() -> void:
 		while not park.has_meta("woodland_diversity"):
 			await get_tree().process_frame
 	_boot_tick = StartupTrace.finish("terrain.wait_services",_boot_tick)
-	for p: Vector2 in park.lake_contour: shoreline.append(p * park.LAYOUT_SCALE)
-	for name in ["OUTER_CIRCUIT","LAKE_PROMENADE_LOOP","SOUTH_ARRIVAL_ROUTE","WEST_DESTINATION_ROUTE","PLAZA_PAVED_ROUTE","NORTH_ENTRY_ROUTE","EAST_DECK_ROUTE","SPORTS_LINK_ROUTE","PLAYGROUND_LOOP","NORTH_WOODLAND_LOOP","SOUTH_BRIDGE_APPROACH","PAVILION_LINK_ROUTE","VIEWING_DECK_APPROACH_ROUTE","FUTURE_BRIDGE_WEST","FUTURE_BRIDGE_NORTH_EAST","FUTURE_BRIDGE_SOUTH"]:
-		await LoadingBudget.checkpoint(park)
-		var line := PackedVector2Array()
-		for p: Vector2 in park.get(name): line.append(p * park.LAYOUT_SCALE)
-		paths.append(line)
-	# Authored bridge treads and their fitted approaches keep their exact datum.
-	for walk: Dictionary in park._bridge_walk_surfaces:
-		await LoadingBudget.checkpoint(park)
-		if walk.kind == "landing":
-			protected_landings.append(walk.spec.footprint)
-			landing_bounds.append(walk.spec.bounds)
-	var lake: Node3D = park.find_child("ArtworkContinuousLake*",true,false)
-	for child in lake.get_children():
-		await LoadingBudget.checkpoint(park)
-		if child is MeshInstance3D and "Isl" in String(child.name) and not "Bank" in String(child.name):
-			var points := PackedVector2Array()
-			for v: Vector3 in child.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
-				var world: Vector3 = child.global_transform * v
-				points.append(Vector2(world.x,world.z))
-			islands.append({"points":Geometry2D.convex_hull(points),"top":(child.global_transform * child.get_aabb().get_center()).y})
-	heights.resize(NX * NZ)
-	for z in range(NZ):
-		await LoadingBudget.checkpoint(park)
-		for x in range(NX): heights[z*NX+x] = raw_height(ORIGIN + Vector2(x,z)*STEP)
+	await LoadingBudget.checkpoint(park)
+	var inputs := _height_inputs()
+	shoreline = inputs.shoreline
+	paths = inputs.paths
+	protected_landings = inputs.protected_landings
+	landing_bounds = inputs.landing_bounds
+	islands = inputs.islands
+	while not WorkerThreadPool.is_task_completed(_height_task): await get_tree().process_frame
+	WorkerThreadPool.wait_for_task_completion(_height_task)
+	_height_task = -1
+	if StartupTrace.enabled and early.has("worker_finished_usec"):
+		print("TERRAIN_HEIGHT_WORKER queued_ms=%d ran_ms=%d done_at_s=%.1f" % [(int(early.worker_started_usec) - int(early.queued_usec)) / 1000, (int(early.worker_finished_usec) - int(early.worker_started_usec)) / 1000, float(early.worker_finished_usec) / 1000000.0])
+	var early_heights: PackedFloat32Array = early.heights
+	var tile_arrays: Array = []
+	if early_heights.size() == NX * NZ and early.shoreline == inputs.shoreline and early.landing_bounds == inputs.landing_bounds and early.islands == inputs.islands and int(early.path_edges) == int(inputs.path_edges):
+		heights = early_heights
+		# The worker also built the tile arrays from these same heights.
+		tile_arrays = early.get("tiles", [])
+	else:
+		push_warning("MIDORI_TERRAIN: height inputs changed during the planting wait; height grid recomputed")
+		heights.resize(NX * NZ)
+		for z in range(NZ):
+			await LoadingBudget.checkpoint(park)
+			for x in range(NX): heights[z*NX+x] = raw_height(ORIGIN + Vector2(x,z)*STEP)
 	_boot_tick = StartupTrace.finish("terrain.height_grid",_boot_tick)
 	var ground: StaticBody3D = park.find_child("ParkGround_220x180m",true,false)
 	var material: Material
 	for child in ground.get_children():
-		await LoadingBudget.checkpoint(park)
+		await _turn()
 		if child is MeshInstance3D: material = child.material_override
 	# Keep the old material resource so the day/night service keeps updating it.
 	var soil := _soil_material()
-	await _build_tiles(material, soil)
+	await _build_tiles(material, soil, tile_arrays)
 	_boot_tick = StartupTrace.finish("terrain.mesh_collision",_boot_tick)
 	ground.collision_layer = 0
 	ground.hide()
@@ -77,9 +87,12 @@ func install() -> void:
 	if shadow_budget!=null and shadow_budget.has_method("before_source_change"):shadow_budget.before_source_change()
 	# Group roots retain supplied model hierarchies; batches are adjusted per item.
 	for child in park.get_children():
-		await LoadingBudget.checkpoint(park)
+		await _turn()
 		if child == self or child.name == "ParkScaleReviewPlayer" or child.name == "ExtractionRun": continue
 		await _drape(child)
+	# Batch lifts computed on workers during the walk are written back here, in
+	# walk order, before anything that waits for the terrain can read them.
+	await _apply_lifts()
 	_boot_tick = StartupTrace.finish("terrain.drape",_boot_tick)
 	_extend_piers()
 	_boot_tick = StartupTrace.finish("terrain.piers",_boot_tick)
@@ -100,10 +113,113 @@ func water_at(p: Vector2) -> bool:
 	return true
 
 func raw_height(p: Vector2) -> float:
-	if Geometry2D.is_point_in_polygon(p,shoreline):
-		var distance := edge_distance(p,shoreline)
+	return _raw_height_from(p,shoreline,islands,landing_bounds)
+
+## Inputs of the height grid, as the park structure holds them now. Typed like
+## the members they are copied into.
+func _height_inputs() -> Dictionary:
+	var shore := PackedVector2Array()
+	for p: Vector2 in park.lake_contour: shore.append(p * park.LAYOUT_SCALE)
+	var lines: Array[PackedVector2Array] = []
+	for name in ["OUTER_CIRCUIT","LAKE_PROMENADE_LOOP","SOUTH_ARRIVAL_ROUTE","WEST_DESTINATION_ROUTE","PLAZA_PAVED_ROUTE","NORTH_ENTRY_ROUTE","EAST_DECK_ROUTE","SPORTS_LINK_ROUTE","PLAYGROUND_LOOP","NORTH_WOODLAND_LOOP","SOUTH_BRIDGE_APPROACH","PAVILION_LINK_ROUTE","VIEWING_DECK_APPROACH_ROUTE","FUTURE_BRIDGE_WEST","FUTURE_BRIDGE_NORTH_EAST","FUTURE_BRIDGE_SOUTH"]:
+		var line := PackedVector2Array()
+		for p: Vector2 in park.get(name): line.append(p * park.LAYOUT_SCALE)
+		lines.append(line)
+	# Authored bridge treads and their fitted approaches keep their exact datum.
+	var landings: Array[PackedVector2Array] = []
+	var bounds: Array[Rect2] = []
+	for walk: Dictionary in park._bridge_walk_surfaces:
+		if walk.kind == "landing":
+			landings.append(walk.spec.footprint)
+			bounds.append(walk.spec.bounds)
+	var isl: Array[Dictionary] = []
+	var lake: Node3D = park.find_child("ArtworkContinuousLake*",true,false)
+	for child in lake.get_children():
+		if child is MeshInstance3D and "Isl" in String(child.name) and not "Bank" in String(child.name):
+			var points := PackedVector2Array()
+			for v: Vector3 in child.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+				var world: Vector3 = child.global_transform * v
+				points.append(Vector2(world.x,world.z))
+			isl.append({"points":Geometry2D.convex_hull(points),"top":(child.global_transform * child.get_aabb().get_center()).y})
+	var edges: Variant = park.get("_path_edge_cells")
+	return {"shoreline":shore,"paths":lines,"protected_landings":landings,"landing_bounds":bounds,"islands":isl,"path_edges":(edges as Dictionary).hash() if edges is Dictionary else 0}
+
+## WorkerThreadPool task: the same raw_height per grid point, in the same order,
+## on copies of its inputs (the entrance lift reads the park's fixed path index).
+func _compute_heights(inputs: Dictionary) -> void:
+	inputs["worker_started_usec"] = Time.get_ticks_usec()
+	var grid := PackedFloat32Array()
+	grid.resize(NX * NZ)
+	var shore: PackedVector2Array = inputs.shoreline
+	var isl: Array = inputs.islands
+	var bounds: Array = inputs.landing_bounds
+	for z in range(NZ):
+		for x in range(NX): grid[z*NX+x] = _raw_height_from(ORIGIN + Vector2(x,z)*STEP,shore,isl,bounds)
+	# The tile vertex/normal/uv arrays are pure maths on this grid: build them here
+	# too (used only when this grid is the one installed).
+	var tiles: Array = []
+	for tz in range(0,NZ-1,16):
+		for tx in range(0,NX-1,16): tiles.append(_tile_arrays(grid,tx,tz))
+	inputs["tiles"] = tiles
+	inputs["heights"] = grid
+	inputs["worker_finished_usec"] = Time.get_ticks_usec()
+
+## One 16x16 tile's triangle arrays (vertices, normals, uv), from a height grid.
+## The same loop _build_tiles ran, with _point on the given grid.
+static func _tile_arrays(grid: PackedFloat32Array, tx: int, tz: int) -> Array:
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uv := PackedVector2Array()
+	for z in range(tz,mini(tz+16,NZ-1)):
+		for x in range(tx,mini(tx+16,NX-1)):
+			for index in [Vector2i(x,z),Vector2i(x+1,z),Vector2i(x,z+1),Vector2i(x+1,z),Vector2i(x+1,z+1),Vector2i(x,z+1)]:
+				var v := _grid_point(grid,index.x,index.y)
+				vertices.append(v)
+				var dx := _grid_point(grid,mini(index.x+1,NX-1),index.y)-_grid_point(grid,maxi(index.x-1,0),index.y)
+				var dz := _grid_point(grid,index.x,mini(index.y+1,NZ-1))-_grid_point(grid,index.x,maxi(index.y-1,0))
+				normals.append(dz.cross(dx).normalized())
+				uv.append(Vector2(v.x,v.z)*0.5)
+	return [vertices,normals,uv]
+
+static func _grid_point(grid: PackedFloat32Array, x: int, z: int) -> Vector3:
+	return Vector3(ORIGIN.x+x*STEP,grid[z*NX+x],ORIGIN.y+z*STEP)
+
+## Every producer waits for the terrain, so behind the boot menu it does not
+## queue for the frame's shared budget (it resumed after the near city and alley
+## life had spent it, and waited ~30 s for 0.5 s of work): it also takes a turn
+## of its own of up to TURN_USEC in each frame. Same work in the same order; it
+## only yields less often. A no-op outside incremental loading, like checkpoint().
+const TURN_USEC := 25000
+var _turn_frame := -1
+var _turn_start := 0
+func _turn() -> void:
+	if not is_instance_valid(park) or not park.get_meta("shinrai_incremental_loading",false): return
+	var now := Time.get_ticks_usec()
+	var frame := Engine.get_process_frames()
+	if frame != _turn_frame:
+		_turn_frame = frame
+		_turn_start = now
+	if now - _turn_start < TURN_USEC or not LoadingBudget.over_budget(): return
+	await get_tree().process_frame
+	_turn_frame = Engine.get_process_frames()
+	_turn_start = Time.get_ticks_usec()
+
+var _height_task := -1
+func _exit_tree() -> void:
+	if _height_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_height_task)
+		_height_task = -1
+	for task: int in _lift_groups: WorkerThreadPool.wait_for_group_task_completion(task)
+	_lift_groups.clear()
+	_lift_jobs.clear()
+	_lift_waiting.clear()
+	_lift_pending.clear()
+
+func _raw_height_from(p: Vector2, shore_in: PackedVector2Array, islands_in: Array, bounds_in: Array) -> float:
+	if Geometry2D.is_point_in_polygon(p,shore_in):
+		var distance := edge_distance(p,shore_in)
 		var edge_y := 0.0
-		for island in islands:
+		for island in islands_in:
 			if Geometry2D.is_point_in_polygon(p,island.points): return float(island.top)
 			var d := edge_distance(p,island.points)
 			if d < distance:
@@ -115,7 +231,7 @@ func raw_height(p: Vector2) -> float:
 	# Kiyosumi-inspired proportions, inferred rather than surveyed: a low bank
 	# rises inland over about 10 m; broad lawn relief carries through the walks.
 	# Keep the original shoreline and underwater profile, including its grid cells.
-	var shore_distance := edge_distance(p,shoreline)
+	var shore_distance := edge_distance(p,shore_in)
 	var bank := smoothstep(2.0,12.0,shore_distance)
 	var hill := 0.60 + 0.10*sin(p.x*0.022)*cos(p.y*0.018)
 	# The inland shoulder rises above the lakeside walk without sharp new hills.
@@ -135,7 +251,7 @@ func raw_height(p: Vector2) -> float:
 		clearance = minf(clearance,p.distance_to(q))
 	# Bounds are deliberately conservative and avoid scanning hundreds of tiny
 	# approach-edge segments for every terrain grid point.
-	for rect in landing_bounds:
+	for rect in bounds_in:
 		clearance = minf(clearance,p.distance_to(p.clamp(rect.position,rect.end)))
 	return hill * bank * smoothstep(3.0,25.0,clearance) + _entrance_bank_lift(p)
 
@@ -171,23 +287,18 @@ func height_at(p: Vector2) -> float:
 func _point(x: int,z: int) -> Vector3:
 	return Vector3(ORIGIN.x+x*STEP,heights[z*NX+x],ORIGIN.y+z*STEP)
 
-func _build_tiles(grass: Material,soil: Material) -> void:
+func _build_tiles(grass: Material,soil: Material,prebuilt: Array = []) -> void:
+	var tile_index := 0
+	var tile_total := range(0,NX-1,16).size()*range(0,NZ-1,16).size()
 	for tz in range(0,NZ-1,16):
-		await LoadingBudget.checkpoint(park)
+		await _turn()
 		for tx in range(0,NX-1,16):
-			await LoadingBudget.checkpoint(park)
-			var vertices := PackedVector3Array()
-			var normals := PackedVector3Array()
-			var uv := PackedVector2Array()
-			for z in range(tz,mini(tz+16,NZ-1)):
-				for x in range(tx,mini(tx+16,NX-1)):
-					for index in [Vector2i(x,z),Vector2i(x+1,z),Vector2i(x,z+1),Vector2i(x+1,z),Vector2i(x+1,z+1),Vector2i(x,z+1)]:
-						var v := _point(index.x,index.y)
-						vertices.append(v)
-						var dx := _point(mini(index.x+1,NX-1),index.y)-_point(maxi(index.x-1,0),index.y)
-						var dz := _point(index.x,mini(index.y+1,NZ-1))-_point(index.x,maxi(index.y-1,0))
-						normals.append(dz.cross(dx).normalized())
-						uv.append(Vector2(v.x,v.z)*0.5)
+			await _turn()
+			var built: Array = prebuilt[tile_index] if prebuilt.size() == tile_total else _tile_arrays(heights,tx,tz)
+			tile_index += 1
+			var vertices: PackedVector3Array = built[0]
+			var normals: PackedVector3Array = built[1]
+			var uv: PackedVector2Array = built[2]
 			var arrays := []
 			arrays.resize(Mesh.ARRAY_MAX)
 			arrays[Mesh.ARRAY_VERTEX]=vertices
@@ -214,11 +325,11 @@ func _build_tiles(grass: Material,soil: Material) -> void:
 	# Use the supplied terrain's material and inject only a submerged-soil tint.
 	if grass is ShaderMaterial:
 		for child in get_children():
-			await LoadingBudget.checkpoint(park)
+			await _turn()
 			if child is MeshInstance3D: child.material_override = grass
 		var parameters := {}
 		for uniform in grass.shader.get_shader_uniform_list():
-			await LoadingBudget.checkpoint(park)
+			await _turn()
 			parameters[uniform.name] = grass.get_shader_parameter(uniform.name)
 		var code: String = grass.shader.code
 		# Ground texture service has its own uniforms; keep that exact resource live.
@@ -244,13 +355,19 @@ func _drape(node: Node) -> void:
 	# Main paths are authored around the origin: translating their root cannot
 	# fit a slope. Subdivide and drape their existing surfaces and UVs instead.
 	if node is MeshInstance3D and String(node.get_parent().name) in ["FinalDestinationLedPathHierarchy","ApprovedLakePromenadeLoop"]:
-		_drape_walk(node)
+		# Each walk is subdivided and given a trimesh: one shared budget per walk
+		# (they all used to run in a single ~4 s frame under the boot menu).
+		await _turn()
+		if is_instance_valid(node): await _drape_walk(node)
 		return
 	if node is MultiMeshInstance3D and node.multimesh != null:
 		# Preserve each supplied mesh; only raise instance anchors on dry terrain.
 		var multi: MultiMesh = node.multimesh
+		# A batch resource seen again must read the lifts already made to it.
+		if _lift_pending.has(multi): await _apply_lifts()
+		if _queue_lift(node, multi): return
 		for i in range(multi.instance_count):
-			if i % 256 == 0: await LoadingBudget.checkpoint(park)
+			if i % 256 == 0: await _turn()
 			var t := multi.get_instance_transform(i)
 			var world: Vector3 = node.global_transform*t.origin
 			var h := land_lift_at(Vector2(world.x,world.z))
@@ -271,11 +388,17 @@ func _drape(node: Node) -> void:
 				node.global_position.y += h
 				moved_roots += 1
 			return
-	for child in node.get_children(): await _drape(child)
+	# Large containers (thousands of rooted props) were walked in one frame after
+	# the last batch checkpoint: ~4 s under the boot menu. Time-based, so cheap.
+	for child in node.get_children():
+		await _turn()
+		if is_instance_valid(child): await _drape(child)
 
 func _drape_walk(walk: MeshInstance3D) -> void:
 	var result := ArrayMesh.new()
 	for surface_index in range(walk.mesh.get_surface_count()):
+		await _turn()
+		if not is_instance_valid(walk): return
 		var source := SurfaceTool.new()
 		source.create_from(walk.mesh,surface_index)
 		source.deindex()
@@ -286,6 +409,10 @@ func _drape_walk(walk: MeshInstance3D) -> void:
 		var output := SurfaceTool.new()
 		output.begin(Mesh.PRIMITIVE_TRIANGLES)
 		for i in range(0,vertices.size(),3):
+			# The output SurfaceTool is local; the walk keeps its old mesh until the end.
+			if i % 384 == 0 and i > 0:
+				await _turn()
+				if not is_instance_valid(walk): return
 			var triangle: Array = []
 			for j in range(3):
 				triangle.append([walk.global_transform*vertices[i+j],uvs[i+j],colors[i+j] if not colors.is_empty() else Color.WHITE])
@@ -293,6 +420,8 @@ func _drape_walk(walk: MeshInstance3D) -> void:
 		output.generate_normals()
 		output.commit(result)
 		result.surface_set_material(surface_index,walk.mesh.surface_get_material(surface_index))
+	await _turn()
+	if not is_instance_valid(walk): return
 	walk.mesh = result
 	# The pavement and physics use the same tessellated mesh, including edges.
 	var body := StaticBody3D.new()
@@ -335,6 +464,150 @@ func _drape_triangle(output: SurfaceTool, inverse: Transform3D, tri: Array, dept
 
 func land_lift_at(p: Vector2) -> float:
 	return 0.0 if Geometry2D.is_point_in_polygon(p,shoreline) else maxf(0.0,height_at(p))
+
+## Drape of one batch on a worker: its transform buffer (3x4 rows per instance,
+## origin at 3/7/11, as park_floor's scan reads it) is copied here, the same
+## per-instance lift is computed on the worker, and _apply_lifts writes the buffer
+## back (only when an instance moved, as the per-instance loop only wrote those).
+## False (the per-instance loop runs) for any other buffer layout.
+## Jobs are [multimesh, input, result], in walk order. They are handed to the pool
+## in groups of at least LIFT_GROUP_INSTANCES instances, one group at a time, on
+## at most LIFT_THREADS threads (the main thread and other producers keep cores).
+const LIFT_GROUP_INSTANCES := 40000
+const LIFT_THREADS := 3
+var _lift_jobs: Array = []
+var _lift_waiting: Array = []
+var _lift_waiting_instances := 0
+var _lift_groups: Array = []
+var _lift_pending: Dictionary = {}
+func _queue_lift(node: MultiMeshInstance3D, multi: MultiMesh) -> bool:
+	if multi.transform_format != MultiMesh.TRANSFORM_3D or multi.instance_count == 0: return false
+	var stride := 12 + (4 if multi.use_colors else 0) + (4 if multi.use_custom_data else 0)
+	# The row layout is checked once per run on a throwaway MultiMesh, not with
+	# get_instance_transform(0) on every batch: that read made the renderer keep a
+	# CPU copy of the whole buffer for the MultiMesh's life (thousands of batches).
+	if not _buffer_rows_verified(): return false
+	var buffer := multi.buffer
+	if buffer.size() != stride * multi.instance_count: return false
+	var input := {"buffer": buffer, "stride": stride, "count": multi.instance_count, "xform": node.global_transform, "lift": node.global_basis.inverse(), "heights": heights, "shoreline": shoreline}
+	var job := [multi, input, {}, node]
+	_lift_jobs.append(job)
+	_lift_waiting.append(job)
+	_lift_waiting_instances += multi.instance_count
+	_lift_pending[multi] = true
+	if _lift_waiting_instances >= LIFT_GROUP_INSTANCES and (_lift_groups.is_empty() or WorkerThreadPool.is_group_task_completed(int(_lift_groups[-1]))):
+		_launch_lifts()
+	return true
+
+## TRANSFORM_3D rows are the three basis rows with the origin component as each
+## row's fourth float (origin at 3/7/11, as _lift_batch reads it). Verified once on
+## a one-instance MultiMesh: the row is written as a buffer (the way the lift
+## writes its result back) and read back as the instance transform. The probe has
+## no mesh, so it never reaches the renderer's AABB rebuild (which would log an
+## error for a mesh-less MultiMesh when an instance is set one at a time). False
+## (per-instance path, as before) under a renderer that does not expose the
+## buffer this way (headless dummy renderer).
+static var _rows_checked := false
+static var _rows_ok := false
+static func _buffer_rows_verified() -> bool:
+	if _rows_checked: return _rows_ok
+	_rows_checked = true
+	var probe := MultiMesh.new()
+	probe.transform_format = MultiMesh.TRANSFORM_3D
+	probe.instance_count = 1
+	var rows := PackedFloat32Array([1.5, 2.5, 3.5, 10.5, 4.5, 5.5, 6.5, 11.5, 7.5, 8.5, 9.5, 12.5])
+	probe.buffer = rows
+	var t := Transform3D(Basis(Vector3(1.5, 4.5, 7.5), Vector3(2.5, 5.5, 8.5), Vector3(3.5, 6.5, 9.5)), Vector3(10.5, 11.5, 12.5))
+	_rows_ok = probe.get_instance_transform(0) == t and probe.buffer == rows
+	return _rows_ok
+
+func _launch_lifts() -> void:
+	if _lift_waiting.is_empty(): return
+	var group := _lift_waiting
+	_lift_waiting = []
+	_lift_waiting_instances = 0
+	_lift_groups.append(WorkerThreadPool.add_group_task(_lift_group.bind(group), group.size(), mini(LIFT_THREADS, group.size()), true, "MidoriTerrain drape lift"))
+
+static func _lift_group(index: int, group: Array) -> void:
+	_lift_batch(group[index][1], group[index][2])
+
+func _apply_lifts() -> void:
+	_launch_lifts()
+	while not _lift_groups.is_empty():
+		var task := int(_lift_groups[0])
+		while not WorkerThreadPool.is_group_task_completed(task):
+			await get_tree().process_frame
+			# _exit_tree waited for and dropped every group.
+			if _lift_groups.is_empty() or int(_lift_groups[0]) != task: return
+		_lift_groups.pop_front()
+		WorkerThreadPool.wait_for_group_task_completion(task)
+	for job: Array in _lift_jobs:
+		var multi: MultiMesh = job[0]
+		var input: Dictionary = job[1]
+		var result: Dictionary = job[2]
+		var stride := 12 + (4 if multi.use_colors else 0) + (4 if multi.use_custom_data else 0)
+		if multi.instance_count != int(input.count) or stride != int(input.stride) or multi.transform_format != MultiMesh.TRANSFORM_3D:
+			# The batch was resized or re-laid out after its snapshot: writing the
+			# snapshot back would drop that edit (or be rejected). Lift the live batch
+			# per instance instead, as before the worker path existed.
+			push_warning("MidoriTerrain: batch changed during drape; lifting it per instance")
+			await _lift_live(job[3] as MultiMeshInstance3D, multi, input.xform, input.lift)
+		elif int(result.moved) > 0:
+			multi.buffer = result.buffer
+			moved_instances += int(result.moved)
+		await _turn()
+	_lift_jobs.clear()
+	_lift_pending.clear()
+
+## The per-instance loop of _drape on a live batch, with the node transform the
+## batch was queued with.
+func _lift_live(_node: MultiMeshInstance3D, multi: MultiMesh, xform: Transform3D, lift: Basis) -> void:
+	for i in range(multi.instance_count):
+		if i % 256 == 0: await _turn()
+		var t := multi.get_instance_transform(i)
+		var world: Vector3 = xform*t.origin
+		var h := land_lift_at(Vector2(world.x,world.z))
+		if h > 0.001:
+			t.origin += lift*Vector3(0,h,0)
+			multi.set_instance_transform(i,t)
+			moved_instances += 1
+
+## WORKER: the per-instance loop of _drape on a copy of one batch's buffer.
+static func _lift_batch(input: Dictionary, result: Dictionary) -> void:
+	var b: PackedFloat32Array = input.buffer
+	var stride: int = input.stride
+	var xform: Transform3D = input.xform
+	var lift: Basis = input.lift
+	var grid: PackedFloat32Array = input.heights
+	var shore: PackedVector2Array = input.shoreline
+	var moved := 0
+	for i in range(int(input.count)):
+		var o := i*stride
+		var origin := Vector3(b[o+3],b[o+7],b[o+11])
+		var world: Vector3 = xform*origin
+		var p := Vector2(world.x,world.z)
+		var h := 0.0 if Geometry2D.is_point_in_polygon(p,shore) else maxf(0.0,_grid_height(grid,p))
+		if h > 0.001:
+			origin += lift*Vector3(0,h,0)
+			b[o+3] = origin.x
+			b[o+7] = origin.y
+			b[o+11] = origin.z
+			moved += 1
+	result["buffer"] = b
+	result["moved"] = moved
+
+## height_at on a given grid (same expression).
+static func _grid_height(grid: PackedFloat32Array, p: Vector2) -> float:
+	if grid.is_empty(): return 0.0
+	var q := ((p-ORIGIN)/STEP).clamp(Vector2.ZERO,Vector2(NX-1.001,NZ-1.001))
+	var x := int(q.x)
+	var z := int(q.y)
+	var f := q - Vector2(x,z)
+	var a := grid[z*NX+x]
+	var b := grid[z*NX+x+1]
+	var c := grid[(z+1)*NX+x]
+	var d := grid[(z+1)*NX+x+1]
+	return a+(b-a)*f.x+(c-a)*f.y if f.x+f.y<=1.0 else d+(c-d)*(1.0-f.x)+(b-d)*(1.0-f.y)
 
 func _extend_piers() -> void:
 	var count := 0

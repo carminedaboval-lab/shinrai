@@ -5,13 +5,100 @@ extends RefCounted
 const Hero := preload("res://scripts/midori_near_city_hero.gd")
 
 var _parts := {}
+# The part being written keeps its arrays in these members (its entry in _parts holds
+# empty stand-ins meanwhile): appending to a member is in place and several times cheaper
+# than a Dictionary lookup per value. _part() and _emit() hand the arrays back first, so
+# callers that edit a part's arrays directly still see and change the real ones.
+# Every part is indexed ("i"): a quad is four corners and six indices, a lone corner
+# indexes itself, so the index list always covers every vertex and the triangles drawn
+# are exactly those of the six-corner form (a third fewer vertex bytes on the GPU).
+var _cur := ""
+var _v := PackedVector3Array()
+var _n := PackedVector3Array()
+var _t := PackedFloat32Array()
+var _c := PackedColorArray()
+var _u := PackedVector2Array()
+var _u2 := PackedVector2Array()
+var _i := PackedInt32Array()
 
 func _part(part: String) -> Dictionary:
+	_park()
 	if not _parts.has(part):
-		_parts[part] = {"v":PackedVector3Array(), "n":PackedVector3Array(), "t":PackedFloat32Array(), "c":PackedColorArray(), "u":PackedVector2Array(), "u2":PackedVector2Array()}
+		_parts[part] = {"v":PackedVector3Array(), "n":PackedVector3Array(), "t":PackedFloat32Array(), "c":PackedColorArray(), "u":PackedVector2Array(), "u2":PackedVector2Array(), "i":PackedInt32Array()}
 	return _parts[part]
 
+func _park() -> void:
+	# Hands the current part's arrays back to its entry in _parts.
+	if _cur == "": return
+	var target: Dictionary = _parts[_cur]
+	target.v = _v
+	target.n = _n
+	target.t = _t
+	target.c = _c
+	target.u = _u
+	target.u2 = _u2
+	target.i = _i
+	_v = PackedVector3Array()
+	_n = PackedVector3Array()
+	_t = PackedFloat32Array()
+	_c = PackedColorArray()
+	_u = PackedVector2Array()
+	_u2 = PackedVector2Array()
+	_i = PackedInt32Array()
+	_cur = ""
+
+func _use(part: String) -> void:
+	# Makes part the one the members write to (creating it, in first-use order, if new).
+	if part == _cur: return
+	var target := _part(part)
+	_v = target.v
+	_n = target.n
+	_t = target.t
+	_c = target.c
+	_u = target.u
+	_u2 = target.u2
+	_i = target.i
+	target.v = PackedVector3Array()
+	target.n = PackedVector3Array()
+	target.t = PackedFloat32Array()
+	target.c = PackedColorArray()
+	target.u = PackedVector2Array()
+	target.u2 = PackedVector2Array()
+	target.i = PackedInt32Array()
+	_cur = part
+
+func _vx(p: Vector3, n: Vector3, tangent: Vector3, tint: Color, uv: Vector2, uv2: Vector2) -> void:
+	# One corner of a plain triangle: it indexes itself.
+	_i.append(_v.size())
+	_v.append(p)
+	_n.append(n)
+	_t.append(tangent.x)
+	_t.append(tangent.y)
+	_t.append(tangent.z)
+	_t.append(1.0)
+	_c.append(tint)
+	_u.append(uv)
+	_u2.append(uv2)
+
+func _corner(p: Vector3, n: Vector3, tangent: Vector3, tint: Color, uv: Vector2, uv2: Vector2) -> void:
+	# One corner of an indexed quad; the caller writes the indices.
+	_v.append(p)
+	_n.append(n)
+	_t.append(tangent.x)
+	_t.append(tangent.y)
+	_t.append(tangent.z)
+	_t.append(1.0)
+	_c.append(tint)
+	_u.append(uv)
+	_u2.append(uv2)
+
+func _quad_indices(base: int) -> void:
+	# Corners base .. base+3 as the triangles 0 1 2 and 0 2 3.
+	_i.append(base); _i.append(base + 1); _i.append(base + 2); _i.append(base); _i.append(base + 2); _i.append(base + 3)
+
 func _emit(target: Dictionary, p: Vector3, n: Vector3, tangent: Vector3, tint: Color, uv: Vector2, uv2: Vector2) -> void:
+	if _cur != "" and is_same(target, _parts[_cur]): _park()
+	target.i.append(target.v.size())
 	target.v.append(p)
 	target.n.append(n)
 	target.t.append(tangent.x)
@@ -27,7 +114,7 @@ func _shaded(tint: Color, ao: float) -> Color:
 
 func quad(part: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, tint: Color, low := 1.0, high := 1.0, streak := 0.0, uv := Vector2.ZERO) -> void:
 	# a, b, c, d run bottom-left, top-left, top-right, bottom-right seen from outside.
-	var target := _part(part)
+	_use(part)
 	var n := (d - a).cross(b - a).normalized()
 	var tangent := (d - a).normalized()
 	var wide := a.distance_to(d)
@@ -38,8 +125,23 @@ func quad(part: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, tint: Co
 	var ub := uv + Vector2(0, -left)
 	var uc := uv + Vector2(wide, -right)
 	var ud := uv + Vector2(wide, 0)
-	for row: Array in [[a, ua, low], [b, ub, high], [c, uc, high], [a, ua, low], [c, uc, high], [d, ud, low]]:
-		_emit(target, row[0], n, tangent, _shaded(tint, row[2]), row[1], rain)
+	var dim := _shaded(tint, low)
+	var lit := _shaded(tint, high)
+	# The four corners a b c d, written out, drawn as a b c and a c d: the commonest call in every building.
+	var base := _v.size()
+	_v.append(a); _v.append(b); _v.append(c); _v.append(d)
+	_n.append(n); _n.append(n); _n.append(n); _n.append(n)
+	var tx := tangent.x
+	var ty := tangent.y
+	var tz := tangent.z
+	_t.append(tx); _t.append(ty); _t.append(tz); _t.append(1.0)
+	_t.append(tx); _t.append(ty); _t.append(tz); _t.append(1.0)
+	_t.append(tx); _t.append(ty); _t.append(tz); _t.append(1.0)
+	_t.append(tx); _t.append(ty); _t.append(tz); _t.append(1.0)
+	_c.append(dim); _c.append(lit); _c.append(lit); _c.append(dim)
+	_u.append(ua); _u.append(ub); _u.append(uc); _u.append(ud)
+	_u2.append(rain); _u2.append(rain); _u2.append(rain); _u2.append(rain)
+	_quad_indices(base)
 
 func smooth(part: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, na: Vector3, nb: Vector3, nc: Vector3, nd: Vector3, tint: Color, ao := 1.0) -> void:
 	# As quad, with a normal per corner; winding follows the normals.
@@ -50,26 +152,43 @@ func smooth(part: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, na: Ve
 		var far_n := nb
 		nb = nd
 		nd = far_n
-	var target := _part(part)
+	_use(part)
 	var tangent := (d - a).normalized()
 	var shaded := _shaded(tint, ao)
-	for row: Array in [[a, na], [b, nb], [c, nc], [a, na], [c, nc], [d, nd]]:
-		_emit(target, row[0], row[1], tangent, shaded, Vector2((row[0] as Vector3).x + (row[0] as Vector3).z, (row[0] as Vector3).y), Vector2.ZERO)
+	var uva := Vector2(a.x + a.z, a.y)
+	var uvc := Vector2(c.x + c.z, c.y)
+	# The four corners a b c d, drawn as a b c and a c d (tubes and lathes come through here).
+	var base := _v.size()
+	_v.append(a); _v.append(b); _v.append(c); _v.append(d)
+	_n.append(na); _n.append(nb); _n.append(nc); _n.append(nd)
+	var tx := tangent.x
+	var ty := tangent.y
+	var tz := tangent.z
+	_t.append(tx); _t.append(ty); _t.append(tz); _t.append(1.0)
+	_t.append(tx); _t.append(ty); _t.append(tz); _t.append(1.0)
+	_t.append(tx); _t.append(ty); _t.append(tz); _t.append(1.0)
+	_t.append(tx); _t.append(ty); _t.append(tz); _t.append(1.0)
+	_c.append(shaded); _c.append(shaded); _c.append(shaded); _c.append(shaded)
+	_u.append(uva); _u.append(Vector2(b.x + b.z, b.y)); _u.append(uvc); _u.append(Vector2(d.x + d.z, d.y))
+	_u2.resize(_u2.size() + 4)
+	_quad_indices(base)
 
 func mapped(part: String, points: Array[Vector3], normals: Array[Vector3], prints: Array[Vector2], marks: Array[float], tint: Color, ao := 1.0) -> void:
 	# As smooth, with an atlas position and a shader weight (UV2.x) at each of the four corners.
 	var order: Array[int] = [0, 1, 2, 0, 2, 3]
 	if (points[3] - points[0]).cross(points[1] - points[0]).dot(normals[0] + normals[1] + normals[2] + normals[3]) < 0.0:
 		order = [0, 3, 2, 0, 2, 1]
-	var target := _part(part)
+	_use(part)
 	var tangent := (points[3] - points[0]).normalized()
 	var shaded := _shaded(tint, ao)
-	for i: int in order:
-		_emit(target, points[i], normals[i], tangent, shaded, prints[i], Vector2(marks[i], 0))
+	var base := _v.size()
+	for i: int in range(4):
+		_corner(points[i], normals[i], tangent, shaded, prints[i], Vector2(marks[i], 0))
+	for i: int in order: _i.append(base + i)
 
 func atlas(part: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, rect: Rect2, tint := Color.WHITE, ao := 1.0, streak := 0.0) -> void:
 	# A quad showing one panel of an atlas; rect is in 0-1 texture space.
-	var target := _part(part)
+	_use(part)
 	var n := (d - a).cross(b - a).normalized()
 	var tangent := (d - a).normalized()
 	var shaded := _shaded(tint, ao)
@@ -78,8 +197,12 @@ func atlas(part: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, rect: R
 	var ub := rect.position
 	var uc := rect.position + Vector2(rect.size.x, 0)
 	var ud := rect.position + rect.size
-	for row: Array in [[a, ua], [b, ub], [c, uc], [a, ua], [c, uc], [d, ud]]:
-		_emit(target, row[0], n, tangent, shaded, row[1], rain)
+	var base := _v.size()
+	_corner(a, n, tangent, shaded, ua, rain)
+	_corner(b, n, tangent, shaded, ub, rain)
+	_corner(c, n, tangent, shaded, uc, rain)
+	_corner(d, n, tangent, shaded, ud, rain)
+	_quad_indices(base)
 
 func block(part: String, xf: Transform3D, size: Vector3, tint: Color, low := 1.0, high := 1.0, streak := 0.0, uv := Vector2.ZERO) -> void:
 	# Six faces around xf.origin; low and high shade its underside and top ends.
@@ -132,7 +255,7 @@ func tube(part: String, points: Array[Vector3], radius: float, tint: Color, side
 
 func lathe(part: String, base: Vector3, profile: Array[Vector2], tint: Color, sides := 12, rect := Rect2()) -> void:
 	# Turned shape: profile is radius and height. With rect, it wraps an atlas panel.
-	var target := _part(part)
+	_use(part)
 	var shaded := _shaded(tint, 1.0)
 	var bottom := profile[0].y
 	var span := maxf(profile[profile.size() - 1].y - bottom, .001)
@@ -159,12 +282,19 @@ func lathe(part: String, base: Vector3, profile: Array[Vector2], tint: Color, si
 			var v0 := rect.position.y + rect.size.y * (1.0 - (p0.y - bottom) / span)
 			var v1 := rect.position.y + rect.size.y * (1.0 - (p1.y - bottom) / span)
 			var tangent := (d - a).normalized()
-			for row: Array in [[d, n1, Vector2(u1, v0)], [c, n1, Vector2(u1, v1)], [b, n0, Vector2(u0, v1)], [d, n1, Vector2(u1, v0)], [b, n0, Vector2(u0, v1)], [a, n0, Vector2(u0, v0)]]:
-				_emit(target, row[0], row[1], tangent, shaded, row[2], Vector2.ZERO)
+			var uvd := Vector2(u1, v0)
+			var uvb := Vector2(u0, v1)
+			# Corners d c b a, drawn as d c b and d b a.
+			var first := _v.size()
+			_corner(d, n1, tangent, shaded, uvd, Vector2.ZERO)
+			_corner(c, n1, tangent, shaded, Vector2(u1, v1), Vector2.ZERO)
+			_corner(b, n0, tangent, shaded, uvb, Vector2.ZERO)
+			_corner(a, n0, tangent, shaded, Vector2(u0, v0), Vector2.ZERO)
+			_quad_indices(first)
 
 func disc(part: String, centre: Vector3, right: Vector3, up: Vector3, radius: float, tint: Color, rect := Rect2()) -> void:
 	# Flat round face; with rect, a square atlas panel shows on it.
-	var target := _part(part)
+	_use(part)
 	var n := right.cross(up).normalized()
 	var shaded := _shaded(tint, 1.0)
 	var steps := 24
@@ -176,12 +306,13 @@ func disc(part: String, centre: Vector3, right: Vector3, up: Vector3, radius: fl
 		var ring1 := Vector2(cos(a1), sin(a1))
 		var uv0 := middle + Vector2(ring0.x, -ring0.y) * rect.size * .5
 		var uv1 := middle + Vector2(ring1.x, -ring1.y) * rect.size * .5
-		for row: Array in [[centre, middle], [centre + (right * ring0.x + up * ring0.y) * radius, uv0], [centre + (right * ring1.x + up * ring1.y) * radius, uv1]]:
-			_emit(target, row[0], n, right, shaded, row[1], Vector2.ZERO)
+		_vx(centre, n, right, shaded, middle, Vector2.ZERO)
+		_vx(centre + (right * ring0.x + up * ring0.y) * radius, n, right, shaded, uv0, Vector2.ZERO)
+		_vx(centre + (right * ring1.x + up * ring1.y) * radius, n, right, shaded, uv1, Vector2.ZERO)
 
 func pane(part: String, xf: Transform3D, x0: float, x1: float, y0: float, y1: float, z: float, cell: float) -> void:
 	# A window for the shared glass shader: UV is metres from its centre.
-	var target := _part(part)
+	_use(part)
 	var half := Vector2((x1 - x0) * .5, (y1 - y0) * .5)
 	var info := Vector2(cell, floorf(half.x * 100.0) + half.y * .1)
 	var n := xf.basis.z.normalized()
@@ -190,10 +321,16 @@ func pane(part: String, xf: Transform3D, x0: float, x1: float, y0: float, y1: fl
 	var b := xf * Vector3(x0, y1, z)
 	var c := xf * Vector3(x1, y1, z)
 	var d := xf * Vector3(x1, y0, z)
-	for row: Array in [[a, Vector2(-half.x, -half.y)], [b, Vector2(-half.x, half.y)], [c, half], [a, Vector2(-half.x, -half.y)], [c, half], [d, Vector2(half.x, -half.y)]]:
-		_emit(target, row[0], n, tangent, Color.WHITE, row[1], info)
+	var low := Vector2(-half.x, -half.y)
+	var base := _v.size()
+	_corner(a, n, tangent, Color.WHITE, low, info)
+	_corner(b, n, tangent, Color.WHITE, Vector2(-half.x, half.y), info)
+	_corner(c, n, tangent, Color.WHITE, half, info)
+	_corner(d, n, tangent, Color.WHITE, Vector2(half.x, -half.y), info)
+	_quad_indices(base)
 
 func commit(parent: Node3D, looks: Dictionary, unshadowed: Array[String]) -> void:
+	_park()
 	for part: String in _parts:
 		var instance := MeshInstance3D.new()
 		instance.name = "Part_" + part

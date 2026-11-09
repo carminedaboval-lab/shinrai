@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dhhfv512rmtov"
-path="res://.godot/imported/mountain_Image_1.jpg-ed19e7fbae5c977bbc7e47c87bb56aff.ctex"
+path.bptc="res://.godot/imported/mountain_Image_1.jpg-ed19e7fbae5c977bbc7e47c87bb56aff.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0e978f505e88f7dc31778c1a0173d4e0"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/gear/backpacks/mountain_Image_1.jpg"
-dest_files=["res://.godot/imported/mountain_Image_1.jpg-ed19e7fbae5c977bbc7e47c87bb56aff.ctex"]
+dest_files=["res://.godot/imported/mountain_Image_1.jpg-ed19e7fbae5c977bbc7e47c87bb56aff.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

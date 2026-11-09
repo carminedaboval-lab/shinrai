@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c27nj6it01s67"
-path="res://.godot/imported/japanese_path_lamp_2800_Image_1.jpg-cb301d3bf87620bedaccfa63d3072725.ctex"
+path.bptc="res://.godot/imported/japanese_path_lamp_2800_Image_1.jpg-cb301d3bf87620bedaccfa63d3072725.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "165421e3d555102a94826054f8603891"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/main_path_lamp/japanese_path_lamp_2800_Image_1.jpg"
-dest_files=["res://.godot/imported/japanese_path_lamp_2800_Image_1.jpg-cb301d3bf87620bedaccfa63d3072725.ctex"]
+dest_files=["res://.godot/imported/japanese_path_lamp_2800_Image_1.jpg-cb301d3bf87620bedaccfa63d3072725.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

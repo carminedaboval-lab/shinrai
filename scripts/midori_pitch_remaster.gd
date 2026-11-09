@@ -1,6 +1,7 @@
 extends RefCounted
 
 # Authored locally for Shinrai. No generated/downloaded replacement assets.
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 const CENTER := Vector3(-140,.15,-86)
 const DECK := Vector2(39.8,21.1)
 const FIELD := Vector2(34,16.8)
@@ -41,8 +42,8 @@ static func build_visuals(parent: Node3D) -> Node3D:
 	return assembly
 
 static func _turf_material(pile_pass: bool = false) -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = """
+	# Carpet and pile share one pooled shader; pile_pass is a uniform.
+	var shader := ShaderPool.shader("""
 shader_type spatial;
 render_mode cull_disabled;
 uniform bool pile_pass=false;
@@ -93,7 +94,7 @@ void fragment(){
  NORMAL_MAP_DEPTH=pile_pass ? 0.0 : .55;
 
 }
-"""
+""")
 	var material := ShaderMaterial.new()
 	material.resource_name = "MutedSyntheticPileWithInlaidWhiteFibres"
 	material.shader = shader
@@ -232,14 +233,22 @@ static func _statistics(root: Node) -> Dictionary:
 	var count := 0
 	var surfaces := 0
 	var triangles := 0
+	# The 60 pile chunks share one mesh: its arrays (read back from the renderer)
+	# are counted once and the same count is added per chunk, as before.
+	var counted := {}
 	for mesh: MeshInstance3D in root.find_children("*","MeshInstance3D",true,false):
 		count+=1
 		surfaces+=mesh.mesh.get_surface_count()
-		for index: int in range(mesh.mesh.get_surface_count()):
-			var arrays := mesh.mesh.surface_get_arrays(index)
-			var indices := PackedInt32Array()
-			if arrays[Mesh.ARRAY_INDEX] != null: indices = arrays[Mesh.ARRAY_INDEX]
-			triangles+=(indices.size() if not indices.is_empty() else arrays[Mesh.ARRAY_VERTEX].size())/3
+		var key := mesh.mesh.get_instance_id()
+		if not counted.has(key):
+			var mesh_triangles := 0
+			for index: int in range(mesh.mesh.get_surface_count()):
+				var arrays := mesh.mesh.surface_get_arrays(index)
+				var indices := PackedInt32Array()
+				if arrays[Mesh.ARRAY_INDEX] != null: indices = arrays[Mesh.ARRAY_INDEX]
+				mesh_triangles+=(indices.size() if not indices.is_empty() else arrays[Mesh.ARRAY_VERTEX].size())/3
+			counted[key] = mesh_triangles
+		triangles+=int(counted[key])
 	return {"mesh_instances":count,"draw_surfaces":surfaces,"triangles":triangles,"collision_bodies":root.find_children("*","StaticBody3D",true,false).size(),"collision_shapes":root.find_children("*","CollisionShape3D",true,false).size()}
 
 

@@ -15,6 +15,18 @@ var _previous_stamina := 100.0
 var _metabolic_combat := false
 var _metabolic_sample := 0.0
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const LoadState = preload("res://scripts/shinrai_load_state.gd")
+## DEPLOY pressed before the world was ready: the deploy cover waits for it.
+var deploy_queued := false
+## The Operations menu is up although the world may still be building (BOOT).
+var hq_menu_open := false
+## Set while the boot host still has to warm the view and enable 3D after HQ.
+var view_warm_pending := false
+## Non-empty when the world build stopped early; the boot host shows it with Retry.
+var boot_error := ""
+var _time_change_pending := false
+var _warmed_views := {}
+var _creator_report_pending := false
 
 const PitchGate = preload("./midori_pitch_gate.gd")
 var pitch_gate: Node3D
@@ -148,9 +160,11 @@ func _ready() -> void:
 	profile.load_profile()
 	metabolism.restore_illness(profile.data.get("food_illness",{}))
 	_restore_weapon_loadout()
+	var _rt := StartupTrace.begin()
 	hud = Hud.new()
 	add_child(hud)
 	hud.action_requested.connect(_on_action)
+	_rt = StartupTrace.finish("raid.ready_hud", _rt)
 	controller_ui=ControllerUI.new();controller_ui.name="ControllerUI";add_child(controller_ui);controller_ui.setup(self)
 	player.died.connect(func() -> void: finish_run(false, "You were eliminated."))
 	player.shot_fired.connect(_on_shot)
@@ -171,10 +185,93 @@ func _ready() -> void:
 			enemy_visual = load(path) as PackedScene
 			if enemy_visual != null:
 				break
-	# HQ is presented only when its native dependencies are ready.
+	_rt = StartupTrace.finish("raid.ready_enemy_visual", _rt)
+	view_warm_pending = bool(park.get_meta("shinrai_boot_host", false))
+	if not view_warm_pending: LoadState.reset()
+	_adopt_early_menu()
+	_rt = StartupTrace.finish("raid.ready_menu", _rt)
+	# The world keeps building behind the menu; deploy waits for world_ready().
 	call_deferred("_prepare_park")
 
+## Takes over the boot host's early Operations menu in this same frame, so the
+## player never sees two menus or a gap, and keeps their choices.
+func _adopt_early_menu() -> void:
+	var early: Variant = park.get_meta("shinrai_menu_source", null)
+	if not early is Object or not is_instance_valid(early): return
+	hq_menu_open = true
+	night_deployment = bool(early.get("night"))
+	_time_change_pending = night_deployment != bool(park.get("is_night_mode"))
+	# Graphics only switches environment/light settings; with 3D still off nothing
+	# compiles until the warm-up renders it, so it applies at once.
+	if bool(early.get("high_quality")) != bool(park.get("high_render_quality")):
+		_set_high_quality(bool(early.get("high_quality")))
+	var wants_deploy := bool(early.get("deploy_requested"))
+	# The window lost focus while that early deploy waited (before this run
+	# existed to see it): the raid must still start paused.
+	var early_focus_lost := wants_deploy and bool(early.get("focus_lost"))
+	var early_quit_open := not wants_deploy and bool(early.get("quit_open"))
+	hud.show_hq(self)
+	early.call("hand_over", self)
+	park.remove_meta("shinrai_menu_source")
+	# An open early quit dialog stays open (same dialog, now the run's), so a
+	# confirm press at the handover never lands on DEPLOY instead.
+	if early_quit_open: _request_quit_confirmation()
+	if wants_deploy: call_deferred("_continue_early_deploy", early_focus_lost)
+
+func _continue_early_deploy(focus_lost: bool = false) -> void:
+	start_run()
+	if focus_lost and deploy_queued: _pause_after_deployment = true
+	# The early cover belongs to this run now; never leave it up when refused.
+	if not deploy_queued and not deployment_pending:
+		LoadState.ui_finish(get_tree().get_first_node_in_group("shinrai_loading_ui"), &"deploy")
+
+## Scav models the squad loads synchronously when a raid starts (a ~4 s frame in
+## the first raid seconds). Loaded on worker threads during the world build and
+## held here, so the raid-time load() is a cache hit. Missing paths are skipped.
+const SCAV_ROLES := ["leader", "scout", "rear_guard"]
+var _actor_assets: Array[Resource] = []
+
+func _preload_actor_assets() -> void:
+	var pending: Array[String] = []
+	for role: String in SCAV_ROLES:
+		# Same choice as scav_visual.gd: the layered body when present, else the base model.
+		var path := "res://assets/enemies/scavs/layered/%s_body.glb" % role
+		if not FileAccess.file_exists(path): path = "res://assets/enemies/scavs/%s/scav_%s.glb" % [role, role]
+		if ResourceLoader.exists(path) and ResourceLoader.load_threaded_request(path, "", true) == OK: pending.append(path)
+	# The real models _register_sites instances after navigation (football
+	# dressing, clubhouse backpacks) too: their synchronous load() there was ~1.5 s
+	# of a ~2.6 s frame on the path to world ready. Same files, now a cache hit.
+	for path: String in FootballTrainingPlacement.RESOURCE_MAP.values() + BackpackPickups.MODELS.values():
+		if path in pending or not ResourceLoader.exists(path) or ResourceLoader.has_cached(path): continue
+		if ResourceLoader.load_threaded_request(path, "", false) == OK: pending.append(path)
+	while not pending.is_empty() and is_inside_tree():
+		for path: String in pending.duplicate():
+			var status := ResourceLoader.load_threaded_get_status(path)
+			if status == ResourceLoader.THREAD_LOAD_LOADED:
+				var resource := ResourceLoader.load_threaded_get(path)
+				if resource != null: _actor_assets.append(resource)
+				pending.erase(path)
+			elif status != ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+				pending.erase(path)
+		await get_tree().process_frame
+
+## Park meta while the render budget runs: {instance id: visible} of the geometry
+## that existed BEFORE the world-complete step. midori_draw_distance and
+## midori_reflection_content leave geometry not in it as built, and judge
+## visibility as it was then (the order the park was tuned with).
+const RENDER_BUDGET_BEFORE_META := &"shinrai_render_budget_before"
+
+## One producer wait finished: move the bar to `at_least` and keep creeping
+## toward the end of the producers band (0.65) over the time that is left.
+func _producers_reached(text: String, at_least: float) -> void:
+	if LoadState.fraction >= 0.65: return
+	LoadState.band(text, at_least, 0.65, maxf(8.0, 90.0 * (0.65 - at_least) / 0.20))
+
 func _prepare_park() -> void:
+	_preload_actor_assets()
+	# Measured ~90 s behind the menu; each finished producer below also moves the
+	# bar (it used to sit within 5 % for ~45 s).
+	LoadState.band("Finishing park producers", 0.45, 0.65, 90.0)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	approach_cover = Cover.new()
@@ -185,9 +282,19 @@ func _prepare_park() -> void:
 	var terrain := park.get_node_or_null("MidoriTerrain")
 	while terrain != null and not terrain.installed:
 		await get_tree().process_frame
+	# The biome look maps read only the terrain's shore data, final now: they
+	# bake on a worker while the producers run (checked again, and used, by the
+	# world-complete step; see midori_biomes.prebake).
+	if terrain != null and is_instance_valid(park): load("res://scripts/midori_biomes.gd").prebake(park)
+	_producers_reached("Laying the park paths", 0.48)
 	var desire_paths := park.get_node_or_null("MidoriDesirePaths")
 	while desire_paths != null and not desire_paths.finished:
 		await get_tree().process_frame
+	# The worn-path map reads only the path layout and the desire routes, final
+	# now: it paints on a worker meanwhile (checked again, and used, by the
+	# world-complete step; see midori_worn_paths.prepaint).
+	if is_instance_valid(park): load("res://scripts/midori_worn_paths.gd").prepaint(park)
+	_producers_reached("Placing lanterns and lamps", 0.50)
 	var stone_lanterns := park.get_node_or_null("MidoriStoneLanterns")
 	while stone_lanterns != null and not stone_lanterns.installed:
 		await get_tree().process_frame
@@ -206,6 +313,7 @@ func _prepare_park() -> void:
 	if secondary_path_lamps != null:
 		await get_tree().physics_frame
 		await get_tree().physics_frame
+	_producers_reached("Furnishing the park", 0.52)
 	# Furniture must exist before native obstacle sampling and cache registration.
 	var identity := park.get_node_or_null("Midori2050Identity")
 	var _t := StartupTrace.begin()
@@ -215,27 +323,34 @@ func _prepare_park() -> void:
 	if identity != null:
 		await get_tree().physics_frame
 		await get_tree().physics_frame
+	_producers_reached("Building the south street", 0.55)
 	# Complete the supported fruit garden before navigation samples its trunks.
 	var fruit_street := park.get_node_or_null("MidoriSouthStreet")
 	while fruit_street != null and fruit_street.get("installed") != true:
 		await get_tree().process_frame
 	_t = StartupTrace.finish("raid.wait_south_street", _t)
+	_producers_reached("Placing the emergency fixtures", 0.58)
 	# Recent emergency fixtures must exist before navigation and Creator scanning.
 	var aftermath := park.get_node_or_null("MidoriAftermath")
 	while aftermath != null and aftermath.get("installed") != true:
 		await get_tree().process_frame
 	_t = StartupTrace.finish("raid.wait_aftermath", _t)
+	_producers_reached("Building the corporate district", 0.59)
 	# Finish the road-connected corporate parcel before world caches and HQ.
 	var corporate := park.get_node_or_null("MidoriCorporateDistrict")
 	while corporate != null and corporate.get("installed") != true:
 		await get_tree().process_frame
 	_t = StartupTrace.finish("raid.wait_corporate", _t)
+	_producers_reached("Raising the fence and cover", 0.61)
 	# Fence, cover and camps are solid, so navigation must sample them.
+	# Island stones (StoneCollision bodies) too: the island nature module yields
+	# per model and per island, so it no longer lands before the graph by timing.
 	park_fence = park.get_node_or_null("MidoriParkFence")
-	for producer_name: String in ["MidoriParkFence", "MidoriParkCover"]:
+	for producer_name: String in ["MidoriParkFence", "MidoriParkCover", "MidoriIslandNature"]:
 		var producer: Node = park.get_node_or_null(NodePath(producer_name))
 		while producer != null and producer.get("installed") != true:
 			await get_tree().process_frame
+	_producers_reached("Planting the fruit garden", 0.63)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_t = StartupTrace.finish("raid.wait_park_fence_cover", _t)
@@ -245,8 +360,12 @@ func _prepare_park() -> void:
 	_t = StartupTrace.finish("raid.fruit_garden", _t)
 	creator_layout_result = await preload("./creator/creator_game_integration.gd").apply_before_navigation(park)
 	_t = StartupTrace.finish("raid.creator_layout", _t)
+	LoadState.band("Preparing park routes", 0.65, 0.72, 18.0)
 	LoadingBudget.stage(park,"Preparing park routes")
+	_t = StartupTrace.begin()
 	await navigation.build(park)
+	_t = StartupTrace.finish("raid.navigation", _t)
+	if not is_inside_tree(): return
 	map_routes = [park.OUTER_CIRCUIT, park.LAKE_PROMENADE_LOOP, park.SOUTH_ARRIVAL_ROUTE, park.WEST_DESTINATION_ROUTE, park.PLAZA_PAVED_ROUTE, park.NORTH_ENTRY_ROUTE, park.EAST_DECK_ROUTE, park.SPORTS_LINK_ROUTE, park.PLAYGROUND_LOOP, park.NORTH_WOODLAND_LOOP, park.SOUTH_BRIDGE_APPROACH, park.PAVILION_LINK_ROUTE, park.VIEWING_DECK_APPROACH_ROUTE, park.FUTURE_BRIDGE_WEST, park.FUTURE_BRIDGE_NORTH_EAST, park.FUTURE_BRIDGE_SOUTH]
 	if desire_paths != null:
 		for route: Dictionary in desire_paths.routes:
@@ -258,29 +377,100 @@ func _prepare_park() -> void:
 		await get_tree().process_frame
 	var street: Node=park.get_node_or_null("MidoriSouthStreet")
 	while street!=null and street.get("installed")!=true:await get_tree().process_frame
+	_t = StartupTrace.finish("raid.map_routes", _t)
 	pitch_gate = PitchGate.install(park,self)
+	_t = StartupTrace.finish("raid.pitch_gate", _t)
 	# Install after navigation captures open apertures; dynamic doors filter routes.
 	clubhouse_doors = ClubhouseDoors.install(cafe,self)
+	_t = StartupTrace.finish("raid.clubhouse_doors", _t)
 	_register_sites()
+	_t = StartupTrace.finish("raid.register_sites", _t)
 	# Finish late planting and partition once while deployment is still locked.
+	LoadState.band("Finishing park details", 0.72, 0.75, 6.0)
 	LoadingBudget.stage(park,"Finishing park details")
 	_t = StartupTrace.begin()
 	var detail_result: Dictionary = await preload("res://scripts/midori_distance_boot.gd").install_before_hq(park)
 	_t = StartupTrace.finish("raid.distance_boot", _t)
-	if detail_result.get("status", "") == "cancelled": return
+	if detail_result.get("status", "") == "cancelled":
+		boot_error = "Park details were cancelled."
+		return
 	if detail_result.has("error"):
 		push_warning("MIDORI_DISTANCE_BOOT: " + str(detail_result.error))
 	else:
 		print("MIDORI_DISTANCE_BOOT ", JSON.stringify(detail_result))
+	# Measured ~40 s (render budget + world-complete step).
+	LoadState.band("Completing the park", 0.75, 0.95, 40.0)
+	if not detail_result.has("error"):
+		# Everything that used to wake on phase != BOOT after a successful distance
+		# boot (roads, shrubs, worn paths, biomes) completes here, before HQ, so
+		# deploy never lands in a world that is still changing.
+		# It runs BEFORE the render budget (plant shadows are then captured once
+		# over the thinned planting instead of re-captured on every thin pass:
+		# ~25 s and several 2-8 s frames less). To keep the look the park had when
+		# the render budget ran first, geometry this step adds is listed and the
+		# draw-distance and reflection passes leave it as built (full draw
+		# distance, drawn in the lake reflection), exactly as before.
+		# Instance id -> [visible, drawn extent], as the render budget would have
+		# seen them first (biome thinning hides nodes and shrinks MultiMesh bounds).
+		var geometry_before := {}
+		# One pass in one frame: nothing may slip in between the listing and the step.
+		var DrawDistance := preload("res://scripts/midori_draw_distance.gd")
+		for node: Node in park.find_children("*", "GeometryInstance3D", true, false):
+			var geometry := node as GeometryInstance3D
+			geometry_before[geometry.get_instance_id()] = [geometry.is_visible_in_tree(), DrawDistance._extent(geometry)]
+		await LoadingBudget.checkpoint(park)
+		var world_complete := LoadState.optional_script(LoadState.WORLD_COMPLETE_PATH)
+		if world_complete != null:
+			_t = StartupTrace.begin()
+			var complete_report: Variant = await world_complete.call("run", park, self)
+			_t = StartupTrace.finish("raid.world_complete", _t)
+			if not is_inside_tree(): return
+			if complete_report is Dictionary and complete_report.has("error"):
+				push_warning("SHINRAI_WORLD_COMPLETE: " + str(complete_report.error))
+			elif complete_report is Dictionary:
+				print("SHINRAI_WORLD_COMPLETE ", JSON.stringify(complete_report))
+		var added_late := 0
+		for node: Node in park.find_children("*", "GeometryInstance3D", true, false):
+			if not geometry_before.has(node.get_instance_id()): added_late += 1
+		park.set_meta(RENDER_BUDGET_BEFORE_META, geometry_before)
+		await LoadingBudget.checkpoint(park)
 		var render_result: Dictionary = await preload("res://scripts/midori_render_budget.gd").install_before_hq(park)
-		if render_result.get("status", "") == "cancelled": return
+		if render_result.get("status", "") == "cancelled":
+			boot_error = "Park render preparation was cancelled."
+			return
 		if render_result.has("error"):
 			push_warning("MIDORI_RENDER_BOOT: " + str(render_result.error))
 		else:
+			render_result["left_as_built"] = added_late
 			print("MIDORI_RENDER_BOOT ", JSON.stringify(render_result))
+		if is_instance_valid(park): park.remove_meta(RENDER_BUDGET_BEFORE_META)
+	else:
+		# The distance boot gave up (world still incomplete): as before, no biomes,
+		# worn paths or late sweep over a half-built world. The roads still take
+		# their surface, now before HQ instead of just after it.
+		var roads := park.get_node_or_null("MidoriTokyoRoads")
+		if roads != null and roads.has_method("resurface_now"): await roads.resurface_now()
+		if not is_inside_tree(): return
+	LoadState.report("Completing the park", 0.95)
 	phase = Phase.HQ
-	hud.show_hq(self)
-	preload("./creator/creator_game_integration.gd").show_report(self, creator_layout_result)
+	if not view_warm_pending: LoadState.mark_world_ready()
+	_on_world_progress()
+	if deploy_queued or deployment_pending: _creator_report_pending = true
+	else: preload("./creator/creator_game_integration.gd").show_report(self, creator_layout_result)
+
+## Called by the boot host once the view is warmed and 3D is live: DEPLOY is now
+## immediate (a queued deploy fires on its next frame).
+func finish_view_warmup() -> void:
+	view_warm_pending = false
+	LoadState.mark_world_ready()
+	_on_world_progress()
+
+## The world became ready (or a step of it finished) while the player may be in
+## the Operations menu or the inventory: refresh DEPLOY in place, never close or
+## rebuild the inventory.
+func _on_world_progress() -> void:
+	if hq_menu_open: _refresh_menu()
+	else: hud.show_hq(self)
 
 func _register_sites() -> void:
 	sites.clear()
@@ -317,14 +507,20 @@ func _register_sites() -> void:
 		{"id": "south", "title": "South gate extraction", "position": Vector3(0, 0.2, 167)},
 		{"id": "west", "title": "West gate extraction", "position": Vector3(-205, 0.2, 40)}]
 
+	var _st := StartupTrace.begin()
 	BackpackPickups.register_for(self,park.get_node_or_null("MidoriClubhouseCafeteria"))
+	_st = StartupTrace.finish("sites.backpacks", _st)
 	var football_layout: Dictionary = FootballTrainingPlacement.build_actual_cluster(park)
 	if not FootballLootRegistration.register_layout(self, football_layout):
 		push_warning("MIDORI_FOOTBALL_LOOT: " + str(football_layout.get("reason", "Container registration failed.")))
 	# Garden installation is owned by the park setup; register only its logical fruit.
+	_st = StartupTrace.finish("sites.football", _st)
 	fruit_harvest.register_tree(park)
+	_st = StartupTrace.finish("sites.fruit", _st)
 	WeaponLoot.install(self)
+	_st = StartupTrace.finish("sites.weapon_loot", _st)
 	var context_result: Dictionary=ContextLoot.install(self)
+	_st = StartupTrace.finish("sites.context_loot", _st)
 	if not context_result.missing.is_empty():push_warning("CONTEXT_LOOT missing anchors: "+str(context_result.missing))
 
 func capacity() -> int:
@@ -486,22 +682,33 @@ func _on_action(action: String) -> void:
 		"deploy": start_run()
 		"retry_deploy": start_run(true)
 		"time":
-			if phase != Phase.HQ:
+			if not in_hq_menu() or view_settings_locked():
 				return
 			night_deployment = not night_deployment
-			park.is_night_mode = night_deployment
-			park._apply_time_of_day()
-			hud.show_hq(self)
+			# While the world builds the choice is stored and applied under the
+			# deploy cover (relighting mid-build would compile new pipelines).
+			if world_ready():
+				park.is_night_mode = night_deployment
+				park._apply_time_of_day()
+				_time_change_pending = false
+			else:
+				_time_change_pending = true
+			_refresh_menu()
+		"graphics":
+			if (not in_hq_menu() and phase != Phase.PAUSED) or view_settings_locked():
+				return
+			_set_high_quality(not menu_high_quality())
+			_refresh_menu()
 		"sell":
-			if phase == Phase.HQ:
+			if in_hq_menu():
 				profile.sell_stash(PRICES)
 				_refresh_operations()
 		"upgrade":
-			if phase == Phase.HQ:
+			if in_hq_menu():
 				profile.buy_upgrade()
 				_refresh_operations()
 		"medkit":
-			if phase == Phase.HQ:
+			if in_hq_menu():
 				profile.buy_medkit()
 				_refresh_operations()
 		"resume": resume_run()
@@ -518,23 +725,138 @@ func _on_action(action: String) -> void:
 			inventory_open = false
 			menu_camera.make_current()
 			hud.show_hq(self)
+			if _creator_report_pending:
+				_creator_report_pending = false
+				preload("./creator/creator_game_integration.gd").show_report(self, creator_layout_result)
 
 func _request_quit_confirmation() -> void:
-	if phase not in [Phase.HQ, Phase.PAUSED] or inventory_open or not pending_cache_id.is_empty() or not pending_result_save.is_empty(): return
+	if not (in_hq_menu() or phase == Phase.PAUSED) or inventory_open or not pending_cache_id.is_empty() or not pending_result_save.is_empty(): return
 	quit_confirmation_open = true
 	hud.show_quit_confirmation(self)
 
 func _cancel_quit_confirmation() -> void:
 	if not quit_confirmation_open: return
 	quit_confirmation_open = false
-	if phase == Phase.HQ: hud.show_hq(self)
+	if in_hq_menu(): hud.show_hq(self)
 	elif phase == Phase.PAUSED: hud.show_pause(self, map_open)
 
 func _refresh_operations() -> void:
 	if inventory_open:
 		hud.show_inventory(self)
 	else:
+		_refresh_menu()
+
+## Updates a visible Operations menu in place (labels, DEPLOY progress, focus
+## kept). Falls back to a full HQ panel only for a HUD without that component,
+## and never while the inventory, a dialog or a deploy owns the screen.
+func _refresh_menu() -> void:
+	if not is_instance_valid(hud): return
+	var refreshed := false
+	for node: Node in hud.find_children("*", "Control", true, false):
+		if node.has_method("configure") and node.has_method("refresh") and node.has_signal("action_requested") and (node as Control).is_visible_in_tree():
+			node.call("refresh")
+			refreshed = true
+	if refreshed: return
+	if in_hq_menu() and not inventory_open and not quit_confirmation_open and pending_result_save.is_empty() and not deployment_pending:
 		hud.show_hq(self)
+
+func world_ready() -> bool:
+	return phase != Phase.BOOT and navigation.ready and not view_warm_pending
+
+func in_hq_menu() -> bool:
+	return phase == Phase.HQ or (phase == Phase.BOOT and hq_menu_open)
+
+# Operations-menu source (scripts/ui/shinrai_operations_menu.gd configure()).
+func menu_profile() -> Dictionary:
+	return profile.data
+
+func menu_world_ready() -> bool:
+	return world_ready()
+
+func menu_can(action: String) -> bool:
+	if not in_hq_menu() or deployment_pending or deploy_queued or not pending_result_save.is_empty():
+		return action in ["quit_desktop", "quit_cancel"] and quit_confirmation_open
+	match action:
+		"deploy": return profile.last_error.is_empty() or can_retry_deployment_save()
+		"retry_deploy": return can_retry_deployment_save()
+		# The inventory screens read raid.phase == HQ; they open once the park is built.
+		"inventory": return phase == Phase.HQ
+		"sell", "upgrade", "medkit": return profile.last_error.is_empty() and not bool(profile.data.get("active_run", false))
+		# Held for the few seconds the boot warms the chosen variant: a switch then
+		# would be undone by the warm-up's restore (and not be the one warmed).
+		"time", "graphics": return not view_settings_locked()
+		"controls", "quit_confirm": return true
+	return false
+
+## True while a warm-up renders the current time-of-day / quality variant
+## (boot: phase HQ before finish_view_warmup; deploy: under the cover).
+func view_settings_locked() -> bool:
+	return (phase == Phase.HQ and view_warm_pending) or deployment_pending
+
+func menu_night() -> bool:
+	return night_deployment
+
+func menu_high_quality() -> bool:
+	return bool(park.get("high_render_quality")) if is_instance_valid(park) else false
+
+func menu_last_error() -> String:
+	return profile.last_error
+
+func _set_high_quality(high: bool) -> void:
+	if not is_instance_valid(park) or not park.has_method("_apply_render_quality"): return
+	park.set("high_render_quality", high)
+	park.call("_apply_render_quality")
+	if park.has_method("_update_time_label"): park.call("_update_time_label")
+
+## Applies the time-of-day choice made while the world was building (relighting
+## mid-build would mix day- and night-installed modules and compile pipelines).
+func apply_menu_preferences() -> void:
+	if _time_change_pending and bool(park.get("is_night_mode")) != night_deployment:
+		park.is_night_mode = night_deployment
+		park._apply_time_of_day()
+	_time_change_pending = false
+
+static func raid_spawn_pose() -> Transform3D:
+	return Transform3D(Basis(), RAID_SPAWN + Vector3(0.0, 1.62, 0.0)).looking_at(RAID_SPAWN_LOOK, Vector3.UP)
+
+## Renders the current time-of-day / quality variant offscreen until pipeline
+## compilation settles (ShinraiShaderWarmup). Once per variant per session, so a
+## second deploy after returning to HQ stays fast.
+func warm_park_view(include_menu_pose: bool, limit_msec: int = 20000) -> Dictionary:
+	# Bounded: the warm-up only saves hitches, it must never hold a menu or deploy.
+	var state := {"done": false, "result": {}}
+	var runner := func() -> void:
+		state.result = await _warm_park_view_now(include_menu_pose)
+		state.done = true
+	runner.call()
+	var deadline := Time.get_ticks_msec() + limit_msec
+	while not state.done and is_inside_tree() and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+	if not state.done:
+		push_warning("SHINRAI_WARMUP: view warm-up exceeded %d ms; continuing" % limit_msec)
+		return {"status": "timeout"}
+	return state.result
+
+func _warm_park_view_now(include_menu_pose: bool) -> Dictionary:
+	var key :="%s/%s" % [bool(park.get("is_night_mode")), bool(park.get("high_render_quality"))]
+	if _warmed_views.has(key) and not include_menu_pose: return {"status": "cached", "variant": key}
+	var warmup := LoadState.warmup_script()
+	if warmup == null or DisplayServer.get_name() == "headless": return {"status": "skipped"}
+	var poses: Array[Transform3D] = []
+	if include_menu_pose and LoadState.script_has(warmup, "default_poses"):
+		# Menu camera + spawn view, plus the other spawn directions on a first launch.
+		poses.assign(warmup.call("default_poses", park, self))
+	else:
+		if include_menu_pose and is_instance_valid(menu_camera): poses.append(menu_camera.global_transform)
+		poses.append(raid_spawn_pose())
+	var guard := park.get_node_or_null("K17_EntryGuard") as Node3D
+	if guard != null:
+		var eye := RAID_SPAWN + Vector3(0.0, 1.62, 0.0)
+		var look := Vector3(guard.global_position.x, eye.y, guard.global_position.z)
+		if eye.distance_to(look) > 0.5: poses.append(Transform3D(Basis(), eye).looking_at(look, Vector3.UP))
+	var result: Variant = await warmup.call("warm", park, poses, bool(park.get("is_night_mode")), bool(park.get("high_render_quality")))
+	_warmed_views[key] = true
+	return result if result is Dictionary else {"status": "done", "variant": key}
 
 func open_inventory() -> void:
 	GameInput.require_release()
@@ -576,18 +898,80 @@ func discard_cargo(index: int) -> bool:
 	return true
 
 func can_retry_deployment_save() -> bool:
-	return phase == Phase.HQ and navigation.ready and pending_result_save.is_empty() and profile.last_error in ["Could not write the save. Your previous save is unchanged.", "Could not replace the save. Your previous save is unchanged."]
+	return phase == Phase.HQ and world_ready() and pending_result_save.is_empty() and profile.last_error in ["Could not write the save. Your previous save is unchanged.", "Could not replace the save. Your previous save is unchanged."]
 
 func start_run(retry_save: bool = false) -> void:
-	if deployment_pending or phase != Phase.HQ or not navigation.ready or not pending_result_save.is_empty():
+	if deployment_pending or deploy_queued or not pending_result_save.is_empty():
 		return
-	if retry_save and not can_retry_deployment_save(): return
+	if not world_ready():
+		# DEPLOY from the menu while the park still builds: wait for the rest.
+		if not retry_save and in_hq_menu() and profile.last_error.is_empty(): _queue_deploy()
+		return
+	await _deploy(retry_save, false)
+
+## Holds a DEPLOY until world_ready(), under the loading screen (owner "deploy")
+## with the remaining progress and a Cancel back to the menu.
+func _queue_deploy() -> void:
+	var loading_ui := get_tree().get_first_node_in_group("shinrai_loading_ui")
+	deploy_queued = true
 	_pause_after_deployment = false
-	deployment_pending = true
+	if loading_ui != null:
+		LoadState.ui_begin(loading_ui, "Entering the park", &"deploy")
+		LoadState.ui_show_cancel(loading_ui, true)
+		if loading_ui.has_signal("cancel_requested") and not loading_ui.is_connected("cancel_requested", cancel_queued_deploy):
+			loading_ui.connect("cancel_requested", cancel_queued_deploy)
+	while deploy_queued and is_inside_tree() and not world_ready():
+		if loading_ui != null and is_instance_valid(loading_ui):
+			loading_ui.set_stage(LoadState.waiting_text(), LoadState.fraction)
+		await get_tree().process_frame
+	if not is_inside_tree() or not deploy_queued: return
+	deploy_queued = false
+	if loading_ui != null and is_instance_valid(loading_ui):
+		LoadState.ui_show_cancel(loading_ui, false)
+		_release_cancel(loading_ui)
+	await _deploy(false, true)
+
+func cancel_queued_deploy() -> void:
+	if not deploy_queued: return
+	deploy_queued = false
+	_pause_after_deployment = false
 	var loading_ui := get_tree().get_first_node_in_group("shinrai_loading_ui")
 	if loading_ui != null:
-		loading_ui.begin("Entering the park")
+		LoadState.ui_show_cancel(loading_ui, false)
+		_release_cancel(loading_ui)
+		LoadState.ui_finish(loading_ui, &"deploy")
+	_refresh_menu()
+	# The cover's CANCEL button held focus; give it back to DEPLOY (pad/keyboard).
+	var menu: Variant = hud.get("operations_menu") if is_instance_valid(hud) else null
+	if menu is Control and is_instance_valid(menu) and (menu as Control).is_visible_in_tree():
+		var button: Variant = (menu as Control).get("deploy_button")
+		if button is Control: (button as Control).call_deferred("grab_focus")
+
+func _release_cancel(loading_ui: Node) -> void:
+	if loading_ui.has_signal("cancel_requested") and loading_ui.is_connected("cancel_requested", cancel_queued_deploy):
+		loading_ui.disconnect("cancel_requested", cancel_queued_deploy)
+
+func _deploy(retry_save: bool, from_queue: bool) -> void:
+	var loading_ui := get_tree().get_first_node_in_group("shinrai_loading_ui")
+	if deployment_pending or phase != Phase.HQ or not world_ready() or not pending_result_save.is_empty() or (retry_save and not can_retry_deployment_save()):
+		if from_queue and loading_ui != null: LoadState.ui_finish(loading_ui, &"deploy")
+		return
+	# A focus loss while the deploy was queued still pauses the new raid.
+	if not from_queue: _pause_after_deployment = false
+	deployment_pending = true
+	_cover_physics(true)
+	if loading_ui != null:
+		LoadState.ui_begin(loading_ui, "Entering the park", &"deploy")
+		LoadState.ui_show_cancel(loading_ui, false)
 		await RenderingServer.frame_post_draw
+	# Time of day and graphics chosen in the menu, applied and warmed under the cover.
+	apply_menu_preferences()
+	if loading_ui != null:
+		loading_ui.set_stage("Preparing the view", -1.0)
+		await warm_park_view(false)
+		if not is_inside_tree():
+			_cover_physics(false)
+			return
 	# Finish an HQ weapon swap before committing and applying the free kit.
 	while player.weapon_transition_pending:
 		await get_tree().process_frame
@@ -597,7 +981,8 @@ func start_run(retry_save: bool = false) -> void:
 		if not can_retry_deployment_save():
 			deployment_pending = false
 			_pause_after_deployment = false
-			if loading_ui != null: loading_ui.finish()
+			_cover_physics(false)
+			if loading_ui != null: LoadState.ui_finish(loading_ui, &"deploy")
 			if not pending_result_save.is_empty(): hud.show_pending_result(self)
 			elif phase == Phase.HQ: hud.show_hq(self)
 			return
@@ -605,10 +990,13 @@ func start_run(retry_save: bool = false) -> void:
 	var staged_kit: Array = profile.data.get("field_kit",[]).duplicate(true)
 	var staged_pack_uid := str(profile.data.get("field_pack_uid", ""))
 	var starter_supplies := bool(profile.data.get("starter_pending",false))
+	# Committed only now: the world is complete and the view warmed, so a crash or
+	# close during the slow part of loading can no longer strand the staged kit.
 	if not profile.begin_run():
 		deployment_pending = false
 		_pause_after_deployment = false
-		if loading_ui != null: loading_ui.finish()
+		_cover_physics(false)
+		if loading_ui != null: LoadState.ui_finish(loading_ui, &"deploy")
 		hud.show_hq(self)
 		return
 	rng.randomize()
@@ -697,20 +1085,54 @@ func start_run(retry_save: bool = false) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	deployment_pending = false
 	_pause_after_deployment = false
-	if loading_ui != null: loading_ui.finish()
+	if loading_ui != null: LoadState.ui_finish(loading_ui, &"deploy")
+	# The deploy frames were long: restoring the catch-up steps now would run up
+	# to 8 live physics steps in the first uncovered raid frame. One step a frame
+	# until two raid frames have passed; the clamped backlog is dropped.
+	_restore_cover_physics_later()
 	announce("TEST BACKPACK SPAWNS · guaranteed when real models are installed" if backpack_test_enabled else "Recover a relay · reach extraction", 5.0)
+
+## Under the deploy cover nothing moves (actors stay locked until the first raid
+## frame), but each long setup frame used to run up to 8 catch-up physics steps
+## (~75-230 ms a frame). One step a frame keeps physics_frame awaits working.
+var _cover_physics_saved := -1
+func _cover_physics(on: bool) -> void:
+	if on:
+		# Restore to the project value (never to a boot-time 1 left by a loader).
+		if _cover_physics_saved < 0: _cover_physics_saved = maxi(Engine.max_physics_steps_per_frame, int(ProjectSettings.get_setting("physics/common/max_physics_steps_per_frame", 8)))
+		Engine.max_physics_steps_per_frame = 1
+	elif _cover_physics_saved >= 0:
+		Engine.max_physics_steps_per_frame = _cover_physics_saved
+		_cover_physics_saved = -1
+
+func _restore_cover_physics_later() -> void:
+	for i: int in 2:
+		if not is_inside_tree(): break
+		await get_tree().process_frame
+		# A new deploy took the cover meanwhile: it restores physics itself.
+		if deployment_pending: return
+	_cover_physics(false)
 
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_APPLICATION_FOCUS_OUT: return
 	GameInput.require_release()
 	if is_instance_valid(player):player.reset_controller_intents()
-	if deployment_pending:
+	if deployment_pending or deploy_queued:
 		_pause_after_deployment = true
 	elif phase == Phase.RAID:
 		pause_run(false)
 
 func _exit_tree() -> void:
 	if is_instance_valid(park): _persist_food_state(true)
+	_cover_physics(false)
+	# A boot Retry frees the park mid-deploy: release the deploy cover with it.
+	if deploy_queued or deployment_pending:
+		deploy_queued = false
+		var loading_ui := get_tree().get_first_node_in_group("shinrai_loading_ui") if is_inside_tree() else null
+		if loading_ui != null:
+			_release_cancel(loading_ui)
+			LoadState.ui_show_cancel(loading_ui, false)
+			LoadState.ui_finish(loading_ui, &"deploy")
 
 func _input(event: InputEvent) -> void:
 	if not GameInput.application_focused():return

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://02u8jymoy7xm"
-path="res://.godot/imported/leader_body_texture_0.png-3cf874cd3819f3c9dbf77e8ced27e01d.ctex"
+path.bptc="res://.godot/imported/leader_body_texture_0.png-3cf874cd3819f3c9dbf77e8ced27e01d.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "d2ae854622f3fb10ba5a3f733110c9bd"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/enemies/scavs/layered/leader_body_texture_0.png"
-dest_files=["res://.godot/imported/leader_body_texture_0.png-3cf874cd3819f3c9dbf77e8ced27e01d.ctex"]
+dest_files=["res://.godot/imported/leader_body_texture_0.png-3cf874cd3819f3c9dbf77e8ced27e01d.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

@@ -2,6 +2,7 @@ extends Node3D
 ## Fenced FIBA street court in world metres; never parent this to the 2x park
 ## layout. Court markings are drawn in a shader so there are no decal seams.
 const Kit = preload("res://scripts/midori_park_kit.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 
 const COURT_SIZE := Vector2(32.0, 19.0)
 const FENCE_HEIGHT := 4.2
@@ -53,10 +54,12 @@ void fragment(){
 const CHAIN_LINK_SHADER := """
 shader_type spatial;
 render_mode cull_disabled;
+uniform vec2 panel_metres = vec2(1.0, 1.0);
 void fragment(){
-	// UV is in metres. Wires resolve up close, then settle into a see-through
-	// grey veil at the mesh's real coverage instead of shimmering.
-	vec2 g = vec2(UV.x + UV.y, UV.x - UV.y) * 14.0;
+	// UV scaled to metres by the panel's size (a uniform, so every fence run
+	// shares this one shader). Wires resolve up close, then settle into a
+	// see-through grey veil at the mesh's real coverage instead of shimmering.
+	vec2 m = UV * panel_metres; vec2 g = vec2(m.x + m.y, m.x - m.y) * 14.0;
 	vec2 f = abs(fract(g) - 0.5);
 	float px = fwidth(g.x) + fwidth(g.y);
 	float wire = max(smoothstep(0.42, 0.43 + px, f.x), smoothstep(0.42, 0.43 + px, f.y));
@@ -116,10 +119,7 @@ func _glow(color: Color) -> StandardMaterial3D:
 func _build_surface() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = COURT_SIZE
-	var shader := Shader.new()
-	shader.code = SURFACE_SHADER
-	_surface = ShaderMaterial.new()
-	_surface.shader = shader
+	_surface = ShaderPool.material(SURFACE_SHADER)
 	var ground := MeshInstance3D.new()
 	ground.name = "CourtSurface"
 	ground.mesh = plane
@@ -131,10 +131,7 @@ func _build_surface() -> void:
 	Kit.solid(self, "CourtFloor", Vector3(COURT_SIZE.x + .5, .4, COURT_SIZE.y + .5), Vector3(0, -.03, 0))
 
 func _build_fence() -> void:
-	var shader := Shader.new()
-	shader.code = CHAIN_LINK_SHADER
-	var link := ShaderMaterial.new()
-	link.shader = shader
+	var link := ShaderPool.material(CHAIN_LINK_SHADER)
 	var half := COURT_SIZE * .5
 	var corners: Array[Vector3] = [Vector3(-half.x, .17, -half.y), Vector3(half.x, .17, -half.y), Vector3(half.x, .17, half.y), Vector3(-half.x, .17, half.y)]
 	var strip := _glow(Color("#22d3ff"))
@@ -177,12 +174,11 @@ func _fence_run(a: Vector3, b: Vector3, link: Material, strip: Material) -> void
 	Kit.solid(self, "FenceBlock", Vector3(length, FENCE_HEIGHT, .12), (a + b) * .5 + Vector3.UP * FENCE_HEIGHT * .5, yaw)
 
 func _metres_uv(link: ShaderMaterial, quad: QuadMesh) -> ShaderMaterial:
-	# Each run keeps a 5 cm mesh pitch however long it is.
+	# Each run keeps a 5 cm mesh pitch however long it is: the run's size in
+	# metres is a uniform on its own material, so the five runs share one shader
+	# (one compile, one set of pipelines) instead of one shader each.
 	var scaled := link.duplicate() as ShaderMaterial
-	var shader := Shader.new()
-	shader.code = CHAIN_LINK_SHADER.replace("vec2 g = vec2(UV.x + UV.y, UV.x - UV.y) * 14.0;",
-		"vec2 m = UV * vec2(%.3f, %.3f); vec2 g = vec2(m.x + m.y, m.x - m.y) * 14.0;" % [quad.size.x, quad.size.y])
-	scaled.shader = shader
+	scaled.set_shader_parameter("panel_metres", quad.size)
 	return scaled
 
 func _build_hoop(side: float) -> void:
@@ -236,10 +232,7 @@ func _build_hoop(side: float) -> void:
 	net_mesh.rings = 1
 	net_mesh.cap_top = false
 	net_mesh.cap_bottom = false
-	var net_shader := Shader.new()
-	net_shader.code = NET_SHADER
-	var net_material := ShaderMaterial.new()
-	net_material.shader = net_shader
+	var net_material := ShaderPool.material(NET_SHADER)
 	var net := MeshInstance3D.new()
 	net.name = "Net"
 	net.mesh = net_mesh

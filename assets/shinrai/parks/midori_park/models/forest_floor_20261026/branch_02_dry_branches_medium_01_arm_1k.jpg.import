@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://chonylgiyogu3"
-path="res://.godot/imported/branch_02_dry_branches_medium_01_arm_1k.jpg-2cabc9f5f17432e42be32d3c8de65076.ctex"
+path.bptc="res://.godot/imported/branch_02_dry_branches_medium_01_arm_1k.jpg-2cabc9f5f17432e42be32d3c8de65076.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "4498cb82417ac26b38682fa3147a6de0"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/forest_floor_20261026/branch_02_dry_branches_medium_01_arm_1k.jpg"
-dest_files=["res://.godot/imported/branch_02_dry_branches_medium_01_arm_1k.jpg-2cabc9f5f17432e42be32d3c8de65076.ctex"]
+dest_files=["res://.godot/imported/branch_02_dry_branches_medium_01_arm_1k.jpg-2cabc9f5f17432e42be32d3c8de65076.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

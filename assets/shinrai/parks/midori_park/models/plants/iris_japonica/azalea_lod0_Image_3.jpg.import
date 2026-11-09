@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://df0ourd2d405o"
-path="res://.godot/imported/azalea_lod0_Image_3.jpg-253f936ebc8d210b0338b89bea6ff71e.ctex"
+path.bptc="res://.godot/imported/azalea_lod0_Image_3.jpg-253f936ebc8d210b0338b89bea6ff71e.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "22072b81bb632cdbf88835200b15b6be"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/plants/iris_japonica/azalea_lod0_Image_3.jpg"
-dest_files=["res://.godot/imported/azalea_lod0_Image_3.jpg-253f936ebc8d210b0338b89bea6ff71e.ctex"]
+dest_files=["res://.godot/imported/azalea_lod0_Image_3.jpg-253f936ebc8d210b0338b89bea6ff71e.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

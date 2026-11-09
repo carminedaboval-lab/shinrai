@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://das3sh2iyp5ti"
-path="res://.godot/imported/clubhouse_door_front_1140_door_timber_normal.png-6e1b8d7af6e9d9901143345023c2f050.ctex"
+path.bptc="res://.godot/imported/clubhouse_door_front_1140_door_timber_normal.png-6e1b8d7af6e9d9901143345023c2f050.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "3b9852665054737579f86d77c632c06c"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/buildings/clubhouse_doors/clubhouse_door_front_1140_door_timber_normal.png"
-dest_files=["res://.godot/imported/clubhouse_door_front_1140_door_timber_normal.png-6e1b8d7af6e9d9901143345023c2f050.ctex"]
+dest_files=["res://.godot/imported/clubhouse_door_front_1140_door_timber_normal.png-6e1b8d7af6e9d9901143345023c2f050.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

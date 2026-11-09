@@ -48,6 +48,9 @@ func _ready() -> void:
 	while city == null and Time.get_ticks_msec() < deadline:
 		city = park.get_node_or_null("MidoriHorizon/NearCity")
 		if city == null: await get_tree().process_frame
+	# The city lays its tiles in budgeted slices; its alleys and hand-built list are whole once built.
+	while city != null and is_instance_valid(city) and city.get("built") == false and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
 	if city == null or city.get("alleys") == null:
 		report = {"error":"near city alleys unavailable"}
 		print("MIDORI_ALLEY_LIFE_SKIPPED ", JSON.stringify(report))
@@ -73,6 +76,8 @@ func _ready() -> void:
 			first = false
 		if not first:
 			avoid.append(Rect2(bounds.position.x, bounds.position.z, bounds.size.x, bounds.size.z).grow(-0.35))
+		await Budget.checkpoint(park)
+		if not is_instance_valid(city): return
 	var clear: Array[Rect2] = []
 	for zone: Rect2 in city.get("CLEAR_ZONES"): clear.append(zone)
 	for entry: Dictionary in city.get("alleys"):
@@ -91,15 +96,48 @@ func _ready() -> void:
 			if footprint.intersects(rect): blocked = true
 		if blocked: continue
 		alleys.append({"rect":rect, "commercial":bool(entry.commercial), "width":width, "length":length})
-	var pieces := 0
-	for alley: Dictionary in alleys:
-		pieces += _dress(alley)
-	_commit()
+	# Dressing the alleys is pure geometry: it fills this node's SurfaceTools and
+	# lamp list from its own two generators, touching no node. It runs on one
+	# worker, every alley in the same order with the same draws (~2.6 s of main
+	# thread before); the meshes are still committed here on the main thread.
+	_dress_task = WorkerThreadPool.add_task(_dress_all, true, "MidoriAlleyLife dressing")
+	while not WorkerThreadPool.is_task_completed(_dress_task):
+		await get_tree().process_frame
+		if not is_inside_tree(): return
+	WorkerThreadPool.wait_for_task_completion(_dress_task)
+	_dress_task = -1
+	var pieces := _dress_pieces
+	await _commit()
+	if not is_inside_tree(): return
 	_place_lights()
 	installed = true
 	set_night_mode(bool(park.get("is_night_mode")))
-	report = {"alleys":alleys.size(), "pieces":pieces, "chunks":_chunks.size(), "lights":_lights.size()}
+	report = {"alleys":alleys.size(), "pieces":pieces, "chunks":_chunk_count, "lights":_lights.size()}
 	print("MIDORI_ALLEY_LIFE_READY ", JSON.stringify(report))
+
+var _dress_task := -1
+var _dress_pieces := 0
+var _chunk_count := 0
+
+## WORKER: the alleys' dressing, in list order (see _ready).
+func _dress_all() -> void:
+	var pieces := 0
+	for alley: Dictionary in alleys:
+		pieces += _dress(alley)
+	_dress_pieces = pieces
+	# Every box face and tube ring was emitted as loose triangles (six vertices a
+	# quad). Indexing merges only vertices that are identical in every attribute,
+	# so the drawn triangles are the same; the mesh keeps about two thirds of the
+	# vertex bytes and the GPU copy shrinks with it. Still on the worker.
+	for group: Dictionary in [_chunks, _fixtures]:
+		for key: Vector2i in group:
+			(group[key] as SurfaceTool).index()
+
+func _exit_tree() -> void:
+	# Quit / Retry mid-build: the worker uses this node's members; let it finish.
+	if _dress_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_dress_task)
+		_dress_task = -1
 
 func set_night_mode(value: bool) -> void:
 	if _material != null:
@@ -437,11 +475,15 @@ func _bicycle(at: Vector3, inward: Vector3, toward_wall: Vector3) -> int:
 # ---------------------------------------------------------------- finishing
 
 func _commit() -> void:
+	_chunk_count = _chunks.size()
 	for group: Array in [[_chunks, "AlleyLife", 1, CHUNK, 230.0], [_fixtures, "AlleyLamps", FIXTURE_LAYER, FIXTURE_CHUNK, FIXTURE_RANGE]]:
 		var chunks: Dictionary = group[0]
 		for key: Vector2i in chunks:
 			var st: SurfaceTool = chunks[key]
 			var mesh := st.commit()
+			# The mesh now owns the geometry; the SurfaceTool's own copy (about
+			# 170 bytes a vertex, 4.7 M vertices across the alleys) is not needed again.
+			st.clear()
 			if mesh.get_surface_count() == 0: continue
 			mesh.surface_set_material(0, _material)
 			var instance := MeshInstance3D.new()
@@ -452,6 +494,11 @@ func _commit() -> void:
 			instance.visibility_range_end = group[4]
 			instance.custom_aabb = AABB(Vector3(key.x * size - 4.0, -1.0, key.y * size - 4.0), Vector3(size + 8.0, 12.0, size + 8.0))
 			add_child(instance)
+			# Same chunks in the same order; only the frames split.
+			await Budget.checkpoint(get_parent())
+	_chunks.clear()
+	_fixtures.clear()
+	_st = null
 
 func _place_lights() -> void:
 	# A small pool of real lights follows the camera: the lamps nearest the

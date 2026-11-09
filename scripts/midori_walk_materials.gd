@@ -2,14 +2,20 @@ extends RefCounted
 const STONE_ROOT := "res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/ProjectShinrai_YakitoriShop_ArtworkReplica_v5_Stone_"
 static var _materials:Dictionary={}
 static var _secondary:Dictionary={}
+## One Shader per kind: every width/length uses the same code (only uniforms differ),
+## and each new Shader is compiled again on the main thread (~17 ms each, measured).
+static var _walk_shader:Shader
+static var _secondary_shader:Shader
 
 ## Secondary park walk: compacted decomposed granite (真砂土), the warm fine
 ## grit of Japanese park side paths. No slab joints; it sits flush and its rim
 ## breaks unevenly into the lawn so it reads as part of the ground.
 static func build_secondary(width:float)->ShaderMaterial:
 	if _secondary.has(width):return _secondary[width]
-	var shader:=Shader.new()
-	shader.code="""
+	var shader:=_secondary_shader
+	if shader==null:
+		shader=Shader.new();_secondary_shader=shader
+		shader.code="""
 shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D stone_albedo : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
@@ -76,8 +82,10 @@ static func build(width:float,length:float=0.0,closed:bool=false)->ShaderMateria
 	# Per-width shared materials keep the edge detail at a real metre scale.
 	var key:=Vector3(width,roundf(length),1.0 if closed else 0.0)
 	if _materials.has(key):return _materials[key]
-	var shader:=Shader.new()
-	shader.code="""
+	var shader:=_walk_shader
+	if shader==null:
+		shader=Shader.new();_walk_shader=shader
+		shader.code="""
 shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D stone_albedo : source_color, repeat_enable, filter_linear_mipmap_anisotropic;

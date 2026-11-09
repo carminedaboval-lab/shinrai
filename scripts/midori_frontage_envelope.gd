@@ -43,7 +43,7 @@ static func build(street: Node3D, anchor: Node3D, spec: Dictionary) -> Dictionar
 		tool.generate_tangents()
 		var visual := MeshInstance3D.new()
 		visual.name = "ConstructedEnvelope_"+key
-		visual.mesh = tool.commit()
+		visual.mesh = preload("res://scripts/midori_south_street_mesh_arrays.gd").commit(tool)
 		visual.material_override = JOINERY.material(street,key) if JOINERY.applies(key,visual.name) else mats[key]
 		assembly.add_child(visual)
 	return {"ok":true,"panels":panel_count,"joint_m":PANEL_JOINT,"canopy_boards":board_count,"material_batches":batches.size(),"lights_created":0,"collisions_created":0}
@@ -179,7 +179,7 @@ static func _tool(batches: Dictionary, key: String) -> SurfaceTool:
 	return batches[key] as SurfaceTool
 
 static func _box(batches: Dictionary, key: String, pos: Vector3, size: Vector3, basis: Basis = Basis.IDENTITY) -> void:
-	var member := JOINERY.mesh(size,(key+str(pos)+str(size)).hash())
+	var member := JOINERY.member_source(size,(key+str(pos)+str(size)).hash())
 	_tool(batches,key).append_from(member,0,Transform3D(basis,pos))
 
 static func _strip(batches: Dictionary, key: String, a: Vector3, b: Vector3, width: float, thickness: float) -> void:

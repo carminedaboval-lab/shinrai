@@ -1,10 +1,12 @@
 extends Node3D
 # Additive placement of supplied plants: taller green masses behind the low grass.
 # No source mesh/material changes, new collisions, or mature tree movement.
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
 func _ready() -> void:
 	call_deferred("install")
 
 func install() -> void:
+	var started_usec:=Time.get_ticks_usec()
 	var park:=get_parent() as Node3D
 	if park.has_meta("woodland_diversity"):
 		return
@@ -25,19 +27,23 @@ func install() -> void:
 			if part.mesh==null:
 				continue
 			var relative:Transform3D=park._vegetation_relative_transform(part,source)
-			var mesh:=part.mesh.duplicate() as Mesh
-			for surface in range(mesh.get_surface_count()):
-				mesh.surface_set_material(surface,part.get_active_material(surface))
+			var mesh:=BakeCache.baked_from(part)
 			var b:AABB=relative*mesh.get_aabb()
 			box=b if first else box.merge(b)
 			first=false
-			group.append({"mesh":mesh,"relative":relative})
+			group.append({"mesh":mesh,"relative":relative,"bake_key":BakeCache.group_key()})
 		parts.append(group)
 		boxes.append(box)
 	var rng:=RandomNumberGenerator.new()
 	rng.seed=205010063
 	var counts:=[0,0,0,0,0,0,0]
 	var positions:Array[Vector3]=[]
+	var prior_grid:={}
+	var max_prior_radius:=0.0
+	# Trunks do not change during this synchronous pass.
+	var tree_grid:={}
+	for tree:Vector2 in park.occupied_tree_positions:
+		_grid_add(tree_grid,tree*2,tree*2)
 	var audit:Array=[]
 	var pockets:=0
 	# Every grass bed gets companions so no bed is one species edge to edge. The
@@ -85,17 +91,26 @@ func install() -> void:
 			var p:=centre+offset
 			if not detail._is_lawn_position(p.x,p.y) or not park._is_vegetation_clear(Vector3(p.x/2,0,p.y/2),radius*.5+.20):
 				continue
-			var clear:=true
-			for side in range(12):
-				var q:=p+Vector2(radius+.15,0).rotated(float(side)*TAU/12)
-				if not detail._is_lawn_position(q.x,q.y):
-					clear=false
-			for tree:Vector2 in park.occupied_tree_positions:
-				if p.distance_to(tree*2)<radius+.65:
-					clear=false
-			for prior:Vector3 in positions:
-				if p.distance_to(Vector2(prior.x,prior.z))<maxf(.85,(radius+prior.y)*.70):
-					clear=false
+			# Same three tests as before (all pure, all required), cheapest first and
+			# stopping at the first failure; the tree and prior tests only visit grid
+			# neighbours but apply the original expression, so results are identical.
+			# (The full scans were O(n^2): most of a ~6 s frame under the boot menu.)
+			var clear:=not _tree_near(tree_grid,p,radius+.65)
+			if clear:
+				var reach:=maxf(.85,(radius+max_prior_radius)*.70)
+				for cell:Vector2i in _cells_around(p,reach):
+					for prior:Vector3 in prior_grid.get(cell,[]):
+						if p.distance_to(Vector2(prior.x,prior.z))<maxf(.85,(radius+prior.y)*.70):
+							clear=false
+							break
+					if not clear:
+						break
+			if clear:
+				for side in range(12):
+					var q:=p+Vector2(radius+.15,0).rotated(float(side)*TAU/12)
+					if not detail._is_lawn_position(q.x,q.y):
+						clear=false
+						break
 			if not clear:
 				continue
 			var anchor:=Vector3(footprint.get_center().x,footprint.position.y,footprint.get_center().z)
@@ -103,6 +118,8 @@ func install() -> void:
 			var t:=Transform3D(basis,Vector3(p.x,.014-(footprint.size.y*.2 if kind==6 else 0.0),p.y)-anchor)
 			groups[kind].append(t)
 			positions.append(Vector3(p.x,radius,p.y))
+			_grid_add(prior_grid,p,Vector3(p.x,radius,p.y))
+			max_prior_radius=maxf(max_prior_radius,radius)
 			audit.append({"kind":labels[kind],"p":[p.x,p.y],"radius":radius,"base_y":(t*box).position.y,"height":footprint.size.y})
 			counts[kind]+=1
 			placed+=1
@@ -123,6 +140,7 @@ func install() -> void:
 				var batch:=MultiMeshInstance3D.new()
 				batch.name="%s_%03d_%02d"%[labels[kind],index,get_child_count()]
 				batch.multimesh=mm
+				BakeCache.tag(batch,part.bake_key)
 				batch.position=Vector3(centre.x,0,centre.y)
 				batch.visibility_range_end=90 if kind<4 else (55 if kind==6 else 65)
 				batch.visibility_range_end_margin=12
@@ -139,3 +157,32 @@ func install() -> void:
 		report.counts[labels[i]]=counts[i]
 	park.set_meta("woodland_diversity",report)
 	print("WOODLAND_DIVERSITY ",JSON.stringify(report))
+	print("WOODLAND_DIVERSITY_MS %d placement_hash=%d" % [(Time.get_ticks_usec()-started_usec)/1000, str(audit).hash()])
+
+## 4 m buckets for exact neighbour tests (callers re-check the real distance).
+const GRID_CELL:=4.0
+
+static func _cell_of(p:Vector2)->Vector2i:
+	return Vector2i(floori(p.x/GRID_CELL),floori(p.y/GRID_CELL))
+
+static func _grid_add(grid:Dictionary,p:Vector2,value:Variant)->void:
+	var key:=_cell_of(p)
+	if not grid.has(key): grid[key]=[]
+	grid[key].append(value)
+
+## Every cell that can hold a point closer than `reach` to p (with a margin).
+static func _cells_around(p:Vector2,reach:float)->Array[Vector2i]:
+	var r:=reach+.05
+	var low:=_cell_of(p-Vector2(r,r))
+	var high:=_cell_of(p+Vector2(r,r))
+	var cells:Array[Vector2i]=[]
+	for y in range(low.y,high.y+1):
+		for x in range(low.x,high.x+1):
+			cells.append(Vector2i(x,y))
+	return cells
+
+static func _tree_near(grid:Dictionary,p:Vector2,reach:float)->bool:
+	for cell:Vector2i in _cells_around(p,reach):
+		for w:Vector2 in grid.get(cell,[]):
+			if p.distance_to(w)<reach: return true
+	return false

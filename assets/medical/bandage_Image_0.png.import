@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dvstkg2molnt6"
-path="res://.godot/imported/bandage_Image_0.png-307536fe93844b4e914efe06641dd439.ctex"
+path.bptc="res://.godot/imported/bandage_Image_0.png-307536fe93844b4e914efe06641dd439.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "335777819c0ab25b3f961f20a9519c97"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/medical/bandage_Image_0.png"
-dest_files=["res://.godot/imported/bandage_Image_0.png-307536fe93844b4e914efe06641dd439.ctex"]
+dest_files=["res://.godot/imported/bandage_Image_0.png-307536fe93844b4e914efe06641dd439.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

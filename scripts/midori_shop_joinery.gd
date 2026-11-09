@@ -3,6 +3,7 @@ extends RefCounted
 ## Its overall box size is unchanged; existing collisions remain owned by caller.
 const TIMBER_PATH := "res://assets/shinrai/streets/midori_frontage_construction/"
 const FineTimber = preload("res://scripts/midori_fine_timber.gd")
+const MeshArrays = preload("res://scripts/midori_south_street_mesh_arrays.gd")
 const TIMBER_NORMAL := TIMBER_PATH+"fine_grained_wood_nor_gl_2k.png"
 const TIMBER_ROUGH := TIMBER_PATH+"fine_grained_wood_rough_2k.jpg"
 
@@ -39,6 +40,15 @@ static func material(street: Node3D, key: String) -> ShaderMaterial:
 	return mat
 
 static func mesh(size: Vector3, seed_value: int, bevel_limit: float=.006, grain_axis: int=-1) -> ArrayMesh:
+	return MeshArrays.commit(_member(size,seed_value,bevel_limit,grain_axis))
+
+## The member mesh() builds, as a SurfaceTool.append_from() source for members
+## merged into a larger assembly: never uploaded as its own mesh nor read back
+## from the GPU (each read-back stalls the render device).
+static func member_source(size: Vector3, seed_value: int, bevel_limit: float=.006, grain_axis: int=-1) -> Mesh:
+	return MeshArrays.tool_source(_member(size,seed_value,bevel_limit,grain_axis))
+
+static func _member(size: Vector3, seed_value: int, bevel_limit: float, grain_axis: int) -> SurfaceTool:
 	var half := size*.5
 	var radius := minf(bevel_limit,minf(size.x,minf(size.y,size.z))*.14)
 	var inner := half-Vector3.ONE*radius
@@ -91,7 +101,7 @@ static func mesh(size: Vector3, seed_value: int, bevel_limit: float=.006, grain_
 				_face(tool,points,signs.normalized(),size,along,seed_value)
 	tool.index()
 	tool.generate_tangents()
-	return tool.commit()
+	return tool
 
 static func floor_mesh(size: Vector3) -> ArrayMesh:
 	# One merged visual, original outer bounds/top unchanged. 18mm timber
@@ -101,7 +111,7 @@ static func floor_mesh(size: Vector3) -> ArrayMesh:
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var board_depth := minf(.018,size.y*.35)
 	var base_size := Vector3(size.x,size.y-board_depth,size.z)
-	tool.append_from(mesh(base_size,31,.0007),0,Transform3D(Basis.IDENTITY,Vector3(0,-board_depth*.5,0)))
+	tool.append_from(member_source(base_size,31,.0007),0,Transform3D(Basis.IDENTITY,Vector3(0,-board_depth*.5,0)))
 	var pitch := .160
 	var rows := ceili(size.z/pitch)
 	for row: int in range(rows):
@@ -116,12 +126,12 @@ static func floor_mesh(size: Vector3) -> ArrayMesh:
 			if x1-x0>.004:
 				var member_size := Vector3(x1-x0-.002,board_depth,z1-z0-.002)
 				var p := Vector3((x0+x1)*.5,(size.y-board_depth)*.5,(z0+z1)*.5)
-				tool.append_from(mesh(member_size,row*97+board*13,.0007,0),0,Transform3D(Basis.IDENTITY,p))
+				tool.append_from(member_source(member_size,row*97+board*13,.0007,0),0,Transform3D(Basis.IDENTITY,p))
 			start += 1.80
 			board += 1
 	tool.index()
 	tool.generate_tangents()
-	return tool.commit()
+	return MeshArrays.commit(tool)
 
 static func _face(tool: SurfaceTool, points: PackedVector3Array, normal: Vector3, size: Vector3, along: int, seed_value: int) -> void:
 	# Godot's front faces use clockwise winding.
@@ -160,4 +170,4 @@ static func upright_profile(source: ArrayMesh) -> ArrayMesh:
 	var tool := SurfaceTool.new()
 	tool.create_from(mesh,0)
 	tool.generate_tangents()
-	return tool.commit()
+	return MeshArrays.commit(tool)

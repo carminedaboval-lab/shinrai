@@ -1,4 +1,5 @@
 extends RefCounted
+const Budget = preload("res://scripts/shinrai_loading_budget.gd")
 const Access = preload("res://scripts/building_access/geometry.gd")
 const UpperConstruction = preload("res://scripts/midori_upper_construction.gd")
 const Rainwater = preload("res://scripts/midori_roof_rainwater.gd")
@@ -7,8 +8,12 @@ const UpperRooms = preload("res://scripts/midori_upper_rooms.gd")
 ## Approved fancy-street architecture. One complete root per building; all units
 ## are world metres. No park, ground, lighting, gameplay or source-asset changes.
 
+## A coroutine: one loading-budget turn after the materials and after each shop
+## (the four shops took ~1.6 s in one frame). Same shops in the same order.
 static func build(street: Node3D) -> Dictionary:
+	var park: Node = street.get("park")
 	_materials(street)
+	await Budget.checkpoint(park)
 	var buildings: Array[Dictionary] = []
 	for spec: Dictionary in [
 		{"id":"UedaBooks","x":19.5,"w":11.0,"eave":6.35,"rise":2.10,"roof":"tile","wall":"arch_plaster","name":"UEDA BOOKS","awning":"arch_cedar","screen":true},
@@ -34,6 +39,7 @@ static func build(street: Node3D) -> Dictionary:
 		anchor.set_meta("architecture_local_bounds",bounds)
 		anchor.set_meta("architecture_shop_interior",Rect2(-float(spec.w)*.5+.30,.16,float(spec.w)-.60,7.62))
 		buildings.append({"name":spec.id,"root":anchor,"local_bounds":bounds,"width":spec.w,"depth":8.0,"eave":spec.eave,"ridge":float(spec.eave)+float(spec.rise),"sockets":sockets})
+		await Budget.checkpoint(park)
 	return {"ok":true,"buildings":buildings,"source":"approved_midori_street_art_target_v1","lights_created":0,"original_assets_modified":false}
 
 static func _materials(street: Node3D) -> void:
@@ -143,7 +149,7 @@ static func _clad_wall(street: Node3D, parent: Node3D, label: String, pos: Vecto
 		var member_pos := pos
 		member_pos[across_axis] = (a+b)*.5
 		member_pos[face_axis] += outward*(size[face_axis]*.5-CLADDING_DEPTH*.5-.001)
-		var member := preload("res://scripts/midori_shop_joinery.gd").mesh(member_size,board*73+int(pos.y*100))
+		var member := preload("res://scripts/midori_shop_joinery.gd").member_source(member_size,board*73+int(pos.y*100))
 		tool.append_from(member,0,Transform3D(Basis.IDENTITY,member_pos))
 		count += 1
 	if count > 0:
@@ -151,7 +157,7 @@ static func _clad_wall(street: Node3D, parent: Node3D, label: String, pos: Vecto
 		node.name = label+"VerticalBoardAssembly"
 		tool.index()
 		tool.generate_tangents()
-		node.mesh = tool.commit()
+		node.mesh = preload("res://scripts/midori_south_street_mesh_arrays.gd").commit(tool)
 		node.material_override = preload("res://scripts/midori_shop_joinery.gd").material(street,"arch_cladding")
 		node.set_meta("constructed_cladding",true)
 		node.set_meta("board_count",count)

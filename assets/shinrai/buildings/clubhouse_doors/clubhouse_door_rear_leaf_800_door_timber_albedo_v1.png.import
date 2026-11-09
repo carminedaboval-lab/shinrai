@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dt2d0c152qg52"
-path="res://.godot/imported/clubhouse_door_rear_leaf_800_door_timber_albedo_v1.png-adb94f14cae2ab923f73df930c9ab408.ctex"
+path.bptc="res://.godot/imported/clubhouse_door_rear_leaf_800_door_timber_albedo_v1.png-adb94f14cae2ab923f73df930c9ab408.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "4385a7e8c445fbd39de8388575892c20"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/buildings/clubhouse_doors/clubhouse_door_rear_leaf_800_door_timber_albedo_v1.png"
-dest_files=["res://.godot/imported/clubhouse_door_rear_leaf_800_door_timber_albedo_v1.png-adb94f14cae2ab923f73df930c9ab408.ctex"]
+dest_files=["res://.godot/imported/clubhouse_door_rear_leaf_800_door_timber_albedo_v1.png-adb94f14cae2ab923f73df930c9ab408.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

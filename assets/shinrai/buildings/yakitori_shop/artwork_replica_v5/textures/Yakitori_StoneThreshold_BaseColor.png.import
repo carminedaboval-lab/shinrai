@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bfivv84he5huk"
-path="res://.godot/imported/Yakitori_StoneThreshold_BaseColor.png-43fa9091d0f092b132b7304c278673fb.ctex"
+path.bptc="res://.godot/imported/Yakitori_StoneThreshold_BaseColor.png-43fa9091d0f092b132b7304c278673fb.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/buildings/yakitori_shop/artwork_replica_v5/textures/Yakitori_StoneThreshold_BaseColor.png"
-dest_files=["res://.godot/imported/Yakitori_StoneThreshold_BaseColor.png-43fa9091d0f092b132b7304c278673fb.ctex"]
+dest_files=["res://.godot/imported/Yakitori_StoneThreshold_BaseColor.png-43fa9091d0f092b132b7304c278673fb.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

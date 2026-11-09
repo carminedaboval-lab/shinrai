@@ -2,6 +2,7 @@ extends RefCounted
 ## Candidate only. Call once after landscape build and before static batching.
 const Landscape = preload("res://scripts/midori_south_street_landscape.gd")
 const SOURCE := "Tree EZTree0.Medium011_leaves.011_0"
+const MeshArrays = preload("res://scripts/midori_south_street_mesh_arrays.gd")
 
 static func build(street: Node3D, _landscape: Dictionary) -> Dictionary:
 	var report := {"scope":"visual foliage only", "climbers":[], "entry_crowns":[], "triangles":0, "source_pack":Landscape.TREE_PACK, "climber_source":SOURCE, "climber_texture":"leaves.011_baseColor.png", "rejected_texture":"leaves.006_baseColor.png is conifer spray, not a climber atlas", "new_collisions":0}
@@ -131,7 +132,7 @@ static func _entry_crown(root: Node3D) -> Array[Dictionary]:
 		for surface: int in range(visual.mesh.get_surface_count()):
 			var material := _cutout(visual.get_active_material(surface))
 			if material == null: continue
-			var arrays: Array = visual.mesh.surface_get_arrays(surface)
+			var arrays: Array = MeshArrays.read(visual.mesh,surface)
 			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 			var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 			var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
@@ -179,7 +180,7 @@ static func _rendered_world_bounds(visual: MeshInstance3D) -> AABB:
 	var result := AABB()
 	var first := true
 	for surface: int in range(visual.mesh.get_surface_count()):
-		var arrays: Array = visual.mesh.surface_get_arrays(surface)
+		var arrays: Array = MeshArrays.read(visual.mesh,surface)
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX]!=null else PackedInt32Array()
 		for index: int in range(indices.size() if not indices.is_empty() else vertices.size()):
@@ -207,7 +208,7 @@ static func plant_context(street: Node3D, context: Dictionary) -> Dictionary:
 			if not child is MeshInstance3D: continue
 			var visual := child as MeshInstance3D
 			for surface: int in range(visual.mesh.get_surface_count()):
-				var arrays: Array = visual.mesh.surface_get_arrays(surface)
+				var arrays: Array = MeshArrays.read(visual.mesh,surface)
 				var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 				var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 				var count: int = indices.size() if not indices.is_empty() else vertices.size()

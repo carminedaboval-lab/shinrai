@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cchrxnh23f6cv"
-path="res://.godot/imported/citrus_tree_Image_2.png-bebb4248aa4ca688813c578eddb457ce.ctex"
+path.bptc="res://.godot/imported/citrus_tree_Image_2.png-bebb4248aa4ca688813c578eddb457ce.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "3889ed0d51d259802977bba0b889556d"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/plants/fruit_garden/citrus_tree_Image_2.png"
-dest_files=["res://.godot/imported/citrus_tree_Image_2.png-bebb4248aa4ca688813c578eddb457ce.ctex"]
+dest_files=["res://.godot/imported/citrus_tree_Image_2.png-bebb4248aa4ca688813c578eddb457ce.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bv21btxpgu3fj"
-path="res://.godot/imported/kasuga_lantern_Image_2.jpg-9ebb629eb9b90929ac82ac35bef72974.ctex"
+path.bptc="res://.godot/imported/kasuga_lantern_Image_2.jpg-9ebb629eb9b90929ac82ac35bef72974.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "edee76fae91a072a17a3bacb14d1373e"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/stone_lantern/kasuga_lantern_Image_2.jpg"
-dest_files=["res://.godot/imported/kasuga_lantern_Image_2.jpg-9ebb629eb9b90929ac82ac35bef72974.ctex"]
+dest_files=["res://.godot/imported/kasuga_lantern_Image_2.jpg-9ebb629eb9b90929ac82ac35bef72974.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

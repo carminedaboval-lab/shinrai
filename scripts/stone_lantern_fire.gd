@@ -1,6 +1,9 @@
 extends Node3D
 # Mount the origin on the real lantern's oil dish, inside its open chamber.
 # This component supplies fire and local light only; it never makes a stone asset.
+# The flame shader comes from the shared pool: one compiled shader for every
+# lantern (the phase is a uniform), instead of one per instance.
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 @export var flame_height := 0.055
 @export var flame_width := 0.026
 @export var light_range := 1.8
@@ -13,8 +16,7 @@ var _spill: SpotLight3D
 var _time := 0.0
 
 func _ready() -> void:
-	var shader := Shader.new()
-	shader.code = """
+	var shader := ShaderPool.shader("""
 shader_type spatial;
 render_mode unshaded, cull_disabled, blend_mix, depth_draw_never, shadows_disabled;
 uniform float phase = 0.0;
@@ -41,7 +43,7 @@ void fragment() {
     EMISSION = amber * (2.2 + 1.1*core);
     ALPHA = edge*foot*tip*0.94;
 }
-"""
+""")
 	var material := ShaderMaterial.new()
 	material.shader = shader
 	material.set_shader_parameter("phase",phase)

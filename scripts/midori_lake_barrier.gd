@@ -37,6 +37,8 @@ func install() -> void:
 	park = get_parent()
 	terrain = park.get_node("MidoriTerrain")
 	while not terrain.installed: await get_tree().process_frame
+	# Everything waiting on the terrain wakes in one frame: take a budget turn first.
+	await LoadingBudget.checkpoint(park)
 	var _ft := preload("res://scripts/startup_trace.gd").begin()
 	var broad := PackedVector2Array()
 	var authored = park.get("LAKE_PROMENADE_LOOP")

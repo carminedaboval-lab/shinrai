@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bdys0b68x8y4m"
-path="res://.godot/imported/groundcover_00_periwinkle_plant_diff_1k.png-d80876b900f4412321740f62e2e13cbd.ctex"
+path.bptc="res://.godot/imported/groundcover_00_periwinkle_plant_diff_1k.png-d80876b900f4412321740f62e2e13cbd.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "f186c39269450e0fd08ed23528002145"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/forest_floor_20261026/groundcover_00_periwinkle_plant_diff_1k.png"
-dest_files=["res://.godot/imported/groundcover_00_periwinkle_plant_diff_1k.png-d80876b900f4412321740f62e2e13cbd.ctex"]
+dest_files=["res://.godot/imported/groundcover_00_periwinkle_plant_diff_1k.png-d80876b900f4412321740f62e2e13cbd.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

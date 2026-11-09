@@ -204,17 +204,28 @@ static func pad(h: Node3D, xf: Transform3D, wide: float, deep: float, tall: floa
 		# dense subdivision budget on all pillows, mattresses and seat cushions.
 		nx = maxi(nx,32)
 		nz = maxi(nz,40)
+	# Each grid corner is shared by up to four cells: work its point, normal and UV out
+	# once (the same expressions on the same values, so the cells get identical corners).
+	var row_size := nx + 1
+	var grid_points := PackedVector3Array()
+	var grid_normals := PackedVector3Array()
+	var grid_uv := PackedVector2Array()
+	for gz: int in range(nz + 1):
+		for gx: int in range(row_size):
+			var p := Vector2(float(gx)/nx*2.0-1.0, float(gz)/nz*2.0-1.0)
+			grid_points.append(xf * _point(p.x,p.y,wide,deep,tall,rumple))
+			grid_normals.append(xf.basis * _normal(p.x,p.y,wide,deep,tall,rumple))
+			grid_uv.append(Vector2(p.x*wide*.5,p.y*deep*.5))
 	for z: int in range(nz):
 		for x: int in range(nx):
-			var us: Array[float] = [float(x)/nx*2.0-1.0, float(x+1)/nx*2.0-1.0]
-			var vs: Array[float] = [float(z)/nz*2.0-1.0, float(z+1)/nz*2.0-1.0]
-			var points: Array[Vector3] = []
-			var normals: Array[Vector3] = []
-			var uv: Array[Vector2] = []
-			for p: Vector2 in [Vector2(us[0],vs[0]),Vector2(us[0],vs[1]),Vector2(us[1],vs[1]),Vector2(us[1],vs[0])]:
-				points.append(xf * _point(p.x,p.y,wide,deep,tall,rumple))
-				normals.append(xf.basis * _normal(p.x,p.y,wide,deep,tall,rumple))
-				uv.append(Vector2(p.x*wide*.5,p.y*deep*.5))
+			# Corners (x,z), (x,z+1), (x+1,z+1), (x+1,z), as before.
+			var c0 := z * row_size + x
+			var c1 := c0 + row_size
+			var c2 := c1 + 1
+			var c3 := c0 + 1
+			var points: Array[Vector3] = [grid_points[c0], grid_points[c1], grid_points[c2], grid_points[c3]]
+			var normals: Array[Vector3] = [grid_normals[c0], grid_normals[c1], grid_normals[c2], grid_normals[c3]]
+			var uv: Array[Vector2] = [grid_uv[c0], grid_uv[c1], grid_uv[c2], grid_uv[c3]]
 			kit.mapped(part,points,normals,uv,[0.0,0.0,0.0,0.0],tint)
 	# A curved closed hem joins the cloth face to the underside. No plane
 	# pokes beyond the mattress or the collision footprint.
@@ -251,20 +262,31 @@ static func throw_on_sofa(h: Node3D, xf: Transform3D) -> void:
 	var kit: CityKit = h._kit
 	const STEPS := 12
 	const ROWS := 48
+	# Corners are shared by up to four cells: each is worked out once, as it was per cell.
+	var corner_row := STEPS + 1
+	var grid_points := PackedVector3Array()
+	var grid_normals := PackedVector3Array()
+	var grid_uv := PackedVector2Array()
+	for row: int in range(ROWS + 1):
+		for i: int in range(corner_row):
+			var u := float(i)/STEPS
+			var t := float(row)/ROWS
+			var p := _throw_point(u,t)
+			var du := _throw_point(u+.002,t)-_throw_point(u-.002,t)
+			var dt := _throw_point(u,minf(1.0,t+.002))-_throw_point(u,maxf(0.0,t-.002))
+			grid_points.append(xf*p)
+			grid_normals.append(xf.basis*dt.cross(du).normalized())
+			grid_uv.append(Vector2(u*.36,t*1.05))
 	for row: int in range(ROWS):
 		for i: int in range(STEPS):
-			var points: Array[Vector3] = []
-			var normals: Array[Vector3] = []
-			var uv: Array[Vector2] = []
-			for corner: Vector2i in [Vector2i(i,row),Vector2i(i,row+1),Vector2i(i+1,row+1),Vector2i(i+1,row)]:
-				var u := float(corner.x)/STEPS
-				var t := float(corner.y)/ROWS
-				var p := _throw_point(u,t)
-				var du := _throw_point(u+.002,t)-_throw_point(u-.002,t)
-				var dt := _throw_point(u,minf(1.0,t+.002))-_throw_point(u,maxf(0.0,t-.002))
-				points.append(xf*p)
-				normals.append(xf.basis*dt.cross(du).normalized())
-				uv.append(Vector2(u*.36,t*1.05))
+			# Corners (i,row), (i,row+1), (i+1,row+1), (i+1,row), as before.
+			var c0 := row * corner_row + i
+			var c1 := c0 + corner_row
+			var c2 := c1 + 1
+			var c3 := c0 + 1
+			var points: Array[Vector3] = [grid_points[c0], grid_points[c1], grid_points[c2], grid_points[c3]]
+			var normals: Array[Vector3] = [grid_normals[c0], grid_normals[c1], grid_normals[c2], grid_normals[c3]]
+			var uv: Array[Vector2] = [grid_uv[c0], grid_uv[c1], grid_uv[c2], grid_uv[c3]]
 			kit.mapped("apartment_fabric",points,normals,uv,[0.0,0.0,0.0,0.0],Color("#74858c"))
 	# Folded-over woven edges are heavier than the loose fabric between them.
 	for edge: float in [.015,.985]:

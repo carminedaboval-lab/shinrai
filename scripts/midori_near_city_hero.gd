@@ -6,13 +6,34 @@ const CORNER_STEPS := 4
 const FRAME := .05
 const SHOP_UNIT := 6.0
 
+## Surfaces of every key but the one being written, as {"v","n","t","c","u","u2","i"} arrays.
+## Quads are indexed (4 corners + 6 indices): the same triangles with the same corner data
+## as the six-corner form, a third fewer vertex bytes on the GPU.
 var _walls := {}
 var _glass := {}
-var _part: Dictionary
+## Keys in the order they were first written, so walls() and glass() list them as before.
+var _keys: Array[int] = []
+var _key := -1
+# The key being written keeps its arrays in members: appending to a member is in place and
+# several times cheaper than going through a Dictionary for every vertex.
+var _v := PackedVector3Array()
+var _n := PackedVector3Array()
+var _t := PackedFloat32Array()
+var _c := PackedColorArray()
+var _u := PackedVector2Array()
+var _u2 := PackedVector2Array()
+var _i := PackedInt32Array()
+var _gv := PackedVector3Array()
+var _gn := PackedVector3Array()
+var _gt := PackedFloat32Array()
+var _gc := PackedColorArray()
+var _gu := PackedVector2Array()
+var _gu2 := PackedVector2Array()
+var _gi := PackedInt32Array()
 
 func add(centre: Vector2, base: float, size: Vector3, front: int, key: int, spec: Dictionary) -> void:
-	_part = _surface(_walls, key)
-	var glass := _surface(_glass, key)
+	_select(key)
+	var glass := {}
 	var dirs: Array[Vector3] = [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]
 	var back := front + 1 if front % 2 == 0 else front - 1
 	var radius: float = spec.radius
@@ -75,15 +96,50 @@ func _roof(middle: Vector3, size: Vector3, radius: float, spec: Dictionary) -> v
 		_quad(outer[i] + lift, inner[i] + lift, inner[next] + lift, outer[next] + lift, Vector3.UP, Vector3.UP, coping, 0.0, 0.0)
 
 func walls() -> Dictionary:
-	return _walls
+	_select(-1)
+	var out := {}
+	for key: int in _keys: out[key] = _walls[key]
+	return out
 
 func glass() -> Dictionary:
-	return _glass
+	_select(-1)
+	var out := {}
+	for key: int in _keys: out[key] = _glass[key]
+	return out
 
-func _surface(table: Dictionary, key: int) -> Dictionary:
-	if not table.has(key):
-		table[key] = {"v":PackedVector3Array(), "n":PackedVector3Array(), "t":PackedFloat32Array(), "c":PackedColorArray(), "u":PackedVector2Array(), "u2":PackedVector2Array()}
-	return table[key]
+func _select(key: int) -> void:
+	# Parks the current key's arrays in the tables and takes key's out of them.
+	if key == _key: return
+	if _key >= 0:
+		_walls[_key] = {"v":_v, "n":_n, "t":_t, "c":_c, "u":_u, "u2":_u2, "i":_i}
+		_glass[_key] = {"v":_gv, "n":_gn, "t":_gt, "c":_gc, "u":_gu, "u2":_gu2, "i":_gi}
+	_key = key
+	var wall: Dictionary = _walls.get(key, {})
+	var pane: Dictionary = _glass.get(key, {})
+	if key >= 0 and not _keys.has(key): _keys.append(key)
+	_v = wall.get("v", PackedVector3Array())
+	_n = wall.get("n", PackedVector3Array())
+	_t = wall.get("t", PackedFloat32Array())
+	_c = wall.get("c", PackedColorArray())
+	_u = wall.get("u", PackedVector2Array())
+	_u2 = wall.get("u2", PackedVector2Array())
+	_i = wall.get("i", PackedInt32Array())
+	_gv = pane.get("v", PackedVector3Array())
+	_gn = pane.get("n", PackedVector3Array())
+	_gt = pane.get("t", PackedFloat32Array())
+	_gc = pane.get("c", PackedColorArray())
+	_gu = pane.get("u", PackedVector2Array())
+	_gu2 = pane.get("u2", PackedVector2Array())
+	_gi = pane.get("i", PackedInt32Array())
+	# Only the members hold the arrays once this returns, so appends never copy them.
+	if key >= 0:
+		_walls.erase(key)
+		_glass.erase(key)
+
+static func _tangent(n: Vector3) -> Vector3:
+	var t := Vector3.UP.cross(n)
+	if t.length_squared() < .01: t = Vector3.RIGHT
+	return t.normalized()
 
 func _face(origin: Vector3, n: Vector3, width: float, height: float, role: int, spec: Dictionary, glass: Dictionary) -> void:
 	var t := Vector3.UP.cross(n)
@@ -177,20 +233,31 @@ func _box(at: Vector3, t: Vector3, n: Vector3, plan: Vector2, tall: float, tint:
 func _at(origin: Vector3, t: Vector3, n: Vector3, x: float, y: float, d: float) -> Vector3:
 	return origin + t * x + Vector3.UP * y - n * d
 
-func _pane(origin: Vector3, t: Vector3, n: Vector3, u: float, left: float, right: float, sill: float, head: float, half: float, recess: float, spec: Dictionary, glass: Dictionary, shop: float) -> void:
+func _pane(origin: Vector3, t: Vector3, n: Vector3, u: float, left: float, right: float, sill: float, head: float, half: float, recess: float, spec: Dictionary, _unused_glass: Dictionary, shop: float) -> void:
 	# UV is metres from the pane centre, for the room behind.
 	var cell := fposmod(float(spec.seed) * 37.0 + u * .73 + sill * 1.31, 1.0)
 	var extent := Vector2(half, (head - sill) * .5)
 	var info := Vector2(cell + shop * 2.0, floorf(extent.x * 100.0) + extent.y * .1)
-	var saved := _part
-	_part = glass
-	_vertex(_at(origin, t, n, left, sill, recess), n, Color.WHITE, Vector2(-extent.x, -extent.y), info)
-	_vertex(_at(origin, t, n, left, head, recess), n, Color.WHITE, Vector2(-extent.x, extent.y), info)
-	_vertex(_at(origin, t, n, right, head, recess), n, Color.WHITE, Vector2(extent.x, extent.y), info)
-	_vertex(_at(origin, t, n, left, sill, recess), n, Color.WHITE, Vector2(-extent.x, -extent.y), info)
-	_vertex(_at(origin, t, n, right, head, recess), n, Color.WHITE, Vector2(extent.x, extent.y), info)
-	_vertex(_at(origin, t, n, right, sill, recess), n, Color.WHITE, Vector2(extent.x, -extent.y), info)
-	_part = saved
+	var ls := _at(origin, t, n, left, sill, recess)
+	var lh := _at(origin, t, n, left, head, recess)
+	var rh := _at(origin, t, n, right, head, recess)
+	var rs := _at(origin, t, n, right, sill, recess)
+	var low := Vector2(-extent.x, -extent.y)
+	var high := Vector2(extent.x, extent.y)
+	# Four corners ls lh rh rs, drawn as the triangles ls lh rh and ls rh rs.
+	var base := _gv.size()
+	_gv.append(ls); _gv.append(lh); _gv.append(rh); _gv.append(rs)
+	for i: int in range(4): _gn.append(n)
+	var tangent := _tangent(n)
+	var tx := tangent.x
+	var ty := tangent.y
+	var tz := tangent.z
+	for i: int in range(4):
+		_gt.append(tx); _gt.append(ty); _gt.append(tz); _gt.append(1.0)
+		_gc.append(Color.WHITE)
+		_gu2.append(info)
+	_gu.append(low); _gu.append(Vector2(-extent.x, extent.y)); _gu.append(high); _gu.append(Vector2(extent.x, -extent.y))
+	_gi.append(base); _gi.append(base + 1); _gi.append(base + 2); _gi.append(base); _gi.append(base + 2); _gi.append(base + 3)
 
 func _ledge(origin: Vector3, n: Vector3, t: Vector3, run: float, y: float, tint: Color) -> void:
 	# A slab edge standing just proud of the wall, so each floor throws a real shadow.
@@ -266,36 +333,34 @@ func _quad_flat(origin: Vector3, n: Vector3, t: Vector3, u0: float, u1: float, y
 
 func _quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, n1: Vector3, n2: Vector3, tint: Color, low: float, high: float) -> void:
 	# Godot faces are clockwise from outside; fix up whichever order arrived.
+	# Four corners a b c d, written straight into the wall arrays: a and b carry normal 1
+	# (uv low / high), c and d normal 2 (uv high / low); each normal's tangent is worked
+	# out once. The two triangles are indexed: a b c, a c d, or a c b, a d c when flipped.
 	var flip := (b - a).cross(c - a).dot(n1 + n2) > 0.0
+	var t1 := _tangent(n1)
+	var t2 := t1 if n2 == n1 else _tangent(n2)
+	var ul := Vector2(low, 0)
+	var uh := Vector2(high, 0)
+	var x1 := t1.x
+	var y1 := t1.y
+	var z1 := t1.z
+	var x2 := t2.x
+	var y2 := t2.y
+	var z2 := t2.z
+	var base := _v.size()
+	_v.append(a); _v.append(b); _v.append(c); _v.append(d)
+	_n.append(n1); _n.append(n1); _n.append(n2); _n.append(n2)
+	_t.append(x1); _t.append(y1); _t.append(z1); _t.append(1.0)
+	_t.append(x1); _t.append(y1); _t.append(z1); _t.append(1.0)
+	_t.append(x2); _t.append(y2); _t.append(z2); _t.append(1.0)
+	_t.append(x2); _t.append(y2); _t.append(z2); _t.append(1.0)
+	_u.append(ul); _u.append(uh); _u.append(uh); _u.append(ul)
 	if flip:
-		_vertex(a, n1, tint, Vector2(low, 0), Vector2.ZERO)
-		_vertex(c, n2, tint, Vector2(high, 0), Vector2.ZERO)
-		_vertex(b, n1, tint, Vector2(high, 0), Vector2.ZERO)
-		_vertex(a, n1, tint, Vector2(low, 0), Vector2.ZERO)
-		_vertex(d, n2, tint, Vector2(low, 0), Vector2.ZERO)
-		_vertex(c, n2, tint, Vector2(high, 0), Vector2.ZERO)
+		_i.append(base); _i.append(base + 2); _i.append(base + 1); _i.append(base); _i.append(base + 3); _i.append(base + 2)
 	else:
-		_vertex(a, n1, tint, Vector2(low, 0), Vector2.ZERO)
-		_vertex(b, n1, tint, Vector2(high, 0), Vector2.ZERO)
-		_vertex(c, n2, tint, Vector2(high, 0), Vector2.ZERO)
-		_vertex(a, n1, tint, Vector2(low, 0), Vector2.ZERO)
-		_vertex(c, n2, tint, Vector2(high, 0), Vector2.ZERO)
-		_vertex(d, n2, tint, Vector2(low, 0), Vector2.ZERO)
-
-func _vertex(p: Vector3, n: Vector3, color: Color, uv: Vector2, uv2: Vector2) -> void:
-	var part := _part
-	part.v.append(p)
-	part.n.append(n)
-	var t := Vector3.UP.cross(n)
-	if t.length_squared() < .01: t = Vector3.RIGHT
-	t = t.normalized()
-	part.t.append(t.x)
-	part.t.append(t.y)
-	part.t.append(t.z)
-	part.t.append(1.0)
-	part.c.append(color)
-	part.u.append(uv)
-	part.u2.append(uv2)
+		_i.append(base); _i.append(base + 1); _i.append(base + 2); _i.append(base); _i.append(base + 2); _i.append(base + 3)
+	_c.append(tint); _c.append(tint); _c.append(tint); _c.append(tint)
+	_u2.resize(_u2.size() + 4)
 
 static func mesh_of(part: Dictionary) -> ArrayMesh:
 	var arrays := []
@@ -306,6 +371,8 @@ static func mesh_of(part: Dictionary) -> ArrayMesh:
 	arrays[Mesh.ARRAY_COLOR] = part.c
 	arrays[Mesh.ARRAY_TEX_UV] = part.u
 	arrays[Mesh.ARRAY_TEX_UV2] = part.u2
+	# Indexed when the emitter wrote indices (every corner is covered); plain triangles otherwise.
+	if part.has("i") and not (part.i as PackedInt32Array).is_empty(): arrays[Mesh.ARRAY_INDEX] = part.i
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh

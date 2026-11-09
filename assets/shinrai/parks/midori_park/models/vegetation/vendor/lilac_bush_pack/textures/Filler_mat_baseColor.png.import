@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cijvbrd7vtfgs"
-path="res://.godot/imported/Filler_mat_baseColor.png-6d1dfc7ca87c893c1590b86e0d50e60f.ctex"
+path.bptc="res://.godot/imported/Filler_mat_baseColor.png-6d1dfc7ca87c893c1590b86e0d50e60f.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/vegetation/vendor/lilac_bush_pack/textures/Filler_mat_baseColor.png"
-dest_files=["res://.godot/imported/Filler_mat_baseColor.png-6d1dfc7ca87c893c1590b86e0d50e60f.ctex"]
+dest_files=["res://.godot/imported/Filler_mat_baseColor.png-6d1dfc7ca87c893c1590b86e0d50e60f.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

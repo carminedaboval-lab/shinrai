@@ -82,6 +82,7 @@ extends RefCounted
 ## (already collapsed instances are skipped, but their positions still feed the
 ## copy matching).
 
+const Kit := preload("res://scripts/biomes/biome_kit.gd")
 const HIDE_SCALE := 0.00001
 const COLLAPSED := 0.0001
 const MATCH_PER_M := 50.0 # 2 cm position cells for source -> copy matching
@@ -95,26 +96,30 @@ const PROTOTYPE_LISTS := ["dense_grass_prototypes", "forest_floor_bush_prototype
 
 ## Optional `area` (world xz) skips nodes and instances outside it, purely for
 ## speed; keep() is still the only judge inside it.
-static func hide_low_planting(park: Node3D, filter_label: Callable, keep: Callable, area: Rect2 = Rect2()) -> Dictionary:
+##
+## `keep_pure` (optional): the caller vouches that keep() is pure maths (reads
+## constants, packed arrays, the shared noise and terrain data only, writes
+## nothing). Then keep() over the matched groups' instances runs on
+## WorkerThreadPool (one task per group), as does the copy matching (always
+## pure when the copy uses no keep()); every instance gets the same answer and
+## the buffers are edited here, in the original order.
+static func hide_low_planting(park: Node3D, filter_label: Callable, keep: Callable, area: Rect2 = Rect2(), keep_pure: bool = false) -> Dictionary:
 	var started := Time.get_ticks_msec()
 	if park == null or not is_instance_valid(park):
 		return {"error": "park unavailable"}
+	_scan(park)
 	var tags := _prototype_tags(park)
 	var container: Node = park.get_node_or_null("MidoriDistanceDetail")
 	var nodes: Array[MultiMeshInstance3D] = []
 	# Meshes that still have a producer (source) node anywhere in the park. A
 	# chunk drawing such a mesh is decided by its sources' labels and positions
 	# only; its own label is a fallback for meshes whose sources are gone.
-	var source_meshes: Dictionary = {}
-	for found: Node in park.find_children("*", "MultiMeshInstance3D", true, false):
-		var node := found as MultiMeshInstance3D
-		if node == null or node.multimesh == null or node.multimesh.mesh == null: continue
-		if node.multimesh.transform_format != MultiMesh.TRANSFORM_3D or node.multimesh.instance_count == 0: continue
-		if _excluded(park, node): continue
-		if container == null or node.get_parent() != container:
-			source_meshes[node.multimesh.mesh.get_instance_id()] = true
-		if area.has_area() and not area.intersects(_flat_box(node)): continue
-		nodes.append(node)
+	# (_scan: every candidate MultiMeshInstance3D in tree order, its bounds and
+	# the source meshes, from one walk per builder.)
+	var source_meshes: Dictionary = _source_meshes
+	for i: int in range(_mmi_nodes.size()):
+		if area.has_area() and not area.intersects(_mmi_rects[i]): continue
+		nodes.append(_mmi_nodes[i])
 	# Group sibling part batches of the same plants (non-copies only).
 	var groups: Dictionary = {}
 	var order: Array[String] = []
@@ -123,7 +128,7 @@ static func hide_low_planting(park: Node3D, filter_label: Callable, keep: Callab
 		if container != null and node.get_parent() == container:
 			copies.append(node)
 			continue
-		var key := "%d|%s|%s|%d" % [node.get_parent().get_instance_id(), _family(String(node.name)), str(node.transform), node.multimesh.instance_count]
+		var key := _group_key(node)
 		if not groups.has(key):
 			groups[key] = []
 			order.append(key)
@@ -145,39 +150,49 @@ static func hide_low_planting(park: Node3D, filter_label: Callable, keep: Callab
 	var groups_matched := 0
 	var changed_nodes := 0
 	# Pass 1: matched groups in their producers' nodes (visible or hidden).
+	# The masks only read each leader's instance origins, which hiding never
+	# moves (it scales the basis), so they are all worked out before any group
+	# is edited (on WorkerThreadPool for a pure keep); the groups are then
+	# edited one by one in the original order.
+	var matched_groups: Array = []
 	for key: String in order:
 		for sub: Variant in groups[key]:
 			var members: Array = sub
-			var matched := false
 			for member: MultiMeshInstance3D in members:
 				if filter_label.call(_label(member, false, tags)):
-					matched = true
+					matched_groups.append(members)
 					break
-			if not matched: continue
-			groups_matched += 1
-			var leader: MultiMeshInstance3D = members[0]
-			var mask := _keep_mask(leader, keep, area)
-			for member: MultiMeshInstance3D in members:
-				target_meshes[member.multimesh.mesh.get_instance_id()] = true
-				var mm_id := member.multimesh.get_instance_id()
-				if done.has(mm_id): continue
-				done[mm_id] = true
-				var result := _apply_mask(member, mask, hidden_at, hidden_box)
-				hidden_box = result[1]
-				var n: int = result[0]
-				if n > 0:
-					source_hidden += n
-					changed_nodes += 1
-					member.set_meta("biome_thinned", true)
-					var owner := _owner_name(park, member)
-					by_owner[owner] = int(by_owner.get(owner, 0)) + n
+	groups_matched = matched_groups.size()
+	var masks := _group_masks(matched_groups, keep, area, keep_pure)
+	for group_index: int in range(matched_groups.size()):
+		var members: Array = matched_groups[group_index]
+		var mask: PackedByteArray = masks[group_index]
+		for member: MultiMeshInstance3D in members:
+			target_meshes[member.multimesh.mesh.get_instance_id()] = true
+			var mm_id := member.multimesh.get_instance_id()
+			if done.has(mm_id): continue
+			done[mm_id] = true
+			var result := _apply_mask(member, mask, hidden_at, hidden_box)
+			hidden_box = result[1]
+			var n: int = result[0]
+			if n > 0:
+				source_hidden += n
+				changed_nodes += 1
+				member.set_meta("biome_thinned", true)
+				var owner := _owner_name(park, member)
+				by_owner[owner] = int(by_owner.get(owner, 0)) + n
 	var search_box := hidden_box.grow(0.1) if hidden_at.size() > 0 else Rect2()
 	# Pass 2: render copies. Distance-detail chunks first, then any other node
 	# that draws a matched mesh (positions only, so unrelated plants stay).
+	# Which nodes are edited depends only on pass 1 (labels, matched meshes, the
+	# search box, bounds of nodes not yet edited), so the list is made first;
+	# then every node's verdicts are worked out (WorkerThreadPool where keep()
+	# is pure or unused) and the nodes are edited in list order.
 	var copy_hidden := 0
 	var copy_label_hidden := 0
 	var other_hidden := 0
 	var chunks_changed := 0
+	var work: Array = [] # [node, hidden_at or {}, keep or Callable(), is chunk copy]
 	for node: MultiMeshInstance3D in copies:
 		var mm_id := node.multimesh.get_instance_id()
 		if done.has(mm_id): continue
@@ -187,24 +202,29 @@ static func hide_low_planting(park: Node3D, filter_label: Callable, keep: Callab
 		# the node name can classify differently from the source's label.
 		var by_label: bool = not source_meshes.has(mesh_id) and bool(filter_label.call(_label(node, true, tags)))
 		var by_mesh := target_meshes.has(mesh_id)
-		if by_mesh and not by_label and not (search_box.has_area() and search_box.intersects(_flat_box(node))): continue
+		if by_mesh and not by_label and not (search_box.has_area() and search_box.intersects(_mmi_rect_of(node))): continue
 		if not by_label and not by_mesh: continue
 		done[mm_id] = true
-		var result := _hide_copy(node, hidden_at if by_mesh else {}, keep if by_label else Callable(), area)
-		if result.x + result.y > 0:
-			copy_hidden += result.x
-			copy_label_hidden += result.y
-			changed_nodes += 1
-			chunks_changed += 1
-			node.set_meta("biome_thinned", true)
+		work.append([node, hidden_at if by_mesh else {}, keep if by_label else Callable(), true])
 	for node: MultiMeshInstance3D in nodes:
 		var mm_id := node.multimesh.get_instance_id()
 		if done.has(mm_id): continue
 		if not target_meshes.has(node.multimesh.mesh.get_instance_id()): continue
-		if not (search_box.has_area() and search_box.intersects(_flat_box(node))): continue
+		if not (search_box.has_area() and search_box.intersects(_mmi_rect_of(node))): continue
 		done[mm_id] = true
-		var result := _hide_copy(node, hidden_at, Callable(), area)
-		if result.x > 0:
+		work.append([node, hidden_at, Callable(), false])
+	var results := _hide_copies(work, area, keep_pure)
+	for work_index: int in range(work.size()):
+		var node: MultiMeshInstance3D = work[work_index][0]
+		var result: Vector2i = results[work_index]
+		if work[work_index][3]:
+			if result.x + result.y > 0:
+				copy_hidden += result.x
+				copy_label_hidden += result.y
+				changed_nodes += 1
+				chunks_changed += 1
+				node.set_meta("biome_thinned", true)
+		elif result.x > 0:
 			other_hidden += result.x
 			changed_nodes += 1
 			node.set_meta("biome_thinned", true)
@@ -239,6 +259,179 @@ static func hide_low_planting(park: Node3D, filter_label: Callable, keep: Callab
 		"rendering_server_instances": 0,
 		"ms": Time.get_ticks_msec() - started,
 	}
+
+# ------------------------------------------------------------ scene scan cache
+## Every call used to walk the whole park twice (about 26,000
+## MultiMeshInstance3D and 19,000 MeshInstance3D, with an ancestor walk and a
+## RenderingServer bounds read per node), and a builder's thin pass calls this
+## several times in a row (pine woods 8, moss garden and shrine 4, iris shore 2).
+## Within one builder's pass nothing but these calls touches the planting, so
+## one walk serves them all: midori_biomes calls forget() before every builder,
+## and a changed SceneTree node count (a node added or freed) walks again.
+## Kept per walk: the candidate MultiMeshInstance3D (in the park, not under a
+## Biome* root or the shadow proxies, with a 3D-transform MultiMesh, a mesh and
+## instances) in tree order with their bounds and copy/source role; every
+## MeshInstance3D with a mesh in tree order with its bounds; owner/prototype
+## tests, plant roots, collision, mesh keys and group keys on first use. Bounds
+## of a MultiMesh this file rewrites are re-read at once (_touched); visibility
+## and buffers are read fresh on every call. Same result as a fresh walk.
+static var _scan_park := 0
+static var _scan_count := -1
+static var _mmi_nodes: Array[MultiMeshInstance3D] = []
+static var _mmi_rects: Array[Rect2] = []
+static var _mmi_index: Dictionary = {} # node id -> row
+static var _rows_of_mm: Dictionary = {} # MultiMesh id -> [row, ...]
+static var _source_meshes: Dictionary = {} # mesh id -> true (non-copy candidates)
+static var _mesh_nodes: Array[MeshInstance3D] = []
+static var _mesh_rects: Array[Rect2] = []
+static var _mesh_boxes: Array[AABB] = []
+static var _mesh_skip: PackedInt32Array = PackedInt32Array() # -1 unknown, 0 keep, 1 skip
+static var _mesh_chain: Array = [] # _plant_root result or null
+static var _collision_of: Dictionary = {} # plant (or lone mesh) id -> bool
+static var _group_keys: Dictionary = {} # node id -> key
+static var _mesh_keys: Dictionary = {} # Mesh id -> [surface count, key]
+
+## midori_biomes: true around each builder (a fresh walk at its first call, then
+## shared by its later calls). Off (the default, any other caller), every call
+## walks the park itself, as before.
+static var _batching := false
+static func batch(on: bool) -> void:
+	forget()
+	_batching = on
+
+## The walk itself (which MultiMeshInstance3D and MeshInstance3D nodes, in
+## tree order) is kept across builders while midori_biomes tracks the park:
+## every node that enters or leaves the tree outside the Biome* roots and the
+## shadow proxies drops it (SceneTree.node_added / node_removed). The per-node
+## data (bounds, multimesh, mesh, counts) is read again by every scan.
+static var _tracking := 0
+static var _track_park: WeakRef = null
+static var _walk_valid := false
+static var _walk_park := 0
+static var _walk_mmi: Array[Node] = []
+static var _walk_mesh: Array[Node] = []
+
+static func track(park: Node3D, on: bool) -> void:
+	_walk_valid = false
+	_walk_mmi = []
+	_walk_mesh = []
+	var tree := Engine.get_main_loop() as SceneTree
+	if on and tree != null and is_instance_valid(park) and park.is_inside_tree():
+		_tracking = park.get_instance_id()
+		_track_park = weakref(park)
+		if not tree.node_added.is_connected(_on_tree_changed): tree.node_added.connect(_on_tree_changed)
+		if not tree.node_removed.is_connected(_on_tree_changed): tree.node_removed.connect(_on_tree_changed)
+	else:
+		_tracking = 0
+		_track_park = null
+		if tree != null:
+			if tree.node_added.is_connected(_on_tree_changed): tree.node_added.disconnect(_on_tree_changed)
+			if tree.node_removed.is_connected(_on_tree_changed): tree.node_removed.disconnect(_on_tree_changed)
+
+static func _on_tree_changed(node: Node) -> void:
+	if not _walk_valid: return
+	var park: Node = _track_park.get_ref() if _track_park != null else null
+	if park == null:
+		_walk_valid = false
+		return
+	if node == park:
+		_walk_valid = false
+		return
+	if not park.is_ancestor_of(node): return
+	var at: Node = node
+	while at.get_parent() != park: at = at.get_parent()
+	var top := String(at.name)
+	if top.begins_with("Biome") or top == "MidoriNearPlantShadows": return
+	_walk_valid = false
+
+## Drops every cached walk (the next call walks the park again).
+static func forget() -> void:
+	_scan_park = 0
+	_scan_count = -1
+	_mmi_nodes = []
+	_mmi_rects = []
+	_mmi_index = {}
+	_rows_of_mm = {}
+	_source_meshes = {}
+	_mesh_nodes = []
+	_mesh_rects = []
+	_mesh_boxes = []
+	_mesh_skip = PackedInt32Array()
+	_mesh_chain = []
+	_collision_of = {}
+	_group_keys = {}
+	_mesh_keys = {}
+
+static func _scan(park: Node3D) -> void:
+	var count := park.get_tree().get_node_count()
+	if _batching and _scan_park == park.get_instance_id() and _scan_count == count: return
+	forget()
+	_scan_park = park.get_instance_id()
+	_scan_count = count
+	var container: Node = park.get_node_or_null("MidoriDistanceDetail")
+	# The park's top-level branches minus the Biome* roots and the shadow
+	# proxies (what _excluded() rejects), each walked the way
+	# park.find_children() walks (the node, then its subtree, pre-order, internal
+	# children included): the same nodes in the same order, with no ancestor walk
+	# per node. Meshes under excluded roots were always skipped before any use.
+	var _found: Array[Node] = []
+	var _found2: Array[Node] = []
+	if _walk_valid and _walk_park == park.get_instance_id():
+		# No node outside the Biome* roots and the shadow proxies entered or left
+		# the tree since this walk (see track()): the same nodes, the same order.
+		_found = _walk_mmi
+		_found2 = _walk_mesh
+	else:
+		for top: Node in park.get_children(true):
+			var top_name := String(top.name)
+			if top_name.begins_with("Biome") or top_name == "MidoriNearPlantShadows": continue
+			if top is MultiMeshInstance3D: _found.append(top)
+			_found.append_array(top.find_children("*", "MultiMeshInstance3D", true, false))
+			if top is MeshInstance3D: _found2.append(top)
+			_found2.append_array(top.find_children("*", "MeshInstance3D", true, false))
+		if _tracking == park.get_instance_id():
+			_walk_mmi = _found
+			_walk_mesh = _found2
+			_walk_park = park.get_instance_id()
+			_walk_valid = true
+	for found: Node in _found:
+		var node := found as MultiMeshInstance3D
+		if node == null or node.multimesh == null or node.multimesh.mesh == null: continue
+		if node.multimesh.transform_format != MultiMesh.TRANSFORM_3D or node.multimesh.instance_count == 0: continue
+		if container == null or node.get_parent() != container:
+			_source_meshes[node.multimesh.mesh.get_instance_id()] = true
+		var row := _mmi_nodes.size()
+		_mmi_nodes.append(node)
+		_mmi_rects.append(_flat_box(node))
+		_mmi_index[node.get_instance_id()] = row
+		var mm_id := node.multimesh.get_instance_id()
+		if not _rows_of_mm.has(mm_id): _rows_of_mm[mm_id] = []
+		(_rows_of_mm[mm_id] as Array).append(row)
+	for found: Node in _found2:
+		var node := found as MeshInstance3D
+		if node == null or node.mesh == null: continue
+		var box: AABB = node.global_transform * node.mesh.get_aabb()
+		_mesh_nodes.append(node)
+		_mesh_boxes.append(box)
+		_mesh_rects.append(Rect2(box.position.x, box.position.z, maxf(box.size.x, 0.01), maxf(box.size.z, 0.01)))
+		_mesh_chain.append(null)
+	_mesh_skip.resize(_mesh_nodes.size())
+	_mesh_skip.fill(-1)
+
+## This file rewrote `mm`'s buffer: its bounds (and so the area tests) change.
+static func _touched(mm: MultiMesh) -> void:
+	for row: int in _rows_of_mm.get(mm.get_instance_id(), []):
+		_mmi_rects[row] = _flat_box(_mmi_nodes[row])
+
+static func _mmi_rect_of(node: MultiMeshInstance3D) -> Rect2:
+	return _mmi_rects[int(_mmi_index[node.get_instance_id()])]
+
+static func _group_key(node: MultiMeshInstance3D) -> String:
+	var id := node.get_instance_id()
+	if _group_keys.has(id): return _group_keys[id]
+	var key := "%d|%s|%s|%d" % [node.get_parent().get_instance_id(), _family(String(node.name)), str(node.transform), node.multimesh.instance_count]
+	_group_keys[id] = key
+	return key
 
 ## Biome roots hold the new planting; shadow proxies share chunk data.
 static func _excluded(park: Node3D, node: Node) -> bool:
@@ -283,7 +476,13 @@ static func _same_spots(a: MultiMeshInstance3D, b: MultiMeshInstance3D) -> bool:
 	return true
 
 static func _mesh_key(mesh: Mesh) -> String:
-	return "%s|%d|%s" % [mesh.resource_name, mesh.get_surface_count(), str(mesh.get_aabb())]
+	var id := mesh.get_instance_id()
+	var surfaces := mesh.get_surface_count()
+	var hit: Variant = _mesh_keys.get(id)
+	if hit != null and int(hit[0]) == surfaces: return hit[1]
+	var key := "%s|%d|%s" % [mesh.resource_name, surfaces, str(mesh.get_aabb())]
+	_mesh_keys[id] = [surfaces, key]
+	return key
 
 ## Mesh signatures of the park's planting prototypes -> readable tag.
 static func _prototype_tags(park: Node3D) -> Dictionary:
@@ -392,7 +591,115 @@ static func _apply_mask(node: MultiMeshInstance3D, mask: PackedByteArray, hidden
 			mm.set_instance_transform(i, t)
 			hidden += 1
 	if packed and hidden > 0: mm.buffer = buffer
+	if hidden > 0: _touched(mm)
 	return [hidden, box]
+
+## Masks (1 = hide) of each group's leader, as _keep_mask() makes them. With a
+## pure keep() the packed leaders are judged on WorkerThreadPool, one task per
+## group (their buffers are read here first, as _keep_mask() reads them); a
+## leader without a packed buffer, or an impure keep(), takes _keep_mask().
+static func _group_masks(groups: Array, keep: Callable, area: Rect2, pure: bool) -> Array:
+	var masks: Array = []
+	masks.resize(groups.size())
+	var jobs: Array = [] # [group index, buffer, stride, count, to_world]
+	for i: int in range(groups.size()):
+		var leader: MultiMeshInstance3D = groups[i][0]
+		if not pure:
+			masks[i] = _keep_mask(leader, keep, area)
+			continue
+		var mm := leader.multimesh
+		var count := mm.instance_count
+		var stride := _stride(mm)
+		var buffer := mm.buffer
+		if buffer.size() != count * stride:
+			masks[i] = _keep_mask(leader, keep, area)
+			continue
+		jobs.append([i, buffer, stride, count, leader.global_transform])
+	if jobs.is_empty(): return masks
+	var job := func(j: int) -> PackedByteArray:
+		var row: Array = jobs[j]
+		var buffer: PackedFloat32Array = row[1]
+		var stride: int = row[2]
+		var count: int = row[3]
+		var to_world: Transform3D = row[4]
+		var mask := PackedByteArray()
+		mask.resize(count)
+		for i: int in range(count):
+			var o := i * stride
+			var at := to_world * Vector3(buffer[o + 3], buffer[o + 7], buffer[o + 11])
+			var p := Vector2(at.x, at.z)
+			if area.has_area() and not area.has_point(p): continue
+			if not keep.call(p): mask[i] = 1
+		return mask
+	var done := Kit.parallel(jobs.size(), job, "thin_all keep")
+	for j: int in range(jobs.size()): masks[int(jobs[j][0])] = done[j]
+	return masks
+
+## _hide_copy() for every [node, hidden_at, keep, chunk] in `work`, in order,
+## with the same edits and counts. The verdict per instance (0 stays, 1 hidden
+## by a recorded source position, 2 by keep()) of every packed node whose keep()
+## is unused or pure is worked out first on WorkerThreadPool, one task per node
+## (hidden_at and the buffers are only read); the buffers are then edited here.
+static func _hide_copies(work: Array, area: Rect2, pure: bool) -> Array:
+	var results: Array = []
+	results.resize(work.size())
+	var jobs: Array = [] # [work index, buffer, stride, count, to_world, hidden_at, keep]
+	var serial := PackedByteArray()
+	serial.resize(work.size())
+	for w: int in range(work.size()):
+		var node: MultiMeshInstance3D = work[w][0]
+		var keep: Callable = work[w][2]
+		var mm := node.multimesh
+		var count := mm.instance_count
+		var stride := _stride(mm)
+		var buffer := mm.buffer
+		if buffer.size() != count * stride or (keep.is_valid() and not pure):
+			serial[w] = 1
+			continue
+		jobs.append([w, buffer, stride, count, node.global_transform, work[w][1], keep])
+	var job := func(j: int) -> PackedByteArray:
+		var row: Array = jobs[j]
+		var buffer: PackedFloat32Array = row[1]
+		var stride: int = row[2]
+		var count: int = row[3]
+		var to_world: Transform3D = row[4]
+		var hidden_at: Dictionary = row[5]
+		var keep: Callable = row[6]
+		var flags := PackedByteArray()
+		flags.resize(count)
+		for i: int in range(count):
+			var o := i * stride
+			if Vector3(buffer[o], buffer[o + 4], buffer[o + 8]).length() < COLLAPSED: continue
+			var at := to_world * Vector3(buffer[o + 3], buffer[o + 7], buffer[o + 11])
+			var p := Vector2(at.x, at.z)
+			if not hidden_at.is_empty() and _recorded(hidden_at, p): flags[i] = 1
+			elif keep.is_valid() and (not area.has_area() or area.has_point(p)) and not keep.call(p): flags[i] = 2
+		return flags
+	var verdicts := Kit.parallel(jobs.size(), job, "thin_all copies") if not jobs.is_empty() else []
+	var next := 0
+	for w: int in range(work.size()):
+		var node: MultiMeshInstance3D = work[w][0]
+		if serial[w] == 1:
+			results[w] = _hide_copy(node, work[w][1], work[w][2], area)
+			continue
+		var row: Array = jobs[next]
+		var flags: PackedByteArray = verdicts[next]
+		next += 1
+		var buffer: PackedFloat32Array = row[1]
+		var stride: int = row[2]
+		var by_position := 0
+		var by_keep := 0
+		for i: int in range(flags.size()):
+			if flags[i] == 0: continue
+			if flags[i] == 1: by_position += 1
+			else: by_keep += 1
+			var o := i * stride
+			for k: int in [0, 1, 2, 4, 5, 6, 8, 9, 10]: buffer[o + k] *= HIDE_SCALE
+		if by_position + by_keep > 0:
+			node.multimesh.buffer = buffer
+			_touched(node.multimesh)
+		results[w] = Vector2i(by_position, by_keep)
+	return results
 
 ## x: hidden by recorded source position, y: hidden by the copy's own label + keep.
 static func _hide_copy(node: MultiMeshInstance3D, hidden_at: Dictionary, keep: Callable, area: Rect2) -> Vector2i:
@@ -433,6 +740,7 @@ static func _hide_copy(node: MultiMeshInstance3D, hidden_at: Dictionary, keep: C
 			t.basis = t.basis.scaled(Vector3.ONE * HIDE_SCALE)
 			mm.set_instance_transform(i, t)
 	if packed and by_position + by_keep > 0: mm.buffer = buffer
+	if by_position + by_keep > 0: _touched(mm)
 	return Vector2i(by_position, by_keep)
 
 ## Single plants placed as scenes. Parts are gathered per plant root first, so a
@@ -446,24 +754,29 @@ static func _hide_single_plants(park: Node3D, filter_label: Callable, keep: Call
 	var reach := area.grow(SINGLE_PLANT_MAX_M) if area.has_area() else Rect2()
 	var plants: Dictionary = {}
 	var order: Array[int] = []
-	for found: Node in park.find_children("*", "MeshInstance3D", true, false):
-		var node := found as MeshInstance3D
-		if node == null or node.mesh == null or not node.is_visible_in_tree(): continue
-		var flat := _flat_box(node)
+	# (_scan: every MeshInstance3D with a mesh in tree order, with its bounds; the
+	# owner/prototype test and the plant root are filled in on first use.)
+	for i: int in range(_mesh_nodes.size()):
+		var flat: Rect2 = _mesh_rects[i]
 		if reach.has_area() and not reach.intersects(flat): continue
-		if _excluded(park, node) or _under_prototype(node, prototypes): continue
+		var node: MeshInstance3D = _mesh_nodes[i]
+		if not node.is_visible_in_tree(): continue
+		if _mesh_skip[i] < 0: _mesh_skip[i] = 1 if (_excluded(park, node) or _under_prototype(node, prototypes)) else 0
+		if _mesh_skip[i] == 1: continue
 		var centre := flat.get_center()
-		var chain := _plant_root(park, node, centre)
+		if _mesh_chain[i] == null: _mesh_chain[i] = _plant_root(park, node, centre)
+		var chain: Array = _mesh_chain[i]
 		var plant: Node3D = chain[0]
 		var key: int = plant.get_instance_id() if plant != null else node.get_instance_id()
 		if not plants.has(key):
 			var at := centre
 			if plant != null: at = Vector2(plant.global_position.x, plant.global_position.z)
-			plants[key] = {"at": at, "parts": [], "matched": false, "blocked": _has_collision(plant if plant != null else node)}
+			if not _collision_of.has(key): _collision_of[key] = _has_collision(plant if plant != null else node)
+			plants[key] = {"at": at, "parts": [], "matched": false, "blocked": _collision_of[key]}
 			order.append(key)
 		var row: Dictionary = plants[key]
 		if row.blocked: continue
-		var box: AABB = node.global_transform * node.mesh.get_aabb()
+		var box: AABB = _mesh_boxes[i]
 		if maxf(flat.size.x, flat.size.y) > SINGLE_PLANT_MAX_M or (plant == null and box.size.y < FLAT_M):
 			row.blocked = true
 			continue

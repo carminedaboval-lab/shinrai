@@ -11,6 +11,7 @@ extends RefCounted
 ## comes from the look map; the lawn is thinned at the waterline so it shows.
 const Biomes := preload("res://scripts/midori_biomes.gd")
 const Kit := preload("res://scripts/biomes/biome_kit.gd")
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 const ID := "mizube"
 const FLOOR := "res://assets/shinrai/parks/midori_park/models/forest_floor_20261026/"
 const MOSS := "res://assets/shinrai/parks/midori_park/models/island_nature/"
@@ -202,8 +203,9 @@ static func _dress_bank(park: Node3D) -> bool:
 ## discs at sample points).
 static func _stamp(park: Node3D, dist: PackedFloat32Array, poly: PackedVector2Array, reach: float) -> PackedFloat32Array:
 	var n := poly.size()
-	var tree := park.get_tree()
 	var visited := 0
+	var stamped_a_frame := false
+	var since := Kit.frames_now()
 	for i: int in range(n):
 		var a := poly[i] - GRID.position
 		var b := poly[(i + 1) % n] - GRID.position
@@ -226,8 +228,11 @@ static func _stamp(park: Node3D, dist: PackedFloat32Array, poly: PackedVector2Ar
 			visited += x1 - x0 + 1
 		if visited > 30000:
 			visited = 0
-			await tree.process_frame
+			stamped_a_frame = true
+			await Kit.slice(park)
 			if not is_instance_valid(park): return dist
+	# Only where the old count-based yield fell: then the frame it gave.
+	if stamped_a_frame: await Kit.settle(park, since)
 	return dist
 
 ## Bilinear read of a grid; far (99) outside it.
@@ -292,7 +297,6 @@ static func _clear_of(spots: Array, footprints: Array, pad: float) -> Array:
 ## band weight, slow noise drifts and the hero pockets.
 static func _scan(park: Node3D, terrain: Node, rng: RandomNumberGenerator, shore: PackedFloat32Array, island: PackedFloat32Array, water_y: float) -> Dictionary:
 	var out := {"reeds": [], "rushes": [], "sedges": [], "iris": [], "bank_iris": [], "low_bank": [], "stones": [], "lilies": [], "cells": 0, "groups": 0, "rejected": {"path": 0, "bridge": 0}}
-	var tree := park.get_tree()
 	var trails := park.get_node_or_null("MidoriDesirePaths")
 	var has_trails := trails != null and trails.has_method("distance_to_path")
 	var has_paths := park.has_method("path_edge_distance_world")
@@ -308,6 +312,7 @@ static func _scan(park: Node3D, terrain: Node, rng: RandomNumberGenerator, shore
 		return g
 	var ctx := {"park": park, "terrain": terrain, "shore": shore, "island": island, "shoreline": shoreline, "water_y": water_y, "landings": landings, "gap_at": gap_at}
 	var group := 0
+	var since := Kit.frames_now()
 	for z: int in range(ROWS):
 		for x: int in range(COLS):
 			var i := z * COLS + x
@@ -396,9 +401,11 @@ static func _scan(park: Node3D, terrain: Node, rng: RandomNumberGenerator, shore
 				_stand(out.rushes, rng, ctx, c + _jitter(rng), rng.randi_range(2, 5), 0.5, -0.7, 13.0, 0.3, 0.5, group, h)
 			if gap > 1.5 and edge > -1.2 and edge < 2.6 and rng.randf() < 0.05 * w + 0.08 * h:
 				out.stones.append([c + _jitter(rng), h + rng.randf(), water])
-		if z % 3 == 0:
-			await tree.process_frame
-			if not is_instance_valid(park): return out
+		# The scan only collects rows: yield on time, not on a row count.
+		await Kit.slice(park)
+		if not is_instance_valid(park): return out
+	await Kit.settle(park, since)
+	if not is_instance_valid(park): return out
 	out.groups = group
 	var bed_rng := RandomNumberGenerator.new()
 	bed_rng.seed = 371105
@@ -805,10 +812,9 @@ static func _iris_mesh(seed_value: int, flowers: int, buds: int, name: String) -
 	return _finish(buf, name)
 
 static func _plant_material(petals: bool, sway: float) -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = PLANT_SHADER.replace("//CUSTOM", "petal_tint = INSTANCE_CUSTOM.rgb;") if petals else PLANT_SHADER
-	var material := ShaderMaterial.new()
-	material.shader = shader
+	# Two pooled shaders (with / without petal tint) serve every plant material
+	# here and in the coppice; sway is a uniform per material.
+	var material := ShaderPool.material(PLANT_SHADER.replace("//CUSTOM", "petal_tint = INSTANCE_CUSTOM.rgb;") if petals else PLANT_SHADER)
 	material.set_shader_parameter("sway", sway)
 	return material
 
@@ -831,7 +837,18 @@ static func _rows_batches(parent: Node3D, name: String, mesh: Mesh, material: Ma
 		var key := Vector2i(floori(t.origin.x / cell), floori(t.origin.z / cell))
 		if not cells.has(key): cells[key] = []
 		(cells[key] as Array).append(row)
-	for key: Vector2i in cells:
+	var keys: Array = cells.keys()
+	# Each cell's buffer is pure data: packed on WorkerThreadPool when large.
+	var pack := func(i: int) -> PackedFloat32Array:
+		var k: Vector2i = keys[i]
+		var cell_rows: Array = cells[k]
+		return Kit.pack_rows(cell_rows, Vector3((k.x + 0.5) * cell, 0.0, (k.y + 0.5) * cell), true, (cell_rows[0] as Array).size() > 2)
+	var buffers: Array = []
+	if rows.size() >= Kit.PACK_THREADS_MIN and keys.size() > 1: buffers = Kit.parallel(keys.size(), pack, "iris_shore pack")
+	else:
+		for i: int in range(keys.size()): buffers.append(pack.call(i))
+	for index: int in range(keys.size()):
+		var key: Vector2i = keys[index]
 		var list: Array = cells[key]
 		var centre := Vector3((key.x + 0.5) * cell, 0.0, (key.y + 0.5) * cell)
 		var custom: bool = (list[0] as Array).size() > 2
@@ -841,13 +858,7 @@ static func _rows_batches(parent: Node3D, name: String, mesh: Mesh, material: Ma
 		many.use_custom_data = custom
 		many.mesh = mesh
 		many.instance_count = list.size()
-		for i: int in range(list.size()):
-			var row: Array = list[i]
-			var t: Transform3D = row[0]
-			t.origin -= centre
-			many.set_instance_transform(i, t)
-			many.set_instance_color(i, row[1])
-			if custom: many.set_instance_custom_data(i, row[2])
+		many.buffer = buffers[index]
 		var node := MultiMeshInstance3D.new()
 		node.name = "%s_%d_%d" % [name, key.x, key.y]
 		node.multimesh = many
@@ -1323,8 +1334,8 @@ static func _thin(park: Node3D, shore: PackedFloat32Array, island: PackedFloat32
 	var report := {}
 	if ResourceLoader.exists(THIN_ALL):
 		var thin: Script = load(THIN_ALL)
-		report["spiky"] = thin.hide_low_planting(park, spiky, keep_spiky, GRID)
-		report["lawn"] = thin.hide_low_planting(park, lawn, keep_lawn, GRID)
+		report["spiky"] = thin.hide_low_planting(park, spiky, keep_spiky, GRID, true)
+		report["lawn"] = thin.hide_low_planting(park, lawn, keep_lawn, GRID, true)
 		report["via"] = "thin_all"
 	else:
 		var roots: Array = [park, park.get_tree().root.get_node_or_null("MidoriGrassDetail")]

@@ -1,5 +1,6 @@
 extends Node
 const StartupTrace = preload("res://scripts/startup_trace.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 
 const FoliageMaterials = preload("res://scripts/midori_foliage_materials.gd")
 
@@ -554,7 +555,6 @@ func _upright_leaf_detail(source: StandardMaterial3D, mesh: Mesh, thin: bool) ->
 	var uses_roughness := source.roughness_texture != null
 	var channels: Array[Vector4] = [Vector4(1,0,0,0), Vector4(0,1,0,0), Vector4(0,0,1,0), Vector4(0,0,0,1), Vector4(1.0/3.0,1.0/3.0,1.0/3.0,0)]
 	if source.roughness_texture_channel < 0 or source.roughness_texture_channel >= channels.size(): return _upright_detail_fallback(source, "Unknown roughness channel")
-	var shader := Shader.new()
 	var code := "shader_type spatial;\nrender_mode " + modes + ";\n"
 	code += "uniform sampler2D source_albedo_texture : source_color, " + sampler_hint + ";\n"
 	if uses_normal: code += "uniform sampler2D source_normal_texture : hint_normal, " + sampler_hint + ";\n"
@@ -639,9 +639,9 @@ void fragment() {
 """
 	if uses_roughness: code += "    ROUGHNESS *= dot(texture(source_roughness_texture, leaf_uv), source_roughness_channel);\n"
 	code += "}\n"
-	shader.code = code
-	var result := ShaderMaterial.new()
-	result.shader = shader
+	# Source materials with the same feature set produce the same text and share
+	# one pooled shader; the per-material numbers are uniforms.
+	var result := ShaderPool.material(code)
 	result.resource_name = source.resource_name + "_LeafDetail"
 	result.render_priority = source.render_priority
 	result.set_shader_parameter("source_albedo_texture", source.albedo_texture)
@@ -1032,8 +1032,7 @@ func _forest_grass_material() -> ShaderMaterial:
 	var reference := reference_mesh.surface_get_material(0) as StandardMaterial3D
 	if reference == null or reference.albedo_texture == null or reference.normal_texture == null or not reference.normal_enabled:
 		return _forest_grass_procedural_material()
-	var shader := Shader.new()
-	shader.code = """
+	var shader := ShaderPool.shader("""
 shader_type spatial;
 render_mode cull_disabled, diffuse_burley;
 uniform sampler2D source_albedo_texture : source_color, filter_linear_mipmap, repeat_disable;
@@ -1085,7 +1084,7 @@ void fragment() {
     AO_LIGHT_AFFECT = .35;
     BACKLIGHT = leaf * .05 * root;
 }
-"""
+""")
 	var result := ShaderMaterial.new()
 	result.resource_name = "Midori_Forest_Grass_Leaf_Detail_Photographic"
 	result.shader = shader
@@ -1103,8 +1102,7 @@ void fragment() {
 
 
 func _forest_grass_procedural_material() -> ShaderMaterial:
-	var shader:=Shader.new()
-	shader.code="""
+	var shader:=ShaderPool.shader("""
 shader_type spatial;
 render_mode cull_disabled, diffuse_burley;
 // Material-only ageing; all mesh vertices, density and LODs remain intact.
@@ -1165,7 +1163,7 @@ void fragment() {
 	NORMAL_MAP_DEPTH=0.28;
 	BACKLIGHT=green*0.05*root;
 }
-"""
+""")
 	var material:=ShaderMaterial.new()
 	material.resource_name="Midori_Forest_Grass_Leaf_Detail"
 	material.shader=shader

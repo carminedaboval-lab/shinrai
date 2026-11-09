@@ -1,12 +1,60 @@
 extends RefCounted
 ## Shared helpers for the biome builders (scripts/midori_biomes.gd).
 const Biomes := preload("res://scripts/midori_biomes.gd")
+const Budget := preload("res://scripts/shinrai_loading_budget.gd")
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
+
+## Frame counters at the start of a time-sliced loop (see settle()).
+static func frames_now() -> Vector2i:
+	return Vector2i(Engine.get_process_frames(), Engine.get_physics_frames())
+
+## Time-sliced yield for loops of pure placement maths (no nodes added, freed or
+## moved inside the loop): yields only once this frame's loading budget is spent.
+## It replaces yields after a fixed number of rows: behind the menu every frame
+## boundary costs a whole frame (~16 ms), and the fixed counts gave ~900 frames
+## to the biome stage. Results never depend on where the frames fall.
+static func slice(park: Node) -> void:
+	await Budget.checkpoint(park, true)
+
+## Runs `job.call(i)` for every i in [0, count) on WorkerThreadPool and returns
+## the results in index order. Only for pure data work: the job reads constants,
+## packed arrays and the terrain's data methods, and writes nothing shared (each
+## task fills only its own slot), so the result does not depend on the threads.
+## Blocks the main thread until done (these jobs are short; the work used to run
+## on the main thread anyway).
+static func parallel(count: int, job: Callable, label: String) -> Array:
+	var slots: Array = []
+	for i: int in range(count): slots.append({})
+	var run := func(i: int) -> void:
+		(slots[i] as Dictionary)["v"] = job.call(i)
+	var task := WorkerThreadPool.add_group_task(run, count, -1, true, label)
+	WorkerThreadPool.wait_for_group_task_completion(task)
+	var out: Array = []
+	for i: int in range(count):
+		# A task that failed on its thread is redone here, so a result is always there.
+		if not (slots[i] as Dictionary).has("v"): (slots[i] as Dictionary)["v"] = job.call(i)
+		out.append(slots[i]["v"])
+	return out
+
+## What the fixed-count yields always gave the code after a converted loop: at
+## least one frame boundary (deferred calls flushed) and two physics steps
+## (bodies added before the loop are in the space) since `since`. Usually
+## already true, then it returns at once.
+static func settle(park: Node, since: Vector2i) -> void:
+	if not is_instance_valid(park) or not park.is_inside_tree(): return
+	var tree := park.get_tree()
+	while Engine.get_process_frames() <= since.x:
+		await tree.process_frame
+		if not is_instance_valid(park): return
+	while Engine.get_physics_frames() < since.y + 2:
+		await tree.physics_frame
+		if not is_instance_valid(park): return
 
 ## Where a new plant or tree may stand: on land, off paths and trails, clear of
 ## water, and not inside an existing tree.
 static func open_ground(park: Node3D, terrain: Node, p: Vector2, clearance: float, tree_gap: float = 0.0) -> bool:
 	if terrain != null and terrain.water_at(p): return false
-	if terrain != null and terrain.shoreline.size() > 2 and Biomes.LAKE_NEAR.has_point(p) and terrain.edge_distance(p, terrain.shoreline) < clearance + 0.5: return false
+	if terrain != null and terrain.shoreline.size() > 2 and Biomes.LAKE_NEAR.has_point(p) and Biomes.shore_distance(terrain, p, clearance + 1.5) < clearance + 0.5: return false
 	if park.has_method("path_edge_distance_world") and park.path_edge_distance_world(p) < clearance: return false
 	var trails := park.get_node_or_null("MidoriDesirePaths")
 	if trails != null and trails.has_method("distance_to_path") and trails.distance_to_path(p) < clearance + 0.6: return false
@@ -84,11 +132,8 @@ void fragment() {
 """
 
 static func leaf_material() -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = LEAF_SHADER
-	var material := ShaderMaterial.new()
-	material.shader = shader
-	return material
+	# One pooled leaf shader for every leaf floor (maple glen, coppice, ...).
+	return ShaderPool.material(LEAF_SHADER)
 
 ## Fallen-leaf colours: rust, tan, brown, a few still olive.
 static func leaf_colour(rng: RandomNumberGenerator, warmth: float = 1.0) -> Color:
@@ -102,6 +147,84 @@ static func leaf_colour(rng: RandomNumberGenerator, warmth: float = 1.0) -> Colo
 	c = c.lerp(Color(0.33, 0.27, 0.15), 1.0 - warmth)
 	return c * rng.randf_range(0.82, 1.1)
 
+## The MultiMesh buffer for rows [Transform3D, Color, custom Color], each origin
+## less `offset`: exactly the floats set_instance_transform, set_instance_color
+## and set_instance_custom_data write (the 3x4 basis rows with the origin, then
+## RGBA, then the custom RGBA), so one buffer assignment replaces two or three
+## server calls per instance. `colours` / `custom` match the MultiMesh flags.
+static func pack_rows(list: Array, offset: Vector3, colours: bool, custom: bool) -> PackedFloat32Array:
+	var stride := 12 + (4 if colours else 0) + (4 if custom else 0)
+	var buf := PackedFloat32Array()
+	buf.resize(list.size() * stride)
+	var k := 0
+	for row: Array in list:
+		var t: Transform3D = row[0]
+		var o := t.origin - offset
+		var bx := t.basis.x
+		var by := t.basis.y
+		var bz := t.basis.z
+		buf[k] = bx.x; buf[k + 1] = by.x; buf[k + 2] = bz.x; buf[k + 3] = o.x
+		buf[k + 4] = bx.y; buf[k + 5] = by.y; buf[k + 6] = bz.y; buf[k + 7] = o.y
+		buf[k + 8] = bx.z; buf[k + 9] = by.z; buf[k + 10] = bz.z; buf[k + 11] = o.z
+		k += 12
+		if colours:
+			var c: Color = row[1]
+			buf[k] = c.r; buf[k + 1] = c.g; buf[k + 2] = c.b; buf[k + 3] = c.a
+			k += 4
+		if custom:
+			var d: Color = row[2]
+			buf[k] = d.r; buf[k + 1] = d.g; buf[k + 2] = d.b; buf[k + 3] = d.a
+			k += 4
+	return buf
+
+## pack_rows for plain transforms, each one `t * relative` less `offset` (the
+## per-part batches of a prototype).
+static func pack_transforms(list: Array, relative: Transform3D, offset: Vector3) -> PackedFloat32Array:
+	var buf := PackedFloat32Array()
+	buf.resize(list.size() * 12)
+	var k := 0
+	for item: Transform3D in list:
+		var t: Transform3D = item * relative
+		var o := t.origin - offset
+		var bx := t.basis.x
+		var by := t.basis.y
+		var bz := t.basis.z
+		buf[k] = bx.x; buf[k + 1] = by.x; buf[k + 2] = bz.x; buf[k + 3] = o.x
+		buf[k + 4] = bx.y; buf[k + 5] = by.y; buf[k + 6] = bz.y; buf[k + 7] = o.y
+		buf[k + 8] = bx.z; buf[k + 9] = by.z; buf[k + 10] = bz.z; buf[k + 11] = o.z
+		k += 12
+	return buf
+
+## Rows at least this many are packed on WorkerThreadPool (one task per cell).
+const PACK_THREADS_MIN := 2048
+
+## The cell buffers pack_rows() gives for each key of `cells` in `keys` order,
+## on WorkerThreadPool when there are enough rows (pure data: the same floats).
+static func pack_cells(cells: Dictionary, keys: Array, cell: float, colours: bool, custom: bool, total: int) -> Array:
+	var job := func(i: int) -> PackedFloat32Array:
+		var key: Vector2i = keys[i]
+		var list: Array = cells[key]
+		return pack_rows(list, Vector3((key.x + 0.5) * cell, 0.0, (key.y + 0.5) * cell), colours if colours else list[0].size() > 1, custom)
+	if total < PACK_THREADS_MIN or keys.size() < 2:
+		var out: Array = []
+		for i: int in range(keys.size()): out.append(job.call(i))
+		return out
+	return parallel(keys.size(), job, "biome_kit pack")
+
+## pack_transforms() of every (cell, part) pair, cells in `keys` order and parts
+## in order within each cell; on WorkerThreadPool when there are enough rows.
+static func pack_part_cells(cells: Dictionary, keys: Array, cell: float, parts: Array, total: int) -> Array:
+	var count := keys.size() * parts.size()
+	var job := func(i: int) -> PackedFloat32Array:
+		var key: Vector2i = keys[i / parts.size()]
+		var part: Dictionary = parts[i % parts.size()]
+		return pack_transforms(cells[key], part.relative, Vector3((key.x + 0.5) * cell, 0.0, (key.y + 0.5) * cell))
+	if total * parts.size() < PACK_THREADS_MIN or count < 2:
+		var out: Array = []
+		for i: int in range(count): out.append(job.call(i))
+		return out
+	return parallel(count, job, "biome_kit pack parts")
+
 ## Builds instance batches in square cells so far cells drop out by range.
 static func cell_batches(parent: Node3D, name: String, mesh: Mesh, material: Material, rows: Array, cell: float, range_end: float, shadows: bool) -> int:
 	var cells := {}
@@ -110,7 +233,11 @@ static func cell_batches(parent: Node3D, name: String, mesh: Mesh, material: Mat
 		var key := Vector2i(floori(t.origin.x / cell), floori(t.origin.z / cell))
 		if not cells.has(key): cells[key] = []
 		cells[key].append(row)
-	for key: Vector2i in cells:
+	var keys: Array = cells.keys()
+	# colours=false: each cell's own rows decide (list[0].size() > 1), as below.
+	var buffers := pack_cells(cells, keys, cell, false, false, rows.size())
+	for index: int in range(keys.size()):
+		var key: Vector2i = keys[index]
 		var list: Array = cells[key]
 		var centre := Vector3((key.x + 0.5) * cell, 0.0, (key.y + 0.5) * cell)
 		var many := MultiMesh.new()
@@ -118,11 +245,7 @@ static func cell_batches(parent: Node3D, name: String, mesh: Mesh, material: Mat
 		many.use_colors = list[0].size() > 1
 		many.mesh = mesh
 		many.instance_count = list.size()
-		for i: int in range(list.size()):
-			var t: Transform3D = list[i][0]
-			t.origin -= centre
-			many.set_instance_transform(i, t)
-			if many.use_colors: many.set_instance_color(i, list[i][1])
+		many.buffer = buffers[index]
 		var node := MultiMeshInstance3D.new()
 		node.name = "%s_%d_%d" % [name, key.x, key.y]
 		node.multimesh = many
@@ -195,7 +318,10 @@ static func batch_parts(parent: Node3D, name: String, proto: Dictionary, rows: A
 		var key := Vector2i(floori(t.origin.x / cell), floori(t.origin.z / cell))
 		if not cells.has(key): cells[key] = []
 		cells[key].append(t)
-	for key: Vector2i in cells:
+	var keys: Array = cells.keys()
+	var buffers := pack_part_cells(cells, keys, cell, proto.parts, rows.size())
+	var at := 0
+	for key: Vector2i in keys:
 		var list: Array = cells[key]
 		var centre := Vector3((key.x + 0.5) * cell, 0.0, (key.y + 0.5) * cell)
 		for part: Dictionary in proto.parts:
@@ -203,10 +329,8 @@ static func batch_parts(parent: Node3D, name: String, proto: Dictionary, rows: A
 			many.transform_format = MultiMesh.TRANSFORM_3D
 			many.mesh = part.mesh
 			many.instance_count = list.size()
-			for i: int in range(list.size()):
-				var t: Transform3D = list[i] * part.relative
-				t.origin -= centre
-				many.set_instance_transform(i, t)
+			many.buffer = buffers[at]
+			at += 1
 			var node := MultiMeshInstance3D.new()
 			node.name = "%s_%d_%d" % [name, key.x, key.y]
 			node.multimesh = many
@@ -221,6 +345,7 @@ static func batch_parts(parent: Node3D, name: String, proto: Dictionary, rows: A
 ## Fallen leaves over a rectangle: density per m2 from `per_m2(p) -> float`.
 static func leaf_floor(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberGenerator, rect: Rect2, per_m2: Callable, warmth: float, name: String) -> int:
 	var rows: Array = []
+	var since := frames_now()
 	for z: int in range(floori(rect.position.y), ceili(rect.end.y)):
 		for x: int in range(floori(rect.position.x), ceili(rect.end.x)):
 			var cell := Vector2(x + 0.5, z + 0.5)
@@ -232,7 +357,8 @@ static func leaf_floor(park: Node3D, terrain: Node, root: Node3D, rng: RandomNum
 				var p := Vector2(x + rng.randf(), z + rng.randf())
 				var basis := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.25, 0.25)) * Basis(Vector3.FORWARD, rng.randf_range(-0.25, 0.25))
 				rows.append([Transform3D(basis.scaled(Vector3.ONE * rng.randf_range(0.85, 1.4)), Vector3(p.x, terrain.height_at(p) + 0.012 + rng.randf() * 0.01, p.y)), leaf_colour(rng, warmth)])
-		if z % 4 == 0: await park.get_tree().process_frame
+		await slice(park)
+	await settle(park, since)
 	cell_batches(root, name, leaf_mesh(), leaf_material(), rows, 8.0, 24.0, false)
 	return rows.size()
 

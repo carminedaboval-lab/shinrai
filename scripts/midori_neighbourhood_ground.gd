@@ -1,7 +1,9 @@
 extends RefCounted
 # Original metre-scale construction. Called after Landscape.build, before batching.
 const Landscape = preload("res://scripts/midori_south_street_landscape.gd")
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
 const GardenEdges = preload("res://scripts/midori_court_garden_edges.gd")
+const MeshArrays = preload("res://scripts/midori_south_street_mesh_arrays.gd")
 const IRIS := "res://assets/shinrai/parks/midori_park/models/identity2050/midori_2050_iris_clump.glb"
 const AZALEA := "res://assets/shinrai/parks/midori_park/models/plants/iris_japonica/red_azalea_lod1.glb"
 const AREA := Rect2(-27.5,218.5,55,23.5)
@@ -141,7 +143,7 @@ static func _finish_soil_beds(_street: Node3D, parent: Node3D, soils: Array[Rect
 		if source!=null:
 			for visual: MeshInstance3D in source.get_children():
 				for surface: int in range(visual.mesh.get_surface_count()):
-					var arrays := visual.mesh.surface_get_arrays(surface)
+					var arrays := MeshArrays.read(visual.mesh,surface)
 					var indices: PackedInt32Array=arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX]!=null else PackedInt32Array()
 					var vertices: PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
 					triangles+=indices.size()/3 if not indices.is_empty() else vertices.size()/3
@@ -334,9 +336,9 @@ static func _finish_soil_beds(_street: Node3D, parent: Node3D, soils: Array[Rect
 		if sources[i]==null: continue
 		if not transforms[i].is_empty():
 			for visual: MeshInstance3D in sources[i].get_children():
-				# Copy only the mesh container to retain EXACT existing active material references.
-				var render_mesh := visual.mesh.duplicate() as ArrayMesh
-				for surface: int in range(render_mesh.get_surface_count()): render_mesh.surface_set_material(surface,visual.get_active_material(surface))
+				# Copy only the mesh container to retain EXACT existing active material
+				# references; one shared copy per (mesh, materials) across the builders.
+				var render_mesh := BakeCache.baked_from(visual) as ArrayMesh
 				var mm := MultiMesh.new()
 				mm.transform_format=MultiMesh.TRANSFORM_3D
 				mm.mesh=render_mesh
@@ -345,7 +347,9 @@ static func _finish_soil_beds(_street: Node3D, parent: Node3D, soils: Array[Rect
 				var batch := MultiMeshInstance3D.new()
 				batch.name="OriginalGardenFoliage_%02d" % batches
 				batch.multimesh=mm
-				batch.set_meta("authored_instance_transforms",transforms[i])
+				BakeCache.tag(batch,BakeCache.group_key())
+				# No "authored_instance_transforms" meta: nothing read it, and it kept the
+				# transform list alive for the batch's life; the MultiMesh holds them.
 				parent.add_child(batch)
 				batches+=1
 		sources[i].free()
@@ -436,7 +440,7 @@ static func _referenced_bounds(source: Node3D) -> AABB:
 	var first := true
 	for visual: MeshInstance3D in source.get_children():
 		for surface: int in range(visual.mesh.get_surface_count()):
-			var arrays: Array=visual.mesh.surface_get_arrays(surface)
+			var arrays: Array=MeshArrays.read(visual.mesh,surface)
 			var vertices: PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
 			var indices: PackedInt32Array=arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX]!=null else PackedInt32Array()
 			var count := indices.size() if not indices.is_empty() else vertices.size()
@@ -583,7 +587,7 @@ static func _projected_coverage(rows: Array[Dictionary],sources: Array[Node3D],z
 			for visual: MeshInstance3D in source.get_children():
 				var matrix := placement*visual.transform
 				for surface: int in range(visual.mesh.get_surface_count()):
-					var arrays: Array=visual.mesh.surface_get_arrays(surface)
+					var arrays: Array=MeshArrays.read(visual.mesh,surface)
 					var vertices: PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
 					var uv: PackedVector2Array=arrays[Mesh.ARRAY_TEX_UV] if arrays[Mesh.ARRAY_TEX_UV]!=null else PackedVector2Array()
 					var indices: PackedInt32Array=arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX]!=null else PackedInt32Array()

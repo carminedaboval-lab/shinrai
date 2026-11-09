@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cvld70j6ph4ii"
-path="res://.godot/imported/midori_2050_rear_planter_rear_stone_base_color.png-a720f66bf7beb60cb88f0425f4a6723b.ctex"
+path.bptc="res://.godot/imported/midori_2050_rear_planter_rear_stone_base_color.png-a720f66bf7beb60cb88f0425f4a6723b.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "d217a3fc3f5083aac773f861129aca5d"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/identity2050/midori_2050_rear_planter_rear_stone_base_color.png"
-dest_files=["res://.godot/imported/midori_2050_rear_planter_rear_stone_base_color.png-a720f66bf7beb60cb88f0425f4a6723b.ctex"]
+dest_files=["res://.godot/imported/midori_2050_rear_planter_rear_stone_base_color.png-a720f66bf7beb60cb88f0425f4a6723b.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

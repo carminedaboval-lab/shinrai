@@ -1,5 +1,7 @@
 extends RefCounted
 ## Original constructed residential shells. Shared installed materials only.
+## build() is a coroutine (a loading-budget turn per house): await it.
+const Budget = preload("res://scripts/shinrai_loading_budget.gd")
 const Architecture = preload("res://scripts/midori_south_street_architecture.gd")
 const Windows = preload("res://scripts/midori_upper_construction.gd")
 const CourtFinishes = preload("res://scripts/midori_court_finishes.gd")
@@ -38,6 +40,8 @@ static func build(street: Node3D) -> Dictionary:
 		# Avoid a Node reference in persistent metadata.
 		house.set_meta("neighbourhood_construction",{"entry_point":entry,"support_y":.16,"threshold_y":.20,"mesh_members":counts.meshes,"collision_count":counts.solids,"local_bounds":bounds,"window_count":13,"enterable":true})
 		results.append(result)
+		# One loading-budget turn per house (the three took ~1 s in one frame).
+		await Budget.checkpoint(street.get("park"))
 	return {"ok":true,"root":group,"buildings":results,"entries":results.map(func(item: Dictionary) -> Vector3: return item.entry_point),"new_buildings":3,"lights_created":0,"source_assets_modified":false,"dependencies":["midori_south_street_architecture.gd","midori_upper_construction.gd","midori_shop_joinery.gd"],"ownership":"three protected residential shells; landscape and circulation owned by parent"}
 
 static func _part(street: Node3D, house: Node3D, label: String, p: Vector3, size: Vector3, key: String, collide: bool = false) -> MeshInstance3D:

@@ -1,5 +1,7 @@
 extends Node3D
 const StartupTrace = preload("res://scripts/startup_trace.gd")
+const Grid = preload("res://scripts/midori_woodland_diversity.gd")
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
 
 func _ready() -> void:
 	call_deferred("install")
@@ -24,19 +26,21 @@ func install() -> void:
 			if part.mesh==null:
 				continue
 			var relative:Transform3D=park._vegetation_relative_transform(part,source)
-			var mesh:=part.mesh.duplicate() as Mesh
-			for surface in range(mesh.get_surface_count()):
-				mesh.surface_set_material(surface,part.get_active_material(surface))
+			var mesh:=BakeCache.baked_from(part)
 			var b:AABB=relative*mesh.get_aabb()
 			box=b if first else box.merge(b)
 			first=false
-			source_parts.append({"mesh":mesh,"relative":relative})
+			source_parts.append({"mesh":mesh,"relative":relative,"bake_key":BakeCache.group_key()})
 		parts.append(source_parts)
 		boxes.append(box)
 	var rng:=RandomNumberGenerator.new()
 	rng.seed=205010061
 	var counts:=[0,0,0]
 	var positions:Array[Vector2]=[]
+	var prior_grid:={}
+	var tree_grid:={}
+	for tree:Vector2 in park.occupied_tree_positions:
+		Grid._grid_add(tree_grid,tree*2,tree*2)
 	var grounding_errors:=0
 	var pockets:=0
 	for index in range(0,beds.size(),3):
@@ -57,17 +61,24 @@ func install() -> void:
 			var p:=centre+offset
 			if not detail._is_lawn_position(p.x,p.y) or not park._is_vegetation_clear(Vector3(p.x/2,0,p.y/2),radius*.5+.18):
 				continue
-			var clear:=true
-			for side in range(8):
-				var q:=p+Vector2(radius+.15,0).rotated(float(side)*TAU/8)
-				if not detail._is_lawn_position(q.x,q.y):
-					clear=false
-			for tree:Vector2 in park.occupied_tree_positions:
-				if p.distance_to(tree*2)<radius+.65:
-					clear=false
-			for prior:Vector2 in positions:
-				if p.distance_to(prior)<maxf(.70,radius+.3):
-					clear=false
+			# Same tests as before (pure, all required), cheapest first, stopping at
+			# the first failure; grid neighbours get the original expressions, so the
+			# placement is identical (see midori_woodland_diversity.gd).
+			var clear:=not Grid._tree_near(tree_grid,p,radius+.65)
+			if clear:
+				for cell:Vector2i in Grid._cells_around(p,maxf(.70,radius+.3)):
+					for prior:Vector2 in prior_grid.get(cell,[]):
+						if p.distance_to(prior)<maxf(.70,radius+.3):
+							clear=false
+							break
+					if not clear:
+						break
+			if clear:
+				for side in range(8):
+					var q:=p+Vector2(radius+.15,0).rotated(float(side)*TAU/8)
+					if not detail._is_lawn_position(q.x,q.y):
+						clear=false
+						break
 			if not clear:
 				continue
 			var basis:=Basis(Vector3.UP,rng.randf_range(0,TAU)).scaled(Vector3.ONE*scale_value)
@@ -77,6 +88,7 @@ func install() -> void:
 				grounding_errors+=1
 			groups[kind].append(t)
 			positions.append(p)
+			Grid._grid_add(prior_grid,p,p)
 			counts[kind]+=1
 			placed+=1
 		if placed==0:
@@ -95,6 +107,7 @@ func install() -> void:
 					mm.set_instance_transform(i,t)
 				var batch:=MultiMeshInstance3D.new()
 				batch.multimesh=mm
+				BakeCache.tag(batch,part.bake_key)
 				batch.position=Vector3(centre.x,0,centre.y)
 				batch.visibility_range_end=75
 				batch.visibility_range_end_margin=12

@@ -2,6 +2,7 @@ extends Node3D
 # One local dry-bank ecotone. Uses authored shoreline, terrain and supplied grass.
 # Attach as direct park child after MidoriTerrain and MidoriDesirePaths exist.
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
+const BakeCache = preload("res://scripts/shinrai_mesh_bake_cache.gd")
 const Meadow = preload("res://assets/shinrai/parks/midori_park/models/vegetation/midori_swaying_meadow_grass_v1.glb")
 var installed := false
 var park: Node3D
@@ -122,8 +123,7 @@ func install() -> void:
 			if count<=0: break
 	for part: MeshInstance3D in source.find_children("*","MeshInstance3D",true,false):
 		if part.mesh==null: continue
-		var mesh := part.mesh.duplicate() as Mesh
-		for s in range(mesh.get_surface_count()): mesh.surface_set_material(s,part.get_active_material(s))
+		var mesh := BakeCache.baked_from(part)
 		var relative: Transform3D = park._vegetation_relative_transform(part,source)
 		var mm := MultiMesh.new()
 		mm.transform_format=MultiMesh.TRANSFORM_3D
@@ -133,6 +133,7 @@ func install() -> void:
 		var batch := MultiMeshInstance3D.new()
 		batch.name="ShoreMeadow_%02d"%get_child_count()
 		batch.multimesh=mm
+		BakeCache.tag(batch,BakeCache.group_key())
 		batch.visibility_range_end=100
 		batch.visibility_range_end_margin=15
 		batch.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

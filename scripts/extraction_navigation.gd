@@ -21,6 +21,7 @@ var _edge_query: PhysicsShapeQueryParameters3D
 func build(park: Node3D) -> void:
 	var _boot_tick := StartupTrace.begin()
 	_park = park
+	_terrain = null
 	_floor_heights.clear()
 	_paving_cells.clear()
 	ready = false
@@ -50,8 +51,13 @@ func build(park: Node3D) -> void:
 	query.exclude = excluded
 	_space = park.get_world_3d().direct_space_state
 	# The graph only depends on the built park, so it is cached on disk. The key
-	# changes whenever any project file or the Creator layout changes.
-	var cache_key := _cache_key()
+	# is a signature of exactly what the graph reads (see _cache_key).
+	var key_tick := StartupTrace.begin()
+	var cache_key := _cache_key(park)
+	StartupTrace.finish("navigation.cache_key", key_tick)
+	if StartupTrace.enabled:
+		print("NAVIGATION_CACHE: key %s... file %s" % [cache_key.left(12), "present" if FileAccess.file_exists(NAV_CACHE_DIR + "navigation_" + cache_key + ".bin") else "absent"])
+	await LoadingBudget.checkpoint(park)
 	if _load_cache(cache_key):
 		var cached_capsule := CapsuleShape3D.new()
 		cached_capsule.radius = 0.42
@@ -456,8 +462,11 @@ func _can_walk_floor_centre(a: Vector2, b: Vector2) -> bool:
 		previous_bridge = bridge_height
 	return true
 
+var _terrain: Node = null
 func _terrain_height(p: Vector2) -> float:
-	var terrain := _park.get_node_or_null("MidoriTerrain")
+	# Looked up once, not per sample (tens of thousands of edge probes).
+	if not is_instance_valid(_terrain): _terrain = _park.get_node_or_null("MidoriTerrain")
+	var terrain := _terrain
 	var base: float = terrain.height_at(p) if terrain != null and terrain.installed else 0.0
 	if _space == null:
 		return base
@@ -492,26 +501,302 @@ func _paving_height(p: Vector2) -> float:
 	return height
 
 const NAV_CACHE_DIR := "user://shinrai_cache/"
-const NAV_CACHE_VERSION := 2
+## Bump when the graph algorithm or the cache payload changes.
+const NAV_CACHE_VERSION := 3
+const NAV_CACHE_KEEP := 8
 
-static func _cache_key() -> String:
+## Content signature of everything the graph reads, taken from the built park
+## right before sampling (not file dates: those changed with every edit anywhere,
+## and an exported build reports constant dates). Inputs:
+##  - this version and the grid / sampling constants;
+##  - every collision body in the park that the mask-1 queries and floor rays
+##    can hit: class, layer, transform, walk / paving / floor groups and each
+##    shape's type and parameters (face data by content hash);
+##  - terrain heights, the shoreline, bridge walk specs, the path-edge index and
+##    the park script's constant routes (the on-path weights);
+##  - the Creator layout file.
+func _cache_key(park: Node3D) -> String:
 	var ctx := HashingContext.new()
 	ctx.start(HashingContext.HASH_SHA256)
-	ctx.update(var_to_bytes([NAV_CACHE_VERSION, CELL, ORIGIN, FLOOR_NODE_SPACING, MAX_FLOOR_STEP]))
-	var pending: Array[String] = ["res://"]
-	while not pending.is_empty():
-		var dir: String = pending.pop_back()
-		for sub: String in DirAccess.get_directories_at(dir):
-			if sub.begins_with("."): continue
-			pending.append(dir.path_join(sub))
-		for file: String in DirAccess.get_files_at(dir):
-			if file.ends_with(".log") or file.ends_with(".tmp"): continue
-			var path := dir.path_join(file)
-			ctx.update(("%s|%d\n" % [path, FileAccess.get_modified_time(path)]).to_utf8_buffer())
+	var debug: Array[String] = []
+	var parts: Dictionary = {
+		"constants": var_to_bytes([NAV_CACHE_VERSION, CELL, ORIGIN, FLOOR_NODE_SPACING, FLOOR_SAMPLE_SPACING, MAX_FLOOR_STEP, FLOOR_NODE_START, 111, 91]),
+		"shoreline": var_to_bytes(shoreline),
+		"bridges": _stable_bytes(park.get("_bridge_walk_surfaces")),
+		"path_edges": _stable_bytes(park.get("_path_edge_cells")),
+	}
+	var terrain := park.get_node_or_null("MidoriTerrain")
+	if terrain != null: parts["terrain"] = var_to_bytes([terrain.get("installed"), terrain.get("heights")])
+	for part: String in ["constants", "shoreline", "terrain", "bridges", "path_edges"]:
+		if not parts.has(part): continue
+		ctx.update(parts[part])
+		if StartupTrace.enabled: debug.append("#%s %d %d" % [part, (parts[part] as PackedByteArray).size(), hash(parts[part])])
+	var script := park.get_script() as Script
+	while script != null:
+		var constants := script.get_script_constant_map()
+		script = script.get_base_script()
+		# Sort as Strings: StringNames order by internal address, which changes
+		# from launch to launch and silently changed the key (cache misses).
+		var named: Dictionary = {}
+		for key: Variant in constants: named[str(key)] = constants[key]
+		var names: Array = named.keys()
+		names.sort()
+		for name: Variant in names:
+			var value: Variant = named[name]
+			if typeof(value) in [TYPE_ARRAY, TYPE_PACKED_VECTOR2_ARRAY, TYPE_PACKED_VECTOR3_ARRAY, TYPE_FLOAT, TYPE_INT, TYPE_VECTOR2, TYPE_RECT2]:
+				var bytes := _stable_bytes(value)
+				ctx.update(str(name).to_utf8_buffer())
+				ctx.update(bytes)
+				if StartupTrace.enabled: debug.append("#const %s %d %d" % [name, bytes.size(), hash(bytes)])
+	# Only what the mask-1 queries and floor rays can hit: bodies (not areas) on
+	# layer 1 in the park's own physics world. Menu previews live in their own
+	# worlds; the player is excluded from every query; moving bodies are keyed
+	# on a coarse position so settling physics does not defeat the cache.
+	var world := park.get_world_3d()
+	var player := park.get_node_or_null("ParkScaleReviewPlayer")
+	var bodies: Array[String] = []
+	for node: Node in park.find_children("*", "PhysicsBody3D", true, false):
+		var body := node as PhysicsBody3D
+		if body == null or body == player or not body.is_inside_tree() or not (body.collision_layer & 1): continue
+		if body.get_world_3d() != world: continue
+		var row := _body_signature(body)
+		bodies.append(row)
+		if StartupTrace.enabled: debug.append(row + " " + str(park.get_path_to(body)))
+	bodies.sort()
+	for row: String in bodies: ctx.update(row.to_utf8_buffer())
 	var layout := "user://creator_layouts/midori_default.json"
 	if FileAccess.file_exists(layout):
 		ctx.update(FileAccess.get_sha256(layout).to_utf8_buffer())
+		if StartupTrace.enabled: debug.append("#layout " + FileAccess.get_sha256(layout))
+	if StartupTrace.enabled:
+		# --profile-startup: every key input, to diff two launches that missed.
+		debug.sort()
+		DirAccess.make_dir_recursive_absolute(NAV_CACHE_DIR)
+		var file := FileAccess.open(NAV_CACHE_DIR + "navigation_key_rows.txt", FileAccess.WRITE)
+		if file != null:
+			file.store_string("\n".join(debug))
+			file.close()
 	return ctx.finish().hex_encode()
+
+static func _body_signature(body: CollisionObject3D) -> String:
+	var place: Variant = body.global_transform
+	if not body is StaticBody3D:
+		place = [body.global_position.snapped(Vector3.ONE * 0.25), body.global_rotation.snapped(Vector3.ONE * 0.1)]
+	var record: Array = [body.get_class(), body.collision_layer, place,
+		body.is_in_group("midori_walk_surface"), body.is_in_group("midori_terrain_paving"), body.is_in_group("midori_terrain_floor"),
+		body.process_mode == Node.PROCESS_MODE_DISABLED]
+	for owner: int in body.get_shape_owners():
+		record.append([body.shape_owner_get_transform(owner), body.is_shape_owner_disabled(owner)])
+		for i: int in range(body.shape_owner_get_shape_count(owner)):
+			record.append(_shape_signature(body.shape_owner_get_shape(owner, i)))
+	return var_to_bytes(record).hex_encode().sha256_text()
+
+static func _shape_signature(shape: Shape3D) -> Array:
+	if shape == null: return ["none"]
+	if shape is BoxShape3D: return ["box", shape.size, shape.margin]
+	if shape is SphereShape3D: return ["sphere", shape.radius]
+	if shape is CapsuleShape3D: return ["capsule", shape.radius, shape.height]
+	if shape is CylinderShape3D: return ["cylinder", shape.radius, shape.height]
+	if shape is ConvexPolygonShape3D: return ["convex", shape.points.size(), hash(shape.points)]
+	if shape is ConcavePolygonShape3D:
+		var faces: PackedVector3Array = shape.get_faces()
+		return ["concave", faces.size(), hash(faces), shape.backface_collision]
+	if shape is HeightMapShape3D: return ["heightmap", shape.map_width, shape.map_depth, hash(shape.map_data)]
+	if shape is WorldBoundaryShape3D: return ["boundary", shape.plane]
+	if shape is SeparationRayShape3D: return ["ray", shape.length]
+	return [shape.get_class(), shape.resource_path]
+
+## Bytes of a value with Objects reduced to their resource path, so no
+## per-run instance id leaks into the key.
+static func _stable_bytes(value: Variant) -> PackedByteArray:
+	match typeof(value):
+		TYPE_OBJECT:
+			var resource := value as Resource
+			return ("obj:" + (resource.resource_path if resource != null else "")).to_utf8_buffer()
+		TYPE_ARRAY:
+			var out := PackedByteArray()
+			out.append_array(("[%d" % (value as Array).size()).to_utf8_buffer())
+			for item: Variant in value: out.append_array(_stable_bytes(item))
+			return out
+		TYPE_DICTIONARY:
+			var out := PackedByteArray()
+			out.append_array(("{%d" % (value as Dictionary).size()).to_utf8_buffer())
+			for key: Variant in value:
+				out.append_array(_stable_bytes(key))
+				out.append_array(_stable_bytes(value[key]))
+			return out
+		TYPE_CALLABLE, TYPE_SIGNAL, TYPE_RID:
+			return PackedByteArray()
+	return var_to_bytes(value)
+
+## Layer-1 bodies (what the queries hit) with their world bounds, keyed by id.
+## Yields on the shared loading budget; shape bounds are cached per shape.
+static func collider_snapshot(park: Node) -> Dictionary:
+	var out := {}
+	var bodies := park.find_children("*", "PhysicsBody3D", true, false)
+	var world := (park as Node3D).get_world_3d()
+	var player := park.get_node_or_null("ParkScaleReviewPlayer")
+	await LoadingBudget.checkpoint(park, true)
+	for index: int in range(bodies.size()):
+		if index % 32 == 31: await LoadingBudget.checkpoint(park, true)
+		var body := bodies[index] as PhysicsBody3D
+		if not is_instance_valid(body) or body == player or not body.is_inside_tree() or not (body.collision_layer & 1): continue
+		if body.get_world_3d() != world: continue
+		out[body.get_instance_id()] = [body.global_transform, _body_bounds(body), body.is_in_group("midori_walk_surface")]
+	return out
+
+static var _shape_bounds_cache: Dictionary = {}
+
+## End-of-boot hook (shinrai_world_complete.gd, after refresh_changed_colliders):
+## the per-shape bounds only serve the two collider snapshots of that step; a
+## later snapshot simply measures again.
+static func release_build_data() -> Dictionary:
+	var freed := {"shape_bounds": _shape_bounds_cache.size()}
+	_shape_bounds_cache = {}
+	return freed
+
+static func _body_bounds(body: CollisionObject3D) -> AABB:
+	var box := AABB()
+	var first := true
+	for owner: int in body.get_shape_owners():
+		if body.is_shape_owner_disabled(owner): continue
+		var local := body.global_transform * body.shape_owner_get_transform(owner)
+		for i: int in range(body.shape_owner_get_shape_count(owner)):
+			var shape := body.shape_owner_get_shape(owner, i)
+			var bounds := _shape_bounds(shape)
+			if bounds.size == Vector3.ZERO and bounds.position == Vector3.ZERO: continue
+			var world := local * bounds
+			box = world if first else box.merge(world)
+			first = false
+	if first: box = AABB(body.global_position - Vector3.ONE, Vector3.ONE * 2.0)
+	return box
+
+static func _shape_bounds(shape: Shape3D) -> AABB:
+	if shape is BoxShape3D: return AABB(-shape.size * 0.5, shape.size)
+	if shape is SphereShape3D: return AABB(-Vector3.ONE * shape.radius, Vector3.ONE * shape.radius * 2.0)
+	if shape is CapsuleShape3D or shape is CylinderShape3D:
+		return AABB(Vector3(-shape.radius, -shape.height * 0.5, -shape.radius), Vector3(shape.radius * 2.0, shape.height, shape.radius * 2.0))
+	if shape is WorldBoundaryShape3D or shape == null: return AABB()
+	var id := shape.get_instance_id()
+	if _shape_bounds_cache.has(id): return _shape_bounds_cache[id]
+	var box := AABB()
+	if shape is ConvexPolygonShape3D or shape is ConcavePolygonShape3D:
+		var points: PackedVector3Array = shape.points if shape is ConvexPolygonShape3D else shape.get_faces()
+		if not points.is_empty():
+			# A throwaway mesh computes the bounds natively (no per-point script loop).
+			var arrays := []
+			arrays.resize(Mesh.ARRAY_MAX)
+			arrays[Mesh.ARRAY_VERTEX] = points
+			var temp := ArrayMesh.new()
+			temp.add_surface_from_arrays(Mesh.PRIMITIVE_POINTS, arrays)
+			box = temp.get_aabb()
+	else:
+		var mesh := shape.get_debug_mesh()
+		if mesh != null: box = mesh.get_aabb()
+	_shape_bounds_cache[id] = box
+	return box
+
+## Re-samples the graph where layer-1 bodies appeared, vanished or moved after
+## it was built (biome rocks, trunks and posts, which otherwise AI paths walked
+## through). Cells near each change get the vertex sphere test again, and every
+## edge touching them the capsule sweep, exactly as at build time; the rest of
+## the graph, its bridge floors and the on-disk cache are untouched.
+func refresh_changed_colliders(before: Dictionary, after: Dictionary) -> Dictionary:
+	if not ready or _space == null or _edge_query == null: return {"error": "Navigation unavailable"}
+	var areas: Array[AABB] = []
+	var added := 0
+	var removed := 0
+	var moved := 0
+	for id: int in after:
+		if not before.has(id):
+			if not after[id][2]: areas.append(after[id][1]); added += 1
+		elif before[id][0] != after[id][0] or before[id][1] != after[id][1]:
+			areas.append(before[id][1]); areas.append(after[id][1]); moved += 1
+	for id: int in before:
+		if not after.has(id) and not before[id][2]:
+			areas.append(before[id][1]); removed += 1
+	var report := {"added_bodies": added, "removed_bodies": removed, "moved_bodies": moved}
+	if areas.is_empty():
+		report["resampled_cells"] = 0
+		return report
+	# Walk surfaces added since the build are floors, not obstacles.
+	var excluded: Array[RID] = []
+	var player := _park.get_node_or_null("ParkScaleReviewPlayer") as CollisionObject3D
+	if player != null: excluded.append(player.get_rid())
+	for support: Node in _park.get_tree().get_nodes_in_group("midori_walk_surface"):
+		if support is StaticBody3D and _park.is_ancestor_of(support): excluded.append(support.get_rid())
+	_edge_query.exclude = excluded
+	# Cells whose vertex sphere (0.65 m) or any edge capsule (0.42 m, up to a
+	# diagonal away) could touch a change.
+	var cells: Dictionary = {}
+	for area: AABB in areas:
+		await LoadingBudget.checkpoint(_park, true)
+		var low := Vector2i(((Vector2(area.position.x, area.position.z) - Vector2.ONE * 1.0 - ORIGIN) / CELL).floor())
+		var high := Vector2i(((Vector2(area.end.x, area.end.z) + Vector2.ONE * 1.0 - ORIGIN) / CELL).ceil())
+		for y: int in range(maxi(0, low.y), mini(91, high.y + 1)):
+			for x: int in range(maxi(0, low.x), mini(111, high.x + 1)):
+				cells[Vector2i(x, y)] = true
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.65
+	var sample := PhysicsShapeQueryParameters3D.new()
+	sample.shape = sphere
+	sample.collision_mask = _edge_query.collision_mask
+	sample.collide_with_areas = false
+	sample.exclude = excluded
+	var solid_before := 0
+	var solid_after := 0
+	var index := 0
+	for cell: Vector2i in cells:
+		index += 1
+		if index % 16 == 0: await LoadingBudget.checkpoint(_park, true)
+		if grid.is_point_solid(cell): solid_before += 1
+		var p := grid.get_point_position(cell)
+		_paving_cells.erase(Vector2i((p * 4.0).round()))
+		_sample_ground_cell(cell, sample)
+		if grid.is_point_solid(cell): solid_after += 1
+	# Every edge with an end, or a diagonal's corner, in a resampled cell.
+	var edges: Dictionary = {}
+	for cell: Vector2i in cells:
+		for dy: int in range(-1, 2):
+			for dx: int in range(-1, 2):
+				var c := cell + Vector2i(dx, dy)
+				if not grid.region.has_point(c): continue
+				for d: int in range(GRID_EDGES.size()):
+					var delta: Vector2i = GRID_EDGES[d]
+					var next := c + delta
+					if cells.has(c) or cells.has(next) or cells.has(c + Vector2i(delta.x, 0)) or cells.has(c + Vector2i(0, delta.y)):
+						edges[Vector3i(c.x, c.y, d)] = true
+	var changed_edges := 0
+	index = 0
+	for edge: Vector3i in edges:
+		var c := Vector2i(edge.x, edge.y)
+		var delta: Vector2i = GRID_EDGES[edge.z]
+		var a := _cell_id(c)
+		var b := _cell_id(c + delta)
+		if not walk_graph.has_point(a) or not walk_graph.has_point(b): continue
+		index += 1
+		if index % 8 == 0: await LoadingBudget.checkpoint(_park, true)
+		var connected := walk_graph.are_points_connected(a, b)
+		# The build only links cells 2..108 x 2..88 (see build()).
+		var open := c.x >= 2 and c.y >= 2 and c.x < 109 and c.y < 89 and _ground_edge_open(c, delta)
+		if connected == open: continue
+		if open: walk_graph.connect_points(a, b)
+		else: walk_graph.disconnect_points(a, b)
+		changed_edges += 1
+	# Bridge floor chains keep their links unless a change now blocks one.
+	var floor_links_cut := 0
+	for id: int in walk_graph.get_point_ids():
+		if id < FLOOR_NODE_START: continue
+		var p := walk_graph.get_point_position(id)
+		if not cells.has(Vector2i(((p - ORIGIN) / CELL).round())): continue
+		for other: int in walk_graph.get_point_connections(id):
+			if other < id and other >= FLOOR_NODE_START: continue
+			if not _can_walk_edge(p, walk_graph.get_point_position(other)):
+				walk_graph.disconnect_points(id, other)
+				floor_links_cut += 1
+	report.merge({"resampled_cells": cells.size(), "solid_before": solid_before, "solid_after": solid_after,
+		"changed_edges": changed_edges, "floor_links_cut": floor_links_cut, "edges_checked": index})
+	return report
 
 func _load_cache(key: String) -> bool:
 	var path := NAV_CACHE_DIR + "navigation_" + key + ".bin"
@@ -573,8 +858,14 @@ func _save_cache(key: String) -> void:
 		height_keys.append(k)
 		height_values.append(float(_floor_heights[k]))
 	DirAccess.make_dir_recursive_absolute(NAV_CACHE_DIR)
+	# Keep a few graphs: the fruit garden rolls its residential plots once per
+	# world (their trunks are obstacles), so a handful of park variants recur.
+	var older: Array = []
 	for name: String in DirAccess.get_files_at(NAV_CACHE_DIR):
-		if name.begins_with("navigation_"): DirAccess.remove_absolute(NAV_CACHE_DIR + name)
+		if name.begins_with("navigation_"): older.append([FileAccess.get_modified_time(NAV_CACHE_DIR + name), name])
+	older.sort()
+	while older.size() >= NAV_CACHE_KEEP:
+		DirAccess.remove_absolute(NAV_CACHE_DIR + str(older.pop_front()[1]))
 	var file := FileAccess.open(NAV_CACHE_DIR + "navigation_" + key + ".bin", FileAccess.WRITE)
 	if file == null: return
 	file.store_var({"version": NAV_CACHE_VERSION, "solids": solids, "grid_weights": weights, "point_ids": ids, "point_positions": positions, "point_weights": point_weights, "links": links, "height_keys": height_keys, "height_values": height_values})

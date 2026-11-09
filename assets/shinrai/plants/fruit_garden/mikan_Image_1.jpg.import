@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ccrbgf6352jiu"
-path="res://.godot/imported/mikan_Image_1.jpg-0c78281023b73efd067eabd77b5e457b.ctex"
+path.bptc="res://.godot/imported/mikan_Image_1.jpg-0c78281023b73efd067eabd77b5e457b.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2842b465614b4b41804e18ec7d6fcaee"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/plants/fruit_garden/mikan_Image_1.jpg"
-dest_files=["res://.godot/imported/mikan_Image_1.jpg-0c78281023b73efd067eabd77b5e457b.ctex"]
+dest_files=["res://.godot/imported/mikan_Image_1.jpg-0c78281023b73efd067eabd77b5e457b.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

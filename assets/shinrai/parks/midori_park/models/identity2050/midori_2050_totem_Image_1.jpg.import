@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c5ilpg1kyall1"
-path="res://.godot/imported/midori_2050_totem_Image_1.jpg-cabbe104791b8faa40e801d6118221d7.ctex"
+path.bptc="res://.godot/imported/midori_2050_totem_Image_1.jpg-cabbe104791b8faa40e801d6118221d7.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "41bcc84cc2584e2a71b00f9ebc0efc35"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/identity2050/midori_2050_totem_Image_1.jpg"
-dest_files=["res://.godot/imported/midori_2050_totem_Image_1.jpg-cabbe104791b8faa40e801d6118221d7.ctex"]
+dest_files=["res://.godot/imported/midori_2050_totem_Image_1.jpg-cabbe104791b8faa40e801d6118221d7.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

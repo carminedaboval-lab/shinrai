@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ce7tjbf5687ca"
-path="res://.godot/imported/splint_Image_0.png-bc8139969e4278a77c747ed28c5b3733.ctex"
+path.bptc="res://.godot/imported/splint_Image_0.png-bc8139969e4278a77c747ed28c5b3733.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "aea6c267a3aeb8279ca6d34f3788a1c8"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/medical/splint_Image_0.png"
-dest_files=["res://.godot/imported/splint_Image_0.png-bc8139969e4278a77c747ed28c5b3733.ctex"]
+dest_files=["res://.godot/imported/splint_Image_0.png-bc8139969e4278a77c747ed28c5b3733.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

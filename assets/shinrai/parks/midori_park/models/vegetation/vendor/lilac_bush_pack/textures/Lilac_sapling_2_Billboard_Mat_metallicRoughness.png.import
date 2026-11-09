@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c2nmlobqh4xlc"
-path="res://.godot/imported/Lilac_sapling_2_Billboard_Mat_metallicRoughness.png-c1cb977fc4ae863deaa4b56f5e5087b1.ctex"
+path.bptc="res://.godot/imported/Lilac_sapling_2_Billboard_Mat_metallicRoughness.png-c1cb977fc4ae863deaa4b56f5e5087b1.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/vegetation/vendor/lilac_bush_pack/textures/Lilac_sapling_2_Billboard_Mat_metallicRoughness.png"
-dest_files=["res://.godot/imported/Lilac_sapling_2_Billboard_Mat_metallicRoughness.png-c1cb977fc4ae863deaa4b56f5e5087b1.ctex"]
+dest_files=["res://.godot/imported/Lilac_sapling_2_Billboard_Mat_metallicRoughness.png-c1cb977fc4ae863deaa4b56f5e5087b1.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

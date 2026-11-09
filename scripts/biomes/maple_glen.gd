@@ -418,6 +418,32 @@ static func _spray_card(st: SurfaceTool, root: Vector3, direction: Vector3, leng
 			st.add_vertex(lefts[k] if corner.x == 0 else rights[k])
 
 static func _maple_form(seed_value: int, bark: Material, leaves: Material, spray_mat: Material = null) -> Dictionary:
+	return _maple_commit(_maple_tools(seed_value), bark, leaves, spray_mat)
+
+## The meshes of one form from _maple_tools(): materials, then the same commit
+## order as always (wood, its far copy, near and far leaves, the fans on both).
+static func _maple_commit(tools: Array, bark: Material, leaves: Material, spray_mat: Material) -> Dictionary:
+	var wood: SurfaceTool = tools[0]
+	var near: SurfaceTool = tools[1]
+	var far: SurfaceTool = tools[2]
+	var fans: SurfaceTool = tools[3]
+	wood.set_material(bark)
+	near.set_material(leaves)
+	far.set_material(leaves)
+	fans.set_material(spray_mat)
+	var near_mesh := wood.commit()
+	var far_mesh := near_mesh.duplicate() as ArrayMesh
+	near.commit(near_mesh)
+	far.commit(far_mesh)
+	fans.commit(near_mesh)
+	fans.commit(far_mesh)
+	return {"near": near_mesh, "far": far_mesh, "height": near_mesh.get_aabb().size.y}
+
+## The pure-data half of a form: the four SurfaceTools filled and indexed
+## (wood, near leaves, far leaves, spray fans), no materials and no mesh yet.
+## Only its own RandomNumberGenerators and SurfaceTools, so it may run on a
+## WorkerThreadPool thread; the same seed fills the same vertices anywhere.
+static func _maple_tools(seed_value: int) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var fan_rng := RandomNumberGenerator.new()
@@ -427,10 +453,6 @@ static func _maple_form(seed_value: int, bark: Material, leaves: Material, spray
 	var far := SurfaceTool.new()
 	var fans := SurfaceTool.new()
 	for tool: SurfaceTool in [wood, near, far, fans]: tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	wood.set_material(bark)
-	near.set_material(leaves)
-	far.set_material(leaves)
-	fans.set_material(spray_mat)
 	var slant := Vector3(rng.randf_range(-0.42, 0.48), 0, rng.randf_range(-0.4, 0.45))
 	var spine: Array[Vector3] = [Vector3.ZERO, Vector3(-0.055,0.63,0.065), Vector3(0.14,1.38,-0.11), Vector3(0.20,2.32,0.12) + slant * 0.3, Vector3(-0.06,3.18,0.24) + slant * 0.67, Vector3(0.18,3.95,0.19) + slant]
 	_branch(wood, spine, [0.145, 0.105, 0.083, 0.057, 0.031, 0.012], 8)
@@ -475,16 +497,10 @@ static func _maple_form(seed_value: int, bark: Material, leaves: Material, spray
 				_spray_card(fans, twig_base, fan_dir, size, size * fan_rng.randf_range(0.89, 1.23), spread * hand * fan_rng.randf_range(0.38, 1.11), fan_rng.randi_range(0,3), fan_rng.randf_range(0.52,1.00))
 				serial += 1
 	wood.index()
-	var near_mesh := wood.commit()
-	var far_mesh := near_mesh.duplicate() as ArrayMesh
 	near.index()
 	far.index()
-	near.commit(near_mesh)
-	far.commit(far_mesh)
 	fans.index()
-	fans.commit(near_mesh)
-	fans.commit(far_mesh)
-	return {"near": near_mesh, "far": far_mesh, "height": near_mesh.get_aabb().size.y}
+	return [wood, near, far, fans]
 
 static func maple_tint(rng: RandomNumberGenerator, rust: bool) -> Color:
 	if rust: return Color(0.37, 0.236, 0.119).lerp(Color(0.47, 0.286, 0.148), rng.randf())
@@ -531,8 +547,32 @@ static func _frame_pavilion(park: Node3D, terrain: Node, placed: Array, pavilion
 	# low plant. Its upper branches sit below the pavilion eave from the shore.
 	front.h = minf(float(front.h) * 0.51, 2.55)
 
+## Seeds of the two maple forms (trees alternate between them).
+const FORM_SEEDS: Array[int] = [77951, 77963]
+
+static var _early: Dictionary = {}
+
+## midori_biomes.prefetch(): starts filling the two forms when the
+## world-complete step begins; _plant_maples() takes the job over (or starts it
+## itself). Same seeds, same vertices.
+static func start_early() -> void:
+	if _early.is_empty(): _early = _start_forms()
+
+static func _start_forms() -> Dictionary:
+	var form_slots: Array = []
+	for i: int in range(FORM_SEEDS.size()): form_slots.append({})
+	var fill_form := func(i: int) -> void:
+		(form_slots[i] as Dictionary)["tools"] = _maple_tools(FORM_SEEDS[i])
+	return {"task": WorkerThreadPool.add_group_task(fill_form, FORM_SEEDS.size(), -1, true, "maple_glen forms"), "slots": form_slots}
+
 static func _plant_maples(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberGenerator, pavilion: Dictionary) -> Array:
 	var placed: Array = []
+	# The two tree forms (pure geometry from their own seeds) fill on
+	# WorkerThreadPool while the trees are sited here; meshes are made below.
+	var job: Dictionary = _early if not _early.is_empty() else _start_forms()
+	_early = {}
+	var form_slots: Array = job.slots
+	var form_task: int = job.task
 	# Draw the pond-side trees from the same total allocation as the rear
 	# clumps. Their roots keep off the promenade, water, pavilion and relief yard.
 	var banks := [Vector2(119, -143), Vector2(127, -147), Vector2(130, -154), Vector2(137, -158), Vector2(145, -162), Vector2(153, -162), Vector2(158, -137), Vector2(159, -130)]
@@ -567,8 +607,12 @@ static func _plant_maples(park: Node3D, terrain: Node, root: Node3D, rng: Random
 			var height := rng.randf_range(4.8, 7.2)
 			placed.append({"p": p, "h": height, "yaw": rng.randf() * TAU, "rust": false})
 			want -= 1
-		await park.get_tree().process_frame
-		if not is_instance_valid(park): return placed
+		# Siting only reads (nothing joins the scene or the physics space until the
+		# trunks below, after Kit.settle): yield on time, not once per clump.
+		await Kit.slice(park)
+		if not is_instance_valid(park):
+			WorkerThreadPool.wait_for_group_task_completion(form_task)
+			return placed
 	# About one in six turns rust, never two side by side.
 	for i: int in range(placed.size()):
 		if i >= banks.size() and i % 7 == 4: placed[i].rust = true
@@ -586,10 +630,19 @@ static func _plant_maples(park: Node3D, terrain: Node, root: Node3D, rng: Random
 	sprays.shader.code = MAPLE_SPRAY_SHADER
 	sprays.set_shader_parameter("sprays", load(SPRAY_ATLAS))
 	var forms: Array[Dictionary] = []
-	for seed_value: int in [77951, 77963]:
-		forms.append(_maple_form(seed_value, bark, foliage, sprays))
+	var since := Kit.frames_now()
+	while not WorkerThreadPool.is_group_task_completed(form_task):
 		await park.get_tree().process_frame
-		if not is_instance_valid(park): return placed
+		if not is_instance_valid(park): break
+	WorkerThreadPool.wait_for_group_task_completion(form_task)
+	if not is_instance_valid(park): return placed
+	for i: int in range(FORM_SEEDS.size()):
+		# A form whose task failed on its thread is filled here instead.
+		if not (form_slots[i] as Dictionary).has("tools"): form_slots[i]["tools"] = _maple_tools(FORM_SEEDS[i])
+		forms.append(_maple_commit(form_slots[i].tools, bark, foliage, sprays))
+	# The frame boundary and physics steps the per-form yields always gave.
+	await Kit.settle(park, since)
+	if not is_instance_valid(park): return placed
 	var trees := Node3D.new()
 	trees.name = "GreenMaples"
 	root.add_child(trees)
@@ -657,12 +710,11 @@ static func _ferns(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberG
 	for part: MeshInstance3D in source.find_children("*", "MeshInstance3D", true, false):
 		if part.mesh == null: continue
 		var relative: Transform3D = park._vegetation_relative_transform(part, source)
-		var mesh := part.mesh.duplicate() as Mesh
-		for surface: int in range(mesh.get_surface_count()): mesh.surface_set_material(surface, part.get_active_material(surface))
+		var mesh: Mesh = preload("res://scripts/shinrai_mesh_bake_cache.gd").baked_from(part)
 		var b: AABB = relative * mesh.get_aabb()
 		box = b if first else box.merge(b)
 		first = false
-		parts.append({"mesh": mesh, "relative": relative})
+		parts.append({"mesh": mesh, "relative": relative, "bake_key": preload("res://scripts/shinrai_mesh_bake_cache.gd").group_key()})
 	if parts.is_empty(): return 0
 	var rows: Array[Transform3D] = []
 	for m: Dictionary in maples:
@@ -684,6 +736,7 @@ static func _ferns(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberG
 		var node := MultiMeshInstance3D.new()
 		node.name = "MapleFerns"
 		node.multimesh = many
+		preload("res://scripts/shinrai_mesh_bake_cache.gd").tag(node, part.bake_key)
 		node.visibility_range_end = 70.0
 		root.add_child(node)
 	return rows.size()
@@ -691,6 +744,7 @@ static func _ferns(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberG
 static func _leaf_floor(park: Node3D, terrain: Node, root: Node3D, rng: RandomNumberGenerator, maples: Array, pavilion: Dictionary) -> int:
 	var rows: Array = []
 	var pav_at: Vector2 = pavilion.get("p", Vector2.INF)
+	var since := Kit.frames_now()
 	for z: int in range(-182, -110):
 		for x: int in range(38, 186):
 			var cell := Vector2(x + 0.5, z + 0.5)
@@ -720,9 +774,11 @@ static func _leaf_floor(park: Node3D, terrain: Node, root: Node3D, rng: RandomNu
 				var colour := Kit.leaf_colour(rng, 1.0)
 				if by_pavilion and _on_pavilion(pavilion, p, 0.0): continue
 				rows.append([Transform3D(basis.scaled(Vector3.ONE * s), Vector3(p.x, ground + 0.012 + lift, p.y)), colour])
-		if z % 4 == 0:
-			await park.get_tree().process_frame
-			if not is_instance_valid(park): return 0
+		# Pure placement maths: yield on time, not on a row count (Kit.slice).
+		await Kit.slice(park)
+		if not is_instance_valid(park): return 0
+	await Kit.settle(park, since)
+	if not is_instance_valid(park): return 0
 	Kit.cell_batches(root, "FallenMapleLeaves", Kit.leaf_mesh(), Kit.leaf_material(), rows, 8.0, 26.0, false)
 	return rows.size()
 

@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cbmjh0pyid3co"
-path="res://.godot/imported/fine_grained_wood_nor_gl_2k.png-000847ed0178e8772347528cc8a8c4b9.ctex"
+path.bptc="res://.godot/imported/fine_grained_wood_nor_gl_2k.png-000847ed0178e8772347528cc8a8c4b9.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/streets/midori_frontage_construction/fine_grained_wood_nor_gl_2k.png"
-dest_files=["res://.godot/imported/fine_grained_wood_nor_gl_2k.png-000847ed0178e8772347528cc8a8c4b9.ctex"]
+dest_files=["res://.godot/imported/fine_grained_wood_nor_gl_2k.png-000847ed0178e8772347528cc8a8c4b9.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

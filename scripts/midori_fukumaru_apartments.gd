@@ -215,22 +215,29 @@ func _drapes(face: Transform3D, window: Rect2, tint: Color, enclosed_end := fals
 		var direction := 1.0 if side == 0 else -1.0
 		# Smooth gathers, slight gravity flare, and a sewn bottom hem. These
 		# remain one opaque fabric batch and need no cloth simulation.
+		# Each corner is shared by up to four cells: work it out once (same expressions on
+		# the same values, so every cell gets the corners it always had).
+		var grid_points := PackedVector3Array()
+		var grid_normals := PackedVector3Array()
+		var grid_prints := PackedVector2Array()
+		for row: int in range(9):
+			for column: int in range(41):
+				var uv := Vector2(float(column) / 40.0, float(row) / 8.0)
+				grid_points.append(face * _curtain_point(uv, edge, direction, bottom, top))
+				var tangent := _curtain_point(uv + Vector2(.001,0),edge,direction,bottom,top) - _curtain_point(uv - Vector2(.001,0),edge,direction,bottom,top)
+				var vertical := _curtain_point(uv + Vector2(0,.001),edge,direction,bottom,top) - _curtain_point(uv - Vector2(0,.001),edge,direction,bottom,top)
+				grid_normals.append(face.basis * (tangent.cross(vertical).normalized() * -direction))
+				grid_prints.append(Vector2(uv.x*.40,uv.y*(top-bottom)))
 		for row: int in range(8):
 			for column: int in range(40):
-				var u0 := float(column) / 40.0
-				var u1 := float(column + 1) / 40.0
-				var v0 := float(row) / 8.0
-				var v1 := float(row + 1) / 8.0
-				var corners: Array[Vector2] = [Vector2(u0,v0),Vector2(u0,v1),Vector2(u1,v1),Vector2(u1,v0)]
-				var positions: Array[Vector3] = []
-				var normals: Array[Vector3] = []
-				var prints: Array[Vector2] = []
-				for uv: Vector2 in corners:
-					positions.append(face * _curtain_point(uv, edge, direction, bottom, top))
-					var tangent := _curtain_point(uv + Vector2(.001,0),edge,direction,bottom,top) - _curtain_point(uv - Vector2(.001,0),edge,direction,bottom,top)
-					var vertical := _curtain_point(uv + Vector2(0,.001),edge,direction,bottom,top) - _curtain_point(uv - Vector2(0,.001),edge,direction,bottom,top)
-					normals.append(face.basis * (tangent.cross(vertical).normalized() * -direction))
-					prints.append(Vector2(uv.x*.40,uv.y*(top-bottom)))
+				# Corners (column,row), (column,row+1), (column+1,row+1), (column+1,row).
+				var c0 := row * 41 + column
+				var c1 := c0 + 41
+				var c2 := c1 + 1
+				var c3 := c0 + 1
+				var positions: Array[Vector3] = [grid_points[c0], grid_points[c1], grid_points[c2], grid_points[c3]]
+				var normals: Array[Vector3] = [grid_normals[c0], grid_normals[c1], grid_normals[c2], grid_normals[c3]]
+				var prints: Array[Vector2] = [grid_prints[c0], grid_prints[c1], grid_prints[c2], grid_prints[c3]]
 				_kit.mapped("apartment_fabric",positions,normals,prints,[0.0,0.0,0.0,0.0],tint,.96)
 		var hem: Array[Vector3] = []
 		for step: int in range(41):

@@ -96,6 +96,13 @@ class Geo:
 ## One tree variant. Returns {near, mid, far: ArrayMesh, box: AABB,
 ## trunk_r: float, stats: Dictionary}.
 static func build(seed: int) -> Dictionary:
+	return finish(grow(seed))
+
+## The pure-data half of build(): skeleton, buds and every LOD's surface arrays.
+## Touches no engine server (only RandomNumberGenerator and packed arrays), so
+## it may run on a WorkerThreadPool thread; the same seed gives the same arrays
+## on any thread.
+static func grow(seed: int) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var trunk := _grow_trunk(rng)
@@ -107,22 +114,29 @@ static func build(seed: int) -> Dictionary:
 	_count(trunk, counts)
 	var clusters: Array = []
 	_buds(trunk, clusters, rng)
-	var meshes: Array = []
+	var lods: Array = []
 	for lod: int in range(3):
 		var bark := Geo.new()
 		_bark(bark, trunk, lod)
 		var bloom := Geo.new()
 		var keep: int = [1, MID_KEEP, FAR_KEEP][lod]
-		var grow: float = [1.0, MID_GROW, FAR_GROW][lod]
+		var grow_by: float = [1.0, MID_GROW, FAR_GROW][lod]
 		for c: int in range(0, clusters.size(), keep):
 			if lod == 0: _near_cards(bloom, clusters[c])
-			else: _cluster_cards(bloom, clusters[c], grow)
+			else: _cluster_cards(bloom, clusters[c], grow_by)
+		lods.append([bark.arrays(), bloom.arrays()])
+	return {"lods": lods, "branches": counts.branches, "clusters": clusters.size()}
+
+## The main-thread half of build(): the three meshes from grow()'s arrays.
+static func finish(grown: Dictionary) -> Dictionary:
+	var meshes: Array = []
+	for surfaces: Array in grown.lods:
 		var mesh := ArrayMesh.new()
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, bark.arrays())
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, bloom.arrays())
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surfaces[0])
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surfaces[1])
 		meshes.append(mesh)
 	var box: AABB = (meshes[0] as ArrayMesh).get_aabb()
-	var stats := {"branches_by_order": counts.branches, "clusters": clusters.size()}
+	var stats := {"branches_by_order": grown.branches, "clusters": int(grown.clusters)}
 	for lod: int in range(3):
 		var mesh: ArrayMesh = meshes[lod]
 		stats[["near", "mid", "far"][lod] + "_tris"] = [mesh.surface_get_array_index_len(0) / 3, mesh.surface_get_array_index_len(1) / 3]
@@ -435,6 +449,11 @@ static func _near_cards(g: Geo, c: Array) -> void:
 ## tip, near-white with a pink blush toward the base, a deeper pink eye and a
 ## ring of pale stamens; a dark red-brown bud scale where the stalks meet.
 static func cluster_texture() -> ImageTexture:
+	return ImageTexture.create_from_image(cluster_image())
+
+## The atlas image of cluster_texture() (Image work only, no server: it may run
+## on a WorkerThreadPool thread).
+static func cluster_image() -> Image:
 	var cell := 256
 	var cm := float(cell) / (CLUSTER * 100.0)
 	var rng := RandomNumberGenerator.new()
@@ -456,7 +475,7 @@ static func cluster_texture() -> ImageTexture:
 		for bud: Vector2 in buds:
 			_cluster(image, bud, cm, rng, origin, cell)
 	image.generate_mipmaps()
-	return ImageTexture.create_from_image(image)
+	return image
 
 static func _cluster(image: Image, bud: Vector2, cm: float, rng: RandomNumberGenerator, origin: Vector2, cell: int) -> void:
 		var count := rng.randi_range(4, 6) + 2

@@ -62,7 +62,15 @@ func source_lod_stats() -> Array[Dictionary]:
 		result.append({"kind": i, "label": s.label, "parts": s.parts.size(), "base_triangles": s.triangles, "lod_enabled_parts": enabled, "lod_surfaces": surfaces, "lod_levels": levels})
 	return result
 
+const SOURCE_FILES := ["stone_00.glb","stone_01.glb","stone_02.glb","stone_03.glb","stone_04.glb","stone_05.glb","branch_00.glb","branch_01.glb","branch_02.glb","groundcover_00.glb","groundcover_01.glb","groundcover_02.glb","groundcover_03.glb","groundcover_04.glb","groundcover_05.glb","leaf_00.glb","leaf_01.glb","leaf_02.glb","paper_00.glb","can_00.glb"]
+
 func _ready() -> void:
+	# The source scenes are read on loader threads during the long wait below;
+	# file_source() takes the same resources (load() if a request failed).
+	for filename: String in SOURCE_FILES:
+		var path: String = ASSETS+filename
+		if not ResourceLoader.has_cached(path) and ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			ResourceLoader.load_threaded_request(path)
 	await Budget.wait_structure(get_parent())
 	park = get_parent()
 	detail = get_tree().root.get_node("MidoriGrassDetail")
@@ -113,7 +121,12 @@ func source(node: Node3D, label: String, distance: float) -> int:
 	return sources.size()-1
 
 func file_source(filename: String, label: String, distance: float) -> void:
-	var resource := load(ASSETS+filename) as PackedScene
+	var path: String = ASSETS+filename
+	var resource: PackedScene = null
+	var status := ResourceLoader.load_threaded_get_status(path)
+	if status == ResourceLoader.THREAD_LOAD_LOADED or status == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+		resource = ResourceLoader.load_threaded_get(path) as PackedScene
+	if resource == null: resource = load(path) as PackedScene
 	if resource == null: return
 	var node := resource.instantiate() as Node3D
 	source(node, label, distance)
@@ -154,6 +167,11 @@ func scan_planting() -> void:
 		trunks[key].append(world)
 	# Source roots are read even when the distance service has hidden its originals.
 	# Skip LOD copies and use only substantial plants, not tiny lawn blades.
+	# The batches are read here (their transform buffers, one call each) and
+	# counted on a worker: the same per-instance maths on the same floats, and
+	# the counts do not depend on order. It used to take a budget turn every 512
+	# instances, ~120k instances, so most of its wall time was waiting for turns.
+	var jobs: Array = []
 	for node: MultiMeshInstance3D in park.find_children("*", "MultiMeshInstance3D", true, false):
 		var path := String(node.get_path()).to_lower()
 		if "midoridistancedetail" in path or "lod1" in path or "lod2" in path: continue
@@ -162,6 +180,12 @@ func scan_planting() -> void:
 		if mm == null or mm.mesh == null: continue
 		var box := mm.mesh.get_aabb()
 		var anchor := Vector3(box.get_center().x,box.position.y,box.get_center().z)
+		if mm.transform_format == MultiMesh.TRANSFORM_3D and mm.instance_count > 0:
+			var stride := 12 + (4 if mm.use_colors else 0) + (4 if mm.use_custom_data else 0)
+			var buffer := mm.buffer
+			if buffer.size() == stride * mm.instance_count:
+				jobs.append({"buffer": buffer, "stride": stride, "count": mm.instance_count, "xform": node.global_transform, "box": box, "anchor": anchor})
+				continue
 		for index: int in range(mm.instance_count):
 			if index%512==0: await Budget.checkpoint(park)
 			var t := node.global_transform*mm.get_instance_transform(index)
@@ -170,6 +194,37 @@ func scan_planting() -> void:
 			var key := cell(Vector2(root.x,root.z))
 			occupied[key]=int(occupied.get(key,0))+1
 			scanned_roots+=1
+	if jobs.is_empty(): return
+	var result := {}
+	var task := WorkerThreadPool.add_task(_scan_job.bind(jobs, result), false, "MidoriParkFloor root scan")
+	while not WorkerThreadPool.is_task_completed(task): await get_tree().process_frame
+	WorkerThreadPool.wait_for_task_completion(task)
+	var counted: Dictionary = result.occupied
+	for key: Vector2i in counted: occupied[key]=int(occupied.get(key,0))+int(counted[key])
+	scanned_roots+=int(result.scanned)
+
+## WORKER: the scan loop above on copies of the transform buffers. Each record
+## is rebuilt exactly as get_instance_transform does (3x4 rows: basis row, origin).
+static func _scan_job(jobs: Array, result: Dictionary) -> void:
+	var counted := {}
+	var scanned := 0
+	for job: Dictionary in jobs:
+		var b: PackedFloat32Array = job.buffer
+		var stride: int = job.stride
+		var xform: Transform3D = job.xform
+		var box: AABB = job.box
+		var anchor: Vector3 = job.anchor
+		for index: int in range(int(job.count)):
+			var o := index*stride
+			var local := Transform3D(Vector3(b[o],b[o+4],b[o+8]),Vector3(b[o+1],b[o+5],b[o+9]),Vector3(b[o+2],b[o+6],b[o+10]),Vector3(b[o+3],b[o+7],b[o+11]))
+			var t := xform*local
+			if (t*box).size.y < .12: continue
+			var root := t*anchor
+			var key := Vector2i(floori(root.x/2.0),floori(root.z/2.0))
+			counted[key]=int(counted.get(key,0))+1
+			scanned+=1
+	result["occupied"]=counted
+	result["scanned"]=scanned
 
 func crowding(p: Vector2) -> int:
 	var key := cell(p)

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://5eo6vycg55sj"
-path="res://.godot/imported/midori_2050_leaf_canopy_texture_0_metallic_roughness.png-5dbe929c9dfe372cbca3099f6653f87c.ctex"
+path.bptc="res://.godot/imported/midori_2050_leaf_canopy_texture_0_metallic_roughness.png-5dbe929c9dfe372cbca3099f6653f87c.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2f0a74e6cf2bf1b9106e2531b5691b63"
@@ -14,12 +15,12 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/shinrai/parks/midori_park/models/identity2050/midori_2050_leaf_canopy_texture_0_metallic_roughness.png"
-dest_files=["res://.godot/imported/midori_2050_leaf_canopy_texture_0_metallic_roughness.png-5dbe929c9dfe372cbca3099f6653f87c.ctex"]
+dest_files=["res://.godot/imported/midori_2050_leaf_canopy_texture_0_metallic_roughness.png-5dbe929c9dfe372cbca3099f6653f87c.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

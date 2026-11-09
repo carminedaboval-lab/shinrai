@@ -77,8 +77,14 @@ func _on_node_added(node: Node) -> void:
 	call_deferred("_replace_candidate", node)
 
 
-func _replace_candidate(node: Node) -> void:
-	if not is_instance_valid(node):
+## Untyped on purpose: the node may be freed before this deferred call runs, and a
+## freed object fails a typed `Node` argument before the validity check (it logged
+## "Cannot convert argument 1 from Object to Object" hundreds of times per boot).
+func _replace_candidate(candidate) -> void:
+	if not is_instance_valid(candidate):
+		return
+	var node := candidate as Node
+	if node == null:
 		return
 
 	var parent: Node = node.get_parent()

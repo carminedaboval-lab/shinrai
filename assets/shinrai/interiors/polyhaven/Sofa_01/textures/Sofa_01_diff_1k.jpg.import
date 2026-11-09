@@ -3,20 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://q7g057ti8jg4"
-path="res://.godot/imported/Sofa_01_diff_1k.jpg-2a5945b50917a3748060281567df3aa9.ctex"
+path.bptc="res://.godot/imported/Sofa_01_diff_1k.jpg-2a5945b50917a3748060281567df3aa9.bptc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/shinrai/interiors/polyhaven/Sofa_01/textures/Sofa_01_diff_1k.jpg"
-dest_files=["res://.godot/imported/Sofa_01_diff_1k.jpg-2a5945b50917a3748060281567df3aa9.ctex"]
+dest_files=["res://.godot/imported/Sofa_01_diff_1k.jpg-2a5945b50917a3748060281567df3aa9.bptc.ctex"]
 
 [params]
 
-compress/mode=0
-compress/high_quality=false
+compress/mode=2
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

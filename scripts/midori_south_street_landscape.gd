@@ -2,6 +2,7 @@ extends RefCounted
 ## World-metre street ground and layered planting. Only a sampled existing-path
 ## stone skin enters Z174..180; finished park objects are never moved or removed.
 const FoliageMaterials = preload("res://scripts/midori_foliage_materials.gd")
+const MeshArrays = preload("res://scripts/midori_south_street_mesh_arrays.gd")
 const TREE_PACK := "res://assets/shinrai/parks/midori_park/models/vegetation/vendor/realistic_trees_collection/scene.glb"
 const TREE_NAME := "Tree EZTree0.Medium011"
 const SHRUB_NAME := "Tree EZTree1.Bush006"
@@ -271,7 +272,8 @@ static func _paver_piece(street: Node3D,parent: Node3D,outline: PackedVector2Arr
 			tool.add_vertex(vertex)
 	var visual := MeshInstance3D.new()
 	visual.name = "GardenFittedMineralSlab"
-	visual.mesh = tool.commit()
+	# Thousands of these are merged at the end of the street build: keep the arrays.
+	visual.mesh = MeshArrays.commit(tool)
 	var mats: Dictionary = street.get("materials")
 	visual.material_override = mats[key]
 	parent.add_child(visual)
@@ -862,7 +864,7 @@ static func _arrival_soil_garden(street: Node3D,index: int) -> Node3D:
 		tool.add_vertex(Vector3(point.x,0,point.y))
 	var soil := MeshInstance3D.new()
 	soil.name = "IrregularRecessedSoil"
-	soil.mesh = tool.commit()
+	soil.mesh = MeshArrays.commit(tool)
 	var soil_material := (mats.land_soil as StandardMaterial3D).duplicate() as StandardMaterial3D
 	soil_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	soil.material_override = soil_material
@@ -1018,7 +1020,7 @@ static func _grass_tuft(parent: Node3D,pos: Vector3,height: float,material: Mate
 			tool.add_vertex(vertex)
 	var visual := MeshInstance3D.new()
 	visual.name = "FineBladeGroundcover"
-	visual.mesh = tool.commit()
+	visual.mesh = MeshArrays.commit(tool)
 	visual.material_override = material
 	visual.position = pos
 	parent.add_child(visual)
@@ -1089,7 +1091,7 @@ static func _prototype(path: String,source_name: String) -> Node3D:
 			# low crown from the triangles actually referenced by the chosen mesh.
 			var first_vertex := true
 			for surface: int in range(child.mesh.get_surface_count()):
-				var arrays: Array = child.mesh.surface_get_arrays(surface)
+				var arrays: Array = MeshArrays.read(child.mesh,surface)
 				var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 				var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 				var count := indices.size() if not indices.is_empty() else vertices.size()
@@ -1151,7 +1153,7 @@ static func _instance(prototype: Node3D,parent: Node3D,pos: Vector3,height: floa
 		# placed transform. Root can expand its visual envelope without guessing.
 		for visual: MeshInstance3D in instance.get_children():
 			for surface: int in range(visual.mesh.get_surface_count()):
-				var arrays: Array = visual.mesh.surface_get_arrays(surface)
+				var arrays: Array = MeshArrays.read(visual.mesh,surface)
 				var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 				var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 				var count := indices.size() if not indices.is_empty() else vertices.size()
