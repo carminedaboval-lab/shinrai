@@ -47,3 +47,5 @@ textures/default_filters/texture_mipmap_bias=0.5
 limits/opengl/max_renderable_lights=96
 limits/opengl/max_lights_per_object=16
 anti_aliasing/quality/use_taa=true
+reflections/reflection_atlas/reflection_count=32
+rendering_device/pipeline_cache/enable=false

@@ -115,7 +115,8 @@ static func _progress(park: Node, text: String, part: float) -> void:
 ## module and every autoload with a release_build_data() method is asked once,
 ## here, after the last step above that could still read that data; so are the
 ## static helpers with such a method (clipped shrubs), the navigation's shape
-## bounds cache and the biome thinning helper's park walk. Synchronous.
+## bounds cache, the grass autoload's forest-mound index and the biome thinning
+## helper's park walk. Synchronous.
 const RELEASE_SCRIPTS := ["res://scripts/midori_clipped_shrubs.gd", "res://scripts/midori_south_street.gd"]
 ## Modules that are not direct children of the park (the near city hangs under
 ## the horizon backdrop: midori_horizon.gd creates it).
@@ -139,10 +140,25 @@ static func _release_build_data(park: Node3D) -> Dictionary:
 				out[path.get_file()] = script.call("release_build_data")
 				break
 	out["navigation"] = Navigation.release_build_data()
+	out["MidoriGrassDetail"] = _release_forest_cells(park)
 	var thin_all: Script = load("res://scripts/biomes/thin_all.gd")
 	thin_all.track(park, false)
 	thin_all.forget()
 	return out
+
+## The grass autoload's forest-mound index: read by its own install and by the
+## understory placement, both long finished here, and cleared and refilled when
+## the autoload installs on the next park. Dropped from here, not by a method in
+## midori_grass_detail.gd: that file's text is part of the understory placement
+## cache key, so editing it costs one uncached boot. Its lawn index stays (it is
+## only rebuilt while _lawn_index_ready is false, and is read at runtime).
+static func _release_forest_cells(park: Node3D) -> Dictionary:
+	var detail := park.get_tree().root.get_node_or_null("MidoriGrassDetail")
+	if detail == null or not (detail.get("_forest_cells") is Dictionary): return {"skipped": "no forest cells"}
+	if not park.has_meta("understory_placement"): return {"skipped": "understory not placed"}
+	var freed := {"forest_cells": (detail.get("_forest_cells") as Dictionary).size()}
+	detail.set("_forest_cells", {})
+	return freed
 
 ## Safety net for a raid that reaches HQ without calling run() (an older or
 ## half-updated ExtractionRun): runs the step once the phase leaves BOOT, as

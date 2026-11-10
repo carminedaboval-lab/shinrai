@@ -3,6 +3,7 @@ extends Node3D
 ## collision: every tower shares one MultiMesh and one shader, so the whole
 ## skyline costs a handful of draws. The shader does its own aerial haze because
 ## scene fog would swallow the lights at this distance.
+const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
 const RNG_SEED := 20500118
 const STAGE_CHANCE := .55
 # Direction from the park (degrees), distance, width, tower count, tallest tower.
@@ -137,10 +138,8 @@ func set_night_mode(value: bool) -> void:
 	if _ground != null: _ground.albedo_color = Color("#0a0b12") if value else Color("#a9adb4")
 
 func _material(code: String, label: String) -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = code
-	var material := ShaderMaterial.new()
-	material.shader = shader
+	# Pooled by text: the five district glows share one shader, not one each.
+	var material := ShaderPool.material(code)
 	material.resource_name = label
 	_materials.append(material)
 	return material
@@ -248,11 +247,7 @@ func _build_crows(rng: RandomNumberGenerator) -> void:
 	var instance := MultiMeshInstance3D.new()
 	instance.name = "ParkCrows"
 	instance.multimesh = multimesh
-	var shader := Shader.new()
-	shader.code = CROW_SHADER
-	var material := ShaderMaterial.new()
-	material.shader = shader
-	instance.material_override = material
+	instance.material_override = ShaderPool.material(CROW_SHADER)
 	instance.custom_aabb = AABB(Vector3(-260, 0, -260), Vector3(520, 90, 520))
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(instance)

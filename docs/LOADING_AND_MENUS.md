@@ -516,6 +516,64 @@ yet proven. Full record: scratchpad `mem\integ\INTEGRATION.md`, `mem\<role>\NOTE
   (with `group_key()` / `tag()` on every batch built from them).
 - Streaming or a saved park once the world grows past what one boot can hold.
 
+### Round 2 (2026-11-09 evening)
+
+Measured on one warm Vulkan boot each (seed 13), after commit 3819733:
+
+| | round 1 | round 2 fixes | + pipeline cache off |
+|---|---|---|---|
+| peak private | 15.0 GB | 14.1 GB | 13.3 GB |
+| GPU committed (peak) | 5.45 GB | 4.85 GB | 4.76 GB |
+| RD textures | 2.89 GB | 2.45 GB | 2.45 GB |
+| MEMORY_STATIC at world_ready | 1.83 GB | 1.82 GB | 1.55 GB |
+| surface pipelines | 1409 | 1331 | 1331 |
+| world_ready | ~70 s | 67.8 s | 66.8 s |
+
+- Fixes: 23 more duplicate shaders pooled (body status, barrel fires, city glow, wildlife, hill rings) and one lantern
+  flame text; near-city shells no longer upload an all-zero UV2; one fine-timber grain texture instead of two; four
+  civic SVG signs BC7; nine layered scav body textures limited to 2048 px (the only change that is not strictly
+  invisible: softer only closer than ~0.8 m); reflection atlas 64 -> 32 slots (22 probes exist); desire-path
+  `paving_cells` and small boot-only tables freed in `release_build_data()`; the lake planar reflection renders once per
+  30 frames while the root viewport has 3D disabled (boot).
+- `rendering/rendering_device/pipeline_cache/enable=false`: Godot's in-memory copy of every compiled pipeline cost about
+  0.8 GB; the GPU driver keeps its own on-disk shader cache, and the warm boot was not slower without it. Re-check the
+  load time after a driver update or on another GPU.
+- Fingerprint: the five round-1 deltas plus `BiomeMossGarden.mat_hash` (shared flame text), as predicted.
+- Not a boot lever: soft shadows on lamps (`light_size > 0`) add ~145 specialization pipelines only when night falls
+  (+157 vs +12 with hard shadows). Textures held by scripts but not drawn: 310 MB (238 MB park assets, 48 MB scavs).
+- Direct3D 12 (`--rendering-driver d3d12`, trial only): peak private 12.0 GB but GPU committed 8.5 GB. Cause measured
+  with `tests/probe_mem_small_buffers.gd`: D3D12 rounds every GPU buffer up to 64 KB (20,000 tiny MultiMeshes = 1.29 GB,
+  20,000 one-quad meshes = 3.75 GB; 0.07 GB on Vulkan). The park has 26,222 MultiMesh nodes and 11,534 unique meshes, so
+  about 5 GB of D3D12's memory is rounding. Next step: merge static meshes per module and map cell, free the hidden
+  distance-detail sources, build tiny plant clusters as fewer MultiMeshes; then D3D12 should land near 7-8 GB.
+- Pending: `tools/bridge_artwork_bc7.gd` (bridge textures to BC7, ~0.1 GB) did not pass its own dry run yet;
+  `tests/probe_mem_near_city_index.gd` needs the UV2 expectation updated (round2 REQUESTS.md).
+
+### Round 3: end-of-boot consolidation (2026-11-10)
+
+`scripts/shinrai_consolidate.gd` runs once per park from `extraction_run.gd`, after the render budget (so draw
+distances are already assigned) and before HQ; raid path only. Switches after `--`: `--no-consolidate`,
+`--no-consolidate-plants`, `--no-consolidate-merge`, `--no-consolidate-street`. Report: `SHINRAI_CONSOLIDATE {json}`
+and park meta `shinrai_consolidation`. Takes about 1.3 s of the boot.
+
+- Plants: frees the 7,057 source batches distance detail copied and hid, and the 1,220 cells the Bush006 swap hid
+  (MultiMesh nodes 26,228 -> 17,951).
+- Static merge (`shinrai_static_merge.gd`, corporate district only): 5,539 single-use boxes -> 425 merged meshes
+  (unique meshes 6,309 -> 1,191), same Material objects, triangles equal (75,168), collision carriers kept with
+  `mesh = null`. A raw reference count cannot tell single-use meshes apart (meshes in the tree carry engine-side
+  references); the per-module use count is the test.
+- South Street (`shinrai_street_consolidate.gd`): identical primitives shared and hidden-for-good visuals freed
+  (unique meshes 2,023 -> 712, 519 nodes freed).
+- Result: nodes 67,355 -> 53,588; MEMORY_STATIC 1.55 -> 1.35 GB. Same-camera day captures (three corporate views,
+  five park views) match with it off and on.
+- Memory, one boot each: Vulkan peak private unchanged (13.3-13.5 GB). Direct3D 12 11.36 -> 10.96 GB; its reported
+  video memory in use falls 8.8 -> 6.9 GB, but the freed 64 KB slots are not returned to the system because the
+  pieces are created during the boot and freed at its end. To bank that ~1.9 GB the builders must not create them in
+  the first place (build the district merged, give hidden sources no GPU buffer).
+- Designs for the next steps (shader set, streaming, plant batches) concluded: on Vulkan about 7 GB is driver memory
+  that follows pipeline count; same-picture shader merging is worth an estimated 1-3 GB for a large effort; streaming
+  a 440 x 360 m park saves ~25 MB on Vulkan. Under 8 GB is only plausible on Direct3D 12.
+
 ### Open items (boot memory)
 
 - Specialization pipelines (677, ~3-4 GB): nearly all appear when the lake reflection SubViewport first renders;

@@ -9,6 +9,7 @@ extends Control
 ## edge of the screen and comes forward when you are hurt or checking vitals.
 const UIStyle = preload("res://scripts/hud/shinrai_ui_style.gd")
 const Medical = preload("res://scripts/extraction_medical.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 const MODEL_PATH := "res://assets/characters/urban_explorer_2050/urban_explorer_2050_body.glb"
 const PARTS := ["head", "thorax", "stomach", "left_arm", "right_arm", "left_leg", "right_leg"]
 const SHORT := {"head":"HEAD", "thorax":"THORAX", "stomach":"STOMACH", "left_arm":"L ARM", "right_arm":"R ARM", "left_leg":"L LEG", "right_leg":"R LEG"}
@@ -152,19 +153,14 @@ func _p(bone_name: String) -> Vector3:
 
 func _bone_material(part: String) -> ShaderMaterial:
 	if not _bone_materials.has(part):
-		var material := ShaderMaterial.new()
-		var shader := Shader.new()
-		shader.code = BONE_SHADER
-		material.shader = shader
+		# One pooled bone shader for every part and glow (it was one per material).
+		var material := ShaderPool.material(BONE_SHADER)
 		material.render_priority = 1
 		_bone_materials[part] = material
 	return _bone_materials[part]
 
 func _glow_material() -> ShaderMaterial:
-	var material := ShaderMaterial.new()
-	var shader := Shader.new()
-	shader.code = BONE_SHADER
-	material.shader = shader
+	var material := ShaderPool.material(BONE_SHADER)
 	material.render_priority = 2
 	material.set_shader_parameter("bone_color", Color(1.0, 0.35, 0.15, 0.0))
 	return material

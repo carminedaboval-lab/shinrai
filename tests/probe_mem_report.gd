@@ -10,9 +10,20 @@ extends SceneTree
 #   data (arrays, dictionaries, packed arrays, images) held by every park node, the
 #   raid, the autoloads and every loaded script's static variables.
 #   godot --path . --script res://tests/probe_mem_report.gd -- [--profile-startup]
-#         [--mem-out=<abs path .json>] [--direct-raid] [--tick-ms=1000]
+#         [--mem-out=<abs path .json>] [--direct-raid] [--tick-ms=1000] [--rd-textures]
 # --direct-raid: boot scenes/shinrai_extraction.tscn directly (test_extraction style),
 #   for headless runs where the menu-first bootstrap cannot be used.
+# --rd-textures: after the report, find every texture resource that is alive and say
+#   who holds it (MEM_RD_TEX lines and "rd_textures" in the JSON): drawn by a tree
+#   material (the report's own number), reached another way from a node (particles,
+#   decals, UI, sky), held only by a script variable / preload constant / PackedScene,
+#   a viewport target, or only in the resource cache. Godot 4.7 does not expose
+#   texture_debug_usage or the resource cache to scripts, so the list is built by
+#   following holders and by asking the cache about every texture / scene / resource
+#   file in the project; RD texture memory minus what was found is printed as
+#   not_found (render targets, atlases, engine-held). Totals per class, with / without
+#   a path and per path prefix, top 60 by bytes. Without the switch the run and its
+#   output are unchanged.
 # Investigation only: edits nothing in the project and never touches the player's save.
 
 const LoadState = preload("res://scripts/shinrai_load_state.gd")
@@ -122,6 +133,9 @@ func _run() -> void:
 	_tick("menu_idle_3s")
 	var report := _report(_find_park(), raid)
 	_tick("after_report")
+	if "--rd-textures" in args:
+		report["rd_textures"] = _rd_texture_section()
+		_tick("after_rd_textures")
 	if out_path != "":
 		var f := FileAccess.open(out_path, FileAccess.WRITE)
 		if f != null:
@@ -456,6 +470,307 @@ func _tex_layered_row(t: Texture, owner: NodePath) -> int:
 	var bytes := int(w * h * layers * bpp * (1.3333 if mips > 1 else 1.0))
 	_tex_seen[id] = {"id": id, "class": t.get_class(), "path": t.resource_path, "name": t.resource_name, "owner": String(owner), "w": w, "h": h, "layers": layers, "format": fmt, "compressed": fmt in _COMPRESSED, "mipmaps": mips, "bytes": bytes, "refs": 1}
 	return bytes
+
+# ------------------------------------------------- RD texture attribution (--rd-textures)
+
+const _RD_DEPTH := 6
+const _RD_MAX_ELEMENTS := 4096
+const _RD_TOP := 60
+
+var _rd_obj_seen: Dictionary = {}    # objects visited by the holder scan
+var _rd_held: Dictionary = {}        # texture instance id -> {class, holder}: first holder found
+var _rd_props: Dictionary = {}       # node class + script -> [built-in object props, script vars]
+
+## Object-typed built-in properties and container-capable script variables of a node,
+## cached per class + script: asking every node for its property list is too slow.
+func _rd_node_props(n: Node) -> Array:
+	var s: Script = n.get_script()
+	var key := n.get_class() + ("#" + str(s.get_instance_id()) if s != null else "")
+	if _rd_props.has(key): return _rd_props[key]
+	var builtin := PackedStringArray()
+	var scripted := PackedStringArray()
+	for p: Dictionary in n.get_property_list():
+		var t := int(p.get("type", 0))
+		if (int(p.get("usage", 0)) & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0:
+			if t == TYPE_OBJECT or t == TYPE_ARRAY or t == TYPE_DICTIONARY or t == TYPE_NIL: scripted.append(String(p.name))
+		elif t == TYPE_OBJECT: builtin.append(String(p.name))
+	var out: Array = [builtin, scripted]
+	_rd_props[key] = out
+	return out
+
+func _rd_value(v: Variant, cls: String, holder: String, depth: int) -> void:
+	match typeof(v):
+		TYPE_OBJECT:
+			if is_instance_valid(v): _rd_collect(v, cls, holder, depth)
+		TYPE_ARRAY:
+			var arr: Array = v
+			if depth <= 0 or arr.size() > _RD_MAX_ELEMENTS: return
+			for e: Variant in arr:
+				var t := typeof(e)
+				if t == TYPE_OBJECT or t == TYPE_ARRAY or t == TYPE_DICTIONARY: _rd_value(e, cls, holder, depth - 1)
+		TYPE_DICTIONARY:
+			var d: Dictionary = v
+			if depth <= 0 or d.size() > _RD_MAX_ELEMENTS: return
+			for k: Variant in d:
+				var e: Variant = d[k]
+				var t := typeof(e)
+				if t == TYPE_OBJECT or t == TYPE_ARRAY or t == TYPE_DICTIONARY: _rd_value(e, cls, holder, depth - 1)
+
+## Follows resources (never nodes) from one holder and records the textures found.
+## Textures and meshes are not asked for their generic properties: those getters can
+## read images back from the GPU or copy whole vertex buffers.
+func _rd_collect(o: Object, cls: String, holder: String, depth: int) -> void:
+	if o is Node or o is MainLoop or o is Script or o is Shader or o is Shape3D or o is AudioStream or o is Animation or o is Image: return
+	var id := o.get_instance_id()
+	if _rd_obj_seen.has(id): return
+	_rd_obj_seen[id] = true
+	if o is Texture:
+		# An atlas region or a viewport texture owns no memory: its atlas / the
+		# viewport target is counted instead.
+		if o is AtlasTexture:
+			if (o as AtlasTexture).atlas != null: _rd_collect((o as AtlasTexture).atlas, cls, holder, depth - 1)
+		elif not o is ViewportTexture and not _rd_held.has(id):
+			_rd_held[id] = {"class": cls, "holder": holder}
+		return
+	if depth <= 0: return
+	if o is Mesh:
+		var mesh := o as Mesh
+		for s: int in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s)
+			if m != null: _rd_collect(m, cls, holder, depth - 1)
+		return
+	if o is MultiMesh:
+		if (o as MultiMesh).mesh != null: _rd_collect((o as MultiMesh).mesh, cls, holder, depth - 1)
+		return
+	if o is PackedScene:
+		# A scene's resources sit in its bundle; nothing in it is drawn until instanced.
+		var bundled: Variant = o.get("_bundled")
+		if bundled is Dictionary:
+			var variants: Variant = (bundled as Dictionary).get("variants", [])
+			if variants is Array:
+				var inner := "%s [PackedScene %s]" % [holder, (o as PackedScene).resource_path]
+				var inner_cls := "script_held" if cls == "tree_other" else cls
+				for e: Variant in (variants as Array):
+					if typeof(e) == TYPE_OBJECT and is_instance_valid(e): _rd_collect(e, inner_cls, inner, depth - 1)
+		return
+	var scripted := o.get_script() != null
+	for p: Dictionary in o.get_property_list():
+		var t := int(p.get("type", 0))
+		if t == TYPE_OBJECT:
+			_rd_value(o.get(String(p.name)), cls, holder, depth - 1)
+		elif scripted and (t == TYPE_ARRAY or t == TYPE_DICTIONARY or t == TYPE_NIL) and (int(p.get("usage", 0)) & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0:
+			_rd_value(o.get(String(p.name)), cls, holder, depth - 1)
+
+## res://a/b/c for a path (sub-resource suffix dropped); for a texture without a path
+## the format and size, which is what tells render targets and generated maps apart.
+func _rd_group(path: String, row: Dictionary) -> String:
+	if path == "": return "(no path) %s fmt=%d %dx%d%s" % [row.type, row.format, row.w, row.h, "x%d" % row.layers if int(row.layers) > 1 else ""]
+	var base := path.get_slice("::", 0).get_base_dir()
+	if not base.begins_with("res://"): return base
+	var parts := base.trim_prefix("res://").split("/", false)
+	if parts.size() > 3: parts = parts.slice(0, 3)
+	return "res://" + "/".join(parts)
+
+func _rd_texture_section() -> Dictionary:
+	var t0 := Time.get_ticks_msec()
+	# 1. Everything a node holds: built-in properties first (things that can be
+	# drawn), script variables second, so a texture held both ways counts as drawn.
+	var nodes: Array[Node] = []
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		nodes.append(n)
+		for c: Node in n.get_children(true): stack.append(c)
+	for pass_index: int in 2:
+		var cls := "tree_other" if pass_index == 0 else "script_held"
+		for n: Node in nodes:
+			var names: PackedStringArray = _rd_node_props(n)[pass_index]
+			if names.is_empty(): continue
+			var node_path := ""
+			for name: String in names:
+				var v: Variant = n.get(name)
+				var t := typeof(v)
+				if t != TYPE_OBJECT and t != TYPE_ARRAY and t != TYPE_DICTIONARY: continue
+				if t == TYPE_OBJECT and (not is_instance_valid(v) or v is Node): continue
+				if node_path == "": node_path = String(n.get_path())
+				_rd_value(v, cls, node_path + "." + name, _RD_DEPTH)
+	# 2. preload() constants and static vars of every loaded script.
+	var files: Array[String] = []
+	_collect_gd("res://scripts", files)
+	var re := RegEx.new()
+	re.compile("(?m)^static\\s+var\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	var scripts_scanned := 0
+	for path: String in files:
+		if not ResourceLoader.has_cached(path): continue
+		var script: Script = ResourceLoader.load(path)
+		if script == null: continue
+		scripts_scanned += 1
+		var consts: Dictionary = script.get_script_constant_map()
+		for name: Variant in consts:
+			_rd_value(consts[name], "script_held", "%s const %s" % [path, str(name)], _RD_DEPTH)
+		var src := FileAccess.get_file_as_string(path)
+		for m: RegExMatch in re.search_all(src):
+			_rd_value(script.get(m.get_string(1)), "script_held", "%s static %s" % [path, m.get_string(1)], _RD_DEPTH)
+	# 3. The resource cache. The engine does not let a script list it (4.7 has no
+	# texture_debug_usage / cache enumeration in the script API), so ask it about every
+	# texture, scene and resource file in the project: whatever is cached and was not
+	# reached above is held by something the scans cannot see (a preload in an inner
+	# class, an engine-side reference, another cached resource).
+	var cache_files: Array[String] = []
+	_rd_collect_files("res://", cache_files)
+	var cached_files := 0
+	for path: String in cache_files:
+		if not ResourceLoader.has_cached(path): continue
+		var res := ResourceLoader.get_cached_ref(path)
+		if res == null: continue
+		cached_files += 1
+		_rd_collect(res, "cache_only", "cache " + path, _RD_DEPTH)
+	var scan_ms := Time.get_ticks_msec() - t0
+	# 4. One row per GPU texture, classed by the first holder found. Keyed by the
+	# RenderingDevice texture so two resources over one upload count once.
+	var order: Array[String] = ["tree_material", "tree_other", "script_held", "viewport_target", "cache_only"]
+	var classes: Dictionary = {}
+	for c: String in order: classes[c] = {"count": 0, "bytes": 0, "path_bytes": 0, "no_path_bytes": 0}
+	var by_path := {"has_path": {"count": 0, "bytes": 0, "reachable_bytes": 0}, "no_path": {"count": 0, "bytes": 0, "reachable_bytes": 0}}
+	var groups: Dictionary = {}
+	var found: Dictionary = {}
+	for id: int in _tex_seen:
+		var tex := instance_from_id(id) as Resource
+		if tex == null: continue
+		var info := _rd_tex_info(tex)
+		if info.is_empty() or found.has(info.key): continue
+		# The report's own byte figure, so this class sums to tex_bytes_unique.
+		info.bytes = int(_tex_seen[id].bytes)
+		found[info.key] = _rd_row(info, tex, "tree_material", String(_tex_seen[id].owner))
+	for id: int in _rd_held:
+		var tex := instance_from_id(id) as Resource
+		if tex == null: continue
+		var info := _rd_tex_info(tex)
+		if info.is_empty() or found.has(info.key): continue
+		found[info.key] = _rd_row(info, tex, _rd_held[id]["class"], _rd_held[id].holder)
+	var rd := RenderingServer.get_rendering_device()
+	for n: Node in nodes:
+		if not n is Viewport or rd == null: continue
+		var target := RenderingServer.texture_get_rd_texture(RenderingServer.viewport_get_texture((n as Viewport).get_viewport_rid()))
+		if not target.is_valid() or found.has(target.get_id()): continue
+		var f := rd.texture_get_format(target)
+		if f == null: continue
+		var bpp := 8.0 if f.format == RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT else 4.0
+		found[target.get_id()] = {"type": "ViewportTarget", "w": f.width, "h": f.height, "layers": f.array_layers, "format": -1, "rd_format": f.format, "mipmaps": f.mipmaps, "bytes": int(f.width * f.height * f.array_layers * bpp), "path": "", "class": "viewport_target", "reachable": false, "holder": String(n.get_path()), "cached": false, "refs": -1}
+	var rows: Array = found.values()
+	var listed_bytes := 0
+	for row: Dictionary in rows:
+		var path: String = row.path
+		var bytes := int(row.bytes)
+		var cls: String = row["class"]
+		var reachable: bool = row.reachable
+		listed_bytes += bytes
+		var ce: Dictionary = classes[cls]
+		ce.count += 1
+		ce.bytes += bytes
+		ce["path_bytes" if path != "" else "no_path_bytes"] += bytes
+		var pe: Dictionary = by_path["has_path" if path != "" else "no_path"]
+		pe.count += 1
+		pe.bytes += bytes
+		if reachable: pe.reachable_bytes += bytes
+		var g := _rd_group(path, row)
+		if not groups.has(g): groups[g] = {"group": g, "count": 0, "bytes": 0, "reachable_bytes": 0, "classes": {}}
+		var ge: Dictionary = groups[g]
+		ge.count += 1
+		ge.bytes += bytes
+		if reachable: ge.reachable_bytes += bytes
+		ge.classes[cls] = int(ge.classes.get(cls, 0)) + bytes
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.bytes) > int(b.bytes))
+	var group_rows: Array = groups.values()
+	group_rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.bytes) > int(b.bytes))
+	var rd_bytes := int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED))
+	var reachable_bytes := int(classes.tree_material.bytes) + int(classes.tree_other.bytes)
+	var estimates := _rd_target_estimates(nodes)
+	var totals := {"rd_texture_mem_bytes": rd_bytes, "found_count": rows.size(), "found_bytes": listed_bytes, "reachable_bytes": reachable_bytes, "held_not_drawn_bytes": listed_bytes - reachable_bytes, "not_found_bytes": rd_bytes - listed_bytes, "scripts_scanned": scripts_scanned, "files_asked": cache_files.size(), "files_cached": cached_files, "nodes_scanned": nodes.size(), "objects_followed": _rd_obj_seen.size(), "scan_ms": scan_ms}
+	# Found bytes are estimates from size, format and mips (as in the report above).
+	# "not_found" is what no holder explains: shadow and reflection atlases, render
+	# buffers, sky, and any texture kept alive only from engine code or a held object
+	# the scans do not follow; the estimate lines size the known render targets.
+	print("MEM_RD_TEX totals rd_texture_mem=%.1f MB found=%d textures %.1f MB (reachable from the tree %.1f MB, held but not drawn %.1f MB) not_found=%.1f MB nodes=%d scripts=%d files_asked=%d files_cached=%d objects_followed=%d scan_ms=%d" % [rd_bytes / 1048576.0, rows.size(), listed_bytes / 1048576.0, reachable_bytes / 1048576.0, (listed_bytes - reachable_bytes) / 1048576.0, (rd_bytes - listed_bytes) / 1048576.0, nodes.size(), scripts_scanned, cache_files.size(), cached_files, _rd_obj_seen.size(), scan_ms])
+	for e: Dictionary in estimates:
+		print("MEM_RD_TEX estimate %7.1f MB %s (not measured: %s)" % [e.bytes / 1048576.0, e.what, e.basis])
+	for c: String in order:
+		var ce: Dictionary = classes[c]
+		print("MEM_RD_TEX class %-16s reachable=%-3s count=%5d total=%8.1f MB with_path=%8.1f MB no_path=%8.1f MB" % [c, "yes" if c == "tree_material" or c == "tree_other" else "no", ce.count, ce.bytes / 1048576.0, ce.path_bytes / 1048576.0, ce.no_path_bytes / 1048576.0])
+	for k: String in ["has_path", "no_path"]:
+		var pe: Dictionary = by_path[k]
+		print("MEM_RD_TEX path %-8s count=%5d total=%8.1f MB reachable=%8.1f MB not_reachable=%8.1f MB" % [k, pe.count, pe.bytes / 1048576.0, pe.reachable_bytes / 1048576.0, (int(pe.bytes) - int(pe.reachable_bytes)) / 1048576.0])
+	for ge: Dictionary in group_rows.slice(0, 40):
+		var parts := PackedStringArray()
+		for c: String in order:
+			if ge.classes.has(c): parts.append("%s=%.1f" % [c, int(ge.classes[c]) / 1048576.0])
+		print("MEM_RD_TEX group %8.1f MB not_reachable=%8.1f MB count=%4d %s [%s]" % [ge.bytes / 1048576.0, (int(ge.bytes) - int(ge.reachable_bytes)) / 1048576.0, ge.count, ge.group, " ".join(parts)])
+	for r: Dictionary in rows.slice(0, _RD_TOP):
+		print("MEM_RD_TEX texture %7.1f MB %dx%d layers=%d fmt=%d mips=%d reachable=%s class=%s cached=%s refs=%d %s %s holder=%s" % [r.bytes / 1048576.0, r.w, r.h, r.layers, r.format, r.mipmaps, "yes" if r.reachable else "no", r["class"], r.cached, r.refs, r.type, r.path if r.path != "" else "(no path)", r.holder if r.holder != "" else "-"])
+	print("MEM_RD_TEX section_ms=%d" % (Time.get_ticks_msec() - t0))
+	return {"totals": totals, "classes": classes, "by_path": by_path, "groups": group_rows, "estimates": estimates, "top": rows.slice(0, 400)}
+
+## Size, format and byte estimate of one texture resource (same arithmetic as
+## _tex_row / _tex_layered_row), keyed by its RenderingDevice texture.
+func _rd_tex_info(t: Resource) -> Dictionary:
+	var rid := t.get_rid()
+	if not rid.is_valid(): return {}
+	var rdf := _rd_format(rid)
+	var rd_rid := RenderingServer.texture_get_rd_texture(rid) if not rdf.is_empty() else RID()
+	var w: int = int(rdf.get("w", 0))
+	var h: int = int(rdf.get("h", 0))
+	var layers: int = maxi(1, int(rdf.get("layers", 1))) * maxi(1, int(rdf.get("depth", 1)))
+	var mips: int = int(rdf.get("mipmaps", 1))
+	var fmt := Image.FORMAT_RGBA8
+	if t is Texture2D:
+		w = (t as Texture2D).get_width()
+		h = (t as Texture2D).get_height()
+		fmt = RenderingServer.texture_get_format(rid)
+	elif t is TextureLayered: fmt = (t as TextureLayered).get_format()
+	elif t is Texture3D: fmt = (t as Texture3D).get_format()
+	var bpp: float = _BPP.get(fmt, 4.0)
+	return {"key": rd_rid.get_id() if rd_rid.is_valid() else rid.get_id(), "w": w, "h": h, "layers": layers, "format": fmt, "mipmaps": mips, "bytes": int(w * h * layers * bpp * (1.3333 if mips > 1 else 1.0))}
+
+func _rd_row(info: Dictionary, t: Resource, cls: String, holder: String) -> Dictionary:
+	var path := t.resource_path
+	# Minus the two references this probe holds while it looks: 1 with cached=true
+	# means the cache entry's owner is the only thing keeping the upload alive.
+	return {"type": t.get_class(), "w": info.w, "h": info.h, "layers": info.layers, "format": info.format, "mipmaps": info.mipmaps, "bytes": info.bytes, "path": path, "name": t.resource_name, "class": cls, "reachable": cls == "tree_material" or cls == "tree_other", "holder": holder, "cached": path != "" and ResourceLoader.has_cached(path), "refs": t.get_reference_count() - 2}
+
+## Project files that can be, or can contain, a texture.
+const _RD_FILE_TYPES: Array[String] = ["png", "jpg", "jpeg", "webp", "svg", "exr", "hdr", "dds", "ktx", "ktx2", "tga", "bmp", "glb", "gltf", "fbx", "tscn", "scn", "res", "tres"]
+
+func _rd_collect_files(dir: String, out: Array[String]) -> void:
+	var d := DirAccess.open(dir)
+	if d == null: return
+	d.list_dir_begin()
+	var name := d.get_next()
+	while name != "":
+		var full := dir.path_join(name)
+		if d.current_is_dir():
+			if not name.begins_with("."): _rd_collect_files(full, out)
+		elif name.get_extension().to_lower() in _RD_FILE_TYPES: out.append(full)
+		name = d.get_next()
+	d.list_dir_end()
+
+## Render targets no resource owns, sized from settings rather than measured, to
+## say how much of "not_found" they could be. The game may override a project
+## setting at run time (the sun shadow atlas is one), so each line names its basis.
+func _rd_target_estimates(nodes: Array[Node]) -> Array:
+	var out: Array = []
+	for n: Node in nodes:
+		if not n is Viewport: continue
+		var vp := n as Viewport
+		if vp.disable_3d or vp.positional_shadow_atlas_size <= 0: continue
+		var side := vp.positional_shadow_atlas_size
+		out.append({"what": "positional shadow atlas %d of %s" % [side, String(vp.get_path())], "bytes": side * side * (2 if vp.positional_shadow_atlas_16_bits else 4), "basis": "viewport property; only allocated once a shadowed omni / spot is drawn in it"})
+	var sun := int(ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/size", 4096))
+	var sun_16: bool = ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/16_bits", true)
+	out.append({"what": "directional shadow atlas %d" % sun, "bytes": sun * sun * (2 if sun_16 else 4), "basis": "project setting; the graphics preset can resize it and there is no getter"})
+	var ref_size := int(ProjectSettings.get_setting("rendering/reflections/reflection_atlas/reflection_size", 256))
+	var ref_count := int(ProjectSettings.get_setting("rendering/reflections/reflection_atlas/reflection_count", 64))
+	out.append({"what": "reflection atlas %d slots of %d^2 cubes" % [ref_count, ref_size], "bytes": int(ref_size * ref_size * 6 * ref_count * 8 * 1.3333), "basis": "project settings, RGBA16F with mips assumed; upper bound"})
+	return out
 
 # ------------------------------------------------- GDScript data estimate
 

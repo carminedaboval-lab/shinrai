@@ -3,6 +3,7 @@ extends Node3D
 ## city skyline across the water. Everything here is far beyond the playable
 ## area, has no collision, and relies on the scene fog for aerial perspective.
 const StartupTrace = preload("res://scripts/startup_trace.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 
 const SEA_RADIUS_M := 3900.0
 const SEA_Y := -0.2 # Below the level activity pads, which sit at datum 0.
@@ -157,8 +158,8 @@ func _build_hill_ring(ring_name: String, radius: float, min_height: float, max_h
 		_quad(st, peak1, peak2, base2, base1)
 	st.generate_normals()
 	var mesh := st.commit()
-	var shader := Shader.new()
-	shader.code = """
+	# Pooled: both hill rings share one shader (tint and tree line are uniforms).
+	var shader := ShaderPool.shader("""
 shader_type spatial;
 render_mode cull_disabled, depth_draw_opaque;
 uniform vec4 base_tint : source_color = vec4(0.2, 0.28, 0.18, 1.0);
@@ -181,7 +182,7 @@ void fragment(){
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.05;
 }
-"""
+""")
 	var material := ShaderMaterial.new()
 	material.shader = shader
 	material.resource_name = "SHINRAI_Horizon_" + ring_name

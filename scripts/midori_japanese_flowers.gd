@@ -285,6 +285,23 @@ static func _inside_cells(cells: Dictionary, p: Vector2, radius: float) -> bool:
 		if p.distance_squared_to(Vector2(root.x, root.y)) < distance * distance: return true
 	return false
 
+## End-of-boot hook (shinrai_world_complete.gd): the colony index is only read
+## while things are placed. Its readers are this module's own trim and the
+## _inside_colony asked by the garden spots, the stone lanterns and the moss
+## garden biome; the hook runs after the biomes, and waits here for the two
+## modules. Rebound, not cleared. colony_roots and the position lists stay.
+## _inside_colony answers false afterwards.
+func release_build_data() -> Dictionary:
+	if not installed: return {"skipped": "not installed"}
+	var park := get_parent()
+	for producer_name: String in ["MidoriGardenSpots", "MidoriStoneLanterns"]:
+		var producer: Node = park.get_node_or_null(producer_name)
+		if producer != null and producer.get("installed") != true: return {"skipped": producer_name + " not installed"}
+	var freed := {"colony_cells": colony_cells.size(), "colony_coarse": _colony_coarse.size()}
+	colony_cells = {}
+	_colony_coarse = {}
+	return freed
+
 ## Coarse 16 m index of the colony cells: a batch whose world bounds touch no
 ## coarse cell cannot have an instance inside a colony (see _may_touch_colony).
 var _colony_coarse: Dictionary = {}

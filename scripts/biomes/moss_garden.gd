@@ -79,33 +79,10 @@ const MAPLE_SPOTS := [Vector2(-1.5, 22.0), Vector2(-4.5, 41.5), Vector2(-20.4, -
 # script-free copy instead: the same flame shader (it flickers on TIME) and the
 # same two small lights, faded out by the lights' own distance fade.
 const LANTERNS_LIT := true
-const FLAME_SHADER := """
-shader_type spatial;
-render_mode unshaded, cull_disabled, blend_mix, depth_draw_never, shadows_disabled;
-uniform float phase = 0.0;
-void vertex() {
-	vec3 up = vec3(0.0, 1.0, 0.0);
-	vec3 facing = vec3(INV_VIEW_MATRIX[2].x, 0.0, INV_VIEW_MATRIX[2].z);
-	facing = length(facing) > 0.001 ? normalize(facing) : vec3(0.0, 0.0, 1.0);
-	vec3 right = normalize(cross(up, facing));
-	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(vec4(right, 0.0), vec4(up, 0.0), vec4(facing, 0.0), MODEL_MATRIX[3]);
-}
-void fragment() {
-	float t = TIME + phase;
-	float y = 1.0 - UV.y;
-	float bend = (sin(t * 5.7 + y * 7.0) * 0.045 + sin(t * 9.1 - y * 12.0) * 0.025) * y * y;
-	float x = (UV.x - 0.5 - bend) * 2.0;
-	float width = 0.74 * pow(max(1.0 - y, 0.001), 0.68);
-	float edge = 1.0 - smoothstep(width * 0.64, width, abs(x));
-	float foot = smoothstep(0.0, 0.08, y);
-	float tip = 1.0 - smoothstep(0.82 + 0.045 * sin(t * 7.0), 1.0, y);
-	float core = exp(-x * x * 30.0) * (1.0 - smoothstep(0.40, 0.77, y));
-	vec3 amber = mix(vec3(1.0, 0.20, 0.025), vec3(1.0, 0.77, 0.29), core);
-	ALBEDO = amber;
-	EMISSION = amber * (2.2 + 1.1 * core);
-	ALPHA = edge * foot * tip * 0.94;
-}
-"""
+# The flame text itself lives in stone_lantern_fire.gd: one exact string, so the
+# pool compiles one flame shader for both kinds of lantern (that script preloads
+# only the pool, so there is no preload cycle).
+const FLAME_SHADER: String = preload("res://scripts/stone_lantern_fire.gd").FLAME_SHADER
 const TRAILS := ["Wooded rise garden", "Northern iris pocket"]
 const THIN_ALL := "res://scripts/biomes/thin_all.gd"
 const MAX_GROUPS_MAIN := 18

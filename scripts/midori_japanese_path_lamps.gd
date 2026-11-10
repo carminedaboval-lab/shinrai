@@ -190,6 +190,18 @@ func _clear(p: Vector2,path: Vector2) -> Dictionary:
 	if not get_world_3d().direct_space_state.intersect_ray(ray).is_empty(): return {}
 	return {"base_y":low-.004,"spread":high-low}
 
+## End-of-boot hook (shinrai_world_complete.gd): the planting index is only
+## read while lamps (_clear, from install) and the civic signs (their
+## _clear_sign) are placed, so it stays until the signs are installed.
+## Rebound, not cleared. routes, placements and lights stay (night switch).
+func release_build_data() -> Dictionary:
+	if not installed: return {"skipped": "not installed"}
+	var civic: Node = park.get_node_or_null("MidoriCivicLighting")
+	if civic != null and civic.get("installed") != true: return {"skipped": "MidoriCivicLighting not installed"}
+	var freed := {"obstacle_cells": obstacle_cells.size()}
+	obstacle_cells = {}
+	return freed
+
 func _index_planting() -> void:
 	for batch: MultiMeshInstance3D in park.find_children("*","MultiMeshInstance3D",true,false):
 		var node: Node = batch

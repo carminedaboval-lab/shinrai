@@ -8,6 +8,7 @@ extends Node3D
 ## of draw calls. Small litter has no collision and never blocks a route.
 const Budget = preload("res://scripts/shinrai_loading_budget.gd")
 const StartupTrace = preload("res://scripts/startup_trace.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 
 const SPACING := 36.0
 const NUDGE_RINGS := 3
@@ -697,8 +698,8 @@ func _burn_barrel(xf: Transform3D) -> void:
 	_fires.append({"fire":fire, "light":light})
 
 func _fire_material() -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = """
+	# One pooled fire shader for every burn barrel (it was one per barrel).
+	var shader := ShaderPool.shader("""
 shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never;
 float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -717,7 +718,7 @@ void fragment() {
 	ALBEDO = mix(vec3(1.0, 0.24, 0.04), vec3(1.0, 0.82, 0.36), flame * flame) * 2.2;
 	ALPHA = clamp(flame, 0.0, 1.0);
 }
-"""
+""")
 	var material := ShaderMaterial.new()
 	material.shader = shader
 	return material

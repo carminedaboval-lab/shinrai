@@ -4,19 +4,10 @@ extends Node3D
 # The flame shader comes from the shared pool: one compiled shader for every
 # lantern (the phase is a uniform), instead of one per instance.
 const ShaderPool := preload("res://scripts/shinrai_shader_pool.gd")
-@export var flame_height := 0.055
-@export var flame_width := 0.026
-@export var light_range := 1.8
-@export var light_energy := 0.045
-@export var spill_energy := 0.65
-@export var phase := 0.0
-var _light: OmniLight3D
-var _flame: MeshInstance3D
-var _spill: SpotLight3D
-var _time := 0.0
-
-func _ready() -> void:
-	var shader := ShaderPool.shader("""
+# The single flame text. biomes/moss_garden.gd reads this const for its
+# script-free lantern flames, so both kinds of lantern share one pooled shader
+# (the pool keys on the exact string). Keep it byte for byte: 4-space indents.
+const FLAME_SHADER := """
 shader_type spatial;
 render_mode unshaded, cull_disabled, blend_mix, depth_draw_never, shadows_disabled;
 uniform float phase = 0.0;
@@ -43,7 +34,20 @@ void fragment() {
     EMISSION = amber * (2.2 + 1.1*core);
     ALPHA = edge*foot*tip*0.94;
 }
-""")
+"""
+@export var flame_height := 0.055
+@export var flame_width := 0.026
+@export var light_range := 1.8
+@export var light_energy := 0.045
+@export var spill_energy := 0.65
+@export var phase := 0.0
+var _light: OmniLight3D
+var _flame: MeshInstance3D
+var _spill: SpotLight3D
+var _time := 0.0
+
+func _ready() -> void:
+	var shader := ShaderPool.shader(FLAME_SHADER)
 	var material := ShaderMaterial.new()
 	material.shader = shader
 	material.set_shader_parameter("phase",phase)

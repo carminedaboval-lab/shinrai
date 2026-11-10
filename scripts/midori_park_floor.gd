@@ -24,6 +24,18 @@ var scanned_roots := 0
 var gap_pockets := 0
 var report: Dictionary = {}
 
+## End-of-boot hook (shinrai_world_complete.gd): the placement audit is only
+## read by the civic signs when they choose a clear shoulder (they take this
+## same array and drop their own reference in their hook), so it stays until
+## they are installed. Nothing else reads it.
+func release_build_data() -> Dictionary:
+	if not installed: return {"skipped": "not installed"}
+	var civic: Node = park.get_node_or_null("MidoriCivicLighting")
+	if civic != null and civic.get("installed") != true: return {"skipped": "MidoriCivicLighting not installed"}
+	var freed := {"audit": audit.size()}
+	audit = []
+	return freed
+
 func imported_lod_info(mesh: Mesh) -> Dictionary:
 	var result := {"surfaces": 0, "levels": 0}
 	if not mesh is ArrayMesh: return result

@@ -8,7 +8,7 @@ const STONE_LENGTH := .60
 const JOINT := .004
 const GULLY_HOLES: Array[Rect2] = [Rect2(-4.94,239.72,.32,.38),Rect2(2.62,239.72,.32,.38)]
 const FINE_WOOD := "res://assets/shinrai/streets/midori_frontage_construction/"
-static var _bench_grain: ImageTexture
+const FineTimber := preload("res://scripts/midori_fine_timber.gd")
 
 static func build(street: Node3D, ground: Node3D, report: Dictionary) -> Dictionary:
 	var root := Node3D.new()
@@ -90,16 +90,11 @@ static func _bench_finish(ground: Node3D) -> Dictionary:
 	return result
 
 static func _bench_grain_texture() -> ImageTexture:
-	if _bench_grain != null: return _bench_grain
 	# This shared source is imported without mipmaps. The bench shader needs
-	# a mean-colour LOD; create one cached local pyramid without reimporting or
-	# changing the texture used by existing facades.
-	var source := load(FINE_WOOD+"fine_grained_wood_col_2k.jpg") as Texture2D
-	var image := source.get_image()
-	if image.is_compressed(): image.decompress()
-	image.generate_mipmaps()
-	_bench_grain = ImageTexture.create_from_image(image)
-	return _bench_grain
+	# a mean-colour LOD, so it samples a local mip pyramid. That pyramid is the
+	# one FineTimber already builds from the same file: sharing it avoids a
+	# second identical 2048 px decode, mip build and upload.
+	return FineTimber.grain()
 
 static func _union_edges(soils: Array[Rect2], paving: Array[Rect2]) -> Array[Dictionary]:
 	var all: Array[Rect2] = soils.duplicate()

@@ -6,6 +6,7 @@ extends Node3D
 ## lamp moths appear at night. Only the birds use CPU, and only near the camera:
 ## everything else is animated in the vertex shader.
 const Budget = preload("res://scripts/shinrai_loading_budget.gd")
+const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
 
 const SEED := 20261103
 const ACTIVE_RANGE := 110.0
@@ -363,8 +364,8 @@ func _step_flight(bird: Dictionary, delta: float) -> void:
 # ---------------------------------------------------------- shader critters
 
 func _drift_shader() -> Shader:
-	var shader := Shader.new()
-	shader.code = """
+	# Pooled: dragonflies, fireflies and moths share one shader (kind is a uniform).
+	return ShaderPool.shader("""
 shader_type spatial;
 render_mode unshaded, skip_vertex_transform, cull_disabled, depth_draw_never;
 uniform float size = 0.05;
@@ -413,8 +414,7 @@ void fragment() {
 	ALPHA = clamp(mask, 0.0, 1.0);
 	if (ALPHA < 0.01) discard;
 }
-"""
-	return shader
+""")
 
 func _swarm(label: String, centres: PackedVector3Array, per_centre: int, spread: float, kind: float, size: float, tint: Color, speed: Vector2, radius: Vector2, range_end: float, shader: Shader, group: Array[Node3D]) -> void:
 	if centres.is_empty(): return

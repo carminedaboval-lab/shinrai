@@ -7,6 +7,8 @@ const FRAME := .05
 const SHOP_UNIT := 6.0
 
 ## Surfaces of every key but the one being written, as {"v","n","t","c","u","u2","i"} arrays.
+## Walls keep "u2" empty: the shell shader never reads UV2 and it was only ever zeros, so
+## it is neither built nor uploaded (8 bytes a vertex). Glass carries its pane info there.
 ## Quads are indexed (4 corners + 6 indices): the same triangles with the same corner data
 ## as the six-corner form, a third fewer vertex bytes on the GPU.
 var _walls := {}
@@ -21,7 +23,6 @@ var _n := PackedVector3Array()
 var _t := PackedFloat32Array()
 var _c := PackedColorArray()
 var _u := PackedVector2Array()
-var _u2 := PackedVector2Array()
 var _i := PackedInt32Array()
 var _gv := PackedVector3Array()
 var _gn := PackedVector3Array()
@@ -111,7 +112,7 @@ func _select(key: int) -> void:
 	# Parks the current key's arrays in the tables and takes key's out of them.
 	if key == _key: return
 	if _key >= 0:
-		_walls[_key] = {"v":_v, "n":_n, "t":_t, "c":_c, "u":_u, "u2":_u2, "i":_i}
+		_walls[_key] = {"v":_v, "n":_n, "t":_t, "c":_c, "u":_u, "u2":PackedVector2Array(), "i":_i}
 		_glass[_key] = {"v":_gv, "n":_gn, "t":_gt, "c":_gc, "u":_gu, "u2":_gu2, "i":_gi}
 	_key = key
 	var wall: Dictionary = _walls.get(key, {})
@@ -122,7 +123,6 @@ func _select(key: int) -> void:
 	_t = wall.get("t", PackedFloat32Array())
 	_c = wall.get("c", PackedColorArray())
 	_u = wall.get("u", PackedVector2Array())
-	_u2 = wall.get("u2", PackedVector2Array())
 	_i = wall.get("i", PackedInt32Array())
 	_gv = pane.get("v", PackedVector3Array())
 	_gn = pane.get("n", PackedVector3Array())
@@ -360,7 +360,6 @@ func _quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, n1: Vector3, n2: Vect
 	else:
 		_i.append(base); _i.append(base + 1); _i.append(base + 2); _i.append(base); _i.append(base + 2); _i.append(base + 3)
 	_c.append(tint); _c.append(tint); _c.append(tint); _c.append(tint)
-	_u2.resize(_u2.size() + 4)
 
 static func mesh_of(part: Dictionary) -> ArrayMesh:
 	var arrays := []
@@ -370,7 +369,10 @@ static func mesh_of(part: Dictionary) -> ArrayMesh:
 	arrays[Mesh.ARRAY_TANGENT] = part.t
 	arrays[Mesh.ARRAY_COLOR] = part.c
 	arrays[Mesh.ARRAY_TEX_UV] = part.u
-	arrays[Mesh.ARRAY_TEX_UV2] = part.u2
+	# An empty UV2 means the part has none (shell walls): leave the slot unset so the
+	# surface carries no UV2 attribute at all.
+	var uv2: PackedVector2Array = part.get("u2", PackedVector2Array())
+	if not uv2.is_empty(): arrays[Mesh.ARRAY_TEX_UV2] = uv2
 	# Indexed when the emitter wrote indices (every corner is covered); plain triangles otherwise.
 	if part.has("i") and not (part.i as PackedInt32Array).is_empty(): arrays[Mesh.ARRAY_INDEX] = part.i
 	var mesh := ArrayMesh.new()

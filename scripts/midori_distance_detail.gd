@@ -281,6 +281,9 @@ static func install(park: Node3D, mode: String = "distance") -> Dictionary:
 	# Publish only after parity validates: no yields during source/chunk visibility swap.
 	for source in hidden: source.hide()
 	container.show()
+	# The copied sources, as instance ids: the end-of-boot consolidation
+	# (scripts/shinrai_consolidate.gd) releases exactly these, nothing re-derived.
+	park.set_meta(&"midori_distance_hidden_sources", PackedInt64Array(hidden.map(func(node: MultiMeshInstance3D) -> int: return node.get_instance_id())))
 	var shadow_faded := 0
 	if mode!="partition":
 		for light: Light3D in park.find_children("WarmWhitePathPool","Light3D",true,false):

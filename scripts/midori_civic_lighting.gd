@@ -66,6 +66,15 @@ func _finish() -> void:
 	park.set_meta("civic_lighting_report", report)
 	print("MIDORI_CIVIC_LIGHTING_READY ", JSON.stringify(report))
 
+## End-of-boot hook (shinrai_world_complete.gd): the floor pass's footprints
+## were only read to choose the sign shoulders (_clear_sign, from _ready). The
+## park floor drops its own reference to the same array in its hook.
+func release_build_data() -> Dictionary:
+	if not installed: return {"skipped": "not installed"}
+	var freed := {"floor_placements": _floor_placements.size()}
+	_floor_placements = []
+	return freed
+
 func _process(delta: float) -> void:
 	if not installed or not is_instance_valid(park): return
 	_clock += delta

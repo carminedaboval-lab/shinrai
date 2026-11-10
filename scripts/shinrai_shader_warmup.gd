@@ -97,8 +97,27 @@ static func stamp_key() -> Dictionary:
 const WARM_SCENE_SHADER_FILES := 48
 const WARM_PIPELINE_CACHE_BYTES := 16 * 1024 * 1024
 
+## Direct3D 12 leaves no pipeline cache file (seen 2026-11-09: after Direct3D 12 boots
+## user://vulkan held only the Vulkan run's file), and its scene shaders sit in the same folders as Vulkan's, named
+## *.d3d12.cache. Judged by the Vulkan file, a Direct3D 12 run looked like a first launch on
+## every boot (or was "warm" only thanks to Vulkan's files). So Direct3D 12 counts its own
+## shader files, skips the pipeline-file test and keeps its own stamp. Every other driver is
+## checked exactly as before.
+static func _is_d3d12() -> bool:
+	return RenderingServer.get_current_rendering_driver_name() == "d3d12"
+
+
+## The stamp the running driver reads and writes. The stamp key holds the graphics API version,
+## so one shared file would turn every switch between drivers into a first launch.
+static func stamp_file() -> String:
+	if _is_d3d12() and stamp_path.get_extension() != "":
+		return "%s.d3d12.%s" % [stamp_path.get_basename(), stamp_path.get_extension()]
+	return stamp_path
+
+
 static func cache_state() -> Dictionary:
-	var scene_files := _count_files("user://shader_cache/SceneForwardClusteredShaderRD", 2)
+	var d3d12 := _is_d3d12()
+	var scene_files := _count_files("user://shader_cache/SceneForwardClusteredShaderRD", 2, ".d3d12.cache" if d3d12 else "")
 	var pipeline_bytes := 0
 	var vulkan := DirAccess.open("user://vulkan")
 	if vulkan != null:
@@ -112,16 +131,24 @@ static func cache_state() -> Dictionary:
 		"scene_shader_files": scene_files, "pipeline_cache_mb": snappedf(pipeline_bytes / 1048576.0, 0.1),
 		"shader_cache": scene_files >= WARM_SCENE_SHADER_FILES,
 		"pipeline_cache": pipeline_bytes >= WARM_PIPELINE_CACHE_BYTES,
+		"pipeline_cache_checked": not d3d12,
+		"rendering_driver": RenderingServer.get_current_rendering_driver_name(),
 	}
 
 
-static func _count_files(path: String, depth: int) -> int:
+## `suffix` "" counts every file; otherwise only names ending in it.
+static func _count_files(path: String, depth: int, suffix: String = "") -> int:
 	var dir := DirAccess.open(path)
 	if dir == null: return 0
-	var total := dir.get_files().size()
+	var total := 0
+	if suffix == "":
+		total = dir.get_files().size()
+	else:
+		for file: String in dir.get_files():
+			if file.ends_with(suffix): total += 1
 	if depth > 0:
 		for sub: String in dir.get_directories():
-			total += _count_files(path.path_join(sub), depth - 1)
+			total += _count_files(path.path_join(sub), depth - 1, suffix)
 	return total
 
 
@@ -136,10 +163,11 @@ static func is_first_launch() -> bool:
 static func _evaluate_first_launch() -> bool:
 	var caches := cache_state()
 	if not bool(caches.shader_cache): return true
-	if RenderingServer.get_current_rendering_method() != "gl_compatibility" and not bool(caches.pipeline_cache):
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility" and bool(caches.pipeline_cache_checked) and not bool(caches.pipeline_cache):
 		return true
-	if not FileAccess.file_exists(stamp_path): return true
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(stamp_path))
+	var path := stamp_file()
+	if not FileAccess.file_exists(path): return true
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if not parsed is Dictionary: return true
 	var stored: Dictionary = (parsed as Dictionary).get("key", {})
 	var key := stamp_key()
@@ -149,9 +177,10 @@ static func _evaluate_first_launch() -> bool:
 
 
 static func mark_done() -> void:
-	var file := FileAccess.open(stamp_path, FileAccess.WRITE)
+	var path := stamp_file()
+	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		push_warning("SHADER_WARMUP: cannot write %s (%s)" % [stamp_path, error_string(FileAccess.get_open_error())])
+		push_warning("SHADER_WARMUP: cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())])
 		return
 	file.store_string(JSON.stringify({"key": stamp_key(), "written": Time.get_datetime_string_from_system()}, "\t"))
 	file.close()

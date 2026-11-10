@@ -1,6 +1,7 @@
 extends Node3D
 const LoadingBudget = preload("res://scripts/shinrai_loading_budget.gd")
 const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
+const ShaderWarmup = preload("res://scripts/shinrai_shader_warmup.gd")
 
 # Sheltered freshwater: measured terrain depth, wind packets and a live planar
 # reflection. The supplied lake mesh, water level and swimming remain unchanged.
@@ -35,6 +36,15 @@ var _camera: Camera3D
 ## The planar reflection redraws the whole world, about a third of a lake view's
 ## frame. It renders every other frame; the ripples hide one frame of lag.
 var _reflection_parity := 0
+## While the viewport has 3D off (the boot's loading screen) nobody can see the
+## reflection, so only every HIDDEN_RENDER_EVERY-th of its renders is made.
+## The counter starts one short of a full turn so the first render is not delayed.
+const HIDDEN_RENDER_EVERY := 15
+var _hidden_skip := HIDDEN_RENDER_EVERY - 1
+var _was_hidden := false
+## Set once the boot's view warm-up has started: from there to the first live
+## frame the reflection runs at its normal rate, exactly as before.
+var _hidden_full_rate := false
 var _water_y := 0.102
 var _previous_layers := 1
 var _cached_probe: ReflectionProbe
@@ -323,6 +333,20 @@ func _process(_delta: float) -> void:
 	_select_reflection_source(active)
 	_reflection_parity = (_reflection_parity + 1) % 2 if active else 0
 	var render_now := active and _reflection_parity == 0
+	var hidden := get_viewport().disable_3d
+	if hidden:
+		if ShaderWarmup.is_busy(): _hidden_full_rate = true
+		if render_now and not _hidden_full_rate:
+			_hidden_skip = (_hidden_skip + 1) % HIDDEN_RENDER_EVERY
+			render_now = _hidden_skip == 0
+	elif _was_hidden:
+		# 3D just came on: render now, so the first visible frame never shows an
+		# image from several seconds ago, then carry on every other frame.
+		_reflection_parity = 0
+		render_now = active
+		_hidden_skip = HIDDEN_RENDER_EVERY - 1
+		_hidden_full_rate = false
+	_was_hidden = hidden
 	# UPDATE_ONCE drops back to disabled after its render, so set it every time.
 	_reflection.render_target_update_mode = SubViewport.UPDATE_ONCE if render_now else SubViewport.UPDATE_DISABLED
 	var ready_value := 1.0 if active else 0.0

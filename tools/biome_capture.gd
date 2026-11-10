@@ -32,6 +32,10 @@ const VIEWS := {
 	"iris_shore_north": [Vector3(71, 0, -97), Vector3(39.6, 0.3, -105.9)],
 	"iris_shore_inlet": [Vector3(122.2, 0, -129.8), Vector3(121.7, 0.3, -97.1)],
 	"maple_glen_floor": [Vector3(96, 0, -150), Vector3(104, -0.6, -156)],
+	# Corporate district (origin 220, 0, 330): close, at the stairs, and from ~190 m.
+	"corporate_near": [Vector3(196, 0, 292), Vector3(226, 6.0, 336)],
+	"corporate_stairs": [Vector3(238, 0, 312), Vector3(222, 12.0, 336)],
+	"corporate_far": [Vector3(120, 0, 170), Vector3(220, 10.0, 330)],
 }
 
 const ROOTS := {

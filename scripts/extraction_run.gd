@@ -444,6 +444,17 @@ func _prepare_park() -> void:
 			render_result["left_as_built"] = added_late
 			print("MIDORI_RENDER_BOOT ", JSON.stringify(render_result))
 		if is_instance_valid(park): park.remove_meta(RENDER_BUDGET_BEFORE_META)
+		# End-of-boot consolidation (fewer GPU buffers, same picture): after the
+		# draw-distance pass above has ranged every original node, before HQ.
+		# Raid boot only (Creator never reaches this). Optional: a missing or
+		# broken script leaves the park as built.
+		var consolidate := LoadState.optional_script("res://scripts/shinrai_consolidate.gd")
+		if consolidate != null and is_instance_valid(park):
+			_t = StartupTrace.begin()
+			var consolidation: Variant = await consolidate.call("run", park)
+			_t = StartupTrace.finish("raid.consolidate", _t)
+			if not is_inside_tree(): return
+			if consolidation is Dictionary: print("SHINRAI_CONSOLIDATE ", JSON.stringify(consolidation))
 	else:
 		# The distance boot gave up (world still incomplete): as before, no biomes,
 		# worn paths or late sweep over a half-built world. The roads still take

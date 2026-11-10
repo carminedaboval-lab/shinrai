@@ -18,6 +18,29 @@ extends SceneTree
 #                 top-level park module, and the duplicate groups with their owners.
 #   godot --path . --script res://tests/probe_mem_shaders.gd -- --profile-startup
 #         [--census-out=<abs path .json>] [--midori-fruit-seed=13]
+# View attribution (opt-in; without these switches the run and its output are unchanged).
+# Any of them adds SHADER_VIEW lines (and "view_marks" in the JSON) at world_ready,
+# after the settle and after every later step, each with the counters, the delta since
+# the previous SHADER_VIEW, soft-shadow lights in tree / in view, probes shown, and
+# which SubViewports have drawn:
+#   --view-marks             the marks only: the baseline boot to compare the others with.
+#   --hold-lake-reflection   stop ONLY the planar reflection viewport from rendering
+#                            (the lake keeps its shaders, banks and films, unlike
+#                            enabled=false); released after the menu settle, so the delta
+#                            at "lake_released" is the reflection-view-only pipelines.
+#                            --hold-lake-reflection=run keeps it stopped through the raid
+#                            and releases it last.
+#   --hold-probes            hide every ReflectionProbe (not the feature latch's) until
+#                            after world_ready + settle; delta at "probes_released".
+#   --hard-shadows           every omni / spot light with light_size > 0 runs with
+#                            light_size 0; restored last, delta at "soft_restored" (only
+#                            meaningful if soft_in_view > 0 on that line).
+#   --deploy                 press DEPLOY after the menu steps: deploy_pressed, raid_view,
+#                            raid_5s (the +~150 at deploy).
+#   --night-switch           flip day/night after the steps above: "night_switched".
+#   --settle-ms=3000         wait before "settled" and after each release / switch.
+#   --private-mb             add the process's private MB to each SHADER_VIEW line (asks
+#                            PowerShell, about a second per mark; Windows only).
 # Investigation only: edits nothing in the project and never touches the player's save.
 
 const LoadState = preload("res://scripts/shinrai_load_state.gd")
@@ -39,15 +62,262 @@ var _lights_cached := -1
 var _lights_at := 0
 var _warmup: Script = null
 
+# View attribution switches (see the header). All off by default.
+var view_marks := false
+var hold_lake := ""                 # "" | "menu" | "run"
+var hold_probes := false
+var hard_shadows := false
+var do_deploy := false
+var night_switch := false
+var private_mb := false
+var settle_ms := 3000
+var _view_rows: Array = []
+var _view_last := {}
+var _lake_held := false
+var _lake_blocked := 0              # frames in which the lake asked to render and was stopped
+var _probes_held := false
+var _probe_ids: Dictionary = {}     # ReflectionProbe instance id -> visibility the game asked for
+var _light_ids: Dictionary = {}     # omni / spot light instance id -> true
+var _soft_orig: Dictionary = {}     # light instance id -> light_size the game asked for
+var _soft_held := false
+
 
 func _initialize() -> void:
 	started = Time.get_ticks_msec()
 	args = OS.get_cmdline_user_args()
 	for a: String in args:
 		if a.begins_with("--census-out="): out_path = a.get_slice("=", 1)
+		elif a == "--view-marks": view_marks = true
+		elif a == "--hold-lake-reflection" or a.begins_with("--hold-lake-reflection="): hold_lake = "run" if a.ends_with("=run") else "menu"
+		elif a == "--hold-probes": hold_probes = true
+		elif a == "--hard-shadows": hard_shadows = true
+		elif a == "--deploy": do_deploy = true
+		elif a == "--night-switch": night_switch = true
+		elif a == "--private-mb": private_mb = true
+		elif a.begins_with("--settle-ms="): settle_ms = maxi(0, int(a.get_slice("=", 1)))
+	if hold_lake != "" or hold_probes or hard_shadows or do_deploy or night_switch or private_mb: view_marks = true
 	_warmup = LoadState.warmup_script()
 	_last = _counters()
+	_view_last = _last
+	if view_marks:
+		_lake_held = hold_lake != ""
+		_probes_held = hold_probes
+		_soft_held = hard_shadows
+		# Lights and probes are found as they enter the tree: a tree walk per frame
+		# would be far too slow on the park.
+		node_added.connect(_on_node_added)
+		# After every node's _process and before the draw: the only point where the
+		# lake's own UPDATE_ONCE request can be taken back for this frame.
+		RenderingServer.frame_pre_draw.connect(_pre_draw)
+		print("SHADER_VIEW switches ", JSON.stringify(_view_switches()))
 	_run.call_deferred()
+
+
+func _view_switches() -> Dictionary:
+	return {"hold_lake": hold_lake, "hold_probes": hold_probes, "hard_shadows": hard_shadows, "deploy": do_deploy, "night_switch": night_switch, "settle_ms": settle_ms, "private_mb": private_mb}
+
+
+## The feature latch renders its own tiny world on purpose (it fixes the renderer's
+## precompile key); holding its probe or lights would change what is being measured.
+func _in_latch(n: Node) -> bool:
+	var at: Node = n
+	while at != null:
+		if at.name == &"ShinraiFeatureLatch": return true
+		at = at.get_parent()
+	return false
+
+
+func _on_node_added(n: Node) -> void:
+	if n is OmniLight3D or n is SpotLight3D:
+		if not _in_latch(n): _light_ids[n.get_instance_id()] = true
+	elif n is ReflectionProbe:
+		if _in_latch(n): return
+		var id := n.get_instance_id()
+		var probe := n as ReflectionProbe
+		# A probe re-entering the tree while held is hidden by us, not by the game.
+		if not _probe_ids.has(id) or probe.visible: _probe_ids[id] = probe.visible
+		if _probes_held: probe.visible = false
+	elif hold_lake != "" and n is SubViewport and n.name == &"LakePlanarReflection":
+		# Known from its first frame, so it cannot draw once before the hold finds it.
+		_lake = n as SubViewport
+
+
+## Re-applies the holds: game code may set light_size or show a probe at any time.
+func _enforce() -> void:
+	if _soft_held:
+		for id: int in _light_ids.keys():
+			var l := instance_from_id(id) as Light3D
+			if l == null:
+				_light_ids.erase(id)
+				continue
+			if l.light_size > 0.0:
+				_soft_orig[id] = l.light_size
+				l.light_size = 0.0
+	if _probes_held:
+		for id: int in _probe_ids.keys():
+			var p := instance_from_id(id) as ReflectionProbe
+			if p == null:
+				_probe_ids.erase(id)
+				continue
+			if p.visible:
+				_probe_ids[id] = true
+				p.visible = false
+
+
+func _pre_draw() -> void:
+	var on_main := OS.get_thread_caller_id() == OS.get_main_thread_id()
+	if on_main: _enforce()
+	if _lake_held and _lake != null and is_instance_valid(_lake):
+		if on_main:
+			if _lake.render_target_update_mode != SubViewport.UPDATE_DISABLED: _lake_blocked += 1
+			_lake.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		# Straight to the server as well, in case the node skips an unchanged value.
+		RenderingServer.viewport_set_update_mode(_lake.get_viewport_rid(), RenderingServer.VIEWPORT_UPDATE_DISABLED)
+
+
+func _release_probes() -> void:
+	_probes_held = false
+	var shown := 0
+	for id: int in _probe_ids.keys():
+		var p := instance_from_id(id) as ReflectionProbe
+		if p != null and bool(_probe_ids[id]):
+			p.visible = true
+			shown += 1
+	print("SHADER_VIEW probes released shown=%d tracked=%d" % [shown, _probe_ids.size()])
+
+
+func _restore_soft() -> void:
+	_soft_held = false
+	var restored := 0
+	for id: int in _soft_orig.keys():
+		var l := instance_from_id(id) as Light3D
+		if l != null:
+			l.light_size = float(_soft_orig[id])
+			restored += 1
+	print("SHADER_VIEW soft shadows restored lights=%d" % restored)
+	_soft_orig.clear()
+
+
+## Private bytes of this process in MB, or -1. Engine monitors do not see driver
+## memory, which is where pipelines live.
+func _private_mb() -> float:
+	if not private_mb or OS.get_name() != "Windows": return -1.0
+	var out: Array = []
+	var code := OS.execute("powershell", ["-NoProfile", "-NonInteractive", "-Command", "(Get-Process -Id %d).PrivateMemorySize64" % OS.get_process_id()], out)
+	if code != 0 or out.is_empty(): return -1.0
+	var text := String(out[0]).strip_edges()
+	return float(text) / 1048576.0 if text.is_valid_int() else -1.0
+
+
+## One SHADER_VIEW line: the counters, their growth since the previous line, and the
+## view state that can explain that growth.
+func _view_mark(label: String) -> void:
+	if not view_marks: return
+	var c := _counters()
+	var cam := root.get_camera_3d()
+	var soft_tree := 0
+	var soft_shadow := 0
+	var soft_view := 0
+	var nearest := -1.0
+	for id: int in _light_ids.keys():
+		var l := instance_from_id(id) as Light3D
+		if l == null:
+			_light_ids.erase(id)
+			continue
+		# A light we zeroed still counts as soft: the question is where they are.
+		if float(_soft_orig.get(id, l.light_size)) <= 0.0 or not l.is_inside_tree() or not l.is_visible_in_tree(): continue
+		soft_tree += 1
+		if not l.shadow_enabled: continue
+		soft_shadow += 1
+		if cam == null: continue
+		var d := cam.global_position.distance_to(l.global_position)
+		if nearest < 0.0 or d < nearest: nearest = d
+		if cam.is_position_in_frustum(l.global_position): soft_view += 1
+	var probes_shown := 0
+	for id: int in _probe_ids.keys():
+		var p := instance_from_id(id) as ReflectionProbe
+		if p != null and p.is_inside_tree() and p.is_visible_in_tree(): probes_shown += 1
+	# Objects in a SubViewport's last draw: 0 means it has never drawn anything.
+	var drawn: Array = []
+	var lake_objects := -1
+	for v: Node in root.find_children("*", "SubViewport", true, false):
+		var sv := v as SubViewport
+		var objects := RenderingServer.viewport_get_render_info(sv.get_viewport_rid(), RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME)
+		if sv == _lake: lake_objects = objects
+		if objects > 0: drawn.append("%s@%dx%d:%d" % [sv.name, sv.size.x, sv.size.y, objects])
+	var row := {
+		"label": label, "t": (Time.get_ticks_msec() - started) / 1000.0, "counters": c,
+		"d_spec": int(c.spec) - int(_view_last.spec), "d_surface": int(c.surface) - int(_view_last.surface), "d_mesh": int(c.mesh) - int(_view_last.mesh), "d_draw": int(c.draw) - int(_view_last.draw),
+		"soft_in_tree": soft_tree, "soft_shadowed": soft_shadow, "soft_in_view": soft_view, "nearest_soft_m": snappedf(nearest, 0.1), "soft_zeroed": _soft_orig.size() if _soft_held else 0,
+		"probes_shown": probes_shown, "probes_tracked": _probe_ids.size(), "probes_held": _probes_held,
+		"lake_held": _lake_held, "lake_blocked_frames": _lake_blocked, "lake_objects_last_draw": lake_objects,
+		"views_drawn": drawn, "private_mb": snappedf(_private_mb(), 0.1), "state": _state(),
+	}
+	_view_last = c
+	_view_rows.append(row)
+	print("SHADER_VIEW %s t=%.1f %s +spec=%d +surface=%d +mesh=%d +draw=%d soft_lights=%d/%d shadowed, %d in view (nearest %.1f m, zeroed %d) probes=%d/%d%s lake_held=%s blocked=%d lake_objects=%d private_mb=%.0f views_drawn=%s %s" % [
+		label, row.t, _counters_text(c), row.d_spec, row.d_surface, row.d_mesh, row.d_draw, soft_shadow, soft_tree, soft_view, nearest, row.soft_zeroed,
+		probes_shown, _probe_ids.size(), " (held)" if _probes_held else "", _lake_held, _lake_blocked, lake_objects, row.private_mb, ",".join(PackedStringArray(drawn)), row.state])
+
+
+func _idle(msec: int) -> void:
+	var until := Time.get_ticks_msec() + msec
+	while Time.get_ticks_msec() < until: await process_frame
+
+
+## A window without OS focus deploys straight into PAUSED (as in probe_menu_time.gd).
+func _deployed(raid: Node) -> bool:
+	return raid.phase == raid.Phase.RAID or (raid.phase == raid.Phase.PAUSED and not bool(raid.get("deployment_pending")))
+
+
+## The steps after the census, in an order that keeps each delta attributable: the
+## held views are released one at a time in the menu, then deploy, then night.
+func _view_stages(raid: Node) -> void:
+	await _idle(maxi(0, settle_ms - 3000))
+	_view_mark("settled")
+	if _probes_held:
+		_release_probes()
+		await _idle(settle_ms)
+		_view_mark("probes_released")
+	if _lake_held and hold_lake == "menu":
+		_lake_held = false
+		await _idle(settle_ms)
+		_view_mark("lake_released")
+	if do_deploy:
+		if not raid.has_method("start_run"):
+			print("SHADER_VIEW DEPLOY_UNAVAILABLE no start_run on the raid")
+		else:
+			raid.start_run()
+			_view_mark("deploy_pressed")
+			var deploy_started := Time.get_ticks_msec()
+			while not _deployed(raid) and Time.get_ticks_msec() - deploy_started < 180000: await process_frame
+			if not _deployed(raid):
+				print("SHADER_VIEW DEPLOY_TIMEOUT")
+			else:
+				_view_mark("raid_view")
+				if raid.phase == raid.Phase.PAUSED:
+					print("SHADER_VIEW note: deployed into PAUSED (window focused=%s); resuming" % DisplayServer.window_is_focused())
+					raid.resume_run()
+				await _idle(5000)
+				_view_mark("raid_5s")
+	if night_switch:
+		var park := _find_park()
+		if park == null or not park.has_method("_apply_time_of_day"):
+			print("SHADER_VIEW NIGHT_UNAVAILABLE")
+		else:
+			var to_night := not bool(park.get("is_night_mode"))
+			park.set("is_night_mode", to_night)
+			park.call("_apply_time_of_day")
+			await _idle(maxi(settle_ms, 3000))
+			_view_mark("night_switched_to_%s" % ("night" if to_night else "day"))
+	if _lake_held:
+		_lake_held = false
+		await _idle(settle_ms)
+		_view_mark("lake_released")
+	if _soft_held:
+		_restore_soft()
+		await _idle(settle_ms)
+		_view_mark("soft_restored")
 
 
 func _counters() -> Dictionary:
@@ -94,6 +364,7 @@ var _lights_shadow_cached := -1
 
 
 func _process(_delta: float) -> bool:
+	if view_marks: _enforce()
 	var now := _counters()
 	var t := (Time.get_ticks_msec() - started) / 1000.0
 	var ds: int = int(now.spec) - int(_last.spec)
@@ -171,6 +442,7 @@ func _run() -> void:
 		return
 	var ready_s := (Time.get_ticks_msec() - started) / 1000.0
 	print("SHADER_MARK world_ready t=%.1f %s %s" % [ready_s, _counters_text(_counters()), _state()])
+	_view_mark("world_ready")
 	var until := Time.get_ticks_msec() + 3000
 	while Time.get_ticks_msec() < until: await process_frame
 	var report := _census(_find_park())
@@ -178,6 +450,10 @@ func _run() -> void:
 	report["pipelines_world_ready"] = _counters()
 	report["pool"] = _pool_stats()
 	print("SHADER_MARK after_census t=%.1f %s" % [(Time.get_ticks_msec() - started) / 1000.0, _counters_text(_counters())])
+	if view_marks:
+		await _view_stages(raid)
+		report["view_switches"] = _view_switches()
+		report["view_marks"] = _view_rows
 	if out_path != "":
 		var f := FileAccess.open(out_path, FileAccess.WRITE)
 		if f != null:

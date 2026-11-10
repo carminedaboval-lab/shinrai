@@ -193,9 +193,13 @@ static func _buffer_rows_verified() -> bool:
 
 ## End-of-boot hook (shinrai_world_complete.gd): the route-finding scratch data
 ## is dead once the trails, shoulders, picnic stop and worn paths are installed.
-## route_cells and paving_cells stay (distance_to_path / paving_distance and the
-## ground-texture job read them); obstacle_hit (shoulders, boot only) answers
-## false afterwards.
+## route_cells and routes stay (distance_to_path: biomes, lamps, flowers);
+## obstacle_hit (shoulders, boot only) answers false afterwards.
+## paving_cells (the largest script table of the boot) goes too: its readers are
+## _route, which only install() calls, and the ground texture's landscape-mask
+## job. It is rebound, never cleared, so a job that took the table keeps its own
+## reference; and it stays while that job has not finished, in case it has not
+## taken the table yet. paving_distance answers INF afterwards.
 func release_build_data() -> Dictionary:
 	if not finished: return {"skipped": "not finished"}
 	var freed := {"density": density.size(), "obstacles": obstacles.size(), "obstacle_cells": _obstacle_grid.size(), "paving_blocked": paving_blocked.size(), "debug_bounds": _debug_bounds_cache.size()}
@@ -204,7 +208,19 @@ func release_build_data() -> Dictionary:
 	_obstacle_grid = {}
 	paving_blocked = {}
 	_debug_bounds_cache = {}
+	if _ground_mask_pending():
+		freed["paving_cells_kept"] = "ground mask not finished"
+	else:
+		freed["paving_cells"] = paving_cells.size()
+		paving_cells = {}
 	return freed
+
+## True while the ground texture autoload still owes its landscape mask. It
+## builds that mask once per process (its install never repeats), so "ready"
+## means no job will read paving_cells again; without the autoload nothing does.
+func _ground_mask_pending() -> bool:
+	var ground := get_tree().root.get_node_or_null("MidoriGroundTexture")
+	return ground != null and ground.get("landscape_ready") != true
 
 ## Same answer as testing every obstacle rect (any-hit), from the 4 m obstacle
 ## grid: a rect grown by `radius` that contains p has a point within `radius`
