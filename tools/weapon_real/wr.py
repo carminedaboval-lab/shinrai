@@ -424,6 +424,135 @@ def empty(name, at=(0, 0, 0)):
     return o
 
 
+def bake_masks(objects, out_dir, sizes=None, samples=24, wear_radius=0.0009, ao_distance=0.012, isolate=()):
+    """UV-unwrap each object and bake a wear-mask texture from its real shape.
+
+    R = edge wear (convex edges via the Bevel-node normal difference, kept to
+    exposed places by AO, broken up by noise), G = dirt and old oil in crevices
+    (low AO), B = ambient occlusion. The game's finish shader reads these
+    instead of its screen-space curvature guess, so wear and grime stay put at
+    any distance. Writes <out_dir>/<object name>_masks.png (non-colour data).
+    """
+    import os
+    os.makedirs(out_dir, exist_ok=True)
+    sc = bpy.context.scene
+    sc.render.engine = 'CYCLES'
+    sc.cycles.samples = samples
+    sc.cycles.use_denoising = False
+    sc.render.bake.margin = 8
+    sizes = sizes or {}
+    for o in objects:
+        if o.type != 'MESH':
+            continue
+        # --- UVs
+        bpy.ops.object.select_all(action='DESELECT')
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        if not o.data.uv_layers:
+            o.data.uv_layers.new(name='UVMap')
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.004, scale_to_bounds=False)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        # --- bake material
+        size = sizes.get(o.name, 2048)
+        img = bpy.data.images.new(o.name + '_masks', size, size, alpha=False, float_buffer=False)
+        img.colorspace_settings.name = 'Non-Color'
+        bm = bpy.data.materials.new(o.name + '_bake')
+        bm.use_nodes = True
+        nt = bm.node_tree
+        for n in list(nt.nodes):
+            nt.nodes.remove(n)
+        N = lambda t: nt.nodes.new(t)
+        out = N('ShaderNodeOutputMaterial')
+        emit = N('ShaderNodeEmission')
+        geo = N('ShaderNodeNewGeometry')
+        bev = N('ShaderNodeBevel')
+        bev.samples = 8
+        bev.inputs['Radius'].default_value = wear_radius
+        dot = N('ShaderNodeVectorMath')
+        dot.operation = 'DOT_PRODUCT'
+        nt.links.new(geo.outputs['Normal'], dot.inputs[0])
+        nt.links.new(bev.outputs['Normal'], dot.inputs[1])
+
+        def math_node(op, a=None, b=None, clamp=True):
+            m = N('ShaderNodeMath')
+            m.operation = op
+            m.use_clamp = clamp
+            for i, v in enumerate((a, b)):
+                if v is None:
+                    continue
+                if isinstance(v, (int, float)):
+                    m.inputs[i].default_value = v
+                else:
+                    nt.links.new(v, m.inputs[i])
+            return m.outputs[0]
+
+        edge = math_node('MULTIPLY', math_node('SUBTRACT', 1.0, dot.outputs['Value'], clamp=False), 9.0)
+        ao = N('ShaderNodeAmbientOcclusion')
+        ao.samples = 16
+        ao.inputs['Distance'].default_value = ao_distance
+        tc = N('ShaderNodeTexCoord')
+        noise = N('ShaderNodeTexNoise')
+        noise.inputs['Scale'].default_value = 260.0
+        noise.inputs['Detail'].default_value = 6.0
+        nt.links.new(tc.outputs['Object'], noise.inputs['Vector'])
+        noise2 = N('ShaderNodeTexNoise')
+        noise2.inputs['Scale'].default_value = 60.0
+        noise2.inputs['Detail'].default_value = 4.0
+        nt.links.new(tc.outputs['Object'], noise2.inputs['Vector'])
+        chips = math_node('MULTIPLY', math_node('SUBTRACT', noise.outputs['Fac'], 0.25), 2.2)
+        exposed = math_node('POWER', ao.outputs['AO'], 2.0)
+        # Wear comes in patches along an edge (where the holster and hands rub),
+        # not as an even silver outline: a large-scale noise gates it.
+        patch = math_node('MAXIMUM', math_node('MULTIPLY', math_node('SUBTRACT', noise2.outputs['Fac'], 0.38), 3.2), 0.12)
+        wear = math_node('MULTIPLY', math_node('MULTIPLY', math_node('MULTIPLY', edge, exposed), patch),
+                         math_node('ADD', math_node('MULTIPLY', chips, 0.45), 0.6))
+        # Broad handling rub on exposed areas (holster, hand contact): faint.
+        rub = math_node('MULTIPLY', math_node('MULTIPLY', math_node('SUBTRACT', noise2.outputs['Fac'], 0.55), 2.5), exposed)
+        wear = math_node('MAXIMUM', wear, math_node('MULTIPLY', rub, 0.35))
+        # Grime only in real crevices (deep occlusion), lightly mottled; shallow
+        # grooves such as serrations stay clean metal.
+        dirt = math_node('MULTIPLY', math_node('POWER', math_node('SUBTRACT', 1.0, ao.outputs['AO']), 1.6),
+                         math_node('ADD', math_node('MULTIPLY', noise2.outputs['Fac'], 0.5), 0.55))
+        comb = N('ShaderNodeCombineColor')
+        nt.links.new(wear, comb.inputs[0])
+        nt.links.new(dirt, comb.inputs[1])
+        nt.links.new(ao.outputs['AO'], comb.inputs[2])
+        nt.links.new(comb.outputs['Color'], emit.inputs['Color'])
+        nt.links.new(emit.outputs['Emission'], out.inputs['Surface'])
+        tex = N('ShaderNodeTexImage')
+        tex.image = img
+        nt.nodes.active = tex
+        # --- swap every slot to the bake material, bake, restore
+        saved = [m for m in o.data.materials]
+        for i in range(len(o.data.materials)):
+            o.data.materials[i] = bm
+        if not saved:
+            o.data.materials.append(bm)
+        bpy.ops.object.select_all(action='DESELECT')
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        # Parts that leave the gun (a magazine) bake alone, or the well they sit
+        # in would bake into them as permanent grime.
+        hidden = [x for x in objects if o.name in isolate and x is not o and not x.hide_render]
+        for x in hidden:
+            x.hide_render = True
+        bpy.ops.object.bake(type='EMIT', use_clear=True)
+        for x in hidden:
+            x.hide_render = False
+        if saved:
+            for i, m in enumerate(saved):
+                o.data.materials[i] = m
+        else:
+            o.data.materials.clear()
+        img.filepath_raw = os.path.join(out_dir, o.name + '_masks.png')
+        img.file_format = 'PNG'
+        img.save()
+        bpy.data.materials.remove(bm)
+        print('BAKED', o.name, size, img.filepath_raw)
+
+
 def export(path, objects):
     for o in objects:
         for c in [o] + list(o.children_recursive):

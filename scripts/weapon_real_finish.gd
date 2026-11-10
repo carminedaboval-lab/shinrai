@@ -14,15 +14,17 @@ const SHADER = preload("res://scripts/weapon_real_finish.gdshader")
 # scales bevel wear, polish the handling sheen, dust the grime in recesses.
 const FINISHES := {
 	# AKANE = Glock 17 Gen 5: nDLC slide/barrel, black polymer frame.
-	"A9 nDLC slide": {"color": Color(0.13, 0.135, 0.14), "metallic": 0.45, "roughness": 0.5, "pattern": 3, "mottle": 0.25, "grain": 0.6, "edge_wear": 0.45, "wear": Color(0.55, 0.55, 0.56)},
-	"A9 nDLC barrel": {"color": Color(0.15, 0.155, 0.16), "metallic": 0.7, "roughness": 0.36, "pattern": 4, "grain": 0.5, "edge_wear": 0.6, "wear": Color(0.62, 0.62, 0.62)},
-	"A9 frame polymer": {"color": Color(0.095, 0.097, 0.1), "metallic": 0.0, "roughness": 0.6, "pattern": 0, "grain": 0.7, "edge_wear": 0.35},
-	"A9 grip texture": {"color": Color(0.098, 0.1, 0.103), "metallic": 0.0, "roughness": 0.72, "pattern": 1, "pitch": 0.0011, "bump": 0.65, "edge_wear": 0.2},
-	"A9 magazine polymer": {"color": Color(0.13, 0.133, 0.136), "metallic": 0.0, "roughness": 0.52, "pattern": 0, "grain": 0.7, "edge_wear": 0.45},
+	# Glock black reads as a dark charcoal in daylight photos, not a void: at
+	# near-black albedo none of the wear, sheen or cuts below can show.
+	"A9 nDLC slide": {"color": Color(0.155, 0.158, 0.162), "metallic": 0.6, "roughness": 0.44, "pattern": 6, "mottle": 0.8, "grain": 1.0, "edge_wear": 0.9, "wear": Color(0.72, 0.72, 0.71), "polish": 1.0},
+	"A9 nDLC barrel": {"color": Color(0.23, 0.235, 0.24), "metallic": 0.75, "roughness": 0.46, "pattern": 4, "grain": 1.0, "edge_wear": 0.9, "wear": Color(0.66, 0.65, 0.63), "polish": 1.0},
+	"A9 frame polymer": {"color": Color(0.16, 0.162, 0.165), "metallic": 0.0, "roughness": 0.58, "pattern": 0, "grain": 1.0, "bump": 1.6, "edge_wear": 0.4, "dust": 0.8},
+	"A9 grip texture": {"color": Color(0.165, 0.167, 0.17), "metallic": 0.0, "roughness": 0.72, "pattern": 1, "pitch": 0.0011, "bump": 0.65, "edge_wear": 0.2},
+	"A9 magazine polymer": {"color": Color(0.17, 0.172, 0.175), "metallic": 0.0, "roughness": 0.52, "pattern": 0, "grain": 0.7, "edge_wear": 0.45},
 	"A9 sight polymer": {"color": Color(0.12, 0.122, 0.125), "metallic": 0.0, "roughness": 0.58, "pattern": 0, "edge_wear": 0.3},
 	"A9 blackened steel": {"color": Color(0.13, 0.134, 0.138), "metallic": 0.65, "roughness": 0.48, "pattern": 4, "grain": 0.5, "edge_wear": 0.45, "wear": Color(0.6, 0.6, 0.6)},
 	"A9 bright steel": {"color": Color(0.74, 0.74, 0.73), "metallic": 1.0, "roughness": 0.3, "pattern": 4, "grain": 0.6},
-	"A9 laser marking": {"color": Color(0.42, 0.43, 0.44), "metallic": 0.25, "roughness": 0.62, "pattern": 8},
+	"A9 laser marking": {"color": Color(0.27, 0.275, 0.28), "metallic": 0.2, "roughness": 0.7, "pattern": 8},
 	# RAIDEN = Colt M4A1: Type III hard-anodised aluminium (dark charcoal,
 	# satin-matte, rubbed to grey/bare alloy on contact edges), manganese-
 	# phosphate steel, black polymer furniture, FDE rail panels.
@@ -107,25 +109,39 @@ const KEYWORD_FINISHES := [
 func _ready() -> void:
 	var geometry := get_node_or_null("Geometry")
 	if geometry != null:
-		apply(geometry)
+		# Baked wear masks live next to the weapon scene: baked/<Part>_masks.png.
+		var baked_dir := scene_file_path.get_base_dir().path_join("baked") if not scene_file_path.is_empty() else ""
+		apply(geometry, baked_dir)
 
-static func apply(root: Node) -> int:
+static func apply(root: Node, baked_dir: String = "") -> int:
 	var changed := 0
 	var made := {}
 	for mesh: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
 		if mesh.mesh == null:
 			continue
+		# A part with its own baked mask gets its own material instances (the
+		# mask is laid out on that part's UVs).
+		var masks: Texture2D = null
+		if not baked_dir.is_empty():
+			var path := baked_dir.path_join(String(mesh.name) + "_masks.png")
+			if ResourceLoader.exists(path):
+				masks = load(path) as Texture2D
 		for surface in mesh.mesh.get_surface_count():
 			var source := mesh.get_active_material(surface)
 			if source == null:
 				continue
 			var key := source.resource_name
-			if not made.has(key):
+			var cache := key + ("@" + String(mesh.name) if masks != null else "")
+			if not made.has(cache):
 				var finish: Dictionary = FINISHES.get(key, _infer(key, source))
-				made[key] = _material(key, finish) if not finish.is_empty() else null
-			if made[key] == null:
+				var m: ShaderMaterial = _material(key, finish) if not finish.is_empty() else null
+				if m != null and masks != null:
+					m.set_shader_parameter("use_masks", true)
+					m.set_shader_parameter("wear_masks", masks)
+				made[cache] = m
+			if made[cache] == null:
 				continue
-			mesh.set_surface_override_material(surface, made[key])
+			mesh.set_surface_override_material(surface, made[cache])
 			changed += 1
 	return changed
 

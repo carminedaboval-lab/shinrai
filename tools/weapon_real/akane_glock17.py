@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bpy
 import wr
+from trace import shape
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / 'assets/weapons/akane/akane_geometry.glb'
@@ -44,6 +45,15 @@ def top(name, pts_xz, y0, y1, m):
     return wr.extrude_xz(name, [(P(x, 0)[0], z / 1000) for x, z in pts_xz], P(0, y1)[1], P(0, y0)[1], m)
 
 
+def luminous(m, strength):
+    """Sight paint is bright against the dark slide even in its own shadow:
+    a faint self-glow keeps the dot and U outline readable when aimed."""
+    bs = m.node_tree.nodes.get('Principled BSDF')
+    bs.inputs['Emission Color'].default_value = (1.0, 1.0, 0.96, 1.0)
+    bs.inputs['Emission Strength'].default_value = strength
+    return m
+
+
 wr.reset()
 M = dict(
     slide=wr.mat('A9 nDLC slide', (0.032, 0.034, 0.036), 0.72, 0.40),
@@ -53,7 +63,7 @@ M = dict(
     bright=wr.mat('A9 bright steel', (0.50, 0.50, 0.49), 1.0, 0.28),
     barrel=wr.mat('A9 nDLC barrel', (0.040, 0.042, 0.044), 0.80, 0.30),
     bore=wr.mat('A9 bore', (0.010, 0.010, 0.010), 0.9, 0.45),
-    white=wr.mat('A9 sight white', (0.82, 0.82, 0.78), 0.0, 0.45),
+    white=luminous(wr.mat('A9 sight white', (0.82, 0.82, 0.78), 0.0, 0.45), 0.35),
     sight=wr.mat('A9 sight polymer', (0.025, 0.026, 0.027), 0.0, 0.55),
     mag=wr.mat('A9 magazine polymer', (0.028, 0.029, 0.030), 0.0, 0.52),
     brass=wr.mat('A9 brass', (0.72, 0.52, 0.24), 1.0, 0.28),
@@ -80,12 +90,19 @@ wr.boolean(slide, plan_cut, 'INTERSECT')
 cuts = []
 PITCH = 5.08
 for k in range(7):
-    for cx in (144.5 + PITCH * k, 10.6 + PITCH * k):
+    for cx, rear in ((144.5 + PITCH * k, True), (10.6 + PITCH * k, False)):
         for s in (1, -1):
-            # Square-bottomed slide serrations, open through the top chamfer
-            # and the bottom edge, 1.0 mm deep.
-            c = side('serration', [(cx - 1.0, 2.0), (cx + 1.0, 2.0), (cx + 1.0, 29), (cx - 1.0, 29)], 1.6, None, z=s * (SLIDE_HALF + 0.6))
-            cuts.append(c)
+            # Gen 5 serrations are sawtooth, not square slots: a steep wall the
+            # thumb pushes against (facing the muzzle on the rear set, the rear
+            # on the front set) and a long ramp back up to the flat. The ramp
+            # catches light at a different angle from the flat, so each tooth
+            # reads as a real cut instead of a dark stripe. 1.0 mm deep.
+            H = SLIDE_HALF
+            wall = cx - 0.85 if rear else cx + 0.85
+            ramp = cx + 1.25 if rear else cx - 1.25
+            pts = [(wall, s * (H + 1.0)), (ramp, s * (H + 1.0)), (ramp, s * (H - 0.02)),
+                   ((wall + ramp) / 2 + (wall - ramp) * 0.2, s * (H - 1.0)), (wall, s * (H - 1.0))]
+            cuts.append(top('serration', pts, 2.0, 29.0, None))
 # Ejection port: right side, opening across the top to just past centreline.
 # Glock port: the top opening runs across nearly the full slide top so the
 # whole barrel hood shows from above; only the left top chamfer is left.
@@ -117,22 +134,26 @@ slide_parts.append(plate)
 for sx in (137.5, 160.5):
     slide_parts.append(wr.cylinder('mos_screw', P(sx, SLIDE_TOP + 0.05), P(sx, SLIDE_TOP - 0.22), 0.0021, M['small'], 20))
     slide_parts.append(wr.cylinder('mos_screw_socket', P(sx, SLIDE_TOP - 0.2), P(sx, SLIDE_TOP - 0.24), 0.0011, M['bore'], 6))
-# Rear sight: polymer, sloped face, U notch with white outline.
-NOTCH_R, NOTCH_C = 1.75, 1.6
+# Rear sight: polymer, sloped face, factory square notch (3.5 mm wide, 2.4 mm
+# deep) framed by the white "U" outline, which is square too: two side bars
+# and a bottom bar around the notch, not a ring.
+NOTCH_HW, NOTCH_BOT, NOTCH_TOP = 1.75, 3.4, 1.0
 
 
-def notch_poly(r, top_y=0.6, c=NOTCH_C):
-    return [(r, top_y), (r, c)] + [(r * math.cos(math.radians(a)), c + r * math.sin(math.radians(a))) for a in range(15, 180, 15)] + [(-r, c), (-r, top_y)]
+def square_notch(hw, bottom, top_y, r=0.22):
+    return [(hw, top_y), (hw, bottom - r), (hw - r, bottom), (-hw + r, bottom), (-hw, bottom - r), (-hw, top_y)]
 
 
-rs_sec = [(-8.3, SLIDE_TOP + 1.2), (8.3, SLIDE_TOP + 1.2), (8.0, SLIDE_TOP - 0.4), (6.4, 1.0)] + notch_poly(NOTCH_R, 1.0) + [(-6.4, 1.0), (-8.0, SLIDE_TOP - 0.4)]
+rs_sec = [(-8.3, SLIDE_TOP + 1.2), (8.3, SLIDE_TOP + 1.2), (8.0, SLIDE_TOP - 0.4), (6.4, NOTCH_TOP)] + square_notch(NOTCH_HW, NOTCH_BOT, NOTCH_TOP) + [(-6.4, NOTCH_TOP), (-8.0, SLIDE_TOP - 0.4)]
 rear_sight = section('rear_sight', rs_sec, 168.6, 176.2, M['sight'])
 slope = side('rear_sight_slope', [(166, -3), (171.5, -3), (167.5, 3.6), (166, 3.6)], 12, None)
 wr.boolean(rear_sight, slope, 'DIFFERENCE')
 wr.bevel(rear_sight, 0.0003, 2, 30)
 slide_parts.append(rear_sight)
-u_white = section('rear_sight_u', [(z, y) for z, y in [(3.35, 1.0)] + notch_poly(NOTCH_R + 0.85, 1.0) + [(-3.35, 1.0)]], 176.15, 176.3, M['white'])
-wr.boolean(u_white, section('u_inner', notch_poly(NOTCH_R, -1.0), 175, 177, None), 'DIFFERENCE')
+# The outline bars are 0.9 mm, a touch bolder than factory paint so the sight
+# picture still reads at game resolution.
+u_white = section('rear_sight_u', square_notch(NOTCH_HW + 0.9, NOTCH_BOT + 0.9, NOTCH_TOP, 0.3), 176.15, 176.3, M['white'])
+wr.boolean(u_white, section('u_inner', square_notch(NOTCH_HW, NOTCH_BOT, NOTCH_TOP - 2.0), 175, 177, None), 'DIFFERENCE')
 slide_parts.append(u_white)
 # Front sight: polymer post with white dot facing the shooter.
 fs = section('front_sight', [(-1.65, SLIDE_TOP + 0.6), (1.65, SLIDE_TOP + 0.6), (1.5, 1.4), (1.1, 1.0), (-1.1, 1.0), (-1.5, 1.4)], 9.3, 13.0, M['sight'])
@@ -149,10 +170,8 @@ slide_parts.append(side('extractor_bump', [(118.5, 10.8), (121.5, 10.8), (121.5,
 # Markings (left: logo box, model, origin, calibre; right: serial).
 L = SLIDE_HALF + 0.02
 slide_parts.append(wr.text('mark_logo', 'AKANE', P(63.5, 15.2, L), 0.0032, M['mark'], 1))
-box_o = side('logo_box', [(55.2, 11.7), (71.8, 11.7), (71.8, 18.7), (55.2, 18.7)], 0.03, M['mark'], z=L)
-box_i = side('logo_box_i', [(55.7, 12.2), (71.3, 12.2), (71.3, 18.2), (55.7, 18.2)], 0.2, None, z=L)
-wr.boolean(box_o, box_i, 'DIFFERENCE')
-slide_parts.append(box_o)
+# (No frame box round the maker's name: the real slide stamping is plain
+# lettering, and the outlined box read as a printed sticker.)
 slide_parts.append(wr.text('mark_model', 'A9  Gen5', P(84.0, 15.2, L), 0.0027, M['mark'], 1))
 slide_parts.append(wr.text('mark_origin', 'JAPAN', P(104.0, 15.2, L), 0.0024, M['mark'], 1))
 slide_parts.append(wr.text('mark_cal', '9x19', P(126.5, 15.2, L), 0.0027, M['mark'], 1))
@@ -290,7 +309,7 @@ for s in (1, -1):
     z = s * (F_HALF - 0.55)
     # Takedown lever: serrated steel tab.
     lever = side('takedown_lever', [(x, y) for x, y in wr.rounded_rect(90.2, 33.0, 3.8, 9.2, 1.4, 4)], 0.6, M['small'], z=z + s * 0.2)
-    wr.bevel(lever, 0.0002, 1, 30)
+    wr.bevel(lever, 0.0003, 2, 30)
     # The real slide lock has five horizontal pull grooves across its face.
     zo = s * (F_HALF - 0.55 + 0.2 + 0.6)
     lever_cuts = [side('lever_groove', [(87.6, gy - 0.32), (92.8, gy - 0.32), (92.8, gy + 0.32), (87.6, gy + 0.32)], 0.28, None, z=zo) for gy in (30.0, 31.5, 33.0, 34.5, 36.0)]
@@ -300,8 +319,13 @@ for s in (1, -1):
     # Ambidextrous slide stop with gripping ridges.
     stop = side('slide_stop', [(125.6, 27.4), (135.4, 27.4), (135.6, 30.4), (134.2, 32.6), (126.4, 32.6), (125.4, 31.2)], 0.9, M['small'], z=s * (F_HALF + 0.45))
     # The stop's grip ridges are too fine to model at this size.
-    wr.bevel(stop, 0.0002, 1, 30)
+    wr.bevel(stop, 0.0003, 2, 30)
     frame_parts.append(stop)
+    # Raised thumb pad at the rear of the stop: the part a thumb actually
+    # presses, standing proud of the lever with a rounded crown.
+    pad = side('slide_stop_pad', [(x, y) for x, y in wr.rounded_rect(132.6, 30.0, 5.6, 4.6, 1.6, 4)], 0.45, M['small'], z=s * (F_HALF + 1.6))
+    wr.bevel(pad, 0.00035, 3, 30)
+    frame_parts.append(pad)
     # Slide-stop arm: pivots on the trigger pin, sits in its frame channel.
     arm = side('slide_stop_arm', STOP_ARM, 0.3, M['small'], z=s * (F_HALF - 0.3))
     wr.bevel(arm, 0.0001, 1, 30)
@@ -322,12 +346,21 @@ frame_obj = wr.join('Receiver', frame_parts)
 # -------------------------------------------------------------- trigger ----
 tf = [(101.2, 43.0), (100.6, 48.0), (99.4, 52.6), (97.4, 56.0), (95.2, 59.2), (93.8, 62.2)]
 tr = [(108.6, 43.0), (108.2, 52.0), (106.4, 57.6), (103.6, 61.2), (100.4, 63.4), (97.2, 65.0)]
-shoe = side('trigger_shoe', [(101.6, 40.0)] + tf + arc(95.4, 63.2, 1.8, 160, 75, 4) + list(reversed(tr)) + [(109.0, 40.0)], 3.3, M['frame'])
+SHOE = [(101.6, 40.0)] + tf + arc(95.4, 63.2, 1.8, 160, 75, 4) + list(reversed(tr)) + [(109.0, 40.0)]
+shoe = side('trigger_shoe', SHOE, 3.8, M['frame'])
+# Real Glock shoe: the finger face is crowned across its width and every edge
+# is a soft moulded radius, not a 6.6 mm flat-sided plate.
+shape(shoe, P, SHOE, 3.3, r=1.7, crown=0.45, step=0.6, margin=0.3)
 wr.boolean(shoe, side('safety_slot', [(x - 1.2, y) for x, y in tf[1:-1]] + [(x + 1.6, y) for x, y in reversed(tf[1:-1])], 1.25, None), 'DIFFERENCE')
 wr.bevel(shoe, 0.0004, 2, 30)
 # Glock trigger shoe and safety blade are black polymer, not steel.
-blade = side('trigger_safety', [(x - 0.9, y) for x, y in tf[1:-1]] + [(x + 1.8, y) for x, y in reversed(tf[1:-1])], 1.1, M['frame'])
-wr.bevel(blade, 0.0002, 1, 30)
+# Trigger safety ('Safe Action'): the hinged blade in the middle of the face.
+# At rest it stands ~1.3 mm proud of the shoe, so the trigger can't move until
+# the finger presses it flush. Rounded nose, slight taper toward the tip.
+BLADE = [(x - 1.3 - 0.25 * i / 3.0, y) for i, (x, y) in enumerate(tf[1:-1])] + [(x + 1.8, y) for x, y in reversed(tf[1:-1])]
+blade = side('trigger_safety', BLADE, 1.25, M['frame'])
+shape(blade, P, BLADE, 1.1, r=0.9, crown=0.15, step=0.5, margin=0.2)
+wr.bevel(blade, 0.0002, 2, 30)
 trigger_obj = wr.join('Trigger', [shoe, blade])
 
 # ------------------------------------------------------------- magazine ----
@@ -353,6 +386,9 @@ objs = [slide_obj, barrel_obj, frame_obj, trigger_obj, mag_obj]
 for o in objs:
     bpy.context.view_layer.objects.active = o
 print('A9 verts', {o.name: len(o.data.vertices) for o in objs}, 'total', wr.stats(objs))
+# Baked wear masks (edge wear, crevice dirt, AO) for the finish shader.
+if '--no-bake' not in sys.argv:
+    wr.bake_masks(objs, REPO / 'assets/weapons/akane/baked', sizes={'Slide': 2048, 'Receiver': 2048, 'Barrel': 1024, 'Trigger': 512, 'Magazine': 1024}, isolate=('Magazine',))
 if '--blend' in sys.argv:
     bpy.ops.wm.save_as_mainfile(filepath=str(REPO / 'tools/weapon_real/akane_glock17.blend'))
 wr.export(OUT, objs)

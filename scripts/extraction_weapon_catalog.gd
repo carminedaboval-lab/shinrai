@@ -288,7 +288,7 @@ const WEAPONS := {
     "recoil_hip": 0.54,
     "recoil_ads": 0.33,
     "ads_fov": 68.0,
-    "ads_speed": 9.0,
+    "ads_speed": 6.7,
     "spread_hip": 0.009,
     "spread_ads": 0.00065,
     "optic_mount": "optic_mount_v1",

@@ -29,6 +29,11 @@ uniform float ply_mm = 0.0;
 uniform float mottle = 1.0;
 uniform float dust = 0.5;
 uniform float polish = 0.5;
+// Baked masks (R edge wear, G crevice dirt, B ambient occlusion) on UV0, from
+// tools/weapon_real/wr.py bake_masks(). When present they replace the
+// screen-space curvature estimate, which fades out with distance.
+uniform bool use_masks = false;
+uniform sampler2D wear_masks : hint_default_black, filter_linear_mipmap, repeat_disable;
 
 varying vec3 p_obj;
 varying vec3 n_obj;
@@ -103,6 +108,13 @@ void fragment() {
 	float vis_edge = 1.0 - smoothstep(0.0007, 0.0018, span);
 	convex *= vis_edge;
 	concave *= vis_edge;
+	float baked_ao = 1.0;
+	if (use_masks) {
+		vec3 mk = texture(wear_masks, UV).rgb;
+		convex = clamp(mk.r * 1.25, 0.0, 1.0);
+		concave = clamp(mk.g, 0.0, 1.0);
+		baked_ao = mk.b;
+	}
 
 	if (pattern == 0) {
 		// Injection moulding: EDM-textured mould gives a fine even matte.
@@ -228,7 +240,7 @@ void fragment() {
 	colour = mix(colour, vec3(0.34, 0.32, 0.28), dusty * 0.28);
 	rough = mix(rough, 0.85, dusty * 0.5);
 	metal *= 1.0 - dusty * 0.5;
-	AO = 1.0 - concave * 0.35;
+	AO = (1.0 - concave * 0.35) * mix(1.0, baked_ao, use_masks ? 0.65 : 0.0);
 	AO_LIGHT_AFFECT = 0.25;
 
 	ALBEDO = colour;
