@@ -10,7 +10,7 @@ extends Control
 const UIStyle = preload("res://scripts/hud/shinrai_ui_style.gd")
 const Medical = preload("res://scripts/extraction_medical.gd")
 const ShaderPool = preload("res://scripts/shinrai_shader_pool.gd")
-const MODEL_PATH := "res://assets/characters/urban_explorer_2050/urban_explorer_2050_body.glb"
+const MODEL_PATH := "res://assets/characters/player_wardrobe/player_wardrobe.tscn"
 const PARTS := ["head", "thorax", "stomach", "left_arm", "right_arm", "left_leg", "right_leg"]
 const SHORT := {"head":"HEAD", "thorax":"THORAX", "stomach":"STOMACH", "left_arm":"L ARM", "right_arm":"R ARM", "left_leg":"L LEG", "right_leg":"R LEG"}
 const HEALTHY := Color(0.62, 0.9, 0.95)

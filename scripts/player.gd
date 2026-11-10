@@ -226,6 +226,8 @@ const TacticalCrosshair := preload("res://scripts/hud/tactical_crosshair.gd")
 const DamageDirection := preload("res://scripts/hud/damage_direction.gd")
 const ImpactFX := preload("res://scripts/fx/combat_impact_fx.gd")
 const CameraTrauma := preload("res://scripts/fx/camera_trauma.gd")
+const BodycamRig := preload("res://scripts/fx/bodycam_rig.gd")
+var bodycam: BodycamRig
 var tactical_crosshair: TacticalCrosshair
 var damage_direction: DamageDirection
 var impact_fx: ImpactFX
@@ -272,6 +274,12 @@ func _ready() -> void:
     camera_trauma.name = "CameraTrauma"
     add_child(camera_trauma)
     camera_trauma.bind(camera)
+    # Bodycam view (F4): a chest-mounted lens renders while this camera keeps
+    # aiming. Off by default; the normal view is unchanged.
+    bodycam = BodycamRig.new()
+    bodycam.name = "BodycamRig"
+    add_child(bodycam)
+    bodycam.bind(self)
     _ensure_impact_fx.call_deferred()
     Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
     _update_hud()
@@ -1285,8 +1293,12 @@ func reset_controller_intents() -> void:
     jump_was_down = false
     _controller_epoch = ControllerInput.release_epoch
 
+## Capture tests set this so they can drive the player without grabbing the
+## real mouse pointer from whoever is using the PC. Never set in the game.
+var test_input_override := false
+
 func _controller_gameplay_allowed() -> bool:
-    return alive and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and ControllerInput.gameplay_ready()
+    return alive and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or test_input_override) and ControllerInput.gameplay_ready()
 
 func _apply_controller_look(delta: float) -> void:
     if not _controller_gameplay_allowed() or not is_instance_valid(head): return
@@ -1309,6 +1321,8 @@ func _unhandled_input(event: InputEvent) -> void:
             reset_controller_intents()
         elif event.keycode == KEY_F3 and not extraction_mode:
             _set_fly_mode(not fly_mode)
+        elif event.keycode == KEY_F4 and is_instance_valid(bodycam):
+            bodycam.toggle()
     if ControllerInput.released(event,"aim"): ads = false
     if not _controller_gameplay_allowed(): return
     if event is InputEventMouseMotion:
@@ -2538,22 +2552,33 @@ func _sync_weapon_magazine() -> void:
 
 func _advance_reload_events(ratio: float) -> bool:
     if not reloading: return false
+    # When the magazine leaves and enters, as a share of the reload. A viewmodel
+    # with its own reload choreography reports its beats so sounds and ammunition
+    # changes land on what is seen.
+    var mag_out_at: float = 0.08 if reload_empty else 0.16
+    var mag_in_at: float = 0.40 if reload_empty else 0.65
+    var bolt_at: float = 0.72
+    if is_instance_valid(uzi_viewmodel) and uzi_viewmodel.has_method("get_reload_events"):
+        var beats: Dictionary = uzi_viewmodel.call("get_reload_events", reload_empty)
+        mag_out_at = float(beats.get("out", mag_out_at))
+        mag_in_at = float(beats.get("in", mag_in_at))
+        bolt_at = float(beats.get("bolt", bolt_at))
     if physical_magazines:
         if not _reload_chamber_only:
-            if not _reload_mag_out and ratio >= (0.08 if reload_empty else 0.16):
+            if not _reload_mag_out and ratio >= mag_out_at:
                 var had_magazine := magazine_inserted
                 if not bool(physical_reload_handler.call("eject")):
                     _cancel_physical_reload()
                     return false
                 _reload_mag_out = true
                 if had_magazine: _play_weapon_sound("magazine_out")
-            if not _reload_mag_in and ratio >= (0.40 if reload_empty else 0.65):
+            if not _reload_mag_in and ratio >= mag_in_at:
                 if not bool(physical_reload_handler.call("insert")):
                     _cancel_physical_reload()
                     return false
                 _reload_mag_in = true
                 _play_weapon_sound("magazine_in")
-        if weapon_id!="uzi" and reload_empty and not _reload_bolt_released and ratio >= (0.30 if _reload_chamber_only else 0.72):
+        if weapon_id!="uzi" and reload_empty and not _reload_bolt_released and ratio >= (0.30 if _reload_chamber_only else bolt_at):
             chambered=magazine_inserted and ammo>0
             bolt_locked=not chambered
             _reload_bolt_released=true
@@ -2577,7 +2602,7 @@ func _advance_reload_events(ratio: float) -> bool:
             _play_weapon_sound("bolt_open")
         return true
     if not _reload_chamber_only:
-        if not _reload_mag_out and ratio >= (0.08 if reload_empty else 0.16):
+        if not _reload_mag_out and ratio >= mag_out_at:
             # The retained old magazine returns its rounds to the reserve pool.
             # A closed-bolt tactical reload preserves the separate chamber round.
             var had_magazine := magazine_inserted
@@ -2587,14 +2612,14 @@ func _advance_reload_events(ratio: float) -> bool:
             magazine_inserted = false
             _reload_mag_out = true
             if had_magazine: _play_weapon_sound("magazine_out")
-        if not _reload_mag_in and ratio >= (0.40 if reload_empty else 0.65):
+        if not _reload_mag_in and ratio >= mag_in_at:
             var moved := mini(mag_size, reserve)
             ammo += moved
             reserve -= moved
             magazine_inserted = true
             _reload_mag_in = true
             _play_weapon_sound("magazine_in")
-    if reload_empty and not _reload_bolt_released and ratio >= (0.30 if _reload_chamber_only else 0.72):
+    if reload_empty and not _reload_bolt_released and ratio >= (0.30 if _reload_chamber_only else bolt_at):
         chambered = magazine_inserted and ammo > 0
         bolt_locked = not chambered
         _reload_bolt_released = true

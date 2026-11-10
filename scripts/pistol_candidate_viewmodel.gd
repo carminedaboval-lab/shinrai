@@ -10,6 +10,16 @@ const OPTIC_SCENES := {"reflex_01": "res://assets/weapons/optics/ame_reflex.tscn
 @export var slide_cycle_seconds := 0.105
 @export var optic_mount_enabled := true
 @export_range(0.08, 0.8, 0.01, "suffix:m") var iron_eye_relief_m := ADS_REAR_DEPTH
+## World scale of the supplied arms and hands. 1.48 is the rig's old enlarged
+## size; 1.0 is life size, which is what a true-size gun needs.
+@export_range(0.5, 2.0, 0.01) var hand_world_scale := MODEL_SCALE
+## Reload by putting the old magazine back in the rig and drawing a fresh one
+## (scripts/pistol_reload_retention.gd) instead of the older lift-and-swap.
+@export var retention_reload := false
+## Moves both hands on the gun, in the gun's own axes (x toward the shooter, y up,
+## z shooter's left), metres. The grip markers suit the old enlarged hands; true-
+## size hands need to sit higher, under the slide.
+@export var grip_hand_offset := Vector3.ZERO
 @export var case_length := 0.019
 @export var case_radius := 0.0048
 var slide_mesh: Node3D
@@ -26,6 +36,7 @@ const PrismReticle = preload("res://assets/weapons/optics/prism_reticle.gdshader
 const PrismView = preload("res://scripts/extraction_prism_scope_view.gd")
 const MuzzleFlash = preload("res://assets/weapons/effects/muzzle_flash.gdshader")
 const Presentation = preload("res://scripts/pistol_candidate_presentation.gd")
+const Retention = preload("res://scripts/pistol_reload_retention.gd")
 @export var weapon_key := "hibari_h9c"
 @export var assembly_scene: PackedScene
 @export var magazine_grip := Vector3(.045,-.105,0)
@@ -93,6 +104,7 @@ func hold_presentation(value: bool) -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
+	_update_aim_light()
 	_slide_elapsed += delta
 	_update_slide()
 	for i: int in range(_cases.size()-1,-1,-1):
@@ -111,6 +123,36 @@ func _process(delta: float) -> void:
 		var life := clampf(_flash_timer / .035,0.0,1.0)
 		_flash_material.set_shader_parameter("life",life)
 		_flash_light.light_energy = .85 * life
+
+# Aimed, a pistol's rear sight and slide face the eye and the sun is usually
+# behind them, so in daylight they read as a flat black block. A narrow, weak
+# spot from the eye (viewmodel layer only, aimed at the sight picture) gives
+# them form and lifts the sight paint, the way other shooters light the
+# aimed weapon. It fades in with the aim and stays off at the hip.
+const AIM_LIGHT_ENERGY := 0.7
+const AIM_LIGHT_EYE := Vector3(0.0, 0.014, 0.02)
+var _aim_light: SpotLight3D
+
+func _update_aim_light() -> void:
+	var weight := smoothstep(0.45, 1.0, ads_blend) if optic_id.is_empty() else 0.0
+	if _aim_light == null:
+		if weight <= 0.0:
+			return
+		_aim_light = SpotLight3D.new()
+		_aim_light.name = "PistolAimLight"
+		_aim_light.spot_angle = 6.5
+		_aim_light.spot_angle_attenuation = 0.6
+		_aim_light.spot_range = 0.9
+		_aim_light.light_specular = 0.08
+		_aim_light.light_color = Color(1.0, 0.98, 0.95)
+		_aim_light.shadow_enabled = false
+		_aim_light.light_cull_mask = VIEWMODEL_LAYER
+		add_child(_aim_light)
+	_aim_light.visible = weight > 0.0
+	_aim_light.light_energy = AIM_LIGHT_ENERGY * weight
+	# Keep it at the eye (the parent's origin) while the gun itself moves.
+	var eye := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-2.5)), AIM_LIGHT_EYE)
+	_aim_light.transform = transform.affine_inverse() * eye
 
 func _ready() -> void:
 	name = weapon_key.capitalize() + "_Viewmodel"
@@ -162,6 +204,16 @@ func _load_bundled_model() -> void:
 		if bone_name.begins_with("DEF-") and bone_name.contains(".L") and (bone_name.contains("f_") or bone_name.contains("thumb")):
 			_closed_fingers[id] = skeleton.get_bone_pose(id)
 	_cache_pistol_reload_pose()
+	# Hands at true size. The supplied rig is drawn 1.48x life size (a far-and-large
+	# viewmodel trick that suited its own, equally enlarged gun). The rebuilt guns
+	# are true size, so on them the hands read half as big again as they should and
+	# the fingers overrun the frame. Scale the rig about the firing hand: the gun,
+	# its sights and the aim stay exactly where they were.
+	if not is_equal_approx(hand_world_scale, MODEL_SCALE):
+		var palm_before := to_local(skeleton.global_transform * skeleton.get_bone_global_pose(right_hand_bone).origin)
+		imported_root.scale = Vector3.ONE * hand_world_scale
+		var palm_after := to_local(skeleton.global_transform * skeleton.get_bone_global_pose(right_hand_bone).origin)
+		imported_root.position += palm_before - palm_after
 	assembly = assembly_scene.instantiate() as Node3D
 	if assembly == null:
 		_fail("Pistol assembly root must be Node3D")
@@ -173,7 +225,7 @@ func _load_bundled_model() -> void:
 			_fail("Pistol assembly marker missing: " + marker)
 			return
 	imported_root.add_child(assembly)
-	assembly.basis = Basis(Vector3.UP, PI * 0.5).scaled(Vector3.ONE / MODEL_SCALE)
+	assembly.basis = Basis(Vector3.UP, PI * 0.5).scaled(Vector3.ONE / hand_world_scale)
 	var palm_world := skeleton.global_transform * skeleton.get_bone_global_pose(right_hand_bone).origin
 	var palm_model := imported_root.to_local(palm_world)
 	assembly.position = palm_model - assembly.basis * assembly.get_node("GripRight").position
@@ -196,6 +248,12 @@ func _load_bundled_model() -> void:
 	body_fit = (skeleton.global_transform * skeleton.get_bone_global_pose(body_bone)).affine_inverse() * assembly.global_transform
 	assembly_reference = global_transform.affine_inverse() * assembly.global_transform
 	_hand_to_assembly = (skeleton.global_transform * _pistol_right_idle[4]).affine_inverse() * assembly.global_transform
+	if retention_reload:
+		# At this point the grip marker sits on the wrist bone, which is only how the
+		# fit is seeded: in the hand the grip belongs at the palm contact. Riding the
+		# gun on the hand with the seeded offset pushed the grip through the heel of
+		# the hand for the whole reload. Hold it where the hand really grips it.
+		_hand_to_assembly = Transform3D(Basis.IDENTITY, RIGHT_PALM_CONTACT - _hand_to_assembly.basis * grip_hand_offset) * _hand_to_assembly
 	magazine_reference = skeleton.get_bone_global_pose(body_bone).affine_inverse() * skeleton.get_bone_global_pose(magazine_bone)
 	_prepare_imported_nodes(assembly)
 	_fitted = true
@@ -299,7 +357,10 @@ func update_supplied_pose(rig: Skeleton3D, delta: float = 0.0) -> void:
 	var ratio := 0.0
 	if reloading:
 		ratio = animation_player.current_animation_position / animation_player.get_animation(animation_player.assigned_animation).length
-		_rig_motion = Presentation.pose(weapon_key,empty,ratio)
+		if _retention_active():
+			_rig_motion = Retention.gun(ratio,empty,assembly_reference*(assembly.get_node("GripRight") as Node3D).position)
+		else:
+			_rig_motion = Presentation.pose(weapon_key,empty,ratio)
 		if _chamber_presentation:
 			_rig_motion = Transform3D.IDENTITY.interpolate_with(_rig_motion,smoothstep(.60,.65,ratio))
 	else:
@@ -310,9 +371,17 @@ func update_supplied_pose(rig: Skeleton3D, delta: float = 0.0) -> void:
 		# Retain the calibrated pistol, not the UZI's moving receiver/magazine bones.
 		assembly.global_transform = global_transform * _rig_motion * assembly_reference
 		magazine_mesh.global_transform = assembly.global_transform * magazine_rest
-		if not _chamber_presentation:
+		if _retention_active():
+			magazine_mesh.global_transform = assembly.global_transform * Retention.magazine(ratio) * magazine_rest
+		elif not _chamber_presentation:
 			magazine_mesh.global_position += assembly.global_basis * Presentation.magazine_offset(empty,ratio)
 		for id: int in _pistol_finger_idle: rig.set_bone_pose(id,_pistol_finger_idle[id])
+		if _retention_active():
+			# The support hand opens to reach, closes on the magazine, lets go in the
+			# pouch, takes the fresh one and opens again as the palm drives it home.
+			var open := Retention.fingers_open(ratio)
+			for id: int in _closed_fingers:
+				rig.set_bone_pose(id,(_pistol_finger_idle[id] as Transform3D).interpolate_with(rig.get_bone_rest(id),open))
 	else:
 		var body_pose := rig.get_bone_global_pose(body_bone)
 		assembly.global_transform = rig.global_transform * body_pose * body_fit
@@ -333,7 +402,7 @@ func update_supplied_pose(rig: Skeleton3D, delta: float = 0.0) -> void:
 		# keep a little of the authored cant, and attach the pistol to that hand.
 		var cant := rig.global_basis.inverse() * (global_basis * _rig_motion.basis * global_basis.inverse()) * rig.global_basis
 		var cant_basis := cant * right_poses[4].basis
-		var grip_target: Vector3 = assembly.get_node("GripRight").global_position
+		var grip_target: Vector3 = assembly.get_node("GripRight").global_position + assembly.global_basis * grip_hand_offset
 		var provisional_offset := rig.global_basis * cant_basis * RIGHT_PALM_CONTACT
 		_solve_arm(rig,right_bones,right_poses,rig.global_transform.affine_inverse()*(grip_target-provisional_offset),false)
 		var natural := rig.get_bone_global_pose(right_bones[4]).basis
@@ -344,19 +413,32 @@ func update_supplied_pose(rig: Skeleton3D, delta: float = 0.0) -> void:
 		# The pistol now rides on the solved hand, so palm and grip stay together.
 		assembly.global_transform = rig.global_transform * rig.get_bone_global_pose(right_bones[4]) * _hand_to_assembly
 		magazine_mesh.global_transform = assembly.global_transform * magazine_rest
-		if not _chamber_presentation:
+		if _retention_active():
+			magazine_mesh.global_transform = assembly.global_transform * Retention.magazine(ratio) * magazine_rest
+		elif not _chamber_presentation:
 			magazine_mesh.global_position += assembly.global_basis * Presentation.magazine_offset(empty,ratio)
 	else:
 		var right_palm_offset := rig.global_basis*right_poses[4].basis*RIGHT_PALM_CONTACT
-		var right_target: Vector3 = assembly.get_node("GripRight").global_position-right_palm_offset
+		var right_target: Vector3 = assembly.get_node("GripRight").global_position+assembly.global_basis*grip_hand_offset-right_palm_offset
 		_solve_arm(rig,right_bones,right_poses,rig.global_transform.affine_inverse()*right_target,true)
 	magazine_mesh.visible = _magazine_inserted or reloading
 	magazine_exchange.update(ratio,reloading and not _chamber_presentation,_magazine_inserted,empty)
-	var contact_world: Vector3 = assembly.get_node("GripLeft").global_position
+	if _retention_active() and magazine_exchange.swapping:
+		# One magazine is in the hand at a time: the old one until it is in its
+		# pouch, the fresh one from the moment it is drawn.
+		if is_instance_valid(magazine_exchange.current): magazine_exchange.current.visible = magazine_exchange.had_magazine and ratio < Retention.STOWED_AT
+		if is_instance_valid(magazine_exchange.replacement): magazine_exchange.replacement.visible = ratio >= Retention.DRAWN_AT
+	var contact_world: Vector3 = assembly.get_node("GripLeft").global_position + assembly.global_basis * grip_hand_offset
 	var contact_local := LEFT_PALM_CONTACT
 	_pistol_release_weight = 0.0
 	_pistol_magazine_contact_weight = 0.0
-	if reloading:
+	if _retention_active():
+		_pistol_magazine_contact_weight = Retention.grasp(ratio)
+		contact_world = contact_world.lerp(magazine_mesh.to_global(magazine_grip),_pistol_magazine_contact_weight)
+		_pistol_release_weight = Retention.slide_release(empty,ratio)
+		contact_world = contact_world.lerp(assembly.get_node("BoltRelease").global_position,_pistol_release_weight)
+		contact_local = contact_local.lerp(_pistol_thumb_contact,_pistol_release_weight)
+	elif reloading:
 		if not _chamber_presentation:
 			var fetch: Vector3 = assembly.to_global(magazine_grip+Vector3(.030,-.160,.035))
 			contact_world = contact_world.lerp(fetch,Presentation.support_fetch(empty,ratio))
@@ -375,12 +457,32 @@ func update_supplied_pose(rig: Skeleton3D, delta: float = 0.0) -> void:
 		_solve_arm(rig,left_bones,poses,rig.global_transform.affine_inverse()*wrist_world,false)
 		for iteration: int in range(2):
 			var natural := rig.get_bone_global_pose(left_bones[4]).basis
-			poses[4].basis = Basis(natural.get_rotation_quaternion().slerp(_pistol_left_idle[4].basis.get_rotation_quaternion(),RELOAD_WRIST_CANT_WEIGHT)).scaled(natural.get_scale())
+			var held := _pistol_left_idle[4].basis
+			if _retention_active():
+				# The hand turns with the magazine it is carrying.
+				var gun_basis := assembly.global_basis.orthonormalized()
+				var rig_basis := rig.global_basis.orthonormalized()
+				var turn := rig_basis.inverse() * (gun_basis * Retention.magazine(ratio).basis * gun_basis.inverse()) * rig_basis
+				held = Basis(Quaternion.IDENTITY.slerp(turn.get_rotation_quaternion(),_pistol_magazine_contact_weight)) * held
+			poses[4].basis = Basis(natural.get_rotation_quaternion().slerp(held.get_rotation_quaternion(),RELOAD_WRIST_CANT_WEIGHT)).scaled(natural.get_scale())
 			wrist_world = contact_world-rig.global_basis*poses[4].basis*contact_local
 			_solve_arm(rig,left_bones,poses,rig.global_transform.affine_inverse()*wrist_world,true)
 	else:
 		_solve_arm(rig,left_bones,poses,rig.global_transform.affine_inverse()*wrist_world,true)
 	_update_slide()
+
+## True while the retention reload is driving the hands (not the chamber-only action).
+func _retention_active() -> bool:
+	if not retention_reload or _chamber_presentation or animation_player == null:
+		return false
+	return str(animation_player.assigned_animation).to_lower().contains("reload") and animation_player.is_playing()
+
+## When the magazine leaves and enters, as a share of the reload, so the player's
+## sounds and ammunition changes land on the visible moments.
+func get_reload_events(_empty: bool) -> Dictionary:
+	if not retention_reload:
+		return {}
+	return {"out": Retention.OUT_AT, "in": Retention.IN_AT, "bolt": Retention.BOLT_AT}
 
 func _solve_arm(rig: Skeleton3D, bones: Array[int], poses: Array[Transform3D], target: Vector3, preserve_hand_orientation: bool = false) -> void:
 	var shoulder := poses[0].origin

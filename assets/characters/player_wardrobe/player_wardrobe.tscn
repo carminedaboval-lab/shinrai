@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/characters/player_wardrobe/player_wardrobe.glb" id="1_body"]
+[ext_resource type="Script" path="res://assets/characters/player_wardrobe/player_wardrobe.gd" id="2_wardrobe"]
+
+[node name="PlayerWardrobe" type="Node3D"]
+script = ExtResource("2_wardrobe")
+
+[node name="Character" parent="." instance=ExtResource("1_body")]
+
+
+[node name="AkaneWristLeft" type="Marker3D" parent="."]
+transform = Transform3D(-0.050154519, 0.995589706, -0.081950191, -0.994355015, -0.057622309, -0.091478723, -0.095776742, 0.076882574, 0.992645973, 0.126258668, -0.057314831, 0.064384229)
+
+[node name="AkaneWristRight" type="Marker3D" parent="."]
+transform = Transform3D(0.293069627, -0.491415493, -0.820397272, -0.845857748, 0.267121280, -0.462169890, 0.446167342, 0.829208872, -0.337309788, 0.141654757, -0.055325827, 0.009675103)

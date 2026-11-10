@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bpy, json
 import wr
-from trace import clean
+from trace import clean, squeeze, smoothstep
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / 'assets/weapons/tobikage/tobikage_geometry.glb'
@@ -255,6 +255,13 @@ wr.boolean(stock, side('thumbhole', smooth_loop([PX(x, y) for x, y in REF['thumb
 taper = sec('stock_taper', [(-9.0, 31.0), (9.0, 31.0), (13.5, 28.5), (16.8, 24.0), (17.7, 17.0), (18.3, -8.0), (18.5, -40.0), (18.2, -90.0), (17.3, -150.0), (-17.3, -150.0), (-18.2, -90.0), (-18.5, -40.0), (-18.3, -8.0),
                             (-17.7, 17.0), (-16.8, 24.0), (-13.5, 28.5)], 520.0, 1260.0, None)
 wr.boolean(stock, taper, 'INTERSECT')
+# Voxelise first so the squeeze below has vertices to move, then soften and
+# decimate (squeezing the decimated mesh streaked its long triangles).
+wr.moulded(stock, voxel=0.0007, smooth_factor=0.0, smooth_iter=0, ratio=1.0)
+# The pistol grip of the thumbhole stock is a 37 mm board in the trace; the
+# real wrist is about 31 mm. Squeeze it smoothly (no steps) below the receiver
+# and ahead of the thumbhole, fading back to full width into the butt bar.
+squeeze(stock, XM, BY, lambda d, y: 1.0 - 0.16 * smoothstep(-38.0, -68.0, y) * (1.0 - smoothstep(962.0, 1045.0, d)) * smoothstep(870.0, 885.0, d))
 wr.moulded(stock, voxel=0.0007, smooth_factor=0.55, smooth_iter=22, ratio=0.08)
 # Detachable cheek rest: it sits on the comb (comb top ~4-9 mm above the
 # bore), so its parting line is a real gap low on both sides, not a painted

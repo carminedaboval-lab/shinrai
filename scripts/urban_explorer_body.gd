@@ -1,7 +1,7 @@
 extends Node3D
 ## Presentation only. The production CharacterBody3D owns collision and movement.
 
-const MODEL_PATH := "res://assets/characters/urban_explorer_2050/urban_explorer_2050_body.glb"
+const MODEL_PATH := "res://assets/characters/player_wardrobe/player_wardrobe.tscn"
 const CLIPS := {
     "idle": "Idle_02", "walk": "Walking", "run": "Running",
     "crouch": "Cautious_Crouch_Walk_Forward", "jump": "Regular_Jump",

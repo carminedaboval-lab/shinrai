@@ -79,9 +79,13 @@ func _run() -> void:
 					await process_frame
 				_check(not vm.is_cycle_active(), key + " bolt cycle completes")
 			vm.play_reload(true)
+			# Give the reload 9 s of real time AND 900 frames: on a slow or paging machine
+			# (or under --fixed-fps) real time alone runs out before the animation does.
 			var t := Time.get_ticks_msec() + 9000
-			while Time.get_ticks_msec() < t and not vm.is_ready_for_input():
+			var waited := 0
+			while (Time.get_ticks_msec() < t or waited < 900) and not vm.is_ready_for_input():
 				await process_frame
+				waited += 1
 			_check(vm.is_ready_for_input(), key + " empty reload completes")
 		else:
 			_check(false, key + " ready for input after equip")

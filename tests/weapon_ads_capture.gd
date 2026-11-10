@@ -7,12 +7,15 @@ const GUNS :=["akane", "raiden_r56", "tobikage", "hayate", "yuzuru", "shigure", 
 var out_dir := "user://ads_capture"
 var only: Array = []
 var want_ads := false
+var bodycam := false
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	for i in args.size():
 		if args[i] == "--out" and i + 1 < args.size():
 			out_dir = args[i + 1]
+		if args[i] == "--bodycam":
+			bodycam = true
 		if args[i] == "--only" and i + 1 < args.size():
 			only = Array(args[i + 1].split(","))
 	DirAccess.make_dir_recursive_absolute(out_dir)
@@ -53,6 +56,9 @@ func run() -> void:
 	await frames(90)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	var player: Node = raid.player
+	if bodycam and player.get("bodycam") != null:
+		player.bodycam.call("set_enabled", true)
+		print("ADS_BODYCAM on")
 	# A scripted window has no mouse focus, so the player drops aim each frame
 	# (controller intents reset); hold the aim input the way a held button would.
 	physics_frame.connect(func() -> void:

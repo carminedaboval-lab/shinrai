@@ -33,7 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bpy
 import wr
-from trace import shape, span_at, clean, lathe
+from trace import shape, span_at, grip_loft, clip_convex, clean, lathe
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = Path(os.environ.get('SHIGURE_OUT', str(REPO / 'assets/weapons/shigure/shigure_geometry.glb')))
@@ -155,7 +155,11 @@ body.append(wr.cylinder('bore_shadow', P(43.0, 0), P(44.5, 0), 0.0046, M['bore']
 
 # ------------------------------------------------------- M-LOK handguard ----
 hg = part('handguard', HG, M['poly'], [(244, 300), (760, 300), (760, 452), (1250, 452), (1250, 845), (244, 845)])
-wr.boolean(hg, sec('hg_round', [(z, y) for z, y in wr.superellipse(0.0, ny(581), 2 * HG, 96.0, 3.0, 40)], 20, 210), 'INTERSECT')
+# Rounded section, and the front face rolls over into a moulded lip instead of
+# ending as a flat square block.
+_hg_rings = [[P(d, y, z) for z, y in wr.superellipse(0.0, ny(581), 2 * HG * k, 96.0 * (0.5 + 0.5 * k), 2.7, 40)]
+             for d, k in ((19.0, 0.70), (31.0, 0.78), (33.0, 0.87), (36.0, 0.93), (40.0, 0.975), (46.0, 1.0), (210.0, 1.0))]   # front face at d 31.6
+wr.boolean(hg, wr.loft('hg_round', _hg_rings, None), 'INTERSECT')
 cuts = [sec('hg_channel', [(z, y) for z, y in wr.superellipse(0.0, 0.0, 2 * (HG - 3.2), 50.0, 3.0, 36)], nd(430), 210)]
 for dc in (92.0, 132.0, 172.0):                       # 3 and 9 o'clock M-LOK slots
     cuts.append(side('mlok_side', stadium(dc, 3.0, 32.0, 7.6), 30.0, None))
@@ -233,6 +237,9 @@ _LR = [N(x, y) for x, y in LOWER_REGION]
 shape(lower, P, None, LO, d_range=(min(p[0] for p in _LR), max(p[0] for p in _LR)),
       span_fn=lambda d: (span_at(_LR, d)[0] if span_at(_LR, d) else ny(1140), 80.0), r=4.0, crown=0.5, bot=0.93, step=3.0)
 wr.boolean(lower, nside('guard_hole', [(1680, 945), (1965, 925), (2012, 985), (2010, 1005), (1946, 1061), (1836, 1079), (1748, 1087), (1727, 1068), (1675, 978)], 40, None), 'DIFFERENCE')
+# Slim the guard loop under the opening to ~18 mm (it was the lower's full 37 mm).
+# The cut's top edge sits 10 px up inside the opening so no faces coincide.
+wr.boolean(lower, [nside('guard_slim', [(2006, 995), (1946, 1051), (1836, 1069), (1748, 1077), (1727, 1058), (1690, 1020), (1690, 1200), (2006, 1200)], 12.0, None, z=s * (9.0 + 12.0)) for s in (1, -1)], 'DIFFERENCE')
 flare = wr.loft('magwell_flare', [
     [P(nd(1330), ny(975), -12.6), P(nd(1600), ny(975), -12.6), P(nd(1600), ny(975), 12.6), P(nd(1330), ny(975), 12.6)],
     [P(nd(1302), ny(1045), -15.4), P(nd(1626), ny(1045), -15.4), P(nd(1626), ny(1045), 15.4), P(nd(1302), ny(1045), 15.4)]])
@@ -266,7 +273,9 @@ body += raised('release_lever', [(1575, 731), (1756, 731), (1756, 790), (1700, 8
 body += raised('takedown_pin', circ(1336, 717, 16), LO, M['steel'], 1.8, sides=(1,))
 body.append(nside('mag_paddle', [(1600, 1040), (1640, 1040), (1650, 1135), (1615, 1140)], 9.0, M['poly']))
 # Raked grip with its palm shelf and texture.
-grip = part('grip', 15.5, M['poly'], [(2050, 800), (2640, 800), (2640, 1540), (2050, 1540)])
+grip = part('grip', 18.0, M['poly'], [(2050, 800), (2640, 800), (2640, 1540), (2050, 1540)])
+# Egg-shaped section along the grip's rake: slim front strap, palm swell, heel.
+wr.boolean(grip, grip_loft('grip_sec', P, clip_convex(OUTLINE, [N(x, y) for x, y in [(2050, 800), (2640, 800), (2640, 1540), (2050, 1540)]]), 14.6, 15.8, 13.4), 'INTERSECT')
 wr.moulded(grip, voxel=0.0006, smooth_factor=0.6, smooth_iter=8, ratio=0.14)
 wr.assign_faces(grip, M['grip'], lambda x, y, z: abs(z) * 1000 > 9.0 and (y - BY) * 1000 < -55)
 body.append(grip)

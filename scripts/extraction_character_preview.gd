@@ -2,7 +2,7 @@ extends SubViewportContainer
 ## Inventory-only view of the same supplied full body used by the player.
 ## No controller, shared animation, original mesh or material is modified.
 
-const MODEL_PATH := "res://assets/characters/urban_explorer_2050/urban_explorer_2050_body.glb"
+const MODEL_PATH := "res://assets/characters/player_wardrobe/player_wardrobe.tscn"
 const Catalog = preload("res://scripts/extraction_weapon_catalog.gd")
 # Wrist orientations measured from the existing UZI holding pose.
 const GRASP := {
@@ -89,6 +89,7 @@ static var uzi_mesh_cache: Array[Dictionary] = []
 static var supplied_hands: Dictionary = {}
 static var supplied_wrists: Dictionary = {}
 static var sleeve_mesh_cache: ArrayMesh
+var wardrobe_hands: MeshInstance3D
 var body_arms: MeshInstance3D
 var original_arm_mesh: Mesh
 const HAND_SCALE := 0.82
@@ -164,8 +165,8 @@ func _ready() -> void:
 			for node: Node in model.find_children("*", "Skeleton3D", true, false):
 				skeleton = node as Skeleton3D
 				break
+			wardrobe_hands = model.find_child("Body_Arms_Hands", true, false) as MeshInstance3D
 			for mesh: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
-				mesh.visible = true
 				mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 				mesh.extra_cull_margin = 2.0
 			for node: Node in model.find_children("*", "AnimationPlayer", true, false):
@@ -319,6 +320,9 @@ func set_loadout(id: String, optic: String) -> void:
 		weapon_model.get_parent().remove_child(weapon_model)
 		weapon_model.queue_free()
 	weapon_model = null
+	if wardrobe_hands != null:
+		wardrobe_hands.show()
+		wardrobe_hands.set_blend_shape_value(0, 0.0)
 	if body_arms != null: body_arms.mesh = original_arm_mesh
 	if not Catalog.available(id) or skeleton == null: return
 	if id == "uzi":
@@ -335,7 +339,10 @@ func set_loadout(id: String, optic: String) -> void:
 		optic_model.name = "EquippedOptic"
 	if not weapon_model.has_node("GripRight") or not weapon_model.has_node("GripLeft"):
 		weapon_model.queue_free(); weapon_model = null; return
-	_add_supplied_hands()
+	if id == "akane" and wardrobe_hands != null:
+		wardrobe_hands.set_blend_shape_value(0, 1.0)
+	else:
+		_add_supplied_hands()
 	# Across the lower chest, muzzle down. Preserve every supplied model's scale.
 	var turn := Basis.from_euler(Vector3(-0.05,deg_to_rad(165.0),deg_to_rad(17.0)))
 	var right_grip: Vector3 = weapon_model.get_node("GripRight").position
@@ -397,7 +404,13 @@ func _apply_equipped_idle() -> void:
 		var target := Vector3(-0.31 if side == "Right" else 0.31,0.86,0.03)
 		var desired_basis := hand_pose.basis
 		var contact_target := Vector3.ZERO
-		if weapon_available and is_instance_valid(weapon_model):
+		if weapon_available and weapon_id == "akane" and wardrobe_hands != null:
+			var wrist := model.get_node("AkaneWrist" + side) as Marker3D
+			var hand_frame := skeleton.global_transform.affine_inverse() * weapon_model.global_transform * wrist.transform
+			target = hand_frame.origin
+			desired_basis = hand_frame.basis.orthonormalized()
+			contact_target = skeleton.to_global(target)
+		elif weapon_available and is_instance_valid(weapon_model):
 			var fit := _hand_fit(side)
 			var cuff_axis:Vector3=CUFFS[side].axis
 			desired_basis = skeleton.global_basis.inverse() * weapon_model.global_basis * fit.basis.orthonormalized() * (GRASP[side].frame as Basis) * (arm.palm_frame as Basis).inverse()
@@ -548,6 +561,7 @@ func _add_supplied_hands() -> void:
 	var profile := _hand_profile(weapon_id)
 	if not supplied_hands.has(profile):return
 	if supplied_hands[profile].Left.is_empty() or supplied_hands[profile].Right.is_empty():return
+	if wardrobe_hands != null: wardrobe_hands.hide()
 	if body_arms != null:body_arms.mesh=sleeve_mesh_cache
 	for side: String in ["Left","Right"]:
 		var fit := _hand_fit(side)

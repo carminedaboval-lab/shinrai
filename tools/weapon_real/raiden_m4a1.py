@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bpy
 import wr
-from trace import clean, lathe
+from trace import clean, lathe, grip_loft, clip_convex
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / 'assets/weapons/raiden_r56/raiden_r56_geometry.glb'
@@ -193,7 +193,12 @@ mk_d = D(3230)
 body.append(wr.text('mk_maker', 'RAIDEN ARMS', P(mk_d, SEAM - 6.0, MW_HALF + 0.03), 0.0030, M['mark'], 1))
 body.append(wr.text('mk_model', 'R-56 CARBINE', P(mk_d, SEAM - 11.5, MW_HALF + 0.03), 0.0024, M['mark'], 1))
 body.append(wr.text('mk_cal', 'CAL 5.56 MM', P(mk_d, SEAM - 16.0, MW_HALF + 0.03), 0.0024, M['mark'], 1))
-grip = part('grip', 14.0, M['poly'], [(2240, 1290), (2610, 1290), (2610, 1515), (2480, 1690), (2330, 2010), (1880, 2010), (1880, 1880), (2240, 1385)])
+grip = part('grip', 16.5, M['poly'], [(2240, 1290), (2610, 1290), (2610, 1515), (2480, 1690), (2330, 2010), (1880, 2010), (1880, 1880), (2240, 1385)])
+# A2 grip section: egg-shaped (slim front strap, full backstrap), 28 mm at the
+# palm, drawing in toward the heel; built along the grip's own rake.
+_gp = [clip_convex(OUTLINE, [N(x, y) for x, y in piece]) for piece in
+       ([(2240, 1290), (2610, 1290), (2610, 1515), (2480, 1690), (2330, 2010), (2240, 2010)], [(2240, 1385), (2240, 2010), (1880, 2010), (1880, 1880)])]
+wr.boolean(grip, grip_loft('grip_sec', P, _gp, 13.2, 14.3, 12.4), 'INTERSECT')
 wr.moulded(grip, voxel=0.0006, smooth_factor=0.6, smooth_iter=8, ratio=0.12)
 wr.assign_faces(grip, M['grip'], lambda x, y, z: abs(z) * 1000 > 9.0 and (y - BY) * 1000 < -62)
 body.append(grip)

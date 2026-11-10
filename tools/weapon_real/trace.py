@@ -149,6 +149,130 @@ def shape(o, P, poly, half, **kw):
     return o
 
 
+def clip_convex(poly, clip):
+    """Sutherland-Hodgman: the part of a (d, y) outline inside a convex region."""
+    area = sum(clip[i][0] * clip[(i + 1) % len(clip)][1] - clip[(i + 1) % len(clip)][0] * clip[i][1] for i in range(len(clip)))
+    sgn = 1.0 if area > 0 else -1.0
+    out = list(poly)
+    for i in range(len(clip)):
+        a, b = clip[i], clip[(i + 1) % len(clip)]
+
+        def ins(p):
+            return sgn * ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) >= 0
+
+        def cut(p, q):
+            x1, y1, x2, y2 = p[0], p[1], q[0], q[1]
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            den = (x2 - x1) * dy - (y2 - y1) * dx
+            t = ((a[0] - x1) * dy - (a[1] - y1) * dx) / den if den else 0.0
+            return (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
+
+        src, out = out, []
+        for j in range(len(src)):
+            p, q = src[j], src[(j + 1) % len(src)]
+            if ins(q):
+                if not ins(p):
+                    out.append(cut(p, q))
+                out.append(q)
+            elif ins(p):
+                out.append(cut(p, q))
+        if not out:
+            break
+    return out
+
+
+def _axis(poly):
+    """Centroid and principal (long) direction of an outline, pointing down."""
+    pts = []
+    n = len(poly)
+    for i in range(n):
+        (x0, y0), (x1, y1) = poly[i], poly[(i + 1) % n]
+        k = max(1, int(math.hypot(x1 - x0, y1 - y0)))
+        pts += [(x0 + (x1 - x0) * t / k, y0 + (y1 - y0) * t / k) for t in range(k)]
+    cx = sum(p[0] for p in pts) / len(pts)
+    cy = sum(p[1] for p in pts) / len(pts)
+    sxx = sum((p[0] - cx) ** 2 for p in pts)
+    syy = sum((p[1] - cy) ** 2 for p in pts)
+    sxy = sum((p[0] - cx) * (p[1] - cy) for p in pts)
+    ang = 0.5 * math.atan2(2 * sxy, sxx - syy)
+    e = (math.cos(ang), math.sin(ang))
+    if e[1] > 0:
+        e = (-e[0], -e[1])
+    return (cx, cy), e
+
+
+def grip_loft(name, P, poly, half_top, half_palm, half_bottom, palm_t=0.42, n=2.3, front=0.8,
+              step=2.0, margin=0.6, extend_top=30.0, axis=None):
+    """Cutter giving a pistol grip a real hand-filling section: stations run
+    along the grip's own raked axis; each section is an egg (narrower at the
+    front strap, fuller at the backstrap) and the width swells at the palm and
+    draws in toward the heel. Intersect the grip (extruded wider than any of
+    the halves) with it, or subtract (region - loft) from a one-piece stock."""
+    polys = poly if isinstance(poly[0][0], (tuple, list)) else [poly]
+    polys = [p for p in polys if len(p) > 2]
+    (cx, cy), e = axis or _axis([q for p in polys for q in p])
+    nv = (-e[1], e[0]) if -e[1] > 0 else (e[1], -e[0])    # perpendicular, pointing rearward (+d)
+    rots = [[((p[0] - cx) * e[0] + (p[1] - cy) * e[1], (p[0] - cx) * nv[0] + (p[1] - cy) * nv[1]) for p in pl] for pl in polys]
+    a0, a1 = min(r[0] for rot in rots for r in rot), max(r[0] for rot in rots for r in rot)
+    stations = []
+    a = a0 - extend_top
+    while a <= a1 + 1.0:
+        stations.append(a)
+        a += step
+    spans = []
+    for s in stations:
+        got = [sp for sp in (span_at(rot, s) for rot in rots) if sp]
+        spans.append((min(g[0] for g in got), max(g[1] for g in got)) if got else None)
+    valid = [i for i, sp in enumerate(spans) if sp]
+    for i in range(len(spans)):
+        if spans[i] is None:
+            spans[i] = spans[min(valid, key=lambda v: abs(v - i))]
+
+    def width(t):
+        t = min(max(t, 0.0), 1.0)
+        if t < palm_t:
+            u = t / palm_t
+            return half_top + (half_palm - half_top) * u * u * (3 - 2 * u)
+        u = (t - palm_t) / (1 - palm_t)
+        return half_palm + (half_bottom - half_palm) * u * u * (3 - 2 * u)
+
+    def prof(s):
+        return (max(0.0, 1 - abs(2 * s - 1) ** n)) ** (1 / n) * (front + (1 - front) * s)
+
+    norm = max(prof(k / 200) for k in range(201))
+    N = 16
+    rings = []
+    for s_a, (lo, hi) in zip(stations, spans):
+        lo, hi = lo - margin, hi + margin
+        W = width((s_a - a0) / (a1 - a0))
+        side_pts = []
+        for k in range(N + 1):
+            s = k / N
+            b = lo + (hi - lo) * s
+            side_pts.append((cx + e[0] * s_a + nv[0] * b, cy + e[1] * s_a + nv[1] * b, W * prof(s) / norm))
+        ring = [P(d, y, -z) for d, y, z in side_pts] + [P(d, y, z) for d, y, z in reversed(side_pts[1:-1])]
+        rings.append(ring)
+    return wr.loft(name, rings, None)
+
+
+def smoothstep(e0, e1, x):
+    t = min(max((x - e0) / (e1 - e0), 0.0), 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def squeeze(o, XM, BY, factor):
+    """Scale a dense (moulded) part's width by factor(d, y): a stepless way to
+    slim one region of a one-piece stock, e.g. the wrist of a thumbhole stock."""
+    for v in o.data.vertices:
+        c = o.matrix_world @ v.co          # Blender (x, -z, y)
+        d, y = (c.x - XM) * 1000.0, (c.z - BY) * 1000.0
+        f = factor(d, y)
+        if f != 1.0:
+            v.co.y *= f
+    o.data.update()
+    return o
+
+
 def lathe(name, P, poly, d0, d1, step, material, axis_y=0.0, seg=40, min_r=0.5, symmetric=True, reach=40.0):
     """Revolve a round part (barrel, brake, nut) from its traced silhouette.
     The radius at each station is the larger of the outline's distances above

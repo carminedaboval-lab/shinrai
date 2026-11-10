@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bpy
 import wr
-from trace import Ref, clean, lathe, shape, span_at, section_half
+from trace import Ref, clean, lathe, shape, span_at, section_half, grip_loft
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / 'assets/weapons/kite/kite_geometry.glb'
@@ -299,7 +299,14 @@ shape(lower, P, None, L_HALF, d_range=(455.0, 720.0), span_fn=lower_span, step=3
 def lower_face(d, y):
     lo, hi = lower_span(d)
     return section_half(lo, hi, L_HALF, y, **LOWER_SEC)
-wr.boolean(lower, side('guard_opening', ref.loop('holes', 'guard_opening'), 40, None), 'DIFFERENCE')
+GUARD_OPEN = ref.loop('holes', 'guard_opening')
+wr.boolean(lower, side('guard_opening', GUARD_OPEN, 40, None), 'DIFFERENCE')
+# The guard bar under the opening is a slim moulded loop (~17 mm), not the
+# full 40 mm width of the lower.
+_gd0, _gd1 = min(p[0] for p in GUARD_OPEN) + 1.0, max(p[0] for p in GUARD_OPEN) - 1.0
+_gmid = (min(p[1] for p in GUARD_OPEN) + max(p[1] for p in GUARD_OPEN)) / 2
+_gbar = [(_gd0, _gmid), (_gd1, _gmid), (_gd1, -200.0), (_gd0, -200.0)]
+wr.boolean(lower, [side('guard_slim', _gbar, 12.0, None, z=s * (8.5 + 12.0)) for s in (1, -1)], 'DIFFERENCE')
 wr.boolean(lower, side('magwell_bore', [N(1222, 600), N(1405, 600), N(1405, 760), N(1222, 760)], 13.6, None), 'DIFFERENCE')
 wr.bevel(lower, 0.0008, 2, 30)
 body.append(lower)
@@ -350,7 +357,10 @@ for d, y, r in ((473.5, -22.5, 3.3), (615.7, -47.5, 3.6), (649.5, -21.0, 4.6)):
 tr = side('trigger', ref.loop('blk', 'trigger'), 3.0, M['black'])
 wr.bevel(tr, 0.0005, 2, 30)
 body.append(tr)
-grip = side('grip', GRIP, 15.0, M['lower'])
+grip = side('grip', GRIP, 18.0, M['lower'])
+# Hand-filling section along the grip's rake: slim front strap, full backstrap,
+# palm swell, narrower heel (instead of a 30 mm slab with rounded edges).
+wr.boolean(grip, grip_loft('grip_sec', P, GRIP, 14.2, 15.2, 13.2), 'INTERSECT')
 wr.moulded(grip, voxel=0.0006, smooth_factor=0.6, smooth_iter=8, ratio=0.1)
 PANEL = [(645, -74), (666, -74), (709, -134), (685, -143)]   # checkered side panel
 wr.assign_faces(grip, M['grip'], lambda x, y, z: abs(z) * 1000 > 8.0 and inside(((x - XM) * 1000, (y - BY) * 1000), PANEL))
@@ -432,7 +442,7 @@ rs_parts.append(apb)
 iron_sights = wr.join('IronSights', rs_parts)
 
 HINGE = ref.loop('blk', 'hinge')
-hinge = side('hinge', HINGE, 23.0, M['black'])
+hinge = side('hinge', HINGE, U_HALF, M['black'])   # flush with the receiver, not proud of it
 wr.bevel(hinge, 0.0006, 2, 30)
 body.append(hinge)
 # Half-moon fold button (textured polymer) on the hinge block.

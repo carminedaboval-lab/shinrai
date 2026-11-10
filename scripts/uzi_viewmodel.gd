@@ -2,6 +2,8 @@ extends Node3D
 
 signal status_changed(text: String)
 
+@export var wardrobe_arms: PackedScene
+
 const WeaponHandling = preload("./extraction_weapon_handling.gd")
 var _handling := WeaponHandling.new()
 var _handling_position := Vector3.ZERO
@@ -238,7 +240,8 @@ func _load_bundled_model() -> void:
     add_child(imported_root)
 
     _prepare_imported_nodes(imported_root)
-    preload("res://scripts/urban_explorer_sleeves.gd").apply_to(imported_root)
+    if wardrobe_arms == null or not preload("res://assets/characters/player_wardrobe/pistol_arms.gd").attach(imported_root, wardrobe_arms):
+        preload("res://scripts/urban_explorer_sleeves.gd").apply_to(imported_root)
     _build_viewmodel_light()
     animation_player = _find_first_animation_player(imported_root)
     if animation_player != null:

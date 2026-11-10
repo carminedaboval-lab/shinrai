@@ -1,0 +1,11 @@
+# Player wardrobe
+
+- The torso fit, upper-back correction and forearm geometry and relief use BodyParts3D, © The Database Center for Life Science, licensed under [CC Attribution-Share Alike 2.1 Japan](https://creativecommons.org/licenses/by-sa/2.1/jp/). This credit and licence apply to the scan-derived shape, forearm relief and anatomical reference comparison. The upper-back masks use the left latissimus dorsi and descending and transverse trapezius, FMA13359, FMA33587 and FMA33585. [Database](https://dbarchive.biosciencedbc.jp/en/bodyparts3d/desc.html) · [Original paper](https://doi.org/10.1093/nar/gkn613) · [Version 3.0 skin and segmented muscle STL distribution](https://github.com/Kevin-Mattheus-Moerman/BodyParts3D).
+
+
+- The original head, cargo geometry, boots, body rig and world animations derive from Shinrai's Urban Explorer 2050 character. See the original project's `assets/characters/urban_explorer_2050/CREDITS.md` for Meshy provenance.
+- The human mesh, male shape, UVs and body weights derive from [MakeHuman / MPFB](https://github.com/makehumancommunity/mpfb2/tree/master/src/mpfb/data). The skin uses the [MakeHuman system assets](https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html). The source assets are CC0. The boxer-brief coverage, bindings and waist finish were made for this fit.
+- The fitted, recoloured crew neck derives from the basic tucked T-shirt by Toigo, credited as MRT in the source file, from the [MakeHuman Shirts 01 pack](https://static.makehumancommunity.org/assets/assetpacks/shirts01.html), CC0.
+- The first-person binding derives from [[UZI] Ultimate FPS Animations by 1Matzh](https://sketchfab.com/3d-models/uzi-ultimate-fps-animations-73266e9f1eb949b69a3ab11d8f636048), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The new overlay uses a reduced set of named bones and the original bind transforms. It carries newly fitted geometry and materials. Keep this credit with distributed use of the overlay.
+
+The installed wardrobe refits the shirt to fuller upper arms and forearms. The world shirt and hands have separate render sections for the body camera. The inventory hand shape uses the existing AKANE pistol pose.
