@@ -66,6 +66,8 @@ const StartupTrace = preload("res://scripts/startup_trace.gd")
 const PoliceGroups = preload("res://assets/enemies/police_spider/park_drone_groups.gd")
 const ScavSquad = preload("./scav_squad.gd")
 const Cover = preload("res://scripts/extraction_cover.gd")
+const Rail = preload("res://scripts/shinrai_rail.gd")
+var rail: Node3D
 const ITEMS := [
 	{"id": "circuit", "title": "Control circuit", "value": 85},
 	{"id": "optics", "title": "Optical sensor", "value": 140},
@@ -517,6 +519,13 @@ func _register_sites() -> void:
 	exits = [
 		{"id": "south", "title": "South gate extraction", "position": Vector3(0, 0.2, 167)},
 		{"id": "west", "title": "West gate extraction", "position": Vector3(-205, 0.2, 40)}]
+	# The loop line: its stops are extraction points of their own kind (board the tram).
+	if not is_instance_valid(rail):
+		rail = Rail.new()
+		rail.top_level = true
+		park.add_child(rail)
+	for stop: int in rail.stops.size():
+		exits.append({"id": "station_%d" % stop, "title": rail.stop_title(stop), "position": rail.stop_ground(stop), "kind": "station"})
 
 	var _st := StartupTrace.begin()
 	BackpackPickups.register_for(self,park.get_node_or_null("MidoriClubhouseCafeteria"))
@@ -974,7 +983,8 @@ func _deploy(retry_save: bool, from_queue: bool) -> void:
 	if loading_ui != null:
 		LoadState.ui_begin(loading_ui, "Entering the park", &"deploy")
 		LoadState.ui_show_cancel(loading_ui, false)
-		await RenderingServer.frame_post_draw
+		if DisplayServer.get_name() == "headless": await get_tree().process_frame
+		else: await RenderingServer.frame_post_draw
 	# Time of day and graphics chosen in the menu, applied and warmed under the cover.
 	apply_menu_preferences()
 	if loading_ui != null:
@@ -1082,10 +1092,15 @@ func _deploy(retry_save: bool, from_queue: bool) -> void:
 	var entry_guard: Node3D = park.get_node_or_null("K17_EntryGuard") as Node3D
 	if entry_guard != null:
 		player.look_at(Vector3(entry_guard.global_position.x, player.global_position.y, entry_guard.global_position.z))
+	# The raid begins aboard the loop tram, running in to a stop the player did not choose.
+	if is_instance_valid(rail):
+		rail.begin_raid(self, rng)
+		last_safe = rail.stop_ground(rail.arrival_stop)
 	hud.show_raid()
 	_set_actors_enabled(false)
 	if loading_ui != null:
-		await RenderingServer.frame_post_draw
+		if DisplayServer.get_name() == "headless": await get_tree().process_frame
+		else: await RenderingServer.frame_post_draw
 		await get_tree().process_frame
 	phase = Phase.RAID
 	# A focus loss during loading remains paused even if focus returned meanwhile.
@@ -1093,7 +1108,7 @@ func _deploy(retry_save: bool, from_queue: bool) -> void:
 		pause_run(false)
 	else:
 		_set_actors_enabled(true)
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if not player.test_input_override: Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	deployment_pending = false
 	_pause_after_deployment = false
 	if loading_ui != null: LoadState.ui_finish(loading_ui, &"deploy")
@@ -1240,7 +1255,7 @@ func resume_run() -> void:
 	inventory_open = false
 	phase = Phase.RAID
 	_set_actors_enabled(true)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if not player.test_input_override: Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	hud.show_raid()
 
 func _set_actors_enabled(enabled: bool) -> void:
@@ -1249,6 +1264,8 @@ func _set_actors_enabled(enabled: bool) -> void:
 	fruit_harvest.require_release()
 	for crew: Node in get_tree().get_nodes_in_group("scav_squad_directors"):
 		crew.set_active(enabled)
+	for director: Node in get_tree().get_nodes_in_group("midge_directors"):
+		director.set_active(enabled)
 	if is_instance_valid(pitch_gate): pitch_gate.set_active(enabled)
 	if is_instance_valid(clubhouse_doors): clubhouse_doors.set_active(enabled)
 	building_access.set_active(enabled)
@@ -1287,7 +1304,8 @@ func _physics_process(delta: float) -> void:
 	_advance_medical(delta)
 	if phase != Phase.RAID or not player.alive: return
 	notice_time = maxf(0.0, notice_time - delta)
-	if remaining <= 0.0:
+	# A rider already sealed in the departing tram is on their way out: no lockdown.
+	if remaining <= 0.0 and not (is_instance_valid(rail) and rail.rider_committed()):
 		finish_run(false, "The park locked down before you reached extraction.")
 		return
 	_keep_player_in_playable_area()
@@ -1300,6 +1318,9 @@ func _physics_process(delta: float) -> void:
 	_update_healing(delta)
 	_update_extraction(delta)
 	if phase != Phase.RAID: return
+	if is_instance_valid(rail):
+		rail.raid_tick(self, delta)
+		if phase != Phase.RAID: return
 	guidance_elapsed += delta
 	if guidance_elapsed >= 1.0:
 		refresh_guidance()
@@ -1439,7 +1460,7 @@ func close_cache_choice() -> void:
 	cache_input_release_pending = true
 	player.weapon_input_locked = true
 	if phase == Phase.RAID and player.alive:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if not player.test_input_override: Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		hud.show_raid()
 
 func pending_cache() -> Dictionary:
@@ -1535,7 +1556,26 @@ func refresh_guidance() -> void:
 	if objective.is_empty():
 		return
 	var street_leg := _street_entry_leg()
-	if street_leg.is_empty():
+	var from_outside := _outside_fence(player.position)
+	var to_outside := _outside_fence(objective.position)
+	if to_outside or (from_outside and street_leg.is_empty()):
+		# The walk grid stops at the fence. Outside it (tram stops, the ring road) the route
+		# follows the pavement round to a way through, then joins the park route.
+		guidance_path = PackedVector3Array([player.position])
+		if from_outside and to_outside:
+			guidance_path.append_array(_fence_walk(_fence_distance(player.position), _fence_distance(objective.position)))
+		elif from_outside:
+			var way_in := _fence_opening(player.position)
+			guidance_path.append_array(_fence_walk(_fence_distance(player.position), _fence_distance(way_in)))
+			guidance_path.append(_fence_point(_fence_distance(way_in), 2.0))
+			guidance_path.append_array(navigation.path(navigation.nearest(_fence_point(_fence_distance(way_in), -9.0)), objective.position))
+		else:
+			var way_out := _fence_opening(objective.position)
+			guidance_path = navigation.path(player.position, navigation.nearest(_fence_point(_fence_distance(way_out), -9.0)))
+			guidance_path.append(_fence_point(_fence_distance(way_out), 2.0))
+			guidance_path.append_array(_fence_walk(_fence_distance(way_out), _fence_distance(objective.position)))
+		if to_outside: guidance_path.append(objective.position)
+	elif street_leg.is_empty():
 		guidance_path = navigation.path(player.position, objective.position)
 	else:
 		# On the north street the walk grid does not reach the player: walk to
@@ -1566,6 +1606,78 @@ func refresh_guidance() -> void:
 				break
 	for index: int in range(1, guidance_path.size()):
 		guidance_distance += guidance_path[index - 1].distance_to(guidance_path[index])
+
+## The park fence line (midori_park_fence.gd HALF) and distances measured round it,
+## clockwise from the north-west corner: north side, east side, south side, west side.
+const FENCE_HALF := Vector2(219.4, 179.4)
+
+func _outside_fence(point: Vector3) -> bool:
+	return absf(point.x) > FENCE_HALF.x or absf(point.z) > FENCE_HALF.y
+
+func _fence_distance(point: Vector3) -> float:
+	var hx := FENCE_HALF.x
+	var hz := FENCE_HALF.y
+	var x := clampf(point.x, -hx, hx)
+	var z := clampf(point.z, -hz, hz)
+	if absf(point.z) / hz >= absf(point.x) / hx:
+		return (x + hx) if point.z < 0.0 else (2.0 * hx + 2.0 * hz + (hx - x))
+	return (2.0 * hx + (z + hz)) if point.x > 0.0 else (4.0 * hx + 2.0 * hz + (hz - z))
+
+## The point at a distance round the fence, pushed out from it (negative = into the park).
+func _fence_point(distance: float, out: float) -> Vector3:
+	var hx := FENCE_HALF.x
+	var hz := FENCE_HALF.y
+	distance = fposmod(distance, 4.0 * (hx + hz))
+	if distance <= 2.0 * hx: return Vector3(distance - hx, 0.1, -hz - out)
+	distance -= 2.0 * hx
+	if distance <= 2.0 * hz: return Vector3(hx + out, 0.1, distance - hz)
+	distance -= 2.0 * hz
+	if distance <= 2.0 * hx: return Vector3(hx - distance, 0.1, hz + out)
+	return Vector3(-hx - out, 0.1, hz - (distance - 2.0 * hx))
+
+## Pavement waypoints from one distance round the fence to another, the shorter way,
+## turning at each fence corner passed.
+func _fence_walk(from: float, to: float) -> PackedVector3Array:
+	var hx := FENCE_HALF.x
+	var hz := FENCE_HALF.y
+	var around := 4.0 * (hx + hz)
+	var forward := fposmod(to - from, around)
+	var sense := 1.0 if forward <= around * 0.5 else -1.0
+	var span := forward if sense > 0.0 else around - forward
+	var corners := [[0.0, Vector3(-hx - 2.0, 0.1, -hz - 2.0)], [2.0 * hx, Vector3(hx + 2.0, 0.1, -hz - 2.0)],
+		[2.0 * hx + 2.0 * hz, Vector3(hx + 2.0, 0.1, hz + 2.0)], [4.0 * hx + 2.0 * hz, Vector3(-hx - 2.0, 0.1, hz + 2.0)]]
+	var passed: Array = []
+	for corner: Array in corners:
+		var along := fposmod((float(corner[0]) - from) * sense, around)
+		if along > 0.0 and along < span: passed.append([along, corner[1]])
+	passed.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	var walk := PackedVector3Array()
+	for corner: Array in passed: walk.append(corner[1])
+	walk.append(_fence_point(to, 2.0))
+	return walk
+
+## The way through the fence that is the shortest walk round from this point: any gate
+## by day; at night only gates that stand open, and the prone holes.
+func _fence_opening(point: Vector3) -> Vector3:
+	var openings: Array[Vector3] = []
+	var night: bool = is_instance_valid(park_fence) and bool(park_fence.get("night"))
+	if is_instance_valid(park_fence):
+		for gate: Dictionary in park_fence.get("_gates"):
+			if not night or bool(gate.get("open", false)):
+				openings.append((gate.root as Node3D).global_position)
+		if night: openings.append_array(park_fence.hole_positions())
+	if openings.is_empty(): openings.append(Vector3(0.0, 0.1, FENCE_HALF.y))
+	var around := 4.0 * (FENCE_HALF.x + FENCE_HALF.y)
+	var here := _fence_distance(point)
+	var best := openings[0]
+	var best_walk := INF
+	for opening: Vector3 in openings:
+		var gap := fposmod(_fence_distance(opening) - here, around)
+		gap = minf(gap, around - gap)
+		if gap < best_walk:
+			best_walk = gap
+			best = opening
+	return best
 
 ## Outside-then-inside points of the way into the park from the north street:
 ## by day the open north gate, at night the nearest north-side prone hole.
@@ -1636,7 +1748,8 @@ func _update_extraction(delta: float) -> void:
 		return
 	var exit_point: Dictionary = {}
 	for candidate: Dictionary in exits:
-		if _distance(candidate.position) <= 8.0:
+		# Loop stops extract by boarding the tram (shinrai_rail.gd), not by holding here.
+		if candidate.get("kind", "") != "station" and _distance(candidate.position) <= 8.0:
 			exit_point = candidate
 	if exit_point.is_empty() or relays == 0:
 		if insertion_grace():
@@ -1666,7 +1779,9 @@ func tracked_objective() -> Dictionary:
 			if candidate.id == selected_destination and not candidate.get("done", false):
 				return candidate
 	var unfinished := sites.filter(func(site: Dictionary) -> bool: return site.kind == "relay" and not site.done)
-	var candidates: Array = exits if track_extraction or unfinished.is_empty() else unfinished
+	# Automatic tracking leads to the gates; tram stops are chosen on the map.
+	var gates: Array = exits.filter(func(exit_point: Dictionary) -> bool: return exit_point.get("kind", "") != "station")
+	var candidates: Array = gates if track_extraction or unfinished.is_empty() else unfinished
 	var result: Dictionary = {}
 	var distance := INF
 	for candidate: Dictionary in candidates:
@@ -1693,6 +1808,7 @@ func finish_run(extracted: bool, reason: String) -> void:
 		_reload_magazine_source_index=-1
 	_capture_weapon_ammunition()
 	_sync_food_illness()
+	if is_instance_valid(rail): rail.release_rider()
 	var bonus := (150*relays+(300 if relays==3 else 0)) if extracted else 0
 	pending_result_save={"extracted":extracted,"reason":reason,"bonus":bonus}
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
@@ -1831,6 +1947,8 @@ func _clear_enemies() -> void:
 		crew.queue_free()
 	for director: Node in get_tree().get_nodes_in_group("police_drone_directors"):
 		director.queue_free()
+	for director: Node in get_tree().get_nodes_in_group("midge_directors"):
+		director.queue_free()
 	for enemy: Node in get_tree().get_nodes_in_group("extraction_hostiles"):
 		enemy.queue_free()
 
@@ -1843,6 +1961,10 @@ func _spawn_patrols() -> void:
 	crew.name="ScavPatrolCrew"
 	crew.raid=self
 	park.add_child(crew)
+	var midges := preload("res://assets/enemies/midge/park_midge_groups.gd").new()
+	midges.name = "MidgeGroups"
+	midges.raid = self
+	park.add_child(midges)
 
 func _spawn_entry_guard() -> void:
 	# Put one of the supplied K17s in the first view down the south approach.

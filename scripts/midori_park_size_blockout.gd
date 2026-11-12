@@ -687,9 +687,11 @@ func _apply_render_quality() -> void:
 		var viewport := get_viewport()
 		# Keep TAA, foliage shadows, and the lake reflection at native resolution.
 		# Resizing the window also increases the actual 3D pixel count.
-		viewport.msaa_3d = Viewport.MSAA_DISABLED
+		# Smoothing is the player's setting. A test that drives the view itself keeps its own.
+		if not get_tree().root.has_meta(&"shinrai_aa_external"):
+			preload("res://scripts/shinrai_settings.gd").apply(viewport)
 		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-		viewport.scaling_3d_scale = 1.0
+		viewport.scaling_3d_scale = preload("res://scripts/shinrai_settings.gd").session_scale()
 		# Imported tree meshes already contain LODs. Earlier transitions in
 		# Balanced reduce distant canopy triangles without changing near trees.
 		viewport.mesh_lod_threshold = 1.0 if high_render_quality else 4.0

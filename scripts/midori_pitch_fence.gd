@@ -21,16 +21,33 @@ func build() -> void:
 	shader.code = """
 shader_type spatial;
 render_mode cull_disabled, depth_prepass_alpha;
+// Half-width of one wire in pattern units: where the old cut-out sat
+// (smoothstep(0.035, 0.095, d) crossing the 0.45 threshold).
+const float HALF_WIRE = 0.067;
+// Share of a pixel footprint of width w, centred on x, that one family of
+// wires covers: the exact box filter of a wire on every half-integer.
+float wire_cover(float x, float w) {
+	float f = fract(x - 0.5 * w);
+	float e = f + w;
+	float lo = 0.5 - HALF_WIRE;
+	float c0 = clamp(f - lo, 0.0, 2.0 * HALF_WIRE);
+	float c1 = floor(e) * 2.0 * HALF_WIRE + clamp(fract(e) - lo, 0.0, 2.0 * HALF_WIRE);
+	return clamp((c1 - c0) / w, 0.0, 1.0);
+}
 void fragment() {
-	float diagonal_a = abs(fract(UV.x + UV.y) - 0.5);
-	float diagonal_b = abs(fract(UV.x - UV.y) - 0.5);
-	float distance_to_wire = min(diagonal_a, diagonal_b);
-	float wire = 1.0 - smoothstep(0.035, 0.095, distance_to_wire);
+	float sa = UV.x + UV.y;
+	float sb = UV.x - UV.y;
+	float wa = max(length(vec2(dFdx(sa), dFdy(sa))), 0.0001);
+	float wb = max(length(vec2(dFdx(sb), dFdy(sb))), 0.0001);
+	// Near: a one-pixel soft wire edge. Far: each diagonal settles on its true
+	// average cover, so the net reads as its real 25 % veil instead of moire.
+	float ca = mix(wire_cover(sa, wa), 2.0 * HALF_WIRE, smoothstep(0.25, 0.6, wa));
+	float cb = mix(wire_cover(sb, wb), 2.0 * HALF_WIRE, smoothstep(0.25, 0.6, wb));
 	ALBEDO = vec3(0.32, 0.39, 0.38);
 	METALLIC = 0.08;
 	ROUGHNESS = 0.82;
-	ALPHA = wire;
-	ALPHA_SCISSOR_THRESHOLD = 0.45;
+	// Blended, no scissor: depth_prepass_alpha still writes depth for solid wire.
+	ALPHA = 1.0 - (1.0 - ca) * (1.0 - cb);
 }
 """
 	_net_material.shader = shader

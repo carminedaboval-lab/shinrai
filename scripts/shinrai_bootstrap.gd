@@ -93,6 +93,8 @@ func _start() -> void:
 	# Draw the loading UI before any heavy work.
 	await _drawn_frame()
 	if generation!=_generation: return
+	# The player's smoothing choice goes on the main view before anything is prepared for it.
+	preload("res://scripts/shinrai_settings.gd").apply(get_tree().root)
 	# Fix the renderer's pipeline features before any park material exists.
 	var warmup:=LoadState.warmup_script()
 	if LoadState.script_has(warmup,"is_first_launch"): LoadState.first_launch_shaders=bool(warmup.call("is_first_launch"))

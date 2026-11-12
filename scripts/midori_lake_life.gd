@@ -301,7 +301,7 @@ func _create_reflection() -> void:
 	_reflection.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	# The root view retains native resolution/MSAA/TAA. The softer secondary
 	# reflection is bilinearly sampled and does not need another MSAA pass.
-	_reflection.msaa_3d = Viewport.MSAA_DISABLED
+	_reflection.msaa_3d = mini(preload("res://scripts/shinrai_settings.gd").session_msaa(), Viewport.MSAA_4X) as Viewport.MSAA  # no TAA on the main view now: unsmoothed mirrored railings and tree edges flicker on the water
 	add_child(_reflection)
 	_camera = Camera3D.new()
 	_camera.name = "ReflectedLakeCamera"

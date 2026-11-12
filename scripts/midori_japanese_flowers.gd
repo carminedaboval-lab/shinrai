@@ -85,6 +85,10 @@ func install() -> void:
 		for marker: Node3D in planned.get_children(): sockets.append(Vector2(marker.global_position.x, marker.global_position.z))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2050100611
+	# Loosens the secondary colonies off their planting pitch. Its own sequence,
+	# so the main one (later colonies, azaleas) is drawn exactly as before.
+	var scatter := RandomNumberGenerator.new()
+	scatter.seed = 2050111101
 	# Creeping rhizomes produce connected colonies, with fewer flowering shoots
 	# than leaf fans. Colony shoulders follow nearby trunks and irregular light gaps.
 	for grove: Dictionary in Woodland.GROVES:
@@ -111,6 +115,14 @@ func install() -> void:
 					if edge > 1.0 + scallop: continue
 					var p := centre + offset.rotated(angle)
 					if not _clear(p, park, terrain, detail, sockets): continue
+					# Let each accepted root wander up to a pitch further, inside the same
+					# scalloped footprint and the same clearances; a root that cannot move
+					# keeps its accepted spot. Private generator seeded from the accepted
+					# position: the shared rng sequence (sizes, yaws, azaleas) is untouched.
+					var loose := offset + Vector2(scatter.randf_range(-.40, .40), scatter.randf_range(-.40, .40))
+					var loose_edge := pow(loose.x / 5.9, 2.0) + pow(loose.y / 4.4, 2.0)
+					var loose_p := centre + loose.rotated(angle)
+					if loose_edge <= 1.0 + .13 * sin(loose.x * .8 + angle) + .10 * cos(loose.y * 1.2) and _clear(loose_p, park, terrain, detail, sockets): p = loose_p
 					var root := Vector3(p.x, terrain.height_at(p) - .008, p.y)
 					var size := rng.randf_range(1.05, 1.30)
 					var yaw := rng.randf_range(0.0, TAU)
@@ -124,8 +136,8 @@ func install() -> void:
 							stems.append(Transform3D(basis, shoot_root))
 							blooms.append(shoot_root)
 					for fan in range(6):
-						var leaf_basis := Basis(Vector3.UP, yaw + fan * TAU / 6.0) * Basis(Vector3.BACK, rng.randf_range(.30, .50))
-						leaf_basis = leaf_basis.scaled(Vector3(1.35, 1.18, 1.35) * size)
+						var leaf_basis := Basis(Vector3.UP, yaw + fan * TAU / 6.0 + sin(root.x * 12.9898 + root.z * 78.233 + fan * 2.399963) * .38) * Basis(Vector3.BACK, rng.randf_range(.30, .50))
+						leaf_basis = leaf_basis.scaled(Vector3(1.35, 1.18, 1.35) * size * lerpf(.80, 1.0, fposmod(sin(root.x * 12.9898 + root.z * 78.233 + float(fan) * 37.719) * 43758.5453, 1.0)))
 						leaves.append(Transform3D(leaf_basis, root))
 					roots.append(root)
 			if roots.size() < 65: continue

@@ -72,12 +72,27 @@ void fragment(){
 
 const NET_SHADER := """
 shader_type spatial;
-render_mode cull_disabled;
+render_mode cull_disabled, depth_prepass_alpha;
+// Half-width of one cord in pattern units (the old step(0.43, f) cut).
+const float HALF_CORD = 0.07;
+// Share of a pixel footprint of width w, centred on x, that one family of
+// cords covers: the exact box filter of a cord on every half-integer.
+float cord_cover(float x, float w) {
+	float f = fract(x - 0.5 * w);
+	float e = f + w;
+	float lo = 0.5 - HALF_CORD;
+	float c0 = clamp(f - lo, 0.0, 2.0 * HALF_CORD);
+	float c1 = floor(e) * 2.0 * HALF_CORD + clamp(fract(e) - lo, 0.0, 2.0 * HALF_CORD);
+	return clamp((c1 - c0) / w, 0.0, 1.0);
+}
 void fragment(){
-	vec2 g = vec2(UV.x * 12.0 + UV.y * 3.0, UV.x * 12.0 - UV.y * 3.0);
-	vec2 f = abs(fract(g) - 0.5);
-	ALPHA = max(step(0.43, f.x), step(0.43, f.y));
-	ALPHA_SCISSOR_THRESHOLD = 0.5;
+	// The old cords sat on whole numbers of g; the half shift keeps them there.
+	vec2 g = vec2(UV.x * 12.0 + UV.y * 3.0, UV.x * 12.0 - UV.y * 3.0) + 0.5;
+	float wa = max(length(vec2(dFdx(g.x), dFdy(g.x))), 0.0001);
+	float wb = max(length(vec2(dFdx(g.y), dFdy(g.y))), 0.0001);
+	float ca = mix(cord_cover(g.x, wa), 2.0 * HALF_CORD, smoothstep(0.25, 0.6, wa));
+	float cb = mix(cord_cover(g.y, wb), 2.0 * HALF_CORD, smoothstep(0.25, 0.6, wb));
+	ALPHA = 1.0 - (1.0 - ca) * (1.0 - cb);
 	ALBEDO = vec3(0.86, 0.86, 0.82);
 	ROUGHNESS = 0.9;
 }

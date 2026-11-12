@@ -95,6 +95,13 @@ func _make_blossom_material(resource_name_value: String) -> StandardMaterial3D:
 	blossom_material.alpha_scissor_threshold = 0.42
 	blossom_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	blossom_material.vertex_color_use_as_albedo = true
+	# MSAA sessions: resolve the petal cut-out per sample (no-op for TAA and Off).
+	# The optional adapter may arrive separately from the shared material script.
+	var cutout_adapter: Script = FoliageMaterials
+	for entry: Dictionary in cutout_adapter.get_script_method_list():
+		if str(entry.get("name", "")) == "msaa_cutout_material":
+			cutout_adapter.call("msaa_cutout_material", blossom_material)
+			break
 	return blossom_material
 
 func _add_tip_blossoms(tree_root: Node3D) -> void:

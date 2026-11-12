@@ -156,7 +156,7 @@ uniform sampler2D soil_roughness_tex : repeat_enable, filter_linear_mipmap_aniso
 uniform float independent_layer_strength : hint_range(0.0, 1.0) = 1.0;
 uniform vec2 grass_handoff_distances = vec2(48.0, 74.0);
 uniform float grass_handoff_strength : hint_range(0.0, 1.0) = 0.35;
-uniform sampler2D landscape_tex : repeat_disable, filter_linear;
+uniform sampler2D landscape_tex : repeat_disable, filter_linear_mipmap_anisotropic;
 uniform bool landscape_ready = false;
 uniform float scene_light_factor = 1.0;
 
@@ -221,8 +221,8 @@ void fragment() {
         vec2 turf_uv2 = rot * ground_uv * 0.61 + vec2(3.17, 1.42);
         vec2 soil_uv2 = rot * ground_uv * 0.73 + vec2(1.93, 4.21);
         float tile_mix = smoothstep(0.35, 0.65, midori_floor_noise(world_pos.xz * 0.21 + vec2(13.0, 9.0)));
-        turf_scan = mix(turf_scan, textureGrad(turf_albedo_tex, turf_uv2, ground_uv_dx * 0.61, ground_uv_dy * 0.61).rgb, tile_mix);
-        soil_scan = mix(soil_scan, textureGrad(soil_albedo_tex, soil_uv2, ground_uv_dx * 0.73, ground_uv_dy * 0.73).rgb, tile_mix);
+        turf_scan = mix(turf_scan, textureGrad(turf_albedo_tex, turf_uv2, rot * ground_uv_dx * 0.61, rot * ground_uv_dy * 0.61).rgb, tile_mix);
+        soil_scan = mix(soil_scan, textureGrad(soil_albedo_tex, soil_uv2, rot * ground_uv_dx * 0.73, rot * ground_uv_dy * 0.73).rgb, tile_mix);
         // Lawn colour field shared with the upright grass blades: lush low
         // pockets and sun-dried rises instead of one uniform green.
         float lawn_field = broad * 0.6 + midori_floor_noise(world_pos.xz * 0.16 + vec2(31.2, 17.6)) * 0.4;
@@ -407,6 +407,9 @@ func _install_landscape_mask(scene: Node3D) -> void:
 		map.blit_rect(part,Rect2i(0,0,part.get_width(),part.get_height()),Vector2i(0,band*MASK_BAND_ROWS))
 		lawn+=int(out.lawn);woodland+=int(out.woodland);worn+=int(out.worn)
 		held_shoulders+=int(out.held);blended_shoulders+=int(out.blended)
+	# Mips let the 1 m mask average over the pixel footprint at distance instead of
+	# point-picking a texel; level 0 (everything near the camera) is unchanged.
+	map.generate_mipmaps()
 	_active_ground_material.set_shader_parameter("landscape_tex",ImageTexture.create_from_image(map))
 	_active_ground_material.set_shader_parameter("landscape_ready",true)
 	landscape_report={"version":4,"independent_ground_layers":_active_ground_material.get_shader_parameter("independent_layers_ready") == true,"map_resolution":Vector2i(440,360),"lawn_samples":lawn,"woodland_samples":woodland,"worn_or_protected_samples":worn,"source_world_scale_m":TEXTURE_WORLD_SIZE_M,"geometry_changes":0,"tree_count":tree_count,"held_shoulder_samples":held_shoulders,"blended_shoulder_samples":blended_shoulders,"path_layer_fade_m":PATH_LAYER_FADE_M,"trail_layer_fade_m":TRAIL_LAYER_FADE_M}

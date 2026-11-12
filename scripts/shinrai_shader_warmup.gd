@@ -247,7 +247,9 @@ static func latch_features(root_node: Node) -> Dictionary:
 	view.size = LATCH_SIZE
 	view.world_3d = World3D.new()
 	_copy_view_settings(tree.root, view)
-	view.use_taa = true # motion vectors are wanted even if a test root has TAA off
+	# Motion-vector pipelines only when this session smooths temporally: on this driver
+	# they cost about 5 GB in the park (docs/LOADING_AND_MENUS.md, round 4).
+	if preload("res://scripts/shinrai_settings.gd").session_uses_taa(): view.use_taa = true
 	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	view.world_3d.environment = _latch_environment()
 

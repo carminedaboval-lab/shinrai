@@ -138,9 +138,14 @@ void fragment(){
 	if (!on_ring) c = mix(c, vec3(0.6, 0.6, 0.57), max(bar_x, bar_z) * (0.65 + 0.35 * tone));
 	// Concrete gutter along the kerb, and the yellow tactile guide strip for the blind.
 	if (ring > 14.0 && ring < 14.55) c = mix(c, vec3(0.34, 0.33, 0.31), 0.85);
-	if (ring > 16.7 && ring < 17.0) {
+	{
+		// Filtered over the pixel: the strip keeps its true share of a far pixel, and the studs
+		// ease to their mean brightness once they are too fine to resolve.
+		float rf = max(fwidth(ring), 0.0001);
+		float strip = (clamp(ring + 0.5 * rf, 16.7, 17.0) - clamp(ring - 0.5 * rf, 16.7, 17.0)) / rf;
 		vec2 stud = abs(fract(vec2(p.x + p.y, ring) / 0.075) - 0.5);
-		c = vec3(0.62, 0.5, 0.1) * (0.82 + 0.26 * step(length(stud), 0.3));
+		float stud_far = smoothstep(0.25, 0.7, max(fwidth(p.x + p.y), rf) / 0.075);
+		c = mix(c, vec3(0.62, 0.5, 0.1) * (0.82 + 0.26 * mix(step(length(stud), 0.3), 0.283, stud_far)), strip);
 	}
 	ALBEDO = c;
 	ROUGHNESS = mix(0.85, 0.7, road_mask);
@@ -267,7 +272,27 @@ void fragment(){ ALBEDO = mix(vec3(0.05, 0.055, 0.06), mix(vec3(0.5), vec3(1.0, 
 
 var _materials: Array[ShaderMaterial] = []
 var _rng := RandomNumberGenerator.new()
-var _rows := {"bodies":{}, "trim":{}, "signs":{}, "tanks":{}, "roofs":{}, "slabs":{}, "wedges":{}, "detail":{}, "domes":{}}
+## The bar line of TRIM_SHADER, and what the railing layers draw instead: the exact share of
+## the pixel the bars (3.9 cm wide, every 13 cm) cover, easing to their true 30 % once they are
+## too fine to resolve, as plain blending (the park fence's method). Nothing is cut, so nothing crawls or pops.
+const BAR_CUT := "if (!rail && abs(box_normal.z) > 0.5 && fract(at.x / 0.13) > 0.3) discard;"
+const BAR_BLEND := """if (abs(box_normal.z) > 0.5) {
+			float u = at.x / 0.13;
+			float w = max(length(vec2(dFdx(u), dFdy(u))), 0.0001);
+			float lo = u - 0.5 * w;
+			float hi = u + 0.5 * w;
+			float bars = clamp((floor(hi) - floor(lo)) * 0.3 + min(fract(hi), 0.3) - min(fract(lo), 0.3), 0.0, w) / w;
+			bars = mix(bars, 0.3, smoothstep(0.25, 0.6, w));
+			// Share of the pixel's part of this face between the kick rail and the top rail; the
+			// rails stay solid. The footprint is clipped to the face, so a railing under a pixel
+			// tall settles on its true average instead of turning solid.
+			float hy = 0.5 * max(length(vec2(dFdx(box.y), dFdy(box.y))), 0.000001);
+			float top = min(box.y + hy, 0.5);
+			float bot = max(box.y - hy, -0.5);
+			float open = clamp((min(top, 0.42) - max(bot, -0.45)) / max(top - bot, 0.000001), 0.0, 1.0);
+			ALPHA = 1.0 - open * (1.0 - bars);
+		}"""
+var _rows := {"bodies":{}, "trim":{}, "signs":{}, "tanks":{}, "roofs":{}, "slabs":{}, "wedges":{}, "detail":{}, "domes":{}, "trim_bars":{}, "detail_bars":{}}
 var _count := 0
 var _hero := Hero.new()
 var _trim_layer := "trim"
@@ -527,6 +552,10 @@ func _chunk_key(at: Vector2) -> int:
 func _put(layer: String, at: Vector3, xform: Transform3D, custom := Color(), color := Color.WHITE) -> void:
 	if _muted: return
 	if keep_build_data: _audit(layer, [xform, custom, color])
+	# Barred railings draw from layers of their own (blended bar coverage). The audit above
+	# keeps the layer they were laid under, so layout checksums do not change. Only reroute
+	# when the bars layer is registered, so a row can never be dropped.
+	if (layer == "trim" or layer == "detail") and int(custom.r + .5) == Pattern.BARS and _rows.has(layer + "_bars"): layer += "_bars"
 	var key := _tile_key if _tile_key >= 0 else _chunk_key(Vector2(at.x, at.z))
 	var table: Dictionary = _rows[layer]
 	if not table.has(key): table[key] = []
@@ -589,6 +618,18 @@ func _prepare_looks() -> void:
 	_layer_looks = {"bodies":[BoxMesh.new(), body_look, true], "trim":[BoxMesh.new(), trim_look, false], "detail":[BoxMesh.new(), trim_look, true],
 		"domes":[dome, trim_look, false], "signs":[BoxMesh.new(), sign_look, false], "tanks":[tank, trim_look, false],
 		"roofs":[PrismMesh.new(), trim_look, true], "slabs":[BoxMesh.new(), slab_look, false], "wedges":[wedge, trim_look, true]}
+	# Railings: the trim shader with its bar cut-out swapped for blended coverage. Same boxes
+	# as the layers they came from (no new mesh); the blended bars cast no shadow themselves,
+	# _commit_layer gives the near ones a shadow-only twin in the opaque trim look.
+	var bars_code := TRIM_SHADER.replace("shader_type spatial;", "shader_type spatial;\nrender_mode depth_prepass_alpha;").replace(BAR_CUT, BAR_BLEND)
+	if not bars_code.contains("ALPHA = "): push_error("MIDORI_NEAR_CITY: TRIM_SHADER's bar line changed; railings fall back to the cut-out")
+	var bars_look := _material(bars_code, "SHINRAI_NearCityTrimBars")
+	_layer_looks["trim_bars"] = [_layer_looks["trim"][0], bars_look, false]
+	_layer_looks["detail_bars"] = [_layer_looks["detail"][0], bars_look, false]
+	# The row tables were declared before these layers existed: every layer needs its table
+	# before the first _put or commit (the first parked tile carries the declared tables).
+	for layer: String in _layer_looks:
+		if not _rows.has(layer): _rows[layer] = {}
 
 func _commit_layers(parent: Node3D = self) -> void:
 	# Commits everything laid out so far under parent, then starts the tables afresh.
@@ -776,7 +817,23 @@ func _commit_layer(layer: String, mesh: Mesh, material: Material, shadows: bool,
 		instance.material_override = material
 		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		# Blended railings always draw before other blended surfaces (the park fence in front
+		# of them), so the order never flips with the camera.
+		if layer.ends_with("_bars"): instance.sorting_offset = -2000.0
+		# The near railings' shadow comes from the twin below only, never from the blended look
+		# (its coverage follows the camera, so its shadow would too).
+		if layer == "detail_bars": instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		parent.add_child(instance)
+		if layer == "detail_bars":
+			# The near railings keep the cut-out shadow they always cast: the same MultiMesh
+			# (no second buffer) in the opaque trim look, drawn into the shadow maps only.
+			var caster := MultiMeshInstance3D.new()
+			caster.name = "NearCity_%s_%d_shadow" % [layer, key]
+			caster.multimesh = multimesh
+			caster.material_override = _layer_looks["detail"][1]
+			caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+			caster.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+			parent.add_child(caster)
 
 func _build_ground() -> void:
 	var plane := PlaneMesh.new()

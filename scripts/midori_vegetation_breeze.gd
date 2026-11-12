@@ -9,7 +9,7 @@ const StartupTrace = preload("res://scripts/startup_trace.gd")
 const TARGET_ROOTS := ["WatersideVegetation_36Reed_9DenseGrass", "MainlandMeadowTransitions", "MainlandEmeraldGrassClusters"]
 const SUPPORTED_PROPERTIES := [
 	"resource_name", "resource_local_to_scene", "render_priority", "transparency",
-	"alpha_scissor_threshold", "alpha_hash_scale", "cull_mode", "albedo_color", "albedo_texture",
+	"alpha_scissor_threshold", "alpha_hash_scale", "alpha_antialiasing_mode", "alpha_antialiasing_edge", "cull_mode", "albedo_color", "albedo_texture",
 	"metallic", "metallic_specular", "metallic_texture", "metallic_texture_channel",
 	"roughness", "roughness_texture", "roughness_texture_channel",
 	"normal_enabled", "normal_scale", "normal_texture", "ao_enabled", "ao_light_affect", "ao_texture", "ao_texture_channel",

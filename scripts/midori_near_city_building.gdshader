@@ -222,7 +222,7 @@ void fragment(){
 		float drape_roll = hsh(cell * 1.3 + seed * 11.0);
 		float gap = half_pane.x * (0.25 + 0.6 * hsh(cell * 2.1 + seed));
 		float drape = (!in_shop && !open_deck) ? ((drape_roll < 0.22) ? step(gap, abs(g.x)) : ((drape_roll < 0.34) ? 1.0 : 0.0)) : 0.0;
-		float slats = (drape_roll > 0.22 && drape_roll < 0.34) ? (0.8 + 0.2 * step(0.5, fract(g.y * 7.0))) : (0.88 + 0.12 * sin(g.x * 24.0));
+		float slats = (drape_roll > 0.22 && drape_roll < 0.34) ? (0.8 + 0.2 * mix(step(0.5, fract(g.y * 7.0)), 0.5, smoothstep(0.25, 0.6, px * 7.0))) : (0.88 + 0.12 * sin(g.x * 24.0) * (1.0 - smoothstep(0.25, 0.6, px * 3.82)));
 		vec3 drape_tint = mix(vec3(0.74, 0.7, 0.62), vec3(0.5, 0.54, 0.58), step(0.5, hsh(cell + 5.0)));
 		vec3 pane = mix(vec3(0.02, 0.026, 0.032), drape_tint * slats * 0.3, drape);
 		// Open by day; most drop their shutters at night. Convenience stores never close.

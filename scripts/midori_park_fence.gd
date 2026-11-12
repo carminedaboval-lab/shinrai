@@ -158,21 +158,40 @@ render_mode cull_disabled, depth_prepass_alpha;
 uniform float night = 0.0;
 uniform vec3 hole_centres[7];
 varying vec3 world_p;
+// Half-width of one wire in pattern units: where the old cut-out sat
+// (smoothstep(0.045, 0.12, d) crossing the 0.45 threshold).
+const float HALF_WIRE = 0.085;
+// Share of a pixel footprint of width w, centred on x, that one family of
+// wires covers: the exact box filter of a wire on every half-integer.
+float wire_cover(float x, float w) {
+	float f = fract(x - 0.5 * w);
+	float e = f + w;
+	float lo = 0.5 - HALF_WIRE;
+	float c0 = clamp(f - lo, 0.0, 2.0 * HALF_WIRE);
+	float c1 = floor(e) * 2.0 * HALF_WIRE + clamp(fract(e) - lo, 0.0, 2.0 * HALF_WIRE);
+	return clamp((c1 - c0) / w, 0.0, 1.0);
+}
 void vertex() { world_p = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
+	float sa = UV.x + UV.y;
+	float sb = UV.x - UV.y;
+	// Pattern periods per pixel for each diagonal (taken before any discard).
+	float wa = max(length(vec2(dFdx(sa), dFdy(sa))), 0.0001);
+	float wb = max(length(vec2(dFdx(sb), dFdy(sb))), 0.0001);
 	for (int i = 0; i < 7; i++) {
 		vec3 q = world_p - hole_centres[i];
 		if (length(q.xz) < 0.50 && q.y < 0.80 - 0.09 * sin(q.x * 9.0 + q.z * 9.0)) discard;
 	}
-	float a = abs(fract(UV.x + UV.y) - 0.5);
-	float b = abs(fract(UV.x - UV.y) - 0.5);
-	float d = min(a, b);
-	float wire = 1.0 - smoothstep(0.045, 0.12, d);
+	// Near: a one-pixel soft wire edge. As a diagonal nears two pixels per
+	// period it settles on its true average cover, so the two together read as
+	// the mesh's real 31 % veil instead of moire.
+	float ca = mix(wire_cover(sa, wa), 2.0 * HALF_WIRE, smoothstep(0.25, 0.6, wa));
+	float cb = mix(wire_cover(sb, wb), 2.0 * HALF_WIRE, smoothstep(0.25, 0.6, wb));
 	ALBEDO = mix(vec3(0.19, 0.35, 0.21), vec3(0.12, 0.2, 0.13), night * 0.6);
 	METALLIC = 0.25;
 	ROUGHNESS = 0.7;
-	ALPHA = wire;
-	ALPHA_SCISSOR_THRESHOLD = 0.45;
+	// Blended, no scissor: depth_prepass_alpha still writes depth for solid wire.
+	ALPHA = 1.0 - (1.0 - ca) * (1.0 - cb);
 }
 """
 	_net = ShaderMaterial.new()

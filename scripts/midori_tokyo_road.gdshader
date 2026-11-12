@@ -44,7 +44,9 @@ float nz(vec2 p) {
 	return mix(mix(hsh(i), hsh(i + vec2(1, 0)), f.x), mix(hsh(i + vec2(0, 1)), hsh(i + vec2(1, 1)), f.x), f.y);
 }
 mat2 rot(float a) { float c = cos(a); float s = sin(a); return mat2(vec2(c, s), vec2(-s, c)); }
-float band(float x, float centre, float half_width) { return 1.0 - smoothstep(half_width - 0.012, half_width + 0.012, abs(x - centre)); }
+// Share of the pixel covered by the line. The footprint never drops below the old 2.4 cm soft edge,
+// so close up it looks the same; far away a line keeps its true share of the pixel instead of flickering.
+float band(float x, float centre, float half_width) { float d = x - centre; float f = max(fwidth(x), 0.024); return (clamp(d + 0.5 * f, -half_width, half_width) - clamp(d - 0.5 * f, -half_width, half_width)) / f; }
 float seg_dist(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a; vec2 ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
 float box_dist(vec2 p, vec2 half_size) { vec2 d = abs(p) - half_size; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
 
@@ -227,7 +229,12 @@ void fragment() {
 		float near_junction = approach > 0 ? 1.0 - step(30.0, dj) : 0.0;
 		bool in_crossing = (start_j > 0 && v > J0 && v < J0 + ZEBRA) || (end_j > 0 && len - v > J0 && len - v < J0 + ZEBRA);
 		if (in_crossing) {
-			if (au < hw - 0.55) white = max(white, step(0.5, fract(u / 0.9 + 0.25)));
+			// Share of the pixel that is bar: hard-edged up close, an even half-white once bars are finer than a pixel.
+			float zebra_w = max(fwidth(u) / 0.9, 0.0001);
+			float zebra_a = u / 0.9 + 0.25 - 0.5 * zebra_w;
+			float zebra_b = u / 0.9 + 0.25 + 0.5 * zebra_w;
+			float zebra = 1.0 - ((floor(zebra_b) - floor(zebra_a)) * 0.5 + min(fract(zebra_b), 0.5) - min(fract(zebra_a), 0.5)) / zebra_w;
+			if (au < hw - 0.55) white = max(white, clamp(zebra, 0.0, 1.0));
 		} else {
 			if (kind != 2) {
 				white = max(white, band(u, 0.0, 0.075));
@@ -248,7 +255,10 @@ void fragment() {
 				float stop_at = J0 + ZEBRA + 1.6;
 				// Stop line across the lanes heading into the junction; a priority
 				// road through an unsignalised junction has none.
-				if (approach != 3) white = max(white, step(stop_at, dj) * step(dj, stop_at + 0.45));
+				if (approach != 3) {
+					float stop_f = max(fwidth(v), 0.0001);
+					white = max(white, (clamp(dj + 0.5 * stop_f, stop_at, stop_at + 0.45) - clamp(dj - 0.5 * stop_f, stop_at, stop_at + 0.45)) / stop_f);
+				}
 				// Arrows in each inbound lane.
 				float lanes = kind == 2 ? 1.0 : 2.0;
 				for (int lane_i = 0; lane_i < 2; lane_i++) {

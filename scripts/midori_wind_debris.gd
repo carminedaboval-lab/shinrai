@@ -82,6 +82,15 @@ func _flake() -> QuadMesh:
 	material.vertex_color_use_as_albedo = true
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	material.alpha_scissor_threshold = 0.5
+	# With MSAA there is no temporal smoothing, so hard cut-out flakes blink as they shrink
+	# towards a pixel. Fade the edge through the MSAA samples instead; the half-covered
+	# outline stays where the 0.5 cut was. TAA and Off sessions keep the plain cut-out.
+	if preload("res://scripts/shinrai_settings.gd").session_msaa() != Viewport.MSAA_DISABLED:
+		image.generate_mipmaps()
+		material.albedo_texture = ImageTexture.create_from_image(image)
+		material.alpha_scissor_threshold = 0.25
+		material.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE
+		material.alpha_antialiasing_edge = 0.25
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	material.roughness = 0.9

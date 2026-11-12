@@ -41,11 +41,11 @@ window/stretch/aspect="expand"
 [rendering]
 
 renderer/rendering_method.mobile="gl_compatibility"
-anti_aliasing/quality/msaa_3d=0
+anti_aliasing/quality/msaa_3d=2
 anti_aliasing/screen_space_roughness_limiter/amount=0.35
 textures/default_filters/texture_mipmap_bias=0.5
 limits/opengl/max_renderable_lights=96
 limits/opengl/max_lights_per_object=16
-anti_aliasing/quality/use_taa=true
+anti_aliasing/quality/use_taa=false
 reflections/reflection_atlas/reflection_count=32
 rendering_device/pipeline_cache/enable=false

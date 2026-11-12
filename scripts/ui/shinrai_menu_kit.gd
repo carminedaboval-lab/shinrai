@@ -552,6 +552,13 @@ static func settings_contents(content: VBoxContainer, high_quality: bool, on_gra
 	var quality := card(content, "RENDER QUALITY", 12, 8)
 	var choice := segmented(quality, ["BALANCED", "HIGH"], 1 if high_quality else 0, func(_index: int) -> void: on_graphics.call(), 16)
 	wrapped(text(quality, "High adds screen-space reflections and indirect light. F7 switches it at any time.", 14, MUTED))
+	var settings: GDScript = load("res://scripts/shinrai_settings.gd")
+	var smoothing := card(content, "ANTI-ALIASING", 12, 8)
+	segmented(smoothing, settings.AA_LABELS, settings.aa_index(), func(index: int) -> void: settings.set_aa(index), 16)
+	wrapped(text(smoothing, "Higher numbers give smoother edges; 9X and 12X want a strong graphics card. TAA is softest and needs about 5 GB more memory. Takes effect the next time you start the game.", 14, MUTED))
+	var edge := card(content, "EDGE FILTER", 12, 8)
+	segmented(edge, settings.FILTER_LABELS, settings.filter_index(), func(index: int) -> void: settings.set_filter(index), 16)
+	wrapped(text(edge, "A light extra pass over remaining jagged edges. Applies at once.", 14, MUTED))
 	section(content, "CONTROLS", 12)
 	var pad := card(content, "CONTROLLER", 12, 3)
 	for row: Array in [["LS / RS", "Move / look"], ["L3", "Sprint"], ["A / B", "Jump / crouch"], ["X", "Reload"], ["Y", "Weapons"], ["RT / LT", "Fire / aim"], ["RB", "Interact"], ["LB", "Heal"], ["Dpad Up / Down", "Eat / lower weapon"], ["View / Menu", "Inventory / pause"], ["Hold R3", "Vitals  ·  R3 + X check magazine"], ["Menus", "Dpad or LS navigate · A select · B back"], ["Inventory", "LB-RB categories · Y cargo actions"]]:
