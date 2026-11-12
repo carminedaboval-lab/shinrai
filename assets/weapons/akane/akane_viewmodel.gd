@@ -14,8 +14,14 @@ var _hand_follow := 0.0
 var _grip_kick := Transform3D.IDENTITY
 var _wrist_frame := Transform3D.IDENTITY
 
+## The Glock read a little small on screen (user, 2026-11-12): hold it closer
+## rather than scaling it. Hip: 4.5 cm nearer the eye (~7-8 % larger).
+const HIP_CLOSER := 0.045
+
 func _load_bundled_model() -> void:
 	super._load_bundled_model()
+	if _fitted:
+		hip_pos.z += HIP_CLOSER
 	if not _fitted or _counter.get_parent() == slide_mesh:
 		return
 	_wrist_frame = assembly_reference.translated_local(RIGHT_WRIST)
