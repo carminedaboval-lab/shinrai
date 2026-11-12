@@ -1,13 +1,22 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/weapons/akane/akane_geometry.glb" id="1"]
 [ext_resource type="Script" path="res://scripts/weapon_real_finish.gd" id="2"]
+[ext_resource type="ArrayMesh" path="res://assets/weapons/akane/akane_slide_inlays.tres" id="3_trim"]
+[ext_resource type="Shader" path="res://assets/weapons/akane/akane_inlay_finish.gdshader" id="4_finish"]
+
+[sub_resource type="ShaderMaterial" id="SatinInlay"]
+shader = ExtResource("4_finish")
 
 [node name="Akane" type="Node3D"]
 script = ExtResource("2")
 metadata/real_counterpart = "Glock 17 Gen 5 MOS, 9x19 mm"
 
 [node name="Geometry" parent="." instance=ExtResource("1")]
+
+[node name="SlideInlays" type="MeshInstance3D" parent="Geometry/Slide"]
+mesh = ExtResource("3_trim")
+material_override = SubResource("SatinInlay")
 
 [node name="GripRight" type="Marker3D" parent="."]
 position = Vector3(0.036, -0.052, 0)

@@ -1,9 +1,18 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=7 format=3]
 
-[ext_resource type="Script" path="res://scripts/pistol_candidate_viewmodel.gd" id="1"]
+[ext_resource type="Script" path="res://assets/weapons/akane/akane_viewmodel.gd" id="1"]
 [ext_resource type="PackedScene" path="res://assets/weapons/akane/akane_weapon.tscn" id="2"]
 
-[ext_resource type="PackedScene" path="res://assets/characters/player_wardrobe/first_person_arms.glb" id="3_arms"]
+[ext_resource type="PackedScene" path="res://assets/weapons/akane/akane_arms.glb" id="3_arms"]
+
+[ext_resource type="Shader" path="res://assets/weapons/akane/akane_counter.gdshader" id="4_led"]
+
+[sub_resource type="ShaderMaterial" id="RearProjection"]
+resource_local_to_scene = true
+shader = ExtResource("4_led")
+
+[sub_resource type="QuadMesh" id="RearFace"]
+size = Vector2(0.023, 0.014)
 
 [node name="AkaneViewmodel" type="Node3D"]
 script = ExtResource("1")
@@ -16,9 +25,19 @@ reload_partial_seconds = 2.7
 reload_empty_seconds = 2.7
 slide_travel = 0.03
 slide_cycle_seconds = 0.105
+muzzle_flash_duration = 0.033
 case_length = 0.019
 optic_id = ""
 iron_eye_relief_m = 0.25
 hand_world_scale = 1.0
 retention_reload = true
 grip_hand_offset = Vector3(0, 0.014, 0)
+
+[node name="RearCounter" type="MeshInstance3D" parent="."]
+visible = false
+position = Vector3(0.07175, 0.0185, 0)
+rotation = Vector3(0, 1.5707963, 0)
+layers = 524288
+cast_shadow = 0
+material_override = SubResource("RearProjection")
+mesh = SubResource("RearFace")
