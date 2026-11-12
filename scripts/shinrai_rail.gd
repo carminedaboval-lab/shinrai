@@ -22,7 +22,7 @@ const DROP_CLEARANCE := 70.0
 const GAUGE := 1.435
 const STOP_NAMES: Array[String] = ["Nishi 3", "Nishi 2", "Nishi 1", "Kita 1", "Kita 2", "Kita 3", "Kita 4", "Higashi 1", "Higashi 2", "Higashi 3"]
 
-enum Mode { IDLE, RUN, OPENING, DWELL, CLOSING, EXTRACT }
+enum Mode { IDLE, RUN, OPENING, DWELL, CLOSING, EXTRACT, DEPART }
 
 var tram: Node3D
 var stops: Array[float] = []
@@ -35,6 +35,10 @@ var direction := 1
 var timer := 0.0
 var arrival := false
 var arrival_stop := -1
+## Set by the raid clock near the end: the stop the tram is at or heading for is its last;
+## when those doors close it leaves the city and the service is over.
+var final_run := false
+var service_over := false
 var rider: CharacterBody3D
 var _rider_car: Node3D
 var _rider_local := Vector3.ZERO
@@ -88,6 +92,9 @@ func begin_raid(run: Node, rng: RandomNumberGenerator) -> void:
 		if clear: allowed.append(index)
 	if allowed.is_empty():
 		for index: int in stops.size(): allowed.append(index)
+	final_run = false
+	service_over = false
+	tram.visible = true
 	arrival_stop = allowed[rng.randi_range(0, allowed.size() - 1)]
 	next_stop = arrival_stop
 	# Run in from whichever end leaves room; either way when both do.
@@ -148,9 +155,9 @@ func raid_tick(run: Node, delta: float) -> void:
 					arrival = false
 					timer = maxf(timer, DWELL_SECONDS - 5.0) if timer <= DWELL_SECONDS else DWELL_SECONDS
 			elif aboard:
-				run.prompt_text = ("Stay aboard to leave the city · doors close in %d s" % closing_in) if run.relays > 0 else "Extraction locked · recover a relay"
+				run.prompt_text = ("%s · doors close in %d s" % ["LAST TRAM · stay aboard to leave" if final_run else "Stay aboard to leave the city", closing_in]) if run.relays > 0 else "Extraction locked · recover a relay"
 			elif player.global_position.distance_to(stop_ground(next_stop)) < 14.0:
-				run.prompt_text = ("Tram boarding · doors close in %d s" % closing_in) if run.relays > 0 else "Tram · recover a relay to ride out"
+				run.prompt_text = ("%s · doors close in %d s" % ["LAST TRAM boarding" if final_run else "Tram boarding", closing_in]) if run.relays > 0 else "Tram · recover a relay to ride out"
 			if timer >= DWELL_SECONDS and not arrival:
 				if aboard and run.relays == 0:
 					timer = DWELL_SECONDS - 3.0
@@ -178,8 +185,21 @@ func raid_tick(run: Node, delta: float) -> void:
 					if car != null:
 						_hold(player, car, car.global_transform.affine_inverse() * player.global_position)
 						mode = Mode.EXTRACT
+					elif final_run:
+						# The last tram leaves the city empty; no more service this raid.
+						service_over = true
+						mode = Mode.DEPART
+						run.announce("The last tram has left the city · lockdown at 0:00", 6.0)
 					else:
 						mode = Mode.RUN
+		Mode.DEPART:
+			timer += delta
+			speed = move_toward(speed, CRUISE, ACCEL * delta)
+			s = clampf(s + speed * delta * float(direction), 18.0, total - 6.0)
+			if timer >= 8.0:
+				tram.visible = false
+				mode = Mode.IDLE
+				speed = 0.0
 		Mode.EXTRACT:
 			timer += delta
 			speed = move_toward(speed, CRUISE, ACCEL * delta)
@@ -210,6 +230,11 @@ func _physics_process(_delta: float) -> void:
 			_rumble.volume_db = lerpf(-16.0, 0.0, clampf(speed / CRUISE, 0.0, 1.0))
 			_rumble.pitch_scale = lerpf(0.7, 1.0, clampf(speed / CRUISE, 0.0, 1.0))
 	_ticked = false
+
+
+## The stop the tram will next open its doors at (or has them open at now).
+func current_stop_title() -> String:
+	return STOP_NAMES[clampi(next_stop, 0, STOP_NAMES.size() - 1)]
 
 
 ## True once the doors have shut on a rider who is leaving the city.

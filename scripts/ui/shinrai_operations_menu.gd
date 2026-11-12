@@ -96,7 +96,7 @@ func _build(frame: Control) -> void:
 	Kit.text(contract, "THE QUIET EXIT", 50, Color("f3eee2"), true)
 	Kit.wrapped(Kit.text(contract, "Recover the park's telemetry. Search for salvage. Get out alive. One relay opens extraction. All three earn the full contract bonus.", 18, Kit.PAPER), 560)
 	var tags := Kit.hbox(contract, 6)
-	for tag: String in ["UP TO 2 HOURS", "SOLO PvE", "BASE CARGO 6–10 SLOTS"]:
+	for tag: String in ["40 MINUTES", "SOLO PvE", "BASE CARGO 6–10 SLOTS"]:
 		Kit.chip(tags, tag, 14, Kit.MUTED)
 	# Deployment sits at the foot of the column, where the eye ends up.
 	Kit.spacer(left, 16, true)

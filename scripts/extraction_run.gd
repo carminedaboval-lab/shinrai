@@ -78,7 +78,14 @@ const ITEMS := [
 	{"id":"backpack_regular","title":"Field backpack","value":0},
 	{"id":"backpack_mountain","title":"Mountain backpack","value":0}] + LootContainers.ITEMS + FruitHarvest.ITEMS
 const PRICES := {"bolt_cutters":38,"hammer":22,"screwdriver":12,"wrench":24,"circuit": 85, "optics": 140, "cell": 60, "archive": 220, "coffee_cup": 12, "pliers":18, "scissors":10, "utility_knife":16, "bottled_water_closed":8, "bottled_water_open":2, "sports_bottle_closed":14, "sports_bottle_open":7, "bandage":15, "tourniquet":35, "splint":25, "ration_bar":12, "garden_mikan":4, "garden_persimmon":5,"canned_mackerel":14,"canned_mackerel_open":6,"canned_peaches":12,"canned_peaches_open":5,"can_opener":9}
-const RAID_SECONDS := 7200.0
+## Raid length (default 40 min, docs/MAP1_MEASURED_PLAN.md). The clock starts when the
+## arrival tram opens its doors. Threat rises over it; the last tram runs near the end.
+const RAID_SECONDS := 2400.0
+## Elapsed seconds at which a fresh drone pack is sent in, with its size.
+const REINFORCEMENTS := [[900.0, 3], [1680.0, 4]]
+## Remaining seconds at which the last tram is called.
+const LAST_TRAM_AT := 180.0
+var _clock_marks := {}
 enum Phase { BOOT, HQ, RAID, PAUSED, RESULT }
 
 var creator_layout_result: Dictionary = {}
@@ -1047,6 +1054,7 @@ func _deploy(retry_save: bool, from_queue: bool) -> void:
 	medkits = 1 if extra_medkit else 0
 	medical_pouch = {"bandage":0,"tourniquet":0,"splint":0}
 	remaining = RAID_SECONDS
+	_clock_marks.clear()
 	var retained_illness := metabolism.illness_snapshot()
 	metabolism.reset()
 	metabolism.restore_illness(retained_illness)
@@ -1321,6 +1329,7 @@ func _physics_process(delta: float) -> void:
 	if is_instance_valid(rail):
 		rail.raid_tick(self, delta)
 		if phase != Phase.RAID: return
+	_update_raid_clock()
 	guidance_elapsed += delta
 	if guidance_elapsed >= 1.0:
 		refresh_guidance()
@@ -1606,6 +1615,36 @@ func refresh_guidance() -> void:
 				break
 	for index: int in range(1, guidance_path.size()):
 		guidance_distance += guidance_path[index - 1].distance_to(guidance_path[index])
+
+## How dangerous the raid has become: 0 for the first six minutes, rising to 1 by the
+## last four. The drone director reads it for backup range and cooldown.
+func threat_level() -> float:
+	return smoothstep(0.15, 0.9, clampf((RAID_SECONDS - remaining) / RAID_SECONDS, 0.0, 1.0))
+
+func _clock_once(key: String) -> bool:
+	if _clock_marks.has(key): return false
+	_clock_marks[key] = true
+	return true
+
+## Timed raid events: reinforcements, the warnings, and the last tram.
+func _update_raid_clock() -> void:
+	var elapsed := RAID_SECONDS - remaining
+	for index: int in REINFORCEMENTS.size():
+		var mark: Array = REINFORCEMENTS[index]
+		if elapsed >= float(mark[0]) and _clock_once("reinforce_%d" % index):
+			var director := get_tree().get_first_node_in_group("police_drone_directors")
+			if director != null and director.has_method("spawn_reinforcement") and director.call("spawn_reinforcement", int(mark[1])) != null:
+				announce("DISPATCH  ·  A drone sweep has entered the park", 5.0)
+	if remaining <= 600.0 and _clock_once("ten_minutes"):
+		announce("CITY NOTICE  ·  Lockdown in ten minutes", 6.0)
+	if remaining <= 300.0 and _clock_once("five_minutes"):
+		announce("CITY NOTICE  ·  Lockdown in five minutes · the last tram runs in two", 6.0)
+	if remaining <= LAST_TRAM_AT and _clock_once("last_tram"):
+		if is_instance_valid(rail) and not rail.service_over:
+			rail.final_run = true
+			announce("LAST TRAM  ·  boarding at %s" % rail.current_stop_title(), 8.0)
+	if remaining <= 60.0 and _clock_once("one_minute"):
+		announce("CITY NOTICE  ·  Lockdown in one minute", 5.0)
 
 ## The park fence line (midori_park_fence.gd HALF) and distances measured round it,
 ## clockwise from the north-west corner: north side, east side, south side, west side.

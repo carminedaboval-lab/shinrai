@@ -4,10 +4,15 @@ const PACK = preload("Shinrai_Drone_Pack.tscn")
 var raid: Node
 var groups: Array[Node3D]=[]
 var spawn_report: Array[Dictionary]=[]
+# Calm-raid values; the raid clock's threat (0 at the start, 1 at the end) scales them
+# towards the late values, so backup comes from further away and more often.
 const BACKUP_RANGE := 420.0
+const BACKUP_RANGE_LATE := 640.0
 # Route length a pack can cover inside its dispatch time at its measured 1.9 m/s.
 const BACKUP_ROUTE_RANGE := 460.0
+const BACKUP_ROUTE_RANGE_LATE := 700.0
 const BACKUP_COOLDOWN := 45.0
+const BACKUP_COOLDOWN_LATE := 15.0
 const WARNING_COOLDOWN := 30.0
 const BACKUP_UPDATE_SECONDS := 8.0
 const BACKUP_UPDATE_MOVE := 15.0
@@ -27,24 +32,45 @@ func _ready() -> void:
 	if preferred.is_empty():
 		preferred.append(raid.player.global_position-raid.player.global_basis.z*60)
 	for i in 3:
-		var placement:=_find_formation(preferred[mini(i,preferred.size()-1)],3+i)
-		if placement.is_empty():
-			push_error("Police drone group %d has no safe formation placement" % (i+1));continue
-		var pack: Node3D=PACK.instantiate();pack.name="PoliceDroneGroup%d" % (i+1)
-		pack.spawn_on_ready=false;pack.roam_enabled=true;pack.target=raid.player;add_child(pack)
-		pack.global_position=placement[0];pack.spawn_pack(3+i)
-		for j in pack.members.size():
-			var actor: CharacterBody3D=pack.members[j]
-			actor.global_position=placement[j];actor.navigation_source=raid
-			actor.name="PoliceDrone_%d_%d" % [i+1,j+1]
-			actor.add_to_group("extraction_hostiles");actor.add_to_group("police_spider_drones")
-			actor.visual.reset_contacts()
-			pack.slots[actor]=actor.global_position-pack.global_position
-		var anchor: Vector3=pack.global_position
-		pack.route.assign([raid.navigation.nearest(anchor+Vector3(0,0,12)),anchor,raid.navigation.nearest(anchor+Vector3(12,0,0)),anchor])
-		groups.append(pack)
-		spawn_report.append({"name":pack.name,"count":pack.members.size(),"anchor":str(anchor)})
+		_add_pack(preferred[mini(i,preferred.size()-1)],3+i)
 	print("POLICE_DRONE_GROUPS ",JSON.stringify(spawn_report))
+
+func _add_pack(preferred: Vector3, count: int) -> Node3D:
+	var i: int=groups.size()
+	var placement:=_find_formation(preferred,count)
+	if placement.is_empty():
+		push_error("Police drone group %d has no safe formation placement" % (i+1));return null
+	var pack: Node3D=PACK.instantiate();pack.name="PoliceDroneGroup%d" % (i+1)
+	pack.spawn_on_ready=false;pack.roam_enabled=true;pack.target=raid.player;add_child(pack)
+	pack.global_position=placement[0];pack.spawn_pack(count)
+	for j in pack.members.size():
+		var actor: CharacterBody3D=pack.members[j]
+		actor.global_position=placement[j];actor.navigation_source=raid
+		actor.name="PoliceDrone_%d_%d" % [i+1,j+1]
+		actor.add_to_group("extraction_hostiles");actor.add_to_group("police_spider_drones")
+		actor.visual.reset_contacts()
+		pack.slots[actor]=actor.global_position-pack.global_position
+	var anchor: Vector3=pack.global_position
+	pack.route.assign([raid.navigation.nearest(anchor+Vector3(0,0,12)),anchor,raid.navigation.nearest(anchor+Vector3(12,0,0)),anchor])
+	groups.append(pack)
+	spawn_report.append({"name":pack.name,"count":pack.members.size(),"anchor":str(anchor)})
+	return pack
+
+## A fresh pack sent in by the raid clock: it enters about 200 m from the player and
+## sweeps towards where they are now. Returns the pack, or null if there was no room.
+func spawn_reinforcement(count: int) -> Node3D:
+	var player_at: Vector3=raid.player.global_position
+	var away: Vector3=Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU)*200.0
+	var pack:=_add_pack(raid.navigation.nearest(player_at+away),count)
+	if pack==null: return null
+	pack.set_physics_process(raid.phase==raid.Phase.RAID)
+	var goal: Vector3=raid.navigation.nearest(player_at)
+	if not raid.get_path_world(pack.living_members()[0].global_position,goal).is_empty():
+		pack.dispatch_to(goal)
+	return pack
+
+func _threat() -> float:
+	return clampf(float(raid.call("threat_level")),0.0,1.0) if raid.has_method("threat_level") else 0.0
 
 ## The warning before force: tells the player a drone is identifying them, while
 ## there is still about a second to break line of sight.
@@ -59,6 +85,7 @@ func police_warning(contact: Node) -> void:
 func request_backup(caller: Node3D, point: Vector3) -> void:
 	var now: float=float(raid.run_time)
 	if now<backup_ready_at or not point.is_finite(): return
+	var threat:=_threat()
 	# A wiped-out pack keeps its old goal, so only living responders count.
 	for pack: Node3D in groups:
 		if is_instance_valid(pack) and pack.backup_goal.is_finite() and not pack.living_members().is_empty(): return
@@ -67,13 +94,13 @@ func request_backup(caller: Node3D, point: Vector3) -> void:
 	for pack: Node3D in groups:
 		if pack==caller or not is_instance_valid(pack) or not pack.is_available_for_dispatch(): continue
 		var distance: float=pack.living_members()[0].global_position.distance_to(point)
-		if distance<BACKUP_RANGE: candidates.append({"pack":pack,"distance":distance})
+		if distance<lerpf(BACKUP_RANGE,BACKUP_RANGE_LATE,threat): candidates.append({"pack":pack,"distance":distance})
 	candidates.sort_custom(func(a: Dictionary,b: Dictionary)->bool:return a.distance<b.distance)
 	# Commit only to a pack with a real route: the player is told help is coming.
 	for row: Dictionary in candidates:
 		var path: PackedVector3Array=raid.get_path_world(row.pack.living_members()[0].global_position,goal)
-		if path.is_empty() or _path_length(path)>BACKUP_ROUTE_RANGE: continue
-		backup_ready_at=now+BACKUP_COOLDOWN
+		if path.is_empty() or _path_length(path)>lerpf(BACKUP_ROUTE_RANGE,BACKUP_ROUTE_RANGE_LATE,threat): continue
+		backup_ready_at=now+lerpf(BACKUP_COOLDOWN,BACKUP_COOLDOWN_LATE,threat)
 		row.pack.dispatch_to(goal)
 		raid.announce("DISPATCH  ·  Police backup responding to your position",4.5)
 		return
