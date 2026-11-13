@@ -14,8 +14,22 @@ const CALLOUT_COOLDOWN:=3.0
 const CASUALTY_FLINCH_RANGE:=30.0
 # The last one standing gives up the fight once hurt this badly.
 const LAST_STAND_HEALTH:=.6
+# Gunfire this close means someone is shooting at or near the crew: they go hostile.
+const GUNFIRE_CLOSE:=65.0
+# Out to here they hear it and stop to watch that way, without knowing who or exactly where.
+const GUNFIRE_FAR:=220.0
+const WARN_RANGE:=20.0
+# After shots in the distance a stranger is warned off from further away for a while.
+const WARY_WARN_RANGE:=34.0
+const WARY_SECONDS:=90.0
+var guard_until:=-100.0
+var guard_point:=Vector3.ZERO
+var wary_until:=-100.0
 var raid: Node
 var asset_root: String="res://assets/enemies/scavs"
+## Where the crew looks for a spawn when it has no town to loot (the park default).
+## The test yard sets its own.
+var spawn_anchor:=Vector3(-48,.2,140)
 var members: Array[CharacterBody3D]=[]
 var route: Array[Vector3]=[]
 var spawn_report: Dictionary={}
@@ -78,7 +92,7 @@ func _ready() -> void:
 func _spawn() -> bool:
 	for role: String in ROLES:
 		if not (ResourceLoader.exists(_model(role)) if asset_root.begins_with("res://") else FileAccess.file_exists(_model(role))): return false
-	var placement:=_find_placement(Vector3(0,.1,190) if town_navigation!=null else Vector3(-48,.2,140))
+	var placement:=_find_placement(Vector3(0,.1,190) if town_navigation!=null else spawn_anchor)
 	if placement.is_empty(): return false
 	route.assign(placement.route)
 	for i: int in range(ROLES.size()):
@@ -213,7 +227,7 @@ func observe_player(actor: CharacterBody3D, visible: bool, delta: float) -> void
 		return
 	var player: Node3D=raid.player
 	var distance:=Vector2(actor.global_position.x-player.global_position.x,actor.global_position.z-player.global_position.z).length()
-	if distance>20.0:
+	if distance>(WARY_WARN_RANGE if tactics.clock<wary_until else WARN_RANGE):
 		_aim_threat_time.erase(actor)
 		return
 	# A carried weapon is the normal player posture, not proof of an attack.
@@ -270,11 +284,40 @@ func make_hostile(actor: CharacterBody3D, reason: String) -> void:
 	_say(actor,"You were warned!" if reason=="ignored_warning" else "Weapon on us!" if reason=="weapon_aimed" else "Taking fire!")
 
 func player_fired() -> void:
+	var nearest:=INF
+	var listener: CharacterBody3D
 	for actor: CharacterBody3D in members:
-		if is_instance_valid(actor) and not actor.dead and actor.global_position.distance_to(raid.player.global_position)<65.0:
-			make_hostile(actor,"gunfire")
-			break
+		if not is_instance_valid(actor) or actor.dead: continue
+		var gap: float=actor.global_position.distance_to(raid.player.global_position)
+		if gap<nearest: nearest=gap; listener=actor
+	if listener!=null:
+		if nearest<GUNFIRE_CLOSE: make_hostile(listener,"gunfire")
+		elif nearest<GUNFIRE_FAR: _distant_shots(listener,raid.player.global_position,nearest)
 	_note_near_misses()
+
+## True while the crew has stopped to watch the direction distant shots came from.
+func on_guard() -> bool:
+	return not hostile and not morale_broken and tactics.clock<guard_until
+
+# Shots a long way off: a direction, not a position, and less sure the further away.
+# The crew stops what it is doing, gets low and watches that way for a while.
+func _distant_shots(listener: CharacterBody3D, point: Vector3, distance: float) -> void:
+	if hostile or morale_broken: return
+	var toward: Vector3=point-listener.global_position; toward.y=0
+	if toward.length()<.1: return
+	toward=toward.normalized().rotated(Vector3.UP,deg_to_rad(randf_range(-1.0,1.0)*(6.0+distance*.05)))
+	var first: bool=not on_guard()
+	guard_point=listener.global_position+toward*40.0
+	guard_until=tactics.clock+randf_range(14.0,20.0)
+	wary_until=tactics.clock+WARY_SECONDS
+	if activity!=null: activity.interrupt("gunfire")
+	tactics.send(listener,"distant_shots",{"distance":distance})
+	if first: _say(listener,"Shots, %s. Heads up."%_compass(toward))
+
+func _compass(direction: Vector3) -> String:
+	# North is -z, east is +x.
+	var names: Array[String]=["north","north-east","east","south-east","south","south-west","west","north-west"]
+	return names[posmod(roundi(atan2(direction.x,-direction.z)/(TAU/8.0)),8)]
 
 # The aim line stands in for the bullet: close enough to the shot, a person hears
 # the crack, and only an unobstructed line can have passed near them.
@@ -371,11 +414,14 @@ func _escape_route(survivor: CharacterBody3D) -> PackedVector3Array:
 	var threat: Vector3=info.get("point",survivor.last_seen_position)
 	var away: Vector3=survivor.global_position-threat; away.y=0
 	if away.length()<.1: away=-survivor.global_basis.z
-	for turn: float in [0.0,-.7,.7]:
-		var goal: Vector3=get_nearest_walkable_world(survivor.global_position+away.normalized().rotated(Vector3.UP,turn)*24.0)
-		if goal.distance_to(threat)<survivor.global_position.distance_to(threat)+10.0: continue
-		var escape: PackedVector3Array=tactics.path_to(survivor.global_position,goal,survivor)
-		if not escape.is_empty(): return escape
+	# Straight away first, then wider to either side, then a shorter dash: three tries at
+	# one distance left a man "cornered" whenever those three exact spots were awkward.
+	for reach: float in [24.0,16.0]:
+		for turn: float in [0.0,-.7,.7,-1.25,1.25]:
+			var goal: Vector3=get_nearest_walkable_world(survivor.global_position+away.normalized().rotated(Vector3.UP,turn)*reach)
+			if not goal.is_finite() or goal.distance_to(threat)<survivor.global_position.distance_to(threat)+reach*.4: continue
+			var escape: PackedVector3Array=tactics.path_to(survivor.global_position,goal,survivor)
+			if not escape.is_empty(): return escape
 	return PackedVector3Array()
 
 func set_active(active: bool) -> void:

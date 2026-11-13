@@ -1,0 +1,82 @@
+﻿run 1 had script errors:
+  SCRIPT ERROR: Invalid call. Nonexistent function 'on_guard' in base 'Node3D (scav_squad.gd)'.
+     at: _far_shot (res://tests/probe_scav_ai.gd:458)
+run 2 had script errors:
+  SCRIPT ERROR: Invalid call. Nonexistent function 'on_guard' in base 'Node3D (scav_squad.gd)'.
+     at: _far_shot (res://tests/probe_scav_ai.gd:458)
+run 3 had script errors:
+  SCRIPT ERROR: Invalid call. Nonexistent function 'on_guard' in base 'Node3D (scav_squad.gd)'.
+     at: _far_shot (res://tests/probe_scav_ai.gd:458)
+run 4 had script errors:
+  SCRIPT ERROR: Invalid call. Nonexistent function 'on_guard' in base 'Node3D (scav_squad.gd)'.
+     at: _far_shot (res://tests/probe_scav_ai.gd:458)
+run 5 had script errors:
+  SCRIPT ERROR: Invalid call. Nonexistent function 'on_guard' in base 'Node3D (scav_squad.gd)'.
+     at: _far_shot (res://tests/probe_scav_ai.gd:458)
+== aimed_at (5 runs)
+   hostile_to_first_hit_s                2.44   range 0.77 to 7.68
+   hostile_to_first_shot_s               1.56   range 0.75 to 3.35
+   raise_to_hostile_s                    0.78   range 0.67 to 1.23
+   warned_before_raise                   1.00   range 1.00 to 1.00
+== break_contact (5 runs)
+   back_to_routine_after_s              23.94   range 22.00 to 24.70
+   closest_to_last_seen_m                1.92   range 1.60 to 2.70
+   closest_to_player_m                  23.62   range 22.20 to 25.40
+   found_player_after_s               never
+   reached_last_seen_after_s            19.38   range 16.50 to 21.90
+   search_orders                         0.00   range 0.00 to 0.00
+   still_hostile                         1.00   range 1.00 to 1.00
+== far_shot (5 runs)
+== gone (5 runs)
+   back_to_routine_after_s              23.44   range 20.90 to 24.40
+   places_to_check                       0.00   range 0.00 to 0.00
+   reached_last_seen_after_s            22.46   range 15.60 to 26.20
+   search_orders                         0.00   range 0.00 to 0.00
+   search_started_after_s             never
+   searchers_moving_at_once              0.00   range 0.00 to 0.00
+   stood_guard_from_s                 never
+== open_fight (5 runs)
+   exposed_share.leader                  0.58   range 0.36 to 0.79
+   exposed_share.rear_guard              0.63   range 0.49 to 0.70
+   exposed_share.scout                   0.48   range 0.39 to 0.58
+   first_hit_s                           7.58   range 1.12 to 13.18   (never in 1 of 5)
+   first_in_cover_s                      3.81   range 2.42 to 5.35
+   first_shot_s                          8.07   range 0.78 to 13.18
+   hits                                  6.20   range 0.00 to 9.00
+   rounds.leader                         8.20   range 0.00 to 23.00
+   rounds.rear_guard                     8.60   range 0.00 to 18.00
+   rounds.scout                          6.60   range 0.00 to 15.00
+   saw_player_but_held_fire_s           10.20   range 8.20 to 13.60
+== sneak_behind (5 runs)
+   after_s                              19.34   range 1.30 to 31.70
+   distance_at_end_m                    13.42   range 7.30 to 17.50
+   noticed                               1.00   range 1.00 to 1.00
+   reached_touching_distance             0.00   range 0.00 to 0.00
+== sniped (5 runs)
+   distance_m                           63.50   range 63.30 to 63.80
+   exposed_share.leader                  0.43   range 0.36 to 0.47
+   exposed_share.rear_guard              1.00   range 1.00 to 1.00
+   exposed_share.scout                   0.30   range 0.26 to 0.36
+   first_return_shot_s                  29.35   range 28.05 to 30.47
+   hits                                  7.00   range 4.00 to 9.00
+   rounds.leader                         7.40   range 3.00 to 10.00
+   rounds.scout                          7.80   range 6.00 to 11.00
+== unseen_shot (5 runs)
+   back_to_routine_after_s            never
+   closest_approach_m                   12.38   range 12.00 to 13.00
+   distance_m                           43.82   range 43.70 to 43.90
+   found_shooter_after_s                16.50   range 15.30 to 17.50
+   hostile                               1.00   range 1.00 to 1.00
+   in_line_of_sight                      0.00   range 0.00 to 0.00
+   leader_moved_after_s                  0.98   range 0.80 to 1.70
+== walk_up (5 runs)
+   hits_next_10s                         5.80   range 2.00 to 9.00
+   hostile                               1.00   range 1.00 to 1.00
+   hostile_distance_m                   12.72   range 10.00 to 14.90
+   hostile_to_first_shot_s               0.75   range 0.75 to 0.75
+   rounds_next_10s                       9.80   range 5.00 to 20.00
+   warn_after_s                          9.72   range 8.80 to 10.20
+   warn_distance_m                      16.62   range 14.90 to 18.90
+   warn_to_hostile_s                     1.80   range 1.80 to 1.80
+   warned                                1.00   range 1.00 to 1.00
+restored working files

@@ -1,0 +1,72 @@
+﻿== aimed_at (5 runs)
+   hostile_to_first_hit_s                0.88   range 0.78 to 0.93
+   hostile_to_first_shot_s               0.77   range 0.75 to 0.80
+   raise_to_hostile_s                    0.81   range 0.67 to 1.38
+   warned_before_raise                   1.00   range 1.00 to 1.00
+== break_contact (5 runs)
+   back_to_routine_after_s            never
+   closest_to_last_seen_m                4.34   range 2.00 to 7.40
+   closest_to_player_m                  24.78   range 19.30 to 28.30
+   found_player_after_s                 34.60   range 23.00 to 46.50
+   reached_last_seen_after_s            21.33   range 19.30 to 22.90   (never in 2 of 5)
+   search_orders                         8.20   range 6.00 to 10.00
+   still_hostile                         1.00   range 1.00 to 1.00
+== far_shot (5 runs)
+   back_to_routine_after_s              17.34   range 15.20 to 19.10
+   distance_m                           74.82   range 74.80 to 74.90
+   hostile                               0.00   range 0.00 to 0.00
+   kneeling                              3.00   range 3.00 to 3.00
+   looking_off_by_deg                    4.60   range 1.00 to 8.00
+   stopped_to_watch                      1.00   range 1.00 to 1.00
+== gone (5 runs)
+   back_to_routine_after_s              77.76   range 75.50 to 78.40
+   places_to_check                      32.40   range 32.00 to 33.00
+   reached_last_seen_after_s            15.40   range 10.20 to 19.30   (never in 1 of 5)
+   search_orders                         6.60   range 5.00 to 9.00
+   search_started_after_s                4.46   range 2.20 to 5.10
+   searchers_moving_at_once              2.00   range 2.00 to 2.00
+   stood_guard_from_s                   59.64   range 57.30 to 60.30
+== open_fight (5 runs)
+   exposed_share.leader                  0.68   range 0.62 to 0.73
+   exposed_share.rear_guard              0.39   range 0.31 to 0.47
+   exposed_share.scout                   0.51   range 0.43 to 0.68
+   first_hit_s                           1.52   range 0.77 to 2.82
+   first_in_cover_s                      3.48   range 3.48 to 3.48
+   first_shot_s                          0.77   range 0.77 to 0.78
+   hits                                 14.20   range 12.00 to 15.00
+   rounds.leader                        12.60   range 6.00 to 21.00
+   rounds.rear_guard                     9.60   range 6.00 to 15.00
+   rounds.scout                         17.60   range 6.00 to 24.00
+   saw_player_but_held_fire_s            8.64   range 6.20 to 10.80
+== sneak_behind (5 runs)
+   after_s                              19.20   range 1.30 to 31.50
+   distance_at_end_m                    13.24   range 8.20 to 17.10
+   noticed                               1.00   range 1.00 to 1.00
+   reached_touching_distance             0.00   range 0.00 to 0.00
+== sniped (5 runs)
+   distance_m                           63.46   range 63.20 to 63.80
+   exposed_share.leader                  0.49   range 0.44 to 0.54
+   exposed_share.rear_guard              1.00   range 1.00 to 1.00
+   exposed_share.scout                   0.29   range 0.19 to 0.34
+   first_return_shot_s                  30.07   range 25.35 to 32.38
+   hits                                  9.00   range 6.00 to 13.00
+   rounds.leader                         6.60   range 3.00 to 9.00
+   rounds.scout                          7.20   range 0.00 to 9.00
+== unseen_shot (5 runs)
+   back_to_routine_after_s            never
+   closest_approach_m                   12.64   range 12.30 to 12.90
+   distance_m                           43.86   range 43.70 to 43.90
+   found_shooter_after_s                14.78   range 13.30 to 17.40
+   hostile                               1.00   range 1.00 to 1.00
+   in_line_of_sight                      0.00   range 0.00 to 0.00
+   leader_moved_after_s                  1.16   range 0.80 to 1.70
+== walk_up (5 runs)
+   hits_next_10s                        11.20   range 4.00 to 21.00
+   hostile                               1.00   range 1.00 to 1.00
+   hostile_distance_m                   11.80   range 9.80 to 14.20
+   hostile_to_first_shot_s               0.75   range 0.75 to 0.75
+   rounds_next_10s                      17.60   range 8.00 to 30.00
+   warn_after_s                         10.04   range 9.70 to 10.50
+   warn_distance_m                      15.74   range 14.70 to 16.70
+   warn_to_hostile_s                     1.80   range 1.80 to 1.80
+   warned                                1.00   range 1.00 to 1.00

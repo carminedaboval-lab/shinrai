@@ -50,6 +50,15 @@ var search_focus:=Vector3.ZERO
 var routine: String=""
 var last_seen_height:=1.2
 var fleeing:=false
+# Seconds this scav has wanted to shoot at a visible enemy while something close (usually
+# their own cover) blocked the rifle. The planner moves them when it adds up.
+var lane_blocked_time:=0.0
+# A shooter who was just in the fight picks the target up again faster than a first sighting.
+const REACQUIRE_SECONDS: float=.15
+const REACQUIRE_WINDOW: float=8.0
+var _since_combat:=999.0
+# Pause between bursts at a close, visible target; longer shots keep the slower rhythm.
+const CLOSE_FIGHT_RANGE: float=30.0
 var _escape_path:=PackedVector3Array()
 var _escape_index:=0
 
@@ -88,6 +97,7 @@ func _physics_process(delta: float) -> void:
 	_report_delay=maxf(0.0,_report_delay-delta)
 	pinned_time=maxf(0.0,pinned_time-delta)
 	suppression=maxf(0.0,suppression-SUPPRESSION_DECAY*delta)
+	_since_combat=0.0 if state==AIState.COMBAT else _since_combat+delta
 	super._physics_process(delta)
 
 func _update_perception(target_visible: bool, delta: float) -> void:
@@ -95,6 +105,7 @@ func _update_perception(target_visible: bool, delta: float) -> void:
 	# Concealment affects initial social notice as well as combat confirmation.
 	notice_exposure=clampf(notice_exposure+delta*visibility_notice_rate if target_visible else notice_exposure-delta*1.25,0.0,NOTICE_CONFIRM_SECONDS)
 	personal_visible_for=personal_visible_for+delta if target_visible else 0.0
+	if not target_visible: lane_blocked_time=0.0
 	var confirmed: bool=target_visible and (notice_exposure>=NOTICE_CONFIRM_SECONDS or (is_instance_valid(squad) and squad.hostile))
 	super._update_perception(confirmed,delta)
 	var new_sighting: bool=confirmed and own_visual_time>.3
@@ -132,10 +143,15 @@ func _update_state(delta: float, target_visible: bool) -> void:
 			break
 		return
 	if is_instance_valid(squad) and squad.get("hostile")!=null and not squad.hostile:
-		_set_crouch(false)
+		# Shots in the distance: stop, get low and watch that way until it stays quiet.
+		var guarding: bool=not target_visible and squad.has_method("on_guard") and squad.on_guard()
+		_set_crouch(guarding)
 		if target_visible:
 			desired_velocity_xz=Vector3.ZERO
 			_face_point(target.global_position,delta,8.0)
+		elif guarding:
+			desired_velocity_xz=Vector3.ZERO
+			_face_point(squad.guard_point,delta,5.0)
 		elif state==AIState.SEARCH: _state_search(delta,false)
 		elif squad.get("activity")!=null: squad.activity.perform(self,delta)
 		else: _state_patrol(delta,false)
@@ -146,7 +162,7 @@ func _update_state(delta: float, target_visible: bool) -> void:
 			# Team intelligence can guide movement, never confirm a personal shot.
 			if target_visible and state!=AIState.COMBAT:
 				sight_confirm_time+=delta*visibility_notice_rate
-				if sight_confirm_time>=ALERT_CONFIRM_TIME: _enter_state(AIState.COMBAT)
+				if sight_confirm_time>=(REACQUIRE_SECONDS if _since_combat<REACQUIRE_WINDOW else ALERT_CONFIRM_TIME): _enter_state(AIState.COMBAT)
 			elif not target_visible:
 				sight_confirm_time=0.0
 				if time_since_seen>LOST_SIGHT_GRACE and state!=AIState.SEARCH: _enter_state(AIState.SEARCH)
@@ -212,7 +228,8 @@ func _can_see_target() -> bool:
 	if is_instance_valid(squad) and squad.hostile:
 		var known_contact: bool=last_seen_valid and time_since_seen<=14.0
 		if not known_contact and squad.tactics!=null:
-			known_contact=not squad.tactics.contact(self).is_empty()
+			# A crew hunting for someone it lost is still looking hard.
+			known_contact=not squad.tactics.contact(self).is_empty() or squad.tactics.hunting()
 		if known_contact: sight_range=HUMAN_COMBAT_RANGE
 	if offset.length()>sight_range or offset.length()<.01: return false
 	visibility_notice_rate=1.0
@@ -266,7 +283,16 @@ func _move_toward_path(destination: Vector3,speed: float,delta: float) -> void:
 func _apply_movement(delta: float) -> void:
 	# Local separation complements the real body capsules; walls still block motion.
 	if is_instance_valid(squad) and desired_velocity_xz.length_squared()>.01:
-		desired_velocity_xz+=squad.separation(self)
+		var push: Vector3=squad.separation(self)
+		var wish: Vector3=desired_velocity_xz
+		if push.length_squared()>.0025 and wish.normalized().dot(push.normalized())<-.3:
+			# A crewmate is standing in the way (kneeling to shoot, say): walk round them.
+			# Pushing straight back along the route just leaves both of them stuck.
+			var side:=Vector3(-wish.z,0,wish.x).normalized()
+			var lean: float=side.dot(push)
+			if lean<-.05 or (absf(lean)<=.05 and get_instance_id()%2==0): side=-side
+			desired_velocity_xz=wish*.35+side*wish.length()*.9
+		desired_velocity_xz+=push
 	var urgent:=_urgent_movement()
 	var can_catch_up:=false
 	if is_instance_valid(squad) and not squad.hostile and not crouching and routine.is_empty() and not busy_search and state!=AIState.SEARCH:
@@ -291,7 +317,9 @@ func hear_noise(point: Vector3, radius: float) -> void:
 	if dead or fleeing or global_position.distance_to(point)>radius: return
 	# Bounded uncertainty: repeated estimates of one sound stay within one
 	# five-metre search area rather than restarting at opposite square corners.
-	var estimate:=point+Vector3.RIGHT.rotated(Vector3.UP,randf_range(0.0,TAU))*randf_range(0.0,2.5)
+	# The further off a noise is, the rougher the guess at where it came from. The crew's
+	# shared estimate narrows again if more noise comes from the same place.
+	var estimate:=point+Vector3.RIGHT.rotated(Vector3.UP,randf_range(0.0,TAU))*randf_range(0.0,2.5+global_position.distance_to(point)*.12)
 	if is_instance_valid(squad): squad.tactics.report(self,estimate,"sound")
 	if state!=AIState.COMBAT: investigate(estimate)
 
@@ -336,7 +364,12 @@ func _shoot_at_player(distance: float) -> void:
 	var lane:=PhysicsRayQueryParameters3D.create(origin,chest,1|2)
 	lane.exclude=[get_rid()]
 	var obstruction:=get_world_3d().direct_space_state.intersect_ray(lane)
-	if not obstruction.is_empty() and obstruction.get("collider")!=target: return
+	if not obstruction.is_empty() and obstruction.get("collider")!=target:
+		# Seeing over cover is not shooting over it. Count it, so the planner finds a spot
+		# where the rifle clears instead of leaving them staring down a blocked barrel.
+		if origin.distance_to(obstruction.position)<3.0: lane_blocked_time+=get_physics_process_delta_time()
+		return
+	lane_blocked_time=0.0
 	# Short, imperfect bursts. The actual muzzle ray must hit the player to hurt them.
 	if _burst_left<=0: _burst_left=3
 	var spread:=aim_spread(distance)
@@ -349,7 +382,7 @@ func _shoot_at_player(distance: float) -> void:
 	var visible_end: Vector3=hit.get("position",end)
 	_show_tracer(origin,visible_end)
 	_burst_left-=1
-	attack_cooldown=.16 if _burst_left>0 else randf_range(1.5,2.2)
+	attack_cooldown=.16 if _burst_left>0 else randf_range(1.0,1.6) if distance<CLOSE_FIGHT_RANGE else randf_range(1.5,2.2)
 	muzzle_timer=.055
 	rounds_fired+=1
 	weapon_rounds-=1
