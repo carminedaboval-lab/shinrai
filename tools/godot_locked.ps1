@@ -1,7 +1,7 @@
 # Run one Godot command while holding the project-wide render lock
 # (same lock as tools/weapon_real/one_gun_locked.ps1) and with no other Godot running.
 #   powershell -File tools/godot_locked.ps1 -Out <log> -GodotArgs "--path . --script res://tests/x.gd -- --flag"
-param([string]$Out = "$env:TEMP\godot_locked.txt", [int]$TimeoutSec = 900, [string]$GodotArgs)
+param([string]$Out = "$env:TEMP\godot_locked.txt", [int]$TimeoutSec = 900, [string]$GodotArgs, [switch]$Play)
 $godot = "$env:USERPROFILE\OneDrive\Desktop\Godot_v4.7.2-stable_win64.exe"
 $root = (Resolve-Path "$PSScriptRoot\..").Path
 Set-Location $root
@@ -22,6 +22,13 @@ while ($null -eq $lock) {
 try {
     while (Get-Process -Name 'Godot*' -ErrorAction SilentlyContinue) { if ($waited % 60 -eq 0) { "another Godot is running; waiting ($waited s)" }; Start-Sleep 10; $waited += 10 }
     $p = Start-Process -FilePath $godot -ArgumentList $GodotArgs -NoNewWindow -PassThru -RedirectStandardOutput $Out -RedirectStandardError "$Out.err"
+    # A player may leave a quiet game open while watching a video. Only a test has
+    # an idle deadline. Keep the lock for the whole play session, at normal priority.
+    # Older desktop shortcuts requested a year-long timeout instead of passing -Play.
+    if ($Play -or ($TimeoutSec -eq 31536000 -and $GodotArgs -notmatch '(?:^|\s)--(?:script|headless)(?:\s|$)')) {
+        $p.WaitForExit()
+        return
+    }
     # Test boots run below normal priority so they take CPU only when the user's own apps are idle.
     try { $p.PriorityClass = 'BelowNormal' } catch {}
     # Hang watchdog: a Godot that uses no CPU and writes no output for 120 s is stuck
