@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=4 format=3]
+
+[ext_resource type="Shader" path="res://scripts/map1/map1_shop_paving.gdshader" id="1"]
+[ext_resource type="Texture2D" path="res://assets/environment/roads/shinrai_road/curb_drain/SHINRAI_CurbConcrete_Albedo_1K.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/environment/roads/shinrai_road/curb_drain/SHINRAI_CurbConcrete_ORM_1K.png" id="3"]
+
+[resource]
+shader = ExtResource("1")
+shader_parameter/surface_color = ExtResource("2")
+shader_parameter/surface_orm = ExtResource("3")
+shader_parameter/sample_metres = 1.35
+shader_parameter/color_gain = Vector3(1.17, 1.08, 0.96)
+shader_parameter/binder = Vector3(0.006, 0.006, 0.005)
+shader_parameter/patina_strength = 0.24
