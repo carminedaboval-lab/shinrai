@@ -106,6 +106,37 @@ var noses: Array[float] = []
 ## and out on this edge), "radius": to the kerb's face, "kerb": +1 or -1, the way along this
 ## edge that the nose's straight kerb and gutter lie from the middle}.
 var mouth_holes: Array = []
+## A nose shared by two lanes' sides (an island too narrow for two footways): its half circle's
+## radius, and how far its tip reaches past the last unit (the street it stands in: that
+## street's footway width). -1: half the footway, and the footway's width.
+var nose_radius := -1.0
+var nose_reach := -1.0
+## A kerb round a turning circle: the edge is a circle, not a line. Metres along are measured
+## round the kerb's face from `round_from` (radians, x towards z), metres out from the centre.
+var is_round := false
+var round_centre := Vector2.ZERO
+var round_from := 0.0
+## Where this side flares out into a turning circle: the straight kerb stops at `fillet_at`
+## (metres along) and turns on a curve of `fillet_r` through `fillet_angle` (radians) until it
+## meets the circle's kerb. -1: no flare.
+var fillet_at := -1.0
+var fillet_r := 0.0
+var fillet_angle := 0.0
+## The same curve where a street ends at a wider cross road that is not built (the shop row's
+## west end at the Outer ring): it turns a quarter round into the cross road's kerb line and
+## stops there, its end closed, with a patch of road out to the corner the two kerb lines make.
+var fillet_end := false
+## Where a footway ends at the road with nothing to turn into (the shop row's east end, at the
+## tram track): metres along its last stretch's end, which it is lowered to meet; -1: none.
+var low_end_at := -1.0
+## A patch of this street's road surface past its end, out to what lies beyond (world x, z): the
+## shop row's east end, up to the painted tram bed's edge. Laid by the side that lays the road.
+var end_patch: PackedVector2Array = []
+## Where the road's ribbon stops (a turning circle's own surface takes over), or -1.
+var ribbon_end := -1.0
+## Where a tram runs down the middle of the street: the road's surface leaves this far either
+## side of the centre line as it is (the rail bed). 0: none.
+var median := 0.0
 var _edge_line := true
 var _exact := false      # an edge between two built streets: laid for its whole length, no picture test
 var _cross_sign := 1.0      # each lowered kerb: from and to along the street, at its lowest
@@ -135,23 +166,28 @@ func lay(map: Node3D, edge: Dictionary, which_side: float) -> void:
 	for crossing: Dictionary in edge.get("crossings", []):
 		for entry: Dictionary in crossing.sides:
 			if is_equal_approx(float(entry.side), side): _crossings.append(Vector3(float(entry.from), float(entry.to), 1.0 if bool(entry.built) else 0.0))
-	if _exact:
-		# It runs from one built street's footway to the other's, whole units from its start.
-		runs.append(Vector2(0.0, float(count) * UNIT))
+	if _exact and _crossings.is_empty():
+		# It is laid for its whole length: whole units from its start, and a cut unit for what
+		# is left at its end.
+		runs.append(Vector2(0.0, length))
 		return
-	# Which units have ground, not road, behind them.
+	if _exact:
+		_lay_between_crossings(length)
+		return
+	# Which units have ground, not road, behind them. (A piece laid between built streets that
+	# a lower lane crosses: open all along but where the map says the lane crosses.)
 	var open: Array[bool] = []
 	for i: int in count:
 		var s := (float(i) + 0.5) * UNIT
 		# (The ground picture can lie up to a metre off a wide road's true edge: an even width
 		# falls between its pixels. So the nearer test stands 1.2 m out where the footway has room.)
-		open.append(not _behind(s))
+		open.append(true if _exact else not _behind(s))
 	# Road that reaches under three metres behind the footway is not a street: where one road
 	# starts from another the picture's paint pokes a little way past the far side. The kerb
 	# runs on past it.
 	var from_unit := -1
 	for i: int in count + 1:
-		var shut: bool = i < count and not open[i]
+		var shut: bool = i < count and not open[i] and not _exact
 		if shut and from_unit < 0: from_unit = i
 		elif not shut and from_unit >= 0:
 			var deep := false
@@ -173,6 +209,12 @@ func lay(map: Node3D, edge: Dictionary, which_side: float) -> void:
 			# One unit short of the road at each end; a stretch of under two metres is left out.
 			if i - first - 2 >= 4: runs.append(Vector2(float(first + 1) * UNIT, float(i - 1) * UNIT))
 			first = -1
+	# A piece laid between built streets runs to its own ends, not one unit short of them.
+	# (So does a street at an end where a piece carries it on: the shop row at its west end.)
+	if bool(edge.get("joined_start", false)) and not runs.is_empty() and open[0] and is_equal_approx(runs[0].x, UNIT): runs[0] = Vector2(0.0, runs[0].y)
+	if _exact and not runs.is_empty():
+		if open[0] and is_equal_approx(runs[0].x, UNIT): runs[0] = Vector2(0.0, runs[0].y)
+		if open[count - 1] and is_equal_approx(runs[runs.size() - 1].y, float(count - 1) * UNIT): runs[runs.size() - 1] = Vector2(runs[runs.size() - 1].x, length)
 	# Where a stretch ends at a side street's mouth, the kerb turns the corner into it: the
 	# stretch gives up one more unit, and a short cut unit and the curved pieces take its place.
 	for index: int in runs.size():
@@ -192,6 +234,39 @@ func lay(map: Node3D, edge: Dictionary, which_side: float) -> void:
 		runs[index] = run
 
 
+## A piece laid between built streets that lower lanes cross: a stretch of kerb between each
+## two crossings, however short (an island between two lanes), each end turning the corner into
+## the lane beside it; the corner's curve is smaller where the stretch is short.
+func _lay_between_crossings(length: float) -> void:
+	var crossings := _crossings.duplicate()
+	crossings.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.x < b.x)
+	var from := 0.0
+	var bounds: Array = []         # [start, end, the crossing before or null, the crossing after or null]
+	var before: Variant = null
+	for crossing: Vector3 in crossings:
+		if crossing.x > from + 0.05: bounds.append([from, crossing.x, before, crossing])
+		from = maxf(from, crossing.y)
+		before = crossing
+	if length > from + 0.05: bounds.append([from, length, before, null])
+	for bound: Array in bounds:
+		var a: float = bound[0]
+		var b: float = bound[1]
+		var turns := (1 if bound[2] != null else 0) + (1 if bound[3] != null else 0)
+		# (Between two lanes with too little room for two curves and a unit between them, there is
+		# no stretch: that is an island between the lanes, and its own rounded end meets the street.)
+		if turns == 2 and b - a < 2.0 * CORNER_R + UNIT: continue
+		# Room for the curve at each end turning into a lane: as much of CORNER_R as the stretch
+		# leaves, keeping at least a unit of straight kerb between two curves.
+		var take := minf(CORNER_R, maxf((b - a - UNIT) / maxf(float(turns), 1.0), 0.0)) if turns > 0 else 0.0
+		var run := Vector2(a + (take if bound[2] != null else 0.0), b - (take if bound[3] != null else 0.0))
+		if run.y - run.x < 0.05: continue
+		runs.append(run)
+		for pair: Array in [[bound[3], 1.0, run.y, b], [bound[2], -1.0, run.x, a]]:
+			if pair[0] == null: continue
+			var crossing: Vector3 = pair[0]
+			corners.append({"mouth": float(pair[3]), "dir": float(pair[1]), "from": float(pair[2]), "deep": 0.0 if crossing.z > 0.5 else MOUTH_DEEP})
+
+
 ## Is there road behind the kerb at s: a side street's mouth, a turning circle? Looked for
 ## a metre past the footway's back, where a side street's road is and a junction's own paint
 ## on the footway is not.
@@ -206,6 +281,7 @@ func _mouth(end: float, dir: float, length: float) -> float:
 	for crossing: Vector3 in _crossings:
 		var edge := crossing.x if dir > 0.0 else crossing.y
 		if (edge - end) * dir >= 0.0 and (edge - end) * dir <= 3.0: return edge
+	if _exact: return NAN      # (a piece laid between built streets: only the map's crossings, not the picture)
 	var mouth := NAN
 	var t := 0.0
 	while t <= 3.0:
@@ -231,9 +307,21 @@ func plot_gap(point: Vector3) -> float:
 	var out := out_of(point)
 	if out < half or out > half + footway_wide + 12.0: return INF
 	var s := along_of(point)
+	if not beside(point, s): return INF
 	for run: Vector2 in runs:
 		if s >= run.x and s <= run.y: return out - half - footway_wide
 	return INF
+
+
+## Whether a point is beside this edge at `s` (its nearest place on the centre line), not off past
+## one of its ends: along_of holds a point beyond an end at that end, and a lane's line, carried on
+## past its end, would otherwise answer for houses a hundred metres away.
+func beside(point: Vector3, s: float) -> bool:
+	if is_round: return true
+	var foot := at(s, 0.0)
+	var ahead := at(s + 0.01, 0.0) - foot
+	if ahead.length() < 1e-6: return true
+	return absf(Vector2(point.x - foot.x, point.z - foot.z).dot(Vector2(ahead.x, ahead.z).normalized())) < 0.2
 
 
 ## How far the paving stands above the ground at a point: the footway's height on the footway,
@@ -243,6 +331,7 @@ func lift_at(point: Vector3) -> float:
 	# (Only where there is a forecourt: on a homes street nothing of a house stands on the footway.)
 	if forecourt <= 0.0 or out < half or out > half + footway_wide + forecourt: return 0.0
 	var s := along_of(point)
+	if not beside(point, s): return 0.0
 	for run: Vector2 in runs:
 		if s < run.x or s > run.y: continue
 		if out <= half + footway_wide: return kerb_high(s)
@@ -309,7 +398,12 @@ func build(entrances: Array = [], with: Array = ["asphalt", "grate", "pole"]) ->
 		pole_out = half + KERB_WIDE + POLE_BEHIND_KERB
 	line_out = half - GUTTER_WIDE - LINE_GAP - LINE_WIDE * 0.5
 	for run: Vector2 in runs:
-		var n := int(round((run.y - run.x) / UNIT))
+		var n := int(floor((run.y - run.x) / UNIT + 0.001))
+		# (A stretch that is not a whole number of units ends in a cut one.)
+		var left := (run.y - run.x) - float(n) * UNIT
+		if left > 0.05:
+			_unit(look, run.x + float(n) * UNIT + JOINT * 0.5, run.y - JOINT * 0.5)
+			units += 1
 		for i: int in n:
 			var from := run.x + float(i) * UNIT
 			var inlet := grate_at >= 0.0 and absf(from - grate_at) < 0.01
@@ -326,6 +420,7 @@ func build(entrances: Array = [], with: Array = ["asphalt", "grate", "pole"]) ->
 	_cross_sign = signf(((ref_b if side < 0.0 else ref_c) - ref_a).cross((ref_c if side < 0.0 else ref_b) - ref_a).y)
 	for corner: Dictionary in corners: _corner(look, stand, corner)
 	for dir: float in noses: _nose(look, stand, dir)
+	if fillet_at >= 0.0: _fillet(look, stand)
 	if pole_at >= 0.0: _pole(look)
 	look.generate_normals()
 	var mesh := look.commit()
@@ -367,11 +462,17 @@ func build(entrances: Array = [], with: Array = ["asphalt", "grate", "pole"]) ->
 	_mouth_asphalt()
 	_edge_line = not with.has("no line")
 	if with.has("asphalt"): _asphalt()
+	if with.has("asphalt") and end_patch.size() >= 3: _end_patch_asphalt()
+	if fillet_end and fillet_at >= 0.0: _end_corner_asphalt()
 
 
 ## The point `s` metres along the street and `out` metres towards this edge's side, on the
 ## ground, `lift` above it.
 func at(s: float, out: float, lift := 0.0) -> Vector3:
+	if is_round:
+		var angle := round_from + s / half
+		var spot := round_centre + Vector2(cos(angle), sin(angle)) * out
+		return Vector3(spot.x, float(_map.ground_height(spot.x, spot.y)) + lift, spot.y)
 	var i := 0
 	while i < _lengths.size() - 2 and _lengths[i + 1] < s: i += 1
 	var a := _points[i]
@@ -384,6 +485,12 @@ func at(s: float, out: float, lift := 0.0) -> Vector3:
 ## How high the kerb stands above the road, `s` metres along: 13 cm, less at a lowered kerb.
 func kerb_high(s: float) -> float:
 	var ramp := float(RAMP_UNITS) * UNIT
+	# (A footway that ends where people step off onto the road: its last unit lies low, and the
+	# units before it slope down to it, the footway's top, its forecourt edge and what is stood on
+	# with them.)
+	if low_end_at >= 0.0 and s > low_end_at - UNIT - ramp:
+		if s >= low_end_at - UNIT: return DROP_HIGH
+		return lerpf(KERB_HIGH, DROP_HIGH, (s - (low_end_at - UNIT - ramp)) / ramp)
 	for drop: Vector2 in drops:
 		if s <= drop.x - ramp or s >= drop.y + ramp: continue
 		if s < drop.x: return lerpf(KERB_HIGH, DROP_HIGH, (s - (drop.x - ramp)) / ramp)
@@ -395,6 +502,7 @@ func kerb_high(s: float) -> float:
 ## How far along the street a point lies (the nearest place on its centre line).
 func along_of(point: Vector3) -> float:
 	var flat := Vector2(point.x, point.z)
+	if is_round: return wrapf(atan2(flat.y - round_centre.y, flat.x - round_centre.x) - round_from, 0.0, TAU) * half
 	var best := 0.0
 	var gap := INF
 	for i: int in _points.size() - 1:
@@ -411,6 +519,7 @@ func along_of(point: Vector3) -> float:
 ## How far out from the centre line a point lies, towards this edge's side (less than
 ## nothing on the other side).
 func out_of(point: Vector3) -> float:
+	if is_round: return Vector2(point.x, point.z).distance_to(round_centre)
 	var s := along_of(point)
 	var centre := at(s, 0.0)
 	var outward := at(s, 1.0) - centre
@@ -653,8 +762,9 @@ func _corner(look: SurfaceTool, stand: SurfaceTool, corner: Dictionary) -> void:
 func _nose(look: SurfaceTool, stand: SurfaceTool, dir: float) -> void:
 	if runs.is_empty(): return
 	var base: float = runs[0].x if dir < 0.0 else runs[runs.size() - 1].y
-	var radius := footway_wide * 0.5
-	var cs := base + dir * radius
+	var radius := nose_radius if nose_radius > 0.0 else footway_wide * 0.5
+	var reach := nose_reach if nose_reach > 0.0 else radius * 2.0
+	var cs := base + dir * (reach - radius)
 	var cout := half + radius
 	var back := half + footway_wide
 	var centre := Vector2(cs, cout)
@@ -684,6 +794,251 @@ func _nose(look: SurfaceTool, stand: SurfaceTool, dir: float) -> void:
 		var f1 := _round(cs, cout, dir, radius, a1)
 		_facing(stand, _high(centre), _high(f0), _high(f1), Vector3.UP)
 		_upright(stand, f0, f1, at(f0.x, f0.y) - at(cs, cout))
+
+
+## A dead end: the lane stops at the boundary of the plot beyond it, a rendered wall across
+## the carriageway and the footway, from the centre line to `reach` out, standing just past
+## the end (`dir` +1: past the end, -1: before the start).
+const END_WALL_THICK := 0.12
+const END_WALL_HIGH := 1.2
+const COPING_PROUD := 0.03
+const COPING_HIGH := 0.06
+const RENDER := Color(0.62, 0.61, 0.58)
+var end_walls := 0
+
+func end_wall(dir: float, reach: float) -> void:
+	if runs.is_empty(): return
+	var edge_s: float = runs[runs.size() - 1].y if dir > 0.0 else runs[0].x
+	var s0 := edge_s if dir > 0.0 else edge_s - END_WALL_THICK
+	var s1 := s0 + END_WALL_THICK
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	tool.set_smooth_group(-1)
+	var stand := SurfaceTool.new()
+	stand.begin(Mesh.PRIMITIVE_TRIANGLES)
+	tool.set_color(RENDER)
+	_solid(tool, stand, s0, s1, 0.0, reach, -FOOT, END_WALL_HIGH)
+	tool.set_color(RENDER.lightened(0.08))
+	_solid(tool, stand, s0 - COPING_PROUD, s1 + COPING_PROUD, 0.0, reach + COPING_PROUD, END_WALL_HIGH, END_WALL_HIGH + COPING_HIGH)
+	tool.generate_normals()
+	var material := StandardMaterial3D.new()
+	material.vertex_color_use_as_albedo = true
+	material.vertex_color_is_srgb = true
+	material.roughness = 0.94
+	var wall := MeshInstance3D.new()
+	wall.name = "EndWall%d" % end_walls
+	wall.mesh = tool.commit()
+	wall.material_override = material
+	add_child(wall)
+	var body := StaticBody3D.new()
+	body.name = "EndWallBody%d" % end_walls
+	var shape := CollisionShape3D.new()
+	shape.shape = stand.commit().create_trimesh_shape()
+	body.add_child(shape)
+	add_child(body)
+	end_walls += 1
+
+
+## A box between two places along (s), two out and two heights above the ground at the centre
+## line's end, every face turned outwards.
+func _solid(tool: SurfaceTool, stand: SurfaceTool, s0: float, s1: float, o0: float, o1: float, y0: float, y1: float) -> void:
+	var ground := at(s0, 0.0).y
+	var c: Array[Vector3] = []
+	for corner: Array in [[s0, o0, y0], [s1, o0, y0], [s1, o1, y0], [s0, o1, y0], [s0, o0, y1], [s1, o0, y1], [s1, o1, y1], [s0, o1, y1]]:
+		var p := at(float(corner[0]), float(corner[1]))
+		c.append(Vector3(p.x, ground + float(corner[2]), p.z))
+	var middle := Vector3.ZERO
+	for p: Vector3 in c: middle += p / 8.0
+	for face: Array in [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]:
+		var q: Array[Vector3] = [c[int(face[0])], c[int(face[1])], c[int(face[2])], c[int(face[3])]]
+		var toward := (q[0] + q[1] + q[2] + q[3]) / 4.0 - middle
+		for target: SurfaceTool in [tool, stand]:
+			_facing(target, q[0], q[1], q[2], toward)
+			_facing(target, q[0], q[2], q[3], toward)
+
+
+## The paving between this side's footway and another lane's, where the two lanes run so close
+## that the ground between them would be a trench: from `out0` to `out1` (metres out from the
+## centre line), `s0` to `s1` along. At footway height, with an upright face at each end.
+func infill(s0: float, s1: float, out0: float, out1: float) -> void:
+	var look := SurfaceTool.new()
+	look.begin(Mesh.PRIMITIVE_TRIANGLES)
+	look.set_smooth_group(-1)
+	var stand := SurfaceTool.new()
+	stand.begin(Mesh.PRIMITIVE_TRIANGLES)
+	look.set_color(FOOTWAY)
+	var steps := maxi(int(ceil((s1 - s0) / UNIT)), 1)
+	for i: int in steps:
+		var a := lerpf(s0, s1, float(i) / float(steps))
+		var b := lerpf(s0, s1, float(i + 1) / float(steps))
+		for tool: SurfaceTool in [look, stand]:
+			_facing(tool, _high(Vector2(a, out0)), _high(Vector2(a, out1)), _high(Vector2(b, out1)), Vector3.UP)
+			_facing(tool, _high(Vector2(a, out0)), _high(Vector2(b, out1)), _high(Vector2(b, out0)), Vector3.UP)
+	var forward := at(s1, out0) - at(s0, out0)
+	for tool: SurfaceTool in [look, stand]:
+		_upright(tool, Vector2(s0, out0), Vector2(s0, out1), -forward)
+		_upright(tool, Vector2(s1, out0), Vector2(s1, out1), forward)
+	look.generate_normals()
+	var material := StandardMaterial3D.new()
+	material.vertex_color_use_as_albedo = true
+	material.vertex_color_is_srgb = true
+	material.roughness = 0.92
+	var instance := MeshInstance3D.new()
+	instance.name = "Infill"
+	instance.mesh = look.commit()
+	instance.material_override = material
+	add_child(instance)
+	var body := StaticBody3D.new()
+	body.name = "InfillBody"
+	var shape := CollisionShape3D.new()
+	shape.shape = stand.commit().create_trimesh_shape()
+	body.add_child(shape)
+	add_child(body)
+
+
+## Makes this edge the kerb round a turning circle: centre, the kerb face's radius, from one
+## angle round to the other (radians, increasing), and the footway's width outside it.
+func make_round(map: Node3D, centre: Vector2, kerb_r: float, from_angle: float, to_angle: float, footway: float) -> void:
+	_map = map
+	is_round = true
+	side = -1.0      # (metres out grow away from the centre: faces are turned as on the -1 side of a line)
+	half = kerb_r
+	footway_wide = footway
+	round_centre = centre
+	round_from = from_angle
+	runs.append(Vector2(0.0, (to_angle - from_angle) * kerb_r))
+
+
+func fillet_pieces() -> int:
+	return maxi(int(ceil(fillet_r * fillet_angle / 0.5)), 3)
+
+
+func fillet_point(radius: float, angle: float) -> Vector2:
+	return _round(fillet_at, half + fillet_r, 1.0, radius, angle)
+
+
+## The flare from the straight kerb into a turning circle's: a curve of fillet_r with the road
+## round its outside and the footway inside it, as wide as the straight footway, so its back
+## runs smoothly from the straight footway's back to the circle's.
+func _fillet(look: SurfaceTool, stand: SurfaceTool) -> void:
+	var centre := Vector2(fillet_at, half + fillet_r)
+	var pieces := fillet_pieces()
+	var joint := JOINT * 0.5 / fillet_r
+	for k: int in pieces:
+		var a0 := fillet_angle * float(k) / float(pieces)
+		var a1 := fillet_angle * float(k + 1) / float(pieces)
+		_piece(look,
+			func(inward: float) -> Vector2: return fillet_point(fillet_r - inward, a0 + joint),
+			func(inward: float) -> Vector2: return fillet_point(fillet_r - inward, a1 - joint))
+		_foot_quad(look, fillet_point(fillet_r - KERB_WIDE, a0), fillet_point(fillet_r - footway_wide, a0), fillet_point(fillet_r - footway_wide, a1), fillet_point(fillet_r - KERB_WIDE, a1))
+		var f0 := fillet_point(fillet_r, a0)
+		var f1 := fillet_point(fillet_r, a1)
+		var b0 := fillet_point(fillet_r - footway_wide, a0)
+		var b1 := fillet_point(fillet_r - footway_wide, a1)
+		_facing(stand, _high(f0), _high(b0), _high(b1), Vector3.UP)
+		_facing(stand, _high(f0), _high(b1), _high(f1), Vector3.UP)
+		_upright(stand, f0, f1, at(f0.x, f0.y) - at(centre.x, centre.y))
+		look.set_color(FOOTWAY)
+		_upright(look, b0, b1, at(centre.x, centre.y) - at(b0.x, b0.y))
+		_upright(stand, b0, b1, at(centre.x, centre.y) - at(b0.x, b0.y))
+	# (At a street's own end the footway stops with the kerb: its end face, toward the cross road.)
+	if fillet_end:
+		var i0 := fillet_point(fillet_r - KERB_WIDE, fillet_angle)
+		var o0 := fillet_point(fillet_r - footway_wide, fillet_angle)
+		var onward := at(o0.x, o0.y + 1.0) - at(o0.x, o0.y)
+		look.set_color(FOOTWAY)
+		_upright(look, i0, o0, onward)
+		_upright(stand, fillet_point(fillet_r, fillet_angle), o0, onward)
+
+
+## The road's surface past the street's end, over `end_patch` (an outline in the world), on the
+## ground as the ribbon is, in this street's own metres so its grain carries on from the ribbon's.
+func _end_patch_asphalt() -> void:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners := Geometry2D.triangulate_polygon(end_patch)
+	# (Its metres along run on past the end in a straight line: along_of stops at the end, and
+	# would stretch the grain into streaks.)
+	var last := _points[_points.size() - 1]
+	var ahead := (last - _points[_points.size() - 2]).normalized()
+	var across := Vector2(-ahead.y, ahead.x) * side
+	var length := _lengths[_lengths.size() - 1]
+	for i: int in range(0, corners.size(), 3):
+		var order: Array[Vector2] = [end_patch[corners[i]], end_patch[corners[i + 1]], end_patch[corners[i + 2]]]
+		# (Turned to face up: clockwise seen from above, where +z is down the screen.)
+		if (order[1] - order[0]).cross(order[2] - order[0]) < 0.0: order = [order[0], order[2], order[1]]
+		for point: Vector2 in order:
+			tool.set_uv(Vector2((point - last).dot(across), length + (point - last).dot(ahead)))
+			tool.add_vertex(Vector3(point.x, float(_map.ground_height(point.x, point.y)) + ASPHALT_LIFT, point.y))
+	tool.generate_normals()
+	var instance := MeshInstance3D.new()
+	instance.name = "EndAsphalt"
+	instance.mesh = tool.commit()
+	var plain: ShaderMaterial = ASPHALT.duplicate()
+	plain.set_shader_parameter("edge_line_offset", 1000.0)
+	instance.material_override = plain
+	add_child(instance)
+
+
+## The road between an end corner's curve and the corner its two kerb lines would make: a fan
+## from that corner (at the gutter's outer edge) round to the gutter's outer edge on the curve.
+## The cross road's own painted surface lies beyond it.
+func _end_corner_asphalt() -> void:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var sharp := Vector2(fillet_at + fillet_r + GUTTER_WIDE, half - GUTTER_WIDE)
+	var pieces := fillet_pieces()
+	for k: int in pieces:
+		var p0 := fillet_point(fillet_r + GUTTER_WIDE, fillet_angle * float(k) / float(pieces))
+		var p1 := fillet_point(fillet_r + GUTTER_WIDE, fillet_angle * float(k + 1) / float(pieces))
+		var order: Array[Vector2] = [sharp, p0, p1]
+		var a := at(sharp.x, sharp.y)
+		# (Turned to face up as the footway's own top is: see _facing.)
+		if (at(p0.x, p0.y) - a).cross(at(p1.x, p1.y) - a).y * _cross_sign < 0.0: order = [sharp, p1, p0]
+		for point: Vector2 in order:
+			tool.set_uv(Vector2(point.y, point.x))
+			tool.add_vertex(at(point.x, point.y, ASPHALT_LIFT))
+	tool.generate_normals()
+	var instance := MeshInstance3D.new()
+	instance.name = "CornerAsphalt"
+	instance.mesh = tool.commit()
+	var plain: ShaderMaterial = ASPHALT.duplicate()
+	plain.set_shader_parameter("edge_line_offset", 1000.0)
+	instance.material_override = plain
+	add_child(instance)
+
+
+## The road's surface over a turning circle: a fan from its centre to the outline that runs
+## along the outer edge of every cast gutter piece round it (given in the world), and across
+## the street where this side's ribbon stops. Grain in this side's own metres, so it carries on
+## from the ribbon's.
+func circle_asphalt(outline: PackedVector3Array, centre: Vector3) -> void:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var origin := at(0.0, 0.0)
+	var heading := (at(1.0, 0.0) - origin).normalized()
+	var outward := (at(0.0, 1.0) - origin).normalized()
+	var points: Array[Vector3] = []
+	for p: Vector3 in outline: points.append(Vector3(p.x, float(_map.ground_height(p.x, p.z)) + ASPHALT_LIFT, p.z))
+	var middle := Vector3(centre.x, float(_map.ground_height(centre.x, centre.z)) + ASPHALT_LIFT, centre.z)
+	for i: int in points.size():
+		var a := points[i]
+		var b := points[(i + 1) % points.size()]
+		var tri: Array[Vector3] = [middle, a, b]
+		# (Godot's front faces wind clockwise seen from above.)
+		if (a - middle).cross(b - middle).y > 0.0: tri = [middle, b, a]
+		for p: Vector3 in tri:
+			var flat := p - origin
+			tool.set_uv(Vector2(flat.dot(outward), flat.dot(heading)))
+			tool.add_vertex(p)
+	tool.generate_normals()
+	var no_line: ShaderMaterial = ASPHALT.duplicate()
+	no_line.set_shader_parameter("edge_line_offset", 1000.0)
+	var instance := MeshInstance3D.new()
+	instance.name = "CircleAsphalt"
+	instance.mesh = tool.commit()
+	instance.material_override = no_line
+	add_child(instance)
 
 
 ## One piece of a paved top on its own surface. Each corner: metres along, metres out, height.
@@ -866,6 +1221,16 @@ func mouth_zones() -> Array[Vector2]:
 		for run: Vector2 in runs:
 			if run.x > float(a.from) - 0.01 and run.y < float(best.from) + 0.01: between = true
 		if not between: zones.append(Vector2(float(a.from), float(best.from)))
+	# A mouth with a corner on one side only (the other side of the lane has no footway to turn
+	# onto): its other edge is the lane's own, from the map's line.
+	for corner: Dictionary in corners:
+		var from := float(corner.from)
+		if float(corner.dir) > 0.0 and not zones.any(func(z: Vector2) -> bool: return is_equal_approx(z.x, from)):
+			for crossing: Vector3 in _crossings:
+				if is_equal_approx(crossing.x, float(corner.mouth)): zones.append(Vector2(from, crossing.y))
+		if float(corner.dir) < 0.0 and not zones.any(func(z: Vector2) -> bool: return is_equal_approx(z.y, from)):
+			for crossing: Vector3 in _crossings:
+				if is_equal_approx(crossing.y, float(corner.mouth)): zones.append(Vector2(crossing.x, from))
 	return zones
 
 
@@ -884,11 +1249,14 @@ func _mouth_asphalt() -> void:
 		for corner: Dictionary in corners:
 			if is_equal_approx(float(corner.from), zone.x) and float(corner.dir) > 0.0: a = corner
 			if is_equal_approx(float(corner.from), zone.y) and float(corner.dir) < 0.0: b = corner
-		if a.is_empty() or b.is_empty(): continue
-		var pair: Array = [a, b]
+		if a.is_empty() and b.is_empty(): continue
+		var pair: Array = []
+		for corner: Dictionary in [a, b]:
+			if not corner.is_empty(): pair.append(corner)
 		# (Where the side street is built too, this surface stops at the footway's back, where
 		# that street's own begins.)
-		var far := back + minf(float(a.get("deep", MOUTH_DEEP)), float(b.get("deep", MOUTH_DEEP)))
+		var far := back + MOUTH_DEEP
+		for corner: Dictionary in pair: far = minf(far, back + float(corner.get("deep", MOUTH_DEEP)))
 		# Fine steps round the curves, coarse ones across the open mouth.
 		var cuts: Array[float] = []
 		var s := zone.x
@@ -992,7 +1360,7 @@ func _hole_span(s: float) -> Vector2:
 				break
 		# On the kerb's side of the middle, and under the footway, the nose runs on behind. Past
 		# the footway's bare back the half circle's gutter ends square at the middle's line.
-		var under := offset * float(hole.kerb) > -float(hole.radius)
+		var under := offset * float(hole.kerb) > -float(hole.radius) or bool(hole.get("closed", false))
 		return Vector2(float(hole.out) - reach, INF if under else float(hole.out))
 	return Vector2(INF, INF)
 
@@ -1042,7 +1410,9 @@ func _road_shape(tool: SurfaceTool, corners_of: Array) -> void:
 ## beside the gutter along each built stretch and none across a side street's mouth.
 func _asphalt() -> void:
 	var length := _lengths[_lengths.size() - 1]
-	var marks: Array[float] = [0.0]
+	var own := length       # (the street's own length: an end corner's ribbon runs on past it)
+	if ribbon_end >= 0.0: length = ribbon_end if fillet_end else minf(length, ribbon_end)
+	var marks: Array[float] = [0.0, own]
 	for run: Vector2 in runs: marks.append_array([run.x, run.y])
 	for run: Vector2 in opposite_runs: marks.append_array([run.x, run.y])
 	var zones := mouth_zones()
@@ -1056,8 +1426,10 @@ func _asphalt() -> void:
 	plain.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var any_plain := false
 	for i: int in marks.size() - 1:
-		var s0 := marks[i]
-		var s1 := marks[i + 1]
+		# (Only over the street's own length: a run may reach past an end, towards an island's
+		# nose in another street's mouth, where that street's surface lies.)
+		var s0 := clampf(marks[i], 0.0, length)
+		var s1 := clampf(marks[i + 1], 0.0, length)
 		if s1 - s0 < 0.01: continue
 		var middle := (s0 + s1) * 0.5
 		var built := _in_gutter_run(middle, runs)
@@ -1067,13 +1439,19 @@ func _asphalt() -> void:
 		# (And to the gutter line across a side street's mouth: the mouth's own surface starts there.)
 		var edge := (half - GUTTER_WIDE) if (built or _in_gutter_run(middle, zones)) else half
 		var opposite := -half + GUTTER_WIDE if (_in_gutter_run(middle, opposite_runs) or _in_gutter_run(middle, opposite_zones)) else -half
-		var across: Array[float] = [opposite, -half * 0.5, 0.0, half * 0.5, edge]
+		# (Past an end corner's start, out to the cross road's kerb line: between the two curves'
+		# gutters, each side's own patch filling from its gutter round to the corner.)
+		if fillet_end and middle > own:
+			edge = half - GUTTER_WIDE
+			opposite = -half + GUTTER_WIDE
+		var strips: Array = [[opposite, -half * 0.5, 0.0, half * 0.5, edge]] if median <= 0.0 else [[opposite, -median], [median, edge]]
 		var steps := maxi(int(ceil((s1 - s0) / 1.25)), 1)
 		for step: int in steps:
 			var a := lerpf(s0, s1, float(step) / float(steps))
 			var b := lerpf(s0, s1, float(step + 1) / float(steps))
-			for column: int in across.size() - 1:
-				_road_quad(tool, a, b, across[column], across[column + 1])
+			for across: Array in strips:
+				for column: int in across.size() - 1:
+					_road_quad(tool, a, b, float(across[column]), float(across[column + 1]))
 	var mesh := ArrayMesh.new()
 	lined.generate_normals()
 	lined.commit(mesh)

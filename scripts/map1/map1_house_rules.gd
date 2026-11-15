@@ -92,7 +92,14 @@ static func _plot_gap(world: Object, frame: Transform3D, wide: float) -> float:
 	var map: Object = world.get("map")
 	if map == null or not map.has_method("footway_gap"): return INF
 	var gap := INF
-	for x: float in [-0.75, wide * 0.5, wide + 0.75]: gap = minf(gap, float(map.footway_gap(frame * Vector3(x, 0.0, 0.0))))
+	# Also a little ahead of the front, towards the street, taking off how far ahead: on a
+	# straight footway square to the house that comes to the same, but where the footway curves
+	# (round a turning circle) or the house stands turned to it, the garden's front corners
+	# come nearer the footway than the house's own front does.
+	for x: float in [-0.75, wide * 0.25, wide * 0.5, wide * 0.75, wide + 0.75]:
+		for ahead: float in [0.0, 1.0, 2.0]:
+			var g := float(map.footway_gap(frame * Vector3(x, 0.0, -ahead)))
+			if g < INF: gap = minf(gap, g + ahead)
 	return gap
 
 

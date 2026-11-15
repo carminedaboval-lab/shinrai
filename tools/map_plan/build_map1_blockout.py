@@ -59,9 +59,24 @@ GROUND = {
 ASPHALT = (60, 60, 62)
 STREET = (74, 74, 76)
 STREET_TRIAL = (112.0, 447.0)   # the homes street that gets the first real kerb (ROAD-002)
-LINK_LANE = (90.9, 430.0)      # the lane that joins the koban lane to the trial homes street
+HOMES_BLOCK = (40.0, 400.0, 180.0, 525.0)   # x from, z from, x to, z to: every lane in here gets a real edge
+EAST_LANES = (240.0, 395.0, 400.0, 530.0)   # east of the turning circle: a square grid of lanes, from clear of the tram street to clear of the collector at x 410
+# Junctions where several streets share one space, left as the painted road for now (agreed with
+# Codex, 2026-11-14): the detailed kerbs stop on clear approaches round them.
+DEFERRED_JUNCTIONS = [
+    {"name": "tram fork", "x": 191.0, "z": 490.0, "why": "Tram street south turns north-east and lane z 496.5 goes straight on east from inside it"},
+    {"name": "diagonal at lane z 466 and lane x 224", "x": 220.0, "z": 463.0, "why": "both lanes meet the diagonal tram street within its footway zone, 7 m apart, and cross each other there"},
+]
+DIAGONAL_PILOT = (200.0, 452.0, 232.0, 481.5)   # where Tram street south runs diagonally: the first lanes that meet a street at an angle
+NORTH_OF_KOBAN = (40.0, 330.0, 215.0, 400.0)  # north of the koban lane, to clear of the tram street's north-south stretch (west footway back x 221)
+KOBAN_EAST = (180.0, 400.0, 215.0, 425.0)     # and lane x 188.7's last stretch, so it meets the koban lane on the map's lines
+# (The diagonal pilot is left out until the compound junction there is designed: see road-discussion.md, 2026-11-14 evening.)
+BLOCKS = (HOMES_BLOCK, EAST_LANES, NORTH_OF_KOBAN, KOBAN_EAST)
+TRAM_SOUTH = (120.0, 490.0)    # Tram street, south: the wide street across the south of the homes block
 KOBAN_LANE = (96.0, 412.0)     # the lane north of the trial street, with the police box and the cafe terrace
 SHOP_ROW = (-340.0, -447.0)    # the wide road in front of the shop row: the first wide road with a real kerb
+RING_KERB_X = -468.0          # the Outer ring's east kerb as painted where the shop row meets it
+SHOP_WEST_CORNER_R = 5.5      # the shop row's corners into the Outer ring
 SHOP_ROW_SPAN = (-440.0, -230.0)   # only this stretch of it, by x: past the T-junction with Tram street, west (x -263 to -249), so the kerb can turn that corner
 SIDEWALK = (148, 146, 140)
 LANE = (98, 92, 80)
@@ -964,6 +979,89 @@ def draw_overview(post_list, crossings=()):
     return sheet
 
 
+def tram_bed_patch(ground, part, wide):
+    """The road's surface past the shop row's east end, out to the painted tram bed (agreed with
+    Codex, 2026-11-14): the tram loop comes in across the row's north footway and runs on down the
+    middle of the road, so the asphalt's end follows the bed's west edge as painted (what the player
+    sees) instead of stopping square across the road; across the lane beside the bed, where nothing
+    stands in the way, it stops square, level with the bed's corner. An outline in the world (x, z)
+    from the road's north edge round to its south edge, or [] if no bed lies within 15 m."""
+    (x0, z0), (x1, z1) = part[-2], part[-1]
+    if abs(z1 - z0) > 0.01 or x1 <= x0:
+        return []                               # (worked out for a road running due east only)
+    north, south = z1 - wide * 0.5, z1 + wide * 0.5
+    edge = []                                   # (x where the bed begins, top of the pixel row, bottom of it)
+    for row in range(int(math.floor(north)), int(math.ceil(south))):
+        for x in range(int(math.floor(x1)), int(math.floor(x1)) + 15):
+            if ground.getpixel((x - X0, row - Z0)) == RAIL_BED:
+                edge.append((x, row, row + 1))
+                break
+    if len(edge) < 2:
+        return []
+    # (The pixels make a staircase: the edge as seen is the straight line through the middle of
+    # each step, from the first row the bed is in to the road's far edge.)
+    (xf, rf, _), (xl, rl, _) = edge[0], edge[-1]
+    slope = (xl - xf) / float(rl - rf)          # metres in x per metre in z
+    corner = [xf + slope * (rf - (rf + 0.5)), float(rf)]
+    far = [xl + slope * (south - (rl + 0.5)), south]
+    outline = [[x1, north], [corner[0], north], corner, far, [x1, south]]
+    return [[round(x, 2), round(z, 2)] for x, z in outline]
+
+
+HOUSE_CLEAR = 0.3      # how far a trimmed house's face stands behind a built street's footway
+
+
+def trim_houses_off_streets(boxes, street_edges):
+    """A house laid out against the ground picture can stand a little into a built street: the
+    picture's road is up to a metre off the true edge, and an older house may predate the street's
+    final width. Such a house gives up depth on its street side, so its face stands HOUSE_CLEAR
+    behind the footway (or the kerb, where the side has none). Its back stays where it was."""
+    for edge in street_edges:
+        pts = edge["points"]
+        fw = edge.get("footway")
+        for index, b in enumerate(boxes):
+            if not str(b[7]).startswith("house") or b[3] < 3.0 or b[5] < 3.0: continue
+            if min(math.hypot(b[0] - x, b[2] - z) for x, z in pts) > 40.0: continue
+            a = math.radians(b[6])
+            ca, sa = math.cos(a), math.sin(a)
+            axes = ((ca, -sa), (sa, ca))          # the box's own x and z directions on the ground
+            worst = None                          # (metres to give up, which axis, toward + or -)
+            for lx in (-0.5, 0.0, 0.5):
+                for lz in (-0.5, 0.0, 0.5):
+                    if lx == 0.0 and lz == 0.0: continue
+                    px = b[0] + lx * b[3] * ca + lz * b[5] * sa
+                    pz = b[2] - lx * b[3] * sa + lz * b[5] * ca
+                    for j in range(len(pts) - 1):
+                        (ax, az), (bx, bz) = pts[j], pts[j + 1]
+                        length = math.hypot(bx - ax, bz - az)
+                        if length < 1e-6: continue
+                        ux, uz = (bx - ax) / length, (bz - az) / length
+                        t = (px - ax) * ux + (pz - az) * uz
+                        # (Beside the edge only: not off past an end, nor in its first or last metre.)
+                        if t < 0.0 or t > length or (j == 0 and t < 1.0) or (j == len(pts) - 2 and t > length - 1.0): continue
+                        signed = (px - ax) * -uz + (pz - az) * ux
+                        wide = float(fw[0] if signed > 0.0 else fw[1]) if fw else float(edge["pavement"])
+                        short = edge["w"] * 0.5 + wide + HOUSE_CLEAR - abs(signed)
+                        if short <= HOUSE_CLEAR + 0.05: continue      # (not into the footway itself)
+                        away = (-uz * math.copysign(1.0, signed), ux * math.copysign(1.0, signed))
+                        axis = max((0, 1), key=lambda k: abs(axes[k][0] * away[0] + axes[k][1] * away[1]))
+                        lean = axes[axis][0] * away[0] + axes[axis][1] * away[1]
+                        need = short / max(abs(lean), 0.5)
+                        if worst is None or need > worst[0]: worst = (need, axis, 1.0 if lean > 0.0 else -1.0)
+            if worst is None: continue
+            need, axis, toward = worst
+            size = 3 if axis == 0 else 5
+            if b[size] - need < 3.0:
+                print("  house box %d stands %.2f m into %s and is too shallow to trim: left as it is" % (index, need, edge["name"]))
+                continue
+            # The face toward the street moves back by `need`: the box is that much shallower and its
+            # middle moves half of it away from the street (toward is the side that stays).
+            b[size] = round(b[size] - need, 3)
+            b[0] = round(b[0] + axes[axis][0] * toward * need * 0.5, 3)
+            b[2] = round(b[2] + axes[axis][1] * toward * need * 0.5, 3)
+            print("  house box %d trimmed %.2f m off its side on %s" % (index, need, edge["name"]))
+
+
 def main():
     global TERRAIN
     TERRAIN = terrain.Terrain(sys.modules[__name__])
@@ -1029,7 +1127,7 @@ def main():
             return min(math.hypot(x - STREET_TRIAL[0], z - STREET_TRIAL[1]) for x, z in street["path"].pts)
         trial = min(town, key=gap)
         street_edges.append({"name": "homes street trial", "cls": trial["cls"], "w": trial["w"], "pavement": city_fabric.PAVEMENT[trial["cls"]],
-                             "points": [[round(x, 2), round(z, 2)] for x, z in trial["path"].pts]})
+                             "points": [[round(float(x), 4), round(float(z), 4)] for x, z in trial["path"].pts]})
     # The lane with the police box and the café terrace (Codex's koban lane), under the name
     # the game already looks for, with the street's true width and footway.
     if town:
@@ -1039,7 +1137,7 @@ def main():
         print("koban lane: class %s, width %.2f, pavement %.2f, from %s to %s, nearest %.1f m from the chosen spot" % (
             lane["cls"], lane["w"], city_fabric.PAVEMENT[lane["cls"]], lane["path"].pts[0], lane["path"].pts[-1], gap_koban(lane)))
         street_edges.append({"name": "koban lane", "cls": lane["cls"], "w": lane["w"], "pavement": city_fabric.PAVEMENT[lane["cls"]],
-                             "points": [[round(x, 2), round(z, 2)] for x, z in lane["path"].pts]})
+                             "points": [[round(float(x), 4), round(float(z), 4)] for x, z in lane["path"].pts]})
     # The first wide road: the stretch in front of the shop row (boxes 171 to 193), chosen
     # with Codex 2026-11-14. Only the part of the road between the two x values is exported.
     wide = [s for s in getattr(module, "town_streets", []) if s["cls"] in ("ring", "grid", "arterial", "collector")]
@@ -1051,68 +1149,384 @@ def main():
         print("shop row road: class %s, width %.2f, pavement %.2f, %d points of %d, nearest %.1f m from the chosen spot" % (
             road["cls"], road["w"], city_fabric.PAVEMENT[road["cls"]], len(part), len(road["path"].pts), gap_row(road)))
         if len(part) >= 2:
-            street_edges.append({"name": "shop row", "cls": road["cls"], "w": road["w"], "pavement": city_fabric.PAVEMENT[road["cls"]], "points": part})
-    # The lane that joins the koban lane to the trial homes street (agreed with Codex,
-    # 2026-11-14): exported between the two streets' footway backs, with its true line, and
-    # each of the two streets is told exactly where it crosses. The ground picture is drawn up
-    # to half a metre off a street's true edge, so two kerbs that must meet take the map's own
-    # lines, not the picture's.
+            # (Its west end carries on as "shop row west", so its kerb runs to its own first point.)
+            street_edges.append({"name": "shop row", "cls": road["cls"], "w": road["w"], "pavement": city_fabric.PAVEMENT[road["cls"]], "points": part,
+                                 "joined_start": True, "end_patch": tram_bed_patch(ground, part, road["w"])})
+            # The shop row carried on west to the Outer ring (agreed with Codex, 2026-11-14), as its
+            # own piece so the shop row's metres along stay as they are. It runs from the shop row's
+            # first point to where its corner curve starts, and its far end turns a quarter round
+            # into the ring's kerb line on both sides. The ring is 23 m wide here (its turn-lane
+            # approach) and painted to x = RING_KERB_X; a curve of SHOP_WEST_CORNER_R stays on the
+            # land side of the junction's own 3 m splay, so no footway covers its paint, and keeps the
+            # two signal posts at (-466.88, -457.84 / -438.16) on the footway, 0.4 m in from the kerb.
+            start = part[0]
+            end_x = RING_KERB_X + SHOP_WEST_CORNER_R
+            if start[0] > end_x + 1.0:
+                street_edges.append({"name": "shop row west", "cls": road["cls"], "w": road["w"], "pavement": city_fabric.PAVEMENT[road["cls"]],
+                                     "points": [[start[0], start[1]], [round(end_x, 2), start[1]]], "exact": True,
+                                     "footway": [city_fabric.PAVEMENT[road["cls"]]] * 2, "ends": ["on", "corner"],
+                                     "end_corner_r": SHOP_WEST_CORNER_R})
+    # The homes block (agreed with Codex, 2026-11-14): every lane with a part inside
+    # HOMES_BLOCK, laid in pieces between the two through streets (the koban lane and the
+    # trial homes street, which are wider and keep their kerb lines). Each through street is
+    # told exactly where each lane crosses it. The ground picture is drawn up to half a metre
+    # off a street's true edge, so kerbs that must meet take the map's own lines, not the
+    # picture's.
     if town and len(street_edges) >= 2:
         def straight(street):
             first, last = street["path"].pts[0], street["path"].pts[-1]
             length = math.hypot(last[0] - first[0], last[1] - first[1])
             along = ((last[0] - first[0]) / length, (last[1] - first[1]) / length)
-            return first, along, (-along[1], along[0]), last       # start, direction, the +1 side's direction, end
+            return first, along, (-along[1], along[0]), length       # start, direction, the +1 side's direction, length
 
         def cross2(u, v):
             return u[0] * v[1] - u[1] * v[0]
 
-        def gap_link(street):
-            return min(math.hypot(x - LINK_LANE[0], z - LINK_LANE[1]) for x, z in street["path"].pts)
-        link = min((s for s in town if s is not trial and s is not lane), key=gap_link)
-        l_start, l_dir, l_side, l_end = straight(link)
-        l_half = link["w"] * 0.5
-        ends = []
-        for entry, street in ((street_edges[1], lane), (street_edges[0], trial)):      # koban lane, then the trial street
-            r_start, r_dir, r_side, _ = straight(street)
-            r_half = street["w"] * 0.5
-            r_pave = city_fabric.PAVEMENT[street["cls"]]
-            # Where the link's middle line meets this street's middle line, as metres along the link.
-            t_mid = cross2((r_start[0] - l_start[0], r_start[1] - l_start[1]), r_dir) / cross2(l_dir, r_dir)
-            sides = []
-            for sign in (1.0, -1.0):
-                # Does the lane go on past this street's kerb on this side?
-                reach = max(((p[0] - r_start[0]) * r_side[0] + (p[1] - r_start[1]) * r_side[1]) * sign for p in (l_start, l_end))
-                if reach < r_half + 1.0:
+        through = [(street_edges[1], lane), (street_edges[0], trial)]      # the koban lane, the trial street
+        # And the wide street across the south of the block, its stretch inside the block. Where
+        # the tram runs down its middle (the rail bed painted there), the road is the two lanes
+        # either side of it and the bed is left as it is.
+        wide_streets = [s for s in getattr(module, "town_streets", []) if s["cls"] in ("ring", "grid", "arterial", "collector")]
+        if wide_streets:
+            tram = min(wide_streets, key=lambda s: min(math.hypot(x - TRAM_SOUTH[0], z - TRAM_SOUTH[1]) for x, z in s["path"].pts))
+            part = [[round(float(x), 4), round(float(z), 4)] for x, z in tram["path"].pts if HOMES_BLOCK[0] <= x <= HOMES_BLOCK[2] and HOMES_BLOCK[1] <= z <= HOMES_BLOCK[3]]
+            if len(part) >= 2:
+                middle = part[len(part) // 2]
+                bed = ground.getpixel((int(middle[0] - X0), int(middle[1] - Z0)))[:3] == RAIL_BED
+                tram_edge = {"name": "tram street south", "cls": tram["cls"], "w": tram["w"], "pavement": city_fabric.PAVEMENT[tram["cls"]],
+                             "median": 3.0 if bed else 0.0, "points": [part[0], part[-1]]}
+                street_edges.append(tram_edge)
+                # (As a straight line between the stretch's ends, for the crossings below.)
+                class _Line:
+                    def __init__(self, a, b): self.pts = [tuple(a), tuple(b)]
+                through.append((tram_edge, {"path": _Line(part[0], part[-1]), "w": tram["w"], "cls": tram["cls"]}))
+                # Its diagonal stretch, from the bend to where it turns north, as a street of its own
+                # for now (the bend itself is not built yet).
+                diag = [[round(float(x), 4), round(float(z), 4)] for x, z in tram["path"].pts
+                        if DIAGONAL_PILOT[0] <= x <= DIAGONAL_PILOT[2] and DIAGONAL_PILOT[1] <= z <= DIAGONAL_PILOT[3]]
+                if len(diag) >= 2 and DIAGONAL_PILOT in BLOCKS:
+                    middle = diag[len(diag) // 2]
+                    bed = ground.getpixel((int(middle[0] - X0), int(middle[1] - Z0)))[:3] == RAIL_BED
+                    diag_edge = {"name": "tram street diagonal", "cls": tram["cls"], "w": tram["w"], "pavement": city_fabric.PAVEMENT[tram["cls"]],
+                                 "median": 3.0 if bed else 0.0, "points": [diag[0], diag[-1]]}
+                    street_edges.append(diag_edge)
+                    through.append((diag_edge, {"path": _Line(diag[0], diag[-1]), "w": tram["w"], "cls": tram["cls"]}))
+        for entry, _ in through:
+            entry["crossings"] = []
+        def block_of(street):
+            """The block a lane is laid in: the one holding most of its points (None if none)."""
+            counts = [sum(1 for x, z in street["path"].pts if box[0] <= x <= box[2] and box[1] <= z <= box[3]) for box in BLOCKS]
+            return BLOCKS[counts.index(max(counts))] if max(counts) > 0 else None
+
+        def in_blocks(x, z):
+            return any(box[0] <= x <= box[2] and box[1] <= z <= box[3] for box in BLOCKS)
+
+        lanes = [s for s in town if s is not trial and s is not lane and s["cls"] == "local" and block_of(s) is not None]
+        # Two lanes the generator laid on one line, overlapping (centre lines within 0.3 m, parallel,
+        # at the same level): one route. Laid as one lane over both extents, at the narrower width,
+        # so a stretch already built at that width is unchanged; the wider one's extra painted road
+        # lies under its footway. (Agreed with Codex, 2026-11-14.)
+        class _Merged:
+            def __init__(self, a, b): self.pts = [tuple(a), tuple(b)]
+        merged_any = True
+        while merged_any:
+            merged_any = False
+            for i in range(len(lanes)):
+                for j in range(i + 1, len(lanes)):
+                    a_start, a_dir, a_side, a_len = straight(lanes[i])
+                    b_start, b_dir, b_side, b_len = straight(lanes[j])
+                    if abs(cross2(a_dir, b_dir)) > 0.01:
+                        continue
+                    if abs((b_start[0] - a_start[0]) * a_side[0] + (b_start[1] - a_start[1]) * a_side[1]) > 0.3:
+                        continue
+                    ta = [0.0, a_len]
+                    tb = sorted(((b_start[0] - a_start[0]) * a_dir[0] + (b_start[1] - a_start[1]) * a_dir[1] + k * b_len * (a_dir[0] * b_dir[0] + a_dir[1] * b_dir[1]) for k in (0.0, 1.0)))
+                    if tb[0] >= ta[1] - 0.5 or tb[1] <= ta[0] + 0.5:
+                        continue
+                    narrow = lanes[i] if lanes[i]["w"] <= lanes[j]["w"] else lanes[j]
+                    # (On the narrower lane's own line, out over both extents.)
+                    n_start, n_dir, n_side, n_len = straight(narrow)
+                    ends = [((p[0] - n_start[0]) * n_dir[0] + (p[1] - n_start[1]) * n_dir[1]) for s in (lanes[i], lanes[j]) for p in (s["path"].pts[0], s["path"].pts[-1])]
+                    lo, hi = min(ends), max(ends)
+                    joined = dict(narrow)
+                    joined["path"] = _Merged((n_start[0] + n_dir[0] * lo, n_start[1] + n_dir[1] * lo), (n_start[0] + n_dir[0] * hi, n_start[1] + n_dir[1] * hi))
+                    print("lanes on one line merged: x %.2f z %.2f to x %.2f z %.2f, width %.2f (the other was %.2f)" % (
+                        joined["path"].pts[0][0], joined["path"].pts[0][1], joined["path"].pts[1][0], joined["path"].pts[1][1], narrow["w"], (lanes[j] if narrow is lanes[i] else lanes[i])["w"]))
+                    lanes = [s for k, s in enumerate(lanes) if k not in (i, j)] + [joined]
+                    merged_any = True
+                    break
+                if merged_any:
+                    break
+        lanes.sort(key=lambda s: (float(s["path"].pts[0][0]), float(s["path"].pts[0][1])))
+        all_streets = getattr(module, "town_streets", [])
+
+        def rank(street):
+            """Which of two streets runs through where they cross: the wider; for equal widths the
+            longer (as the generator made it, before any block cut it); then the generator's
+            own order, so neighbouring blocks always agree."""
+            index = next((n for n, s in enumerate(all_streets) if s is street), 0)
+            return (round(float(street["w"]), 3), round(float(straight(street)[3]), 3), -index)
+
+        # Pass 1: every lane is cut where a higher-ranked street crosses it. Each crossing is
+        # recorded on the street that runs through: a whole street''s export entry, or a lane.
+        lane_crossings = {id(one): [] for one in lanes}       # (from, to, side dict, label), metres along the lane
+        plans = []
+        crossers = [(entry, street) for entry, street in through] + [(None, other) for other in lanes]
+        for one in lanes:
+            l_start, l_dir, l_side, l_len = straight(one)
+            l_half = one["w"] * 0.5
+            # The part of the lane inside the blocks, as metres along it: across the seam where two
+            # blocks meet, so a lane is laid on continuously from one into the next.
+            ranges = []
+            for block in BLOCKS:
+                r0, r1 = 0.0, l_len
+                for axis, low, high in ((0, block[0], block[2]), (1, block[1], block[3])):
+                    if abs(l_dir[axis]) > 1e-9:
+                        a, b = sorted(((low - l_start[axis]) / l_dir[axis], (high - l_start[axis]) / l_dir[axis]))
+                        r0, r1 = max(r0, a), min(r1, b)
+                    elif not (low <= l_start[axis] <= high):
+                        r0, r1 = 1.0, 0.0
+                if r1 > r0:
+                    ranges.append([r0, r1])
+            ranges.sort()
+            joined_ranges = []
+            for r in ranges:
+                if joined_ranges and r[0] <= joined_ranges[-1][1] + 0.5:
+                    joined_ranges[-1][1] = max(joined_ranges[-1][1], r[1])
+                else:
+                    joined_ranges.append(r)
+            t0, t1 = max(joined_ranges, key=lambda r: r[1] - r[0])
+            # Each higher-ranked street it crosses: where, and the lane''s metres at that street''s two footway backs.
+            marks = []
+            for entry, street in crossers:
+                if street is one or (entry is None and rank(street) <= rank(one)):
                     continue
-                # The lane's two edge lines cut this street's kerb line here (metres along this street).
-                cuts = []
-                for edge in (1.0, -1.0):
-                    d = (l_start[0] + l_side[0] * edge * l_half - r_start[0] - r_side[0] * sign * r_half,
-                         l_start[1] + l_side[1] * edge * l_half - r_start[1] - r_side[1] * sign * r_half)
-                    cuts.append(cross2(d, l_dir) / cross2(r_dir, l_dir))
-                # Is the built part of the lane on this side? (It is the side towards the other street.)
-                other_start = straight(trial if street is lane else lane)[0]
-                built = ((other_start[0] - r_start[0]) * r_side[0] + (other_start[1] - r_start[1]) * r_side[1]) * sign > 0.0
-                sides.append({"side": sign, "from": round(float(min(cuts)), 3), "to": round(float(max(cuts)), 3), "built": bool(built)})
-                if built:
-                    # The link runs from this street's footway back on that side.
+                r_start, r_dir, r_side, r_len = straight(street)
+                r_half = street["w"] * 0.5
+                r_pave = city_fabric.PAVEMENT[street["cls"]]
+                turn = cross2(l_dir, r_dir)
+                if abs(turn) < 1e-6:
+                    continue
+                gap_ = (r_start[0] - l_start[0], r_start[1] - l_start[1])
+                t_mid = cross2(gap_, r_dir) / turn
+                s_mid = cross2(gap_, l_dir) / turn
+                # (A lane may begin inside the street it meets, as the generator draws them: its start
+                # is within that street's half width, measured along the lane.)
+                reach_in = (r_half + r_pave + 1.0) / max(abs(turn), 0.2)
+                if not (0.0 <= s_mid <= r_len and t0 - reach_in <= t_mid <= t1 + reach_in):
+                    continue
+                # (A lane that runs through is crossed only where both lie inside the block.)
+                if entry is None:
+                    px, pz = r_start[0] + r_dir[0] * s_mid, r_start[1] + r_dir[1] * s_mid
+                    if not in_blocks(px, pz):
+                        continue
+                sides = []
+                for sign in (1.0, -1.0):
+                    # Does the lane go on past this street''s kerb on this side?
+                    reach = max(((p[0] - r_start[0]) * r_side[0] + (p[1] - r_start[1]) * r_side[1]) * sign
+                                for p in (l_start, (l_start[0] + l_dir[0] * l_len, l_start[1] + l_dir[1] * l_len)))
+                    if reach < r_half + 1.0:
+                        continue
+                    # The lane''s two edge lines cut this street''s kerb line here (metres along this street).
+                    cuts = []
+                    for edge in (1.0, -1.0):
+                        d = (l_start[0] + l_side[0] * edge * l_half - r_start[0] - r_side[0] * sign * r_half,
+                             l_start[1] + l_side[1] * edge * l_half - r_start[1] - r_side[1] * sign * r_half)
+                        cuts.append(cross2(d, l_dir) / cross2(r_dir, l_dir))
                     d = (r_start[0] + r_side[0] * sign * (r_half + r_pave) - l_start[0], r_start[1] + r_side[1] * sign * (r_half + r_pave) - l_start[1])
-                    ends.append(cross2(d, r_dir) / cross2(l_dir, r_dir))
-            entry["crossings"] = [{"with": "homes link lane", "sides": sides}]
-        if len(ends) == 2:
-            ends.sort()
-            street_edges.append({"name": "homes link lane", "cls": link["cls"], "w": link["w"], "pavement": city_fabric.PAVEMENT[link["cls"]], "exact": True,
-                                 "points": [[round(float(l_start[0] + l_dir[0] * t), 3), round(float(l_start[1] + l_dir[1] * t), 3)] for t in ends]})
-            print("homes link lane: width %.2f, from %s to %s (%.2f m); crossings: %s" % (link["w"], street_edges[-1]["points"][0], street_edges[-1]["points"][1], ends[1] - ends[0],
-                  "; ".join("%s %s" % (e["name"], e.get("crossings")) for e in street_edges[:2])))
+                    back_t = float(cross2(d, r_dir) / turn)
+                    # Where each of the lane's two kerb lines meets this street's footway back line,
+                    # from where its centre line does (0 where they cross square), and which way the
+                    # lane runs from here: where they cross at an angle, the kerbs start at different
+                    # places and the corners turn through different angles.
+                    offsets = {}
+                    for edge in (1.0, -1.0):
+                        d2 = (d[0] - l_side[0] * edge * l_half, d[1] - l_side[1] * edge * l_half)
+                        offsets[edge] = float(cross2(d2, r_dir) / turn) - back_t
+                    away = 1.0 if back_t > t_mid else -1.0
+                    sides.append({"side": sign, "from": round(float(min(cuts)), 4), "to": round(float(max(cuts)), 4), "built": False, "_back": back_t,
+                                  "lane_dir": [round(float(l_dir[0] * away), 6), round(float(l_dir[1] * away), 6)],
+                                  "_offsets": offsets, "_line": [round(float(r_dir[0]), 6), round(float(r_dir[1]), 6)]})
+                if sides:
+                    marks.append((float(t_mid), entry, sides, street))
+            marks.sort(key=lambda mark: mark[0])
+            plans.append((one, l_start, l_dir, l_side, l_len, l_half, t0, t1, marks))
+            for t_mid, entry, sides, street in marks:
+                if entry is None:
+                    for side in sides:
+                        lane_crossings[id(street)].append((side["from"], side["to"], side, "lane at x %.2f" % float(l_start[0])))
+
+        # Pass 2: each lane''s pieces, with their footways measured, and the crossings of lower lanes
+        # that fall inside a piece handed to that piece in its own metres.
+        laid = []
+        for (one, l_start, l_dir, l_side, l_len, l_half, t0, t1, marks) in plans:
+            # The pieces: from the lane''s start (or the block''s edge) to the first street''s footway
+            # back, between two streets'' backs, and from the last one''s to the lane''s end.
+            at, at_kind, at_side = t0, ("dead" if t0 <= 1e-6 else "cut"), None
+            spans = []
+            for t_mid, entry, sides, street in marks:
+                before = [s for s in sides if s["_back"] < t_mid]
+                after = [s for s in sides if s["_back"] > t_mid]
+                if before and at is not None:
+                    spans.append((at, before[0]["_back"], at_kind, "joined", at_side, before[0]))
+                at, at_kind, at_side = (after[0]["_back"], "joined", after[0]) if after else (None, None, None)
+            if at is not None:
+                spans.append((at, t1, at_kind, ("dead" if t1 >= l_len - 1e-6 else "cut"), at_side, None))
+            x_here = float(l_start[0])
+            pave = city_fabric.PAVEMENT[one["cls"]]
+            mine = lane_crossings[id(one)]
+
+            def room_at(t, sign):
+                """How far behind the kerb''s face the nearest building stands on one side, at
+                metres `t` along the lane (looked at 25 cm either way along it), up to the
+                pavement''s width and a little more."""
+                for o10 in range(0, int((pave + 0.1) * 20) + 1):
+                    o = o10 * 0.05
+                    for dt in (-0.25, 0.0, 0.25):
+                        x = l_start[0] + l_dir[0] * (t + dt) + l_side[0] * sign * (l_half + o)
+                        z = l_start[1] + l_dir[1] * (t + dt) + l_side[1] * sign * (l_half + o)
+                        for q in near_boxes:
+                            ang = math.radians(q[6])
+                            dx, dz = x - q[0], z - q[2]
+                            lx = dx * math.cos(ang) - dz * math.sin(ang)
+                            lz = dx * math.sin(ang) + dz * math.cos(ang)
+                            if abs(lx) <= q[3] * 0.5 and abs(lz) <= q[5] * 0.5:
+                                return o
+                return 99.0
+
+            def width_for(room):
+                """The footway a side has room for: the full pavement, a narrow one past a house that
+                stands close, or the kerb alone. (Three widths only: a real pavement does not step
+                in and out by ten centimetres from house to house.)"""
+                if room >= pave + 0.05:
+                    return pave
+                if room >= 0.95:
+                    return 0.9
+                return 0.14
+
+            pieces = []
+            for span_number, (a, b, kind_a, kind_b, side_a, side_b) in enumerate(spans):
+                if b - a < 1.2:
+                    continue
+                lo_x, hi_x = sorted((l_start[0] + l_dir[0] * a, l_start[0] + l_dir[0] * b))
+                lo_z, hi_z = sorted((l_start[1] + l_dir[1] * a, l_start[1] + l_dir[1] * b))
+                near_boxes = [q for q in boxes if q[3] >= 3.0 and q[5] >= 3.0 and lo_x - 15 <= q[0] <= hi_x + 15 and lo_z - 15 <= q[2] <= hi_z + 15]
+                # Each side''s footway, metre by metre; the lane is cut into pieces where it changes,
+                # so a footway runs where there is room and stops at a building that stands at the kerb.
+                # (Not inside a crossing of a lower lane, where the corners decide.)
+                stations = []
+                t = a
+                while t < b:
+                    widths = (width_for(room_at(t + 0.25, 1.0)), width_for(room_at(t + 0.25, -1.0)))
+                    if stations and any(c[0] - 1.0 - pave <= t <= c[1] + 1.0 + pave for c in mine):
+                        widths = stations[-1][1]
+                    stations.append((t, widths))
+                    t += 0.5
+                # And where a lane running alongside within reach starts or ends: the ground between the
+                # two is an island only where both run, so the piece is cut there too.
+                forced = []
+                for other in lanes:
+                    if other is one:
+                        continue
+                    o_start, o_dir, o_side, o_len = straight(other)
+                    if abs(cross2(l_dir, o_dir)) > 0.01:
+                        continue
+                    apart = abs((o_start[0] - l_start[0]) * l_side[0] + (o_start[1] - l_start[1]) * l_side[1])
+                    if apart > (one["w"] + other["w"]) * 0.5 + 2.0 * pave + 0.5 or apart < 0.3:
+                        continue
+                    for p in (o_start, (o_start[0] + o_dir[0] * o_len, o_start[1] + o_dir[1] * o_len)):
+                        f = (p[0] - l_start[0]) * l_dir[0] + (p[1] - l_start[1]) * l_dir[1]
+                        if a + 0.6 < f < b - 0.6:
+                            forced.append(f)
+                forced.sort()
+                cuts = [[a, stations[0][1]]]
+                previous = a
+                for t, widths in stations[1:]:
+                    for f in forced:
+                        if previous < f <= t and f - cuts[-1][0] >= 0.6:
+                            cuts.append([f, widths])
+                    if widths != cuts[-1][1]:
+                        cuts.append([t, widths])
+                    previous = t
+                # A piece under 1.2 m long takes the narrower of its own and its neighbour''s.
+                merged = []
+                for c in cuts:
+                    if merged and (c[0] - merged[-1][0] < 1.2) and not any(abs(c[0] - f) < 0.01 for f in forced):
+                        merged[-1][1] = (min(merged[-1][1][0], c[1][0]), min(merged[-1][1][1], c[1][1]))
+                    else:
+                        merged.append([c[0], c[1]])
+                if len(merged) > 1 and b - merged[-1][0] < 1.2:
+                    last = merged.pop()
+                    merged[-1][1] = (min(merged[-1][1][0], last[1][0]), min(merged[-1][1][1], last[1][1]))
+                for n, (c0, widths) in enumerate(merged):
+                    c1 = merged[n + 1][0] if n + 1 < len(merged) else b
+                    pieces.append((c0, c1, kind_a if n == 0 else "on", kind_b if n == len(merged) - 1 else "on",
+                                   side_a if n == 0 else None, side_b if n == len(merged) - 1 else None, widths, span_number, n,
+                                   kind_a == "joined" and kind_b == "joined"))
+            for (a, b, kind_a, kind_b, side_a, side_b, widths, number, sub, between) in pieces:
+                link = between
+                if b - a < 1.2:
+                    continue
+                for side in (side_a, side_b):
+                    if side is not None:
+                        side["built"] = True
+                # (Named by where it runs: a lane running north and south by its x, one running east and west by its z.)
+                where = ("%d" % round(x_here)) if abs(l_dir[1]) >= abs(l_dir[0]) else ("z%d" % round(float(l_start[1])))
+                name = "homes link lane" if (abs(x_here - 90.86) < 0.5 and link) else "homes lane %s %s" % (where, "abcdefgh"[number])
+                if sub > 0:
+                    name += " %d" % (sub + 1)
+                piece = {"name": name, "cls": one["cls"], "w": one["w"], "pavement": city_fabric.PAVEMENT[one["cls"]], "exact": True, "ends": [kind_a, kind_b], "footway": [widths[0], widths[1]],
+                         "points": [[round(float(l_start[0] + l_dir[0] * t), 4), round(float(l_start[1] + l_dir[1] * t), 4)] for t in (a, b)]}
+                # Where a piece meets a street at an angle: how far each side's kerb starts or ends
+                # from the piece's own end, and the direction of that street's footway back line there.
+                ends_info = []
+                for side in (side_a, side_b):
+                    if side is not None and any(abs(v) > 0.02 for v in side["_offsets"].values()):
+                        ends_info.append({"offsets": [round(side["_offsets"][1.0], 4), round(side["_offsets"][-1.0], 4)], "line": side["_line"]})
+                    else:
+                        ends_info.append(None)
+                if any(e is not None for e in ends_info):
+                    piece["angled_ends"] = ends_info
+                # Lower lanes that cross this piece: where, in this piece''s own metres.
+                own = [c for c in mine if a + 0.5 <= c[0] and c[1] <= b - 0.5]
+                if own:
+                    groups = {}
+                    for c in own:
+                        groups.setdefault(c[3], []).append({"side": c[2]["side"], "from": round(c[0] - a, 4), "to": round(c[1] - a, 4), "built": c[2]})
+                    piece["crossings"] = [{"with": label, "sides": sides} for label, sides in groups.items()]
+                laid.append(piece)
+            for t_mid, entry, sides, street in marks:
+                if entry is not None:
+                    entry["crossings"].append({"with": "lane at x %.2f" % x_here, "sides": sides})
+        # The "built" of a lane''s crossing is the lower lane''s own side record: read it now that every
+        # piece is laid, and drop the working values.
+        for piece in laid:
+            for crossing in piece.get("crossings", []):
+                for side in crossing["sides"]:
+                    side["built"] = bool(side["built"]["built"])
+        for entry, _ in through:
+            for crossing in entry["crossings"]:
+                for side in crossing["sides"]:
+                    side.pop("_back", None)
+                    side.pop("_offsets", None)
+                    side.pop("_line", None)
+        for piece in laid:
+            for crossing in piece.get("crossings", []):
+                for side in crossing["sides"]:
+                    for key in ("_back", "_offsets", "_line"):
+                        side.pop(key, None)
+        street_edges.extend(laid)
+        print("homes block: %d lanes in the block, %d pieces laid: %s" % (len(lanes), len(laid), "; ".join("%s %s to %s (%s)" % (e["name"], e["points"][0], e["points"][1], "/".join(e["ends"])) for e in laid)))
+        for entry, _ in through:
+            print("  %s is crossed at: %s" % (entry["name"], "; ".join("%s %s" % (c["with"], [(s["side"], s["from"], s["to"], s["built"]) for s in c["sides"]]) for c in entry["crossings"])))
+    trim_houses_off_streets(boxes, street_edges)
     data = {
         "about": "Generated by tools/map_plan/build_map1_blockout.py from data/map1/map1_plan.json. Do not edit by hand.",
         "frame": PLAN["frame"], "kinds": kinds,
         "height": {"file": "map1_height.bin", "cell": terrain.CELL, "columns": TERRAIN.columns, "rows": TERRAIN.rows},
         "boxes": [b[:7] + [kinds.index(b[7])] for b in boxes],
         "shapes": shapes, "trees": trees, "posts": post_list, "spaces": spaces, "junctions": junctions.export(crossings), "view_breakers": breakers, "encounters": meet,
-        "street_edges": street_edges, "businesses": trade["list"], "fuel_stations": getattr(module, "fuel_stations", []),
+        "street_edges": street_edges, "businesses": trade["list"], "fuel_stations": getattr(module, "fuel_stations", []), "deferred_junctions": DEFERRED_JUNCTIONS,
     }
     with open(os.path.join(OUT, "map1_blockout.json"), "w", encoding="utf-8") as handle:
         json.dump(data, handle, separators=(",", ":"))

@@ -1641,18 +1641,45 @@ func _businesses() -> void:
 		plain_shops += 1
 		if site.has("business") or site.features.has("business") or site.features.has("shop_front") or (site.spec as Dictionary).has("signs") or (site.spec as Dictionary).has("drums"): marked += 1
 	_check((compared >= 3 or moved == PLAIN_SHOPS.size()) and differ.is_empty() and plain_shops > 100 and marked == 0, "a shop-house with no business is as it was: %d sampled ones are described to the letter as before the trades were made (%d differ%s; %d left out, their box has moved), and none of all %d has a sign's words, a lantern or a trade (%d have)" % [compared, differ.size(), "" if differ.is_empty() else ": boxes " + str(differ), moved, plain_shops, marked])
-	# And a business changes nothing of the house but its front: the same rooms, doors, stair, windows and roof.
+	# And a business changes nothing of the house but its front: the same rooms, doors, stair,
+	# windows and roof. The one planned exception: a trade that hangs a noren has a sliding front
+	# door where the wall leaves it room (a hinged one would swing out through the cloth), so
+	# for those the front door may differ in how it opens and in nothing else. And a convenience
+	# store's ground floor is its shop, behind a glass front: its ground-floor front windows may
+	# differ and must include floor-length glass a metre wide or more; every other window is
+	# compared exactly.
 	var replanned := 0
 	var planning_differs := 0
+	var noren_doors := 0
+	var differing: Array[String] = []
+	var glass_fronts := 0
 	for what: String in sample_of:
 		var dressed: Dictionary = sample_of[what]
 		var bare := _plan_as(int(dressed.index), "")
 		replanned += 1
+		var noren := (Dress.TRADES.get(what, {}) as Dictionary).has("noren")
 		for key: String in ["size", "floors", "partitions", "doors", "windows", "steps", "roof", "stair", "upper", "low", "recess", "loot", "gutter", "foundation"]:
-			if var_to_str((dressed.spec as Dictionary).get(key)) != var_to_str((bare.spec as Dictionary).get(key)):
+			var mine: Variant = (dressed.spec as Dictionary).get(key)
+			var theirs: Variant = (bare.spec as Dictionary).get(key)
+			if key == "doors" and noren:
+				mine = (mine as Array).duplicate(true)
+				theirs = (theirs as Array).duplicate(true)
+				if str((mine[0] as Dictionary).get("kind", "")) != str((theirs[0] as Dictionary).get("kind", "")): noren_doors += 1
+				for door: Dictionary in [mine[0], theirs[0]]:
+					door.erase("kind")
+					door.erase("style")
+			if key == "windows" and what == "convenience store":
+				var front_glass := (mine as Array).filter(func(w: Dictionary) -> bool: return int(w.floor) == 0 and str(w.wall) == "front")
+				# (Another room on the same wall, a bathroom say, may keep its small high window.)
+				if front_glass.any(func(w: Dictionary) -> bool: return float(w.sill) == 0.0 and float(w.width) >= 1.0): glass_fronts += 1
+				else: differing.append("convenience store: no glass front")
+				mine = (mine as Array).filter(func(w: Dictionary) -> bool: return not (int(w.floor) == 0 and str(w.wall) == "front"))
+				theirs = (theirs as Array).filter(func(w: Dictionary) -> bool: return not (int(w.floor) == 0 and str(w.wall) == "front"))
+			if var_to_str(mine) != var_to_str(theirs):
 				planning_differs += 1
+				differing.append("%s: %s" % [what, key])
 				break
-	_check(replanned == Dress.TRADES.size() and planning_differs == 0, "one shop of each trade planned again with its business taken away: the same rooms, doors, stair, windows, steps and roof in all %d (%d differ); only the front's fittings, signs and paint are the trade's" % [replanned, planning_differs])
+	_check(replanned == Dress.TRADES.size() and planning_differs == 0 and glass_fronts == (1 if sample_of.has("convenience store") else 0), "one shop of each trade planned again with its business taken away: the same rooms, doors, stair, windows, steps and roof in all %d (%d differ); only the front's fittings, signs and paint are the trade's, and on %d noren trades the front door slides, and %d convenience store has a glass front of floor-length windows%s" % [replanned, planning_differs, noren_doors, glass_fronts, "" if differing.is_empty() else " (" + ", ".join(differing) + ")"])
 
 	# The same picture both ways, and the same two draw calls: one shop of each trade built as
 	# the outside-only house and as the full one.

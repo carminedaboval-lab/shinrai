@@ -19,6 +19,8 @@ const ShopRowBoards := preload("res://scripts/map1/map1_shop_row_boards.gd")
 const Fuel := preload("res://scripts/map1/map1_fuel.gd")
 const CarPark := preload("res://scripts/map1/map1_car_park.gd")
 const Plaza := preload("res://scripts/map1/map1_plaza.gd")
+const CurveMirrors := preload("res://scripts/map1/map1_curve_mirrors.gd")
+var curve_mirrors: Node3D
 const Street := preload("res://scripts/map1/map1_street.gd")
 ## The trial street edge is built on one side only: +1 is the south side of the homes street,
 ## the right-hand side in the modern_street picture.
@@ -112,6 +114,7 @@ func _ready() -> void:
 	CarPark.install(self)      # the ground of a coin car park in a gap of a shop row
 	Plaza.install(self)        # the paving and tree pits of a plaza along a built road
 	if with_world: ShopRowBoards.install(self)
+	curve_mirrors = CurveMirrors.install(self)   # at blind lane corners, clear of gates and lowered kerbs
 	if with_player: _spawn_player()
 	report = {"boxes": (data.boxes as Array).size(), "trees": (data.trees as Array).size(), "build_ms": Time.get_ticks_msec() - started}
 	print("MAP1_BLOCKOUT ", JSON.stringify(report))
@@ -246,9 +249,25 @@ func _lay_street_edges() -> void:
 				street.name = "ShopRowEdge" if side == STREET_TRIAL_SIDE else "ShopRowEdgeOther"
 			elif edge.name == "homes link lane":
 				street.name = "LinkLaneEdge" if side == STREET_TRIAL_SIDE else "LinkLaneEdgeOther"
+			elif edge.name == "tram street south":
+				street.name = "TramSouthEdge" if side == STREET_TRIAL_SIDE else "TramSouthEdgeOther"
+			elif bool(edge.get("exact", false)):
+				street.name = "%s%s" % [str(edge.name).capitalize().replace(" ", ""), "Edge" if side == STREET_TRIAL_SIDE else "EdgeOther"]
 			add_child(street)
 			street.lay(self, edge, side)
 			street.set_meta("edge", edge)
+			street.median = float(edge.get("median", 0.0))
+			# A lane has a footway only where there is room for one: where a building stands
+			# nearer its kerb than the footway is wide, the footway is as wide as the room, and
+			# under 60 cm of room that side has the kerb alone, as a narrow lane does.
+			# (Where the map has measured the room along the lane and cut it into pieces by it, that
+			# width is taken as it is.)
+			if bool(edge.get("exact", false)) and edge.has("footway"):
+				street.footway_wide = float((edge.footway as Array)[0 if side == STREET_TRIAL_SIDE else 1])
+			elif bool(edge.get("exact", false)):
+				var room := _room_behind(street)
+				if room < float(street.footway_wide) + 0.05:
+					street.footway_wide = (room - 0.05) if room - 0.05 >= 0.6 else Street.KERB_WIDE
 			if edge.name == "shop row":
 				street.forecourt = _forecourt_deep(street)
 				# Where a plaza lies behind this side, an apron falls from the footway to it.
@@ -258,11 +277,218 @@ func _lay_street_edges() -> void:
 				# Codex's paving materials for this road's footway and shop forecourt.
 				if ResourceLoader.exists("res://scripts/map1/map1_shop_footway.tres"): street.footway_material = load("res://scripts/map1/map1_shop_footway.tres")
 				if ResourceLoader.exists("res://scripts/map1/map1_shop_forecourt.tres"): street.forecourt_material = load("res://scripts/map1/map1_shop_forecourt.tres")
+				# Its east end (agreed with Codex, 2026-11-14): both footways come down to the road
+				# where people step off, by the tram track on one side and onto the painted pavement
+				# that carries on on the other; the road's surface runs on to the tram bed's edge.
+				if not street.runs.is_empty(): street.low_end_at = (street.runs[street.runs.size() - 1] as Vector2).y
+				for point: Array in edge.get("end_patch", []): street.end_patch.append(Vector2(float(point[0]), float(point[1])))
+			elif edge.name == "shop row west":
+				# The shop row carried on to the Outer ring: the same paving, no shops, so no forecourt.
+				if ResourceLoader.exists("res://scripts/map1/map1_shop_footway.tres"): street.footway_material = load("res://scripts/map1/map1_shop_footway.tres")
+			if edge.has("end_corner_r"):
+				# Its far end turns a quarter round into the cross road's kerb line and stops there.
+				var length := 0.0
+				for i: int in range(1, edge.points.size()):
+					length += Vector2(float(edge.points[i - 1][0]), float(edge.points[i - 1][1])).distance_to(Vector2(float(edge.points[i][0]), float(edge.points[i][1])))
+				street.fillet_at = length
+				street.fillet_r = float(edge.end_corner_r)
+				street.fillet_angle = PI * 0.5
+				street.fillet_end = true
+				# (The road's surface runs on to the cross road's kerb line, where its gutter's outer edge is.)
+				street.ribbon_end = length + street.fillet_r + Street.GUTTER_WIDE
 			street_edges.append(street)
 		var south: Node3D = street_edges[-2]
 		var north: Node3D = street_edges[-1]
 		south.opposite_runs = north.runs
 		south.opposite_zones = north.mouth_zones()
+		if edge.name == "homes street trial": _turning_circle(edge, south, north)
+	_islands()
+
+
+## Where a street ends in a turning circle (the map's space of that kind at its last point):
+## each side's straight kerb flares out on a curve into a kerb round the circle, with the
+## footway outside it.
+const CIRCLE_KERB_R := 9.0
+const CIRCLE_FLARE_R := 3.0
+var circle_edge: Node3D
+
+func _turning_circle(edge: Dictionary, first: Node3D, second: Node3D) -> void:
+	var last: Array = edge.points[edge.points.size() - 1]
+	var centre := Vector2(float(last[0]), float(last[1]))
+	var found := false
+	for space: Dictionary in data.get("spaces", []):
+		if str(space.kind) == "turning circle" and Vector2(float(space.x), float(space.z)).distance_to(centre) < 1.0: found = true
+	if not found: return
+	var length := 0.0
+	for i: int in range(1, edge.points.size()):
+		length += Vector2(float(edge.points[i - 1][0]), float(edge.points[i - 1][1])).distance_to(Vector2(float(edge.points[i][0]), float(edge.points[i][1])))
+	var angles: Array[float] = []
+	for street: Node3D in [first, second]:
+		var out_f := float(street.half) + CIRCLE_FLARE_R
+		var reach := sqrt(pow(CIRCLE_KERB_R + CIRCLE_FLARE_R, 2.0) - out_f * out_f)
+		street.fillet_at = length - reach
+		street.fillet_r = CIRCLE_FLARE_R
+		street.fillet_angle = acos(out_f / (CIRCLE_KERB_R + CIRCLE_FLARE_R))
+		var run: Vector2 = street.runs[street.runs.size() - 1]
+		street.runs[street.runs.size() - 1] = Vector2(run.x, minf(run.y, street.fillet_at))
+		street.fillet_at = street.runs[street.runs.size() - 1].y
+		street.ribbon_end = street.fillet_at
+		var meet: Vector2 = street.fillet_point(CIRCLE_FLARE_R, street.fillet_angle)
+		var world: Vector3 = street.at(meet.x, meet.y)
+		angles.append(atan2(world.z - centre.y, world.x - centre.x))
+	var from_angle := minf(angles[0], angles[1])
+	var to_angle := maxf(angles[0], angles[1])
+	# (Round the far side of the circle, away from the street.)
+	var towards := (centre - Vector2(float(edge.points[edge.points.size() - 2][0]), float(edge.points[edge.points.size() - 2][1]))).normalized()
+	var mid := (from_angle + to_angle) * 0.5
+	if Vector2(cos(mid), sin(mid)).dot(towards) < 0.0:
+		var keep := from_angle
+		from_angle = to_angle
+		to_angle = keep + TAU
+	var ring := Street.new()
+	ring.name = "TurningCircleEdge"
+	add_child(ring)
+	ring.make_round(self, centre, CIRCLE_KERB_R, from_angle, to_angle, float(first.footway_wide))
+	var room := _room_behind(ring)
+	if room < float(ring.footway_wide) + 0.05: ring.footway_wide = maxf(room - 0.05, Street.KERB_WIDE)
+	ring.set_meta("edge", {"name": "turning circle", "exact": false, "points": [[centre.x - 12.0, centre.y - 12.0], [centre.x + 12.0, centre.y + 12.0]]})
+	street_edges.append(ring)
+	circle_edge = ring
+
+
+## The circle's road surface, after both sides and the ring are built.
+func _circle_asphalt() -> void:
+	if circle_edge == null: return
+	var sides: Array[Node3D] = []
+	for street: Node3D in street_edges:
+		if float(street.fillet_at) >= 0.0: sides.append(street)
+	if sides.size() != 2: return
+	var lays: Node3D = sides[0] if sides[0].side == STREET_TRIAL_SIDE else sides[1]
+	var other: Node3D = sides[1] if lays == sides[0] else sides[0]
+	var g := Street.GUTTER_WIDE
+	var outline := PackedVector3Array()
+	# This side's flare, from the ribbon's end out to the circle.
+	for k: int in lays.fillet_pieces() + 1:
+		var p: Vector2 = lays.fillet_point(float(lays.fillet_r) + g, float(lays.fillet_angle) * float(k) / float(lays.fillet_pieces()))
+		outline.append(lays.at(p.x, p.y))
+	# Round the circle, from this side's end of the ring to the other's, at every unit's end.
+	var run: Vector2 = circle_edge.runs[0]
+	var marks: Array[float] = []
+	var s := run.x
+	while s < run.y - 0.001:
+		marks.append(s)
+		s += Street.UNIT
+	marks.append(run.y)
+	var near_lays := (circle_edge.at(run.x, float(circle_edge.half)) as Vector3).distance_to(outline[outline.size() - 1]) < (circle_edge.at(run.y, float(circle_edge.half)) as Vector3).distance_to(outline[outline.size() - 1])
+	if not near_lays: marks.reverse()
+	for m: float in marks: outline.append(circle_edge.at(m, float(circle_edge.half) - g))
+	# The other side's flare, back to its ribbon's end.
+	for k: int in range(other.fillet_pieces(), -1, -1):
+		var p: Vector2 = other.fillet_point(float(other.fillet_r) + g, float(other.fillet_angle) * float(k) / float(other.fillet_pieces()))
+		outline.append(other.at(p.x, p.y))
+	var last: Array = (lays.get_meta("edge") as Dictionary).points
+	var centre: Array = last[last.size() - 1]
+	lays.circle_asphalt(outline, Vector3(float(centre[0]), 0.0, float(centre[1])))
+
+
+## Where two lanes run side by side, the ground between them. Narrower than two footways: one
+## island, the wider lane's footway across it and the other lane's kerb alone along its other
+## edge, rounded off as one nose where it meets a street. Wider, but by under three metres:
+## the strip between the two footways is paved, so it is not a trench.
+func _islands() -> void:
+	var exact: Array[Node3D] = []
+	for street: Node3D in street_edges:
+		if bool((street.get_meta("edge") as Dictionary).get("exact", false)) and not street.runs.is_empty(): exact.append(street)
+	var narrow: Array = []
+	var wide: Array = []
+	for a: Node3D in exact:
+		for b: Node3D in exact:
+			if a.get_instance_id() >= b.get_instance_id() or (a.get_meta("edge") as Dictionary).name == (b.get_meta("edge") as Dictionary).name: continue
+			var overlap := _side_by_side(a, b)
+			if overlap.is_empty(): continue
+			var gap := float(overlap.gap)
+			if gap < float(a.footway_wide) + float(b.footway_wide) + 0.05: narrow.append([a, b, overlap])
+			elif gap - float(a.footway_wide) - float(b.footway_wide) < 3.0: wide.append([a, b])
+	for entry: Array in narrow:
+		var a: Node3D = entry[0]
+		var b: Node3D = entry[1]
+		var keeper: Node3D = a if float(a.half) >= float(b.half) else b
+		var other: Node3D = b if keeper == a else a
+		var gap := float(entry[2].gap)
+		keeper.footway_wide = gap - Street.KERB_WIDE
+		keeper.nose_radius = gap * 0.5
+		keeper.set_meta("island_partner", other)
+		other.footway_wide = Street.KERB_WIDE
+		other.set_meta("island_keeper", keeper)
+	for entry: Array in wide:
+		var a: Node3D = entry[0]
+		var b: Node3D = entry[1]
+		var overlap := _side_by_side(a, b)
+		if overlap.is_empty(): continue
+		var gap := float(overlap.gap)
+		if gap - float(a.footway_wide) - float(b.footway_wide) < 0.05: continue
+		var pairs: Array = a.get_meta("infill", [])
+		pairs.append({"s0": float(overlap.lo), "s1": float(overlap.hi), "out0": float(a.half) + float(a.footway_wide), "out1": float(a.half) + gap - float(b.footway_wide)})
+		a.set_meta("infill", pairs)
+
+
+## How far out the wall across a dead end reaches on one side: to the footway's back, and on
+## across any paved strip between lanes that ends on the same line; short of any building.
+func _end_wall_reach(street: Node3D, dir: float) -> float:
+	var run: Vector2 = street.runs[street.runs.size() - 1] if dir > 0.0 else street.runs[0]
+	var end_s: float = run.y if dir > 0.0 else run.x
+	var origin: Vector3 = street.at(end_s, 0.0)
+	var heading: Vector3 = (street.at(end_s + 1.0, 0.0) - origin).normalized()
+	var reach := float(street.half) + float(street.footway_wide)
+	# (A side whose footway is an island shared with the lane beside it: the wall closes this lane's
+	# road and kerb only, and the island stays open to walk along from the other lane.)
+	if street.has_meta("island_partner"): reach = float(street.half) + Street.KERB_WIDE
+	for other: Node3D in street_edges:
+		for piece: Dictionary in other.get_meta("infill", []):
+			for s: float in [float(piece.s0), float(piece.s1)]:
+				var p0: Vector3 = other.at(s, float(piece.out0))
+				var p1: Vector3 = other.at(s, float(piece.out1))
+				if absf((p0 - origin).dot(heading)) > 0.1 or absf((p1 - origin).dot(heading)) > 0.1: continue
+				var o0 := float(street.out_of(p0))
+				var o1 := float(street.out_of(p1))
+				if minf(o0, o1) > float(street.half) and minf(o0, o1) < reach + 0.1: reach = maxf(reach, maxf(o0, o1))
+	# Short of any building standing across the line.
+	# (A centimetre at a time, so the wall meets the building's face; its coping may run into it.)
+	# (Never off the kerb, though: where a building stands on the kerb's back, the wall's end tucks
+	# into it.)
+	while reach > float(street.half) + Street.KERB_WIDE + 0.001 and _in_a_building(street.at(end_s + dir * Street.END_WALL_THICK * 0.5, reach)):
+		reach -= 0.01
+	return reach
+
+
+func _in_a_building(p: Vector3) -> bool:
+	for box: Array in data.boxes:
+		if float(box[3]) < 3.0 or float(box[5]) < 3.0: continue
+		var local := Basis(Vector3.UP, deg_to_rad(float(box[6]))).inverse() * Vector3(p.x - float(box[0]), 0.0, p.z - float(box[2]))
+		if absf(local.x) <= float(box[3]) * 0.5 and absf(local.z) <= float(box[5]) * 0.5: return true
+	return false
+
+
+## Whether two lanes' sides face each other across a strip of ground, and if so how wide it is
+## (kerb face to kerb face) and over what stretch of the first, in its metres along.
+func _side_by_side(a: Node3D, b: Node3D) -> Dictionary:
+	var b_run: Vector2 = b.runs[0]
+	var b_mid := (b_run.x + b_run.y) * 0.5
+	var b_face: Vector3 = b.at(b_mid, float(b.half))
+	var b_out: Vector3 = b.at(b_mid, float(b.half) + 1.0) - b_face
+	var a_s := float(a.along_of(b_face))
+	var a_face: Vector3 = a.at(a_s, float(a.half))
+	var a_out: Vector3 = a.at(a_s, float(a.half) + 1.0) - a_face
+	if a_out.dot(b_out) > -0.95: return {}
+	var gap := float(a.out_of(b_face)) - float(a.half)
+	if gap <= 0.0 or gap > 8.0: return {}
+	var a_run: Vector2 = a.runs[0]
+	var e0 := float(a.along_of(b.at(b_run.x, float(b.half))))
+	var e1 := float(a.along_of(b.at(b_run.y, float(b.half))))
+	var lo := maxf(minf(e0, e1), a_run.x)
+	var hi := minf(maxf(e0, e1), a_run.y)
+	if hi - lo < 0.5: return {}
+	return {"gap": gap, "lo": lo, "hi": hi}
 
 
 ## A footway end that no other street's corner comes round to meet gets a rounded nose, and
@@ -273,7 +499,10 @@ func _find_noses() -> void:
 		var edge: Dictionary = street.get_meta("edge")
 		if not bool(edge.get("exact", false)): continue
 		var length := Vector2(float(edge.points[0][0]), float(edge.points[0][1])).distance_to(Vector2(float(edge.points[1][0]), float(edge.points[1][1])))
-		for end: Array in [[0.0, -1.0], [length, 1.0]]:
+		var kinds: Array = edge.get("ends", ["joined", "joined"])
+		for end: Array in [[0.0, -1.0, kinds[0]], [length, 1.0, kinds[1]]]:
+			# (Only an end that reaches another built street: a dead end or the block's edge just stops.)
+			if str(end[2]) != "joined": continue
 			var face: Vector3 = street.at(float(end[0]), float(street.half))
 			var met := false
 			for other: Node3D in street_edges:
@@ -281,20 +510,41 @@ func _find_noses() -> void:
 				for corner: Dictionary in other.corners:
 					if (other.at(float(corner.mouth), float(other.half) + float(other.footway_wide)) as Vector3).distance_to(face) < 0.15: met = true
 			if met: continue
+			# (A side that is only the kerb of an island does not get one: the island's nose is
+			# its footway side's, and this kerb runs on to meet it.)
+			if street.has_meta("island_keeper") or float(street.footway_wide) <= Street.KERB_WIDE + 0.01: continue
 			street.noses.append(float(end[1]))
-			# The nose's half circle: its middle, half the footway out from the kerb's face and as
-			# far past the last unit.
-			var radius := float(street.footway_wide) * 0.5
+			# The nose's half circle: its middle is half the island out from the kerb's face; its
+			# tip reaches the kerb line of the street it stands in, whose footway back this end is on.
+			var radius := float(street.nose_radius) if float(street.nose_radius) > 0.0 else float(street.footway_wide) * 0.5
 			var whole: float = (street.runs[0] as Vector2).x if float(end[1]) < 0.0 else (street.runs[street.runs.size() - 1] as Vector2).y
-			var middle: Vector3 = street.at(whole + float(end[1]) * radius, float(street.half) + radius)
-			var kerb_at: Vector3 = street.at(whole + float(end[1]) * radius, float(street.half))
+			var base: Vector3 = street.at(whole, float(street.half) + radius)
+			var heading: Vector3 = (street.at(whole + 1.0, float(street.half)) - street.at(whole, float(street.half))).normalized()
+			var host: Node3D = null
 			for other: Node3D in street_edges:
 				if other == street or (other.get_meta("edge") as Dictionary).name == edge.name: continue
-				var out := float(other.out_of(middle))
-				# The street whose kerb line the nose's tip reaches.
-				if absf(out - radius - float(other.half)) > 0.1: continue
-				other.mouth_holes.append({"s": float(other.along_of(middle)), "out": out, "radius": radius,
-					"kerb": signf(float(other.along_of(kerb_at)) - float(other.along_of(middle)))})
+				var across: Vector3 = (other.at(1.0, float(other.half)) - other.at(0.0, float(other.half))).normalized()
+				if absf(across.dot(heading)) > 0.3: continue
+				if absf(float(other.out_of(base)) - float(other.half) - float(other.footway_wide)) < 0.15:
+					host = other
+					break
+			var reach := float(host.footway_wide) if host != null else radius * 2.0
+			street.nose_reach = reach
+			var middle: Vector3 = street.at(whole + float(end[1]) * (reach - radius), float(street.half) + radius)
+			var kerb_at: Vector3 = street.at(whole + float(end[1]) * (reach - radius), float(street.half))
+			var partner: Node3D = street.get_meta("island_partner", null)
+			if host != null:
+				host.mouth_holes.append({"s": float(host.along_of(middle)), "out": float(host.out_of(middle)), "radius": radius,
+					"kerb": signf(float(host.along_of(kerb_at)) - float(host.along_of(middle))), "closed": partner != null})
+			# The island's other kerb runs on to where the half circle meets it.
+			if partner != null:
+				var run: Vector2 = partner.runs[0]
+				var near_start: bool = (partner.at(run.x, float(partner.half)) as Vector3).distance_to(middle) < (partner.at(run.y, float(partner.half)) as Vector3).distance_to(middle)
+				var from_s: float = run.x if near_start else run.y
+				var p0: Vector3 = partner.at(from_s, float(partner.half))
+				var forward: Vector3 = (partner.at(from_s + 1.0, float(partner.half)) - p0).normalized()
+				var shift := (middle - p0).dot(forward)
+				partner.runs[0] = Vector2(run.x + shift, run.y) if near_start else Vector2(run.x, run.y + shift)
 
 
 ## Lowered kerbs go where a car crosses the footway: at a house's carport and at a plot cars
@@ -302,33 +552,74 @@ func _find_noses() -> void:
 func _build_street_edges() -> void:
 	_find_noses()
 	for street: Node3D in street_edges:
-		var edge: Dictionary = street.get_meta("edge")
-		var first: bool = street.side == STREET_TRIAL_SIDE
-		var entrances: Array = _carports_near(edge)
-		entrances.append_array(street.car_parks(4.2))
-		if edge.name == KobanLane.EDGE.name:
-			# A drain and a walking edge serve the terrace. The existing police beacon is the landmark here.
-			if first: street.build(entrances, ["grate","asphalt"])
-			else: street.build(entrances, [])
-		elif edge.name == "homes link lane":
-			# The lane between the koban lane and the trial street: too narrow for an edge line.
-			if first: street.build(entrances, ["asphalt", "no line"])
-			else: street.build(entrances, [])
-		elif edge.name == "shop row":
-			# The first wide road: shops stand at the footway, so no gate; the first side lays the road.
-			# The kerb is lowered on both sides where the zebra crossing meets it (six units, 3.6 m,
-			# from 166.8 to 170.4 m along; the zebra is 3.2 m wide).
-			entrances.append({"at": street.at(SHOP_ROW_CROSSING, float(street.half) + 1.0), "wide": 3.6, "what": "crossing"})
-			if first: street.build(entrances)
-			else: street.build(entrances, [])
-		elif first:
-			for gate: Vector3 in _gates_near(edge):
-				if float(street.plot_gap(gate)) < INF:
-					entrances.append({"at": gate, "wide": 1.8, "what": "gate"})
-					break
-			street.build(entrances)
-		else:
-			street.build(entrances, [])
+		_build_one(street)
+	_circle_asphalt()
+
+
+func _build_one(street: Node3D) -> void:
+	var edge: Dictionary = street.get_meta("edge")
+	var first: bool = street.side == STREET_TRIAL_SIDE
+	var entrances: Array = _carports_near(edge)
+	entrances.append_array(street.car_parks(4.2))
+	if edge.name == KobanLane.EDGE.name:
+		# A drain and a walking edge serve the terrace. The existing police beacon is the landmark here.
+		if first: street.build(entrances, ["grate","asphalt"])
+		else: street.build(entrances, [])
+	elif edge.name == "turning circle":
+		street.build(entrances, [])
+	elif edge.name == "shop row west":
+		# The shop row's road carried on: its edge line too. The first side lays the road.
+		if first: street.build(entrances, ["asphalt"])
+		else: street.build(entrances, [])
+	elif bool(edge.get("exact", false)):
+		# A lane laid between built streets: too narrow for an edge line.
+		if first: street.build(entrances, ["asphalt", "no line"])
+		else: street.build(entrances, [])
+		for piece: Dictionary in street.get_meta("infill", []):
+			street.infill(float(piece.s0), float(piece.s1), float(piece.out0), float(piece.out1))
+		var kinds: Array = edge.get("ends", ["joined", "joined"])
+		for end: Array in [[-1.0, kinds[0]], [1.0, kinds[1]]]:
+			if str(end[1]) == "dead": street.end_wall(float(end[0]), _end_wall_reach(street, float(end[0])))
+	elif edge.name == "shop row":
+		# The first wide road: shops stand at the footway, so no gate; the first side lays the road.
+		# The kerb is lowered on both sides where the zebra crossing meets it (six units, 3.6 m,
+		# from 166.8 to 170.4 m along; the zebra is 3.2 m wide).
+		entrances.append({"at": street.at(SHOP_ROW_CROSSING, float(street.half) + 1.0), "wide": 3.6, "what": "crossing"})
+		if first: street.build(entrances)
+		else: street.build(entrances, [])
+	elif first:
+		for gate: Vector3 in _gates_near(edge):
+			if float(street.plot_gap(gate)) < INF:
+				entrances.append({"at": gate, "wide": 1.8, "what": "gate"})
+				break
+		street.build(entrances)
+	else:
+		street.build(entrances, [])
+
+
+## How far the nearest building stands behind the kerb's road face along one side of a laid
+## edge (INF if none within six metres).
+func _room_behind(street: Node3D) -> float:
+	var room := INF
+	var length := 0.0
+	for run: Vector2 in street.runs: length = maxf(length, run.y)
+	for box: Array in data.boxes:
+		if float(box[3]) < 3.0 or float(box[5]) < 3.0: continue
+		var middle := Vector3(float(box[0]), 0.0, float(box[2]))
+		if absf(float(street.out_of(middle))) > 30.0: continue
+		var turn := Basis(Vector3.UP, deg_to_rad(float(box[6])))
+		var half_box := Vector3(float(box[3]) * 0.5, 0.0, float(box[5]) * 0.5)
+		for corner: Vector3 in [Vector3(1, 0, 1), Vector3(1, 0, -1), Vector3(-1, 0, 1), Vector3(-1, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]:
+			var point := middle + turn * (half_box * corner)
+			var along := float(street.along_of(point))
+			var out := float(street.out_of(point)) - float(street.half)
+			# (along_of holds a point past either end at that end: such a point is beside it only
+			# if it is truly level with the edge.)
+			var beside: Vector3 = street.at(along, float(street.half) + out)
+			if beside.distance_to(Vector3(point.x, beside.y, point.z)) > 0.3: continue
+			if along < -0.01 or along > length + 0.01 or out <= 0.0 or out > 6.0: continue
+			room = minf(room, out)
+	return room
 
 
 ## How deep a shop forecourt is on one side of a street: from the footway's back to the

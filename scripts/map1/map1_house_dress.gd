@@ -126,6 +126,7 @@ static func dress(c: Dictionary) -> void:
 	_windows(c)
 	_fixtures(c)
 	_roof(c)
+	_noren_door(c)
 	_entrance(c)
 	_balcony(c)
 	_plot(c)
@@ -138,8 +139,8 @@ static func dress(c: Dictionary) -> void:
 	(c.items as Array).sort()
 	f["plot"] = ",".join(PackedStringArray(c.items))
 	f["sig"] = "%s/%s|%s|%s|%s|%s" % [str(f.roof), str(f.ridge), str(f.setback), str(f.porch), str(f.balcony), str(f.plot)]
-	# Does the front door have the wall beside it to slide into (the kit's own rule)?
 	var front: Dictionary = c.doors[0]
+	# Does the front door have the wall beside it to slide into (the kit's own rule)?
 	if str(front.get("kind", "")) == "slide":
 		var notch: Dictionary = c.layout.get("recess", {})
 		var from := (0.0 if float(notch.x0) <= T + 0.01 else float(notch.x0) - T) if not notch.is_empty() else 0.0
@@ -149,6 +150,23 @@ static func dress(c: Dictionary) -> void:
 			front.erase("kind")
 			front["style"] = "panel"
 			f["front_door"] = "hinged"
+
+
+## A shop that hangs a noren has a sliding front door, as such shops do: a hinged one would
+## swing out through the cloth. Settled before the entrance is built round it; where the wall
+## leaves the door no room to slide (the kit's own rule, as in dress()), it stays hinged and
+## _shop_front hangs no noren.
+static func _noren_door(c: Dictionary) -> void:
+	if not c.has("business") or not (TRADES.get(str(c.business.what), {}) as Dictionary).has("noren"): return
+	var front: Dictionary = c.doors[0]
+	if str(front.get("kind", "")) == "slide": return
+	var notch: Dictionary = c.layout.get("recess", {})
+	var from := (0.0 if float(notch.x0) <= T + 0.01 else float(notch.x0) - T) if not notch.is_empty() else 0.0
+	var to := ((c.size as Vector2).x if float(notch.x1) >= (c.size as Vector2).x - T - 0.01 else float(notch.x1) + T) if not notch.is_empty() else (c.size as Vector2).x
+	var x := float(front.at)
+	if x + 1.47 > to - 0.03 and x - 1.47 < from + 0.03: return
+	front["kind"] = "slide"
+	front["style"] = "slide"
 
 
 # ---- geometry helpers ----------------------------------------------------------------------
@@ -348,6 +366,14 @@ static func _uses(c: Dictionary) -> void:
 		if int(room.floor) == 0: ground.append(room)
 	ground.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return (a.rect as Rect2).get_area() > (b.rect as Rect2).get_area())
 	var shop := str(layout.get("shop_room", ""))
+	# A convenience store's ground floor is its shop: where the plan names no shop room, the
+	# largest room on the front gets the shop's glass front. (It keeps its use in the house, so
+	# everything else about the house comes out as it would without the store.)
+	if shop == "" and c.has("business") and str(c.business.what) == "convenience store":
+		for room: Dictionary in ground:
+			if _span(_wall(c, "front", 0), room.rect) != Vector2.ZERO and not bool(room.get("entry", false)):
+				room["glass_front"] = true
+				break
 	var living: Dictionary = {}
 	for room: Dictionary in ground:
 		if str(room.name) == shop: room["use"] = "shop"
@@ -541,11 +567,13 @@ static func _windows(c: Dictionary) -> void:
 				windows.append(entry)
 				sliding += 1
 				continue
-			if use == "shop" and wall == "front":
+			if (use == "shop" or bool(room.get("glass_front", false))) and wall == "front":
 				# The shop front: sliding glass from the floor up, either side of the door.
 				var door_x := float(layout.door_x)
 				var beside := 1.55 if str(c.doors[0].get("kind", "")) == "slide" else 0.62
 				for stretch: Vector2 in [Vector2(span.x + 0.2, door_x - beside), Vector2(door_x + beside, span.y - 0.2)]:
+					# (Only within this room's own front: the door may be in a hall beside it.)
+					stretch = Vector2(maxf(stretch.x, span.x + 0.2), minf(stretch.y, span.y - 0.2))
 					var wide := minf(stretch.y - stretch.x, 3.4)
 					if wide < 1.0: continue
 					var front := entry.duplicate()
@@ -869,6 +897,14 @@ static func _balcony(c: Dictionary) -> void:
 	var at := float(b.at)
 	var w := float(b.width)
 	var deep := 0.95
+	# A balcony may not hang over the public road: on a front that faces a built footway it is
+	# no deeper than the plot in front of the upper wall, and with under 60 cm there is none.
+	if str(b.wall) == "front" and float(c.get("plot_gap", INF)) < 20.0:
+		var room := float(c.plot_gap) + float(c.inset.front) - 0.05
+		if room < 0.6:
+			c.erase("balcony")
+			return
+		deep = minf(deep, snappedf(room - 0.025, 0.05))
 	var kind := str(c.wish.balcony_kind)
 	var wall_colour: Color = c.colours.get("outer_wall_upper", c.colours.outer_wall)
 	var metal: Color = c.colours.frame
@@ -1233,7 +1269,7 @@ static func _shop_front(c: Dictionary) -> void:
 
 	# The noren: a rod on two brackets over the door, the cloth joined along its top and
 	# hanging in panels with slits between them.
-	if trade.has("noren"):
+	if trade.has("noren") and str((c.doors[0] as Dictionary).get("kind", "")) == "slide":
 		var head := L0 - float(c.doors[0].get("sunk", 0.0)) + HouseKit.DOOR_HEIGHT
 		var rod := minf(head + 0.05, 2.13)
 		var cloth: Color = trade.noren

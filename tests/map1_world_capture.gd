@@ -44,6 +44,8 @@ func _run() -> void:
 	root.add_child(map)
 	world = map.world
 	for label: Label3D in map.labels: label.visible = false
+	# (--no-mirrors: the same views without the curve mirrors, for a before picture.)
+	if "--no-mirrors" in OS.get_cmdline_user_args() and map.curve_mirrors != null: map.curve_mirrors.visible = false
 	camera = Camera3D.new()
 	camera.far = 20000.0
 	root.add_child(camera)
@@ -125,8 +127,46 @@ func _run() -> void:
 	await _shot("wide_junction", _eye(Vector3(-276.0, 0.0, -449.0), 1.7), _eye(Vector3(-262.0, 0.0, -441.5), 0.2), 70.0)
 	await _shot("wide_plaza", _eye(Vector3(-330.0, 0.0, -452.0), 1.7), _eye(Vector3(-352.0, 0.0, -436.0), 1.2), 75.0)
 	await _shot("plaza_pit", _eye(Vector3(-347.0, 0.0, -441.5), 1.7), _eye(Vector3(-352.5, 0.0, -436.5), 0.1), 70.0)
+	# The shop row's west end, where it meets the Outer ring: each corner from the road, and the
+	# south one from its own footway, past the signal post.
+	await _shot("ring_corner_south", _eye(Vector3(-455.0, 0.0, -449.5), 1.7), _eye(Vector3(-466.0, 0.0, -457.0), 0.1), 70.0)
+	await _shot("ring_corner_north", _eye(Vector3(-455.0, 0.0, -446.5), 1.7), _eye(Vector3(-466.0, 0.0, -439.0), 0.1), 70.0)
+	await _shot("ring_corner_walk", _eye(Vector3(-450.0, 0.0, -456.0), 1.7), _eye(Vector3(-468.0, 0.0, -461.0), 1.0), 70.0)
+	# The shop row's east end, where the tram track comes in across the north footway and a rail
+	# line crosses the south one: each end from the road, and the north footway walked east.
+	await _shot("rail_end_north", _eye(Vector3(-240.0, 0.0, -449.0), 1.7), _eye(Vector3(-229.0, 0.0, -441.0), 0.1), 70.0)
+	await _shot("rail_end_south", _eye(Vector3(-240.0, 0.0, -447.0), 1.7), _eye(Vector3(-229.0, 0.0, -455.5), 0.1), 70.0)
+	await _shot("rail_end_walk", _eye(Vector3(-246.0, 0.0, -440.0), 1.7), _eye(Vector3(-222.0, 0.0, -440.0), 0.8), 70.0)
+	# Curve mirrors at blind lane corners: coming up the lane at x 168 to the koban lane, coming
+	# down the lane at x 175 to tram street south (two heads), and along the koban lane's north
+	# footway past one.
+	await _shot("mirror_koban_lane", _eye(Vector3(168.4, 0.0, 426.0), 1.7), _eye(Vector3(172.3, 0.0, 409.9), 2.4), 60.0)
+	await _shot("mirror_tram_south", _eye(Vector3(175.1, 0.0, 472.0), 1.7), _eye(Vector3(175.1, 0.0, 496.4), 2.4), 60.0)
+	await _shot("mirror_footway", _eye(Vector3(162.0, 0.0, 409.6), 1.6), _eye(Vector3(178.0, 0.0, 409.6), 1.6), 65.0)
 	await _shot("link_lane", _eye(Vector3(91.6, 0.0, 449.5), 1.7), _eye(Vector3(90.6, 0.0, 425.0), 0.6), 70.0)
 	await _shot("link_lane_north", _eye(Vector3(89.5, 0.0, 411.6), 1.7), _eye(Vector3(89.6, 0.0, 424.0), 0.3), 75.0)
+	# The homes block's two clean crossroads.
+	await _shot("cross_168", _eye(Vector3(159.0, 0.0, 413.6), 1.7), _eye(Vector3(168.4, 0.0, 412.4), 0.2), 75.0)
+	await _shot("cross_82", _eye(Vector3(72.5, 0.0, 448.9), 1.7), _eye(Vector3(81.6, 0.0, 447.6), 0.2), 75.0)
+	await _shot("arm_north", _eye(Vector3(89.4, 0.0, 414.6), 1.7), _eye(Vector3(89.8, 0.0, 404.0), 0.3), 75.0)
+	await _shot("arm_south", _eye(Vector3(91.8, 0.0, 446.8), 1.7), _eye(Vector3(90.6, 0.0, 457.5), 0.3), 75.0)
+	await _shot("island_south", _eye(Vector3(86.4, 0.0, 411.4), 1.7), _eye(Vector3(87.4, 0.0, 420.0), 0.2), 70.0)
+	await _shot("island_north", _eye(Vector3(88.4, 0.0, 414.6), 1.7), _eye(Vector3(87.6, 0.0, 405.0), 0.2), 70.0)
+	await _shot("island_trench", _eye(Vector3(86.2, 0.0, 449.8), 1.7), _eye(Vector3(86.2, 0.0, 457.0), 0.0), 70.0)
+	await _shot("dead_end_91c", _eye(Vector3(89.6, 0.0, 449.6), 1.7), _eye(Vector3(89.0, 0.0, 458.6), 0.6), 70.0)
+	await _shot("dead_end_168b", _eye(Vector3(168.0, 0.0, 416.0), 1.7), _eye(Vector3(168.4, 0.0, 427.4), 0.6), 70.0)
+	await _shot("turning_circle", _eye(Vector3(138.0, 0.0, 447.0), 1.7), _eye(Vector3(156.0, 0.0, 448.2), 0.0), 70.0)
+	await _shot("turning_flare", _eye(Vector3(150.5, 0.0, 445.2), 1.7), _eye(Vector3(146.0, 0.0, 452.2), 0.0), 70.0)
+	# The homes block's south: Tram street south with its rail bed, and the lanes that meet it.
+	await _shot("tram_t_82", _eye(Vector3(73.0, 0.0, 492.5), 1.7), _eye(Vector3(81.6, 0.0, 480.0), 0.3), 75.0)
+	await _shot("tram_street", _eye(Vector3(60.0, 0.0, 485.5), 1.7), _eye(Vector3(110.0, 0.0, 490.0), 0.5), 70.0)
+	await _shot("lane_82b_narrow", _eye(Vector3(82.6, 0.0, 462.0), 1.7), _eye(Vector3(83.5, 0.0, 480.0), 0.3), 70.0)
+	await _shot("lane_cross_292", _eye(Vector3(283.0, 0.0, 403.6), 1.7), _eye(Vector3(292.0, 0.0, 405.4), 0.2), 75.0)
+	await _shot("lane_t_300", _eye(Vector3(296.0, 0.0, 445.5), 1.7), _eye(Vector3(299.8, 0.0, 434.0), 0.2), 75.0)
+	await _shot("grid_378", _eye(Vector3(368.0, 0.0, 494.0), 1.7), _eye(Vector3(377.7, 0.0, 497.0), 0.2), 75.0)
+	await _shot("grid_370", _eye(Vector3(370.6, 0.0, 450.0), 1.7), _eye(Vector3(370.0, 0.0, 436.0), 0.2), 75.0)
+	await _shot("north_378", _eye(Vector3(76.0, 0.0, 376.0), 1.7), _eye(Vector3(84.7, 0.0, 378.6), 0.2), 75.0)
+	await _shot("koban_189", _eye(Vector3(180.0, 0.0, 411.8), 1.7), _eye(Vector3(188.7, 0.0, 413.4), 0.2), 75.0)
 	await _shot("wide_road", _eye(Vector3(-300.0, 0.0, -451.0), 1.7), _eye(Vector3(-360.0, 0.0, -456.0), 1.6), 70.0)
 	await _shot("wide_pavement", _eye(Vector3(-352.0, 0.0, -456.2), 1.7), _eye(Vector3(-375.0, 0.0, -458.2), 1.0), 70.0)
 	await _shot("wide_crossing", _eye(Vector3(-285.0, 0.0, -445.0), 1.7), _eye(Vector3(-268.0, 0.0, -450.0), 1.2), 70.0)
