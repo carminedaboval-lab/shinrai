@@ -12,8 +12,10 @@ func _run() -> void:
 	map.add_child(player)
 	camera = player.camera
 	world.set_viewer(camera,player)
+	check_shop_row_ring_join()
+	check_tram_bed_join()
 	var triangles := road_triangles()
-	var link_gutters := link_gutter_triangles()
+	var lane_gutters := lane_gutter_triangles()
 	for x: float in [81.5,90.5]:
 		for side: float in [-1,1]:
 			var missing := 0
@@ -46,13 +48,42 @@ func _run() -> void:
 				var p: Vector3=edge.at(corner.mouth+corner.dir*offset,edge.half+edge.footway_wide+0.67)
 				var built_gutter: bool = corner.get("deep",3.0)==0.0 and offset<0.22
 				var road_hits := surface_hits(p,triangles)
-				var gutter_hits: Array = surface_hits(p,link_gutters) if built_gutter else []
+				var gutter_hits: Array = surface_hits(p,lane_gutters) if built_gutter else []
 				if built_gutter:
 					if not road_hits.is_empty() or gutter_hits.size()!=1 or absf(gutter_hits[0]-lerpf(0.008,0.02,offset/0.22))>0.004: missing.append(offset)
 				elif road_hits.size()!=1: missing.append(offset)
 			_check(missing.is_empty(),"correct asphalt or continuing concrete gutter at %.2f m on side %.0f, incorrect offsets %s"%[corner.mouth,edge.side,missing])
 	print("SIDE_STREET_DONE passed=%d failed=%d"%[passed,failed])
 	quit(1 if failed else 0)
+
+## The painted base is walkable even when the asphalt stops short of the ring.
+func check_shop_row_ring_join() -> void:
+	var triangles := road_triangles(-455.0,-441.0,-468.2,-462.0)
+	var missing := 0
+	var overlap := 0
+	var off_grade := 0
+	for x: float in [-462.17,-462.71,-463.83,-465.26,-466.19,-467.11,-468.12]:
+		for z: float in [-454.68,-454.17,-451.31,-448.21,-444.42,-441.34]:
+			var hits := surface_hits(map.on_ground(x,z),triangles)
+			if hits.is_empty(): missing += 1
+			elif hits.size()>1: overlap += 1
+			elif absf(hits[0]-0.012)>0.01: off_grade += 1
+	_check(missing==0 and overlap==0 and off_grade==0,"shop road asphalt meets the ring across its width: %d missing, %d overlapping, %d off grade"%[missing,overlap,off_grade])
+
+func check_tram_bed_join() -> void:
+	var triangles := road_triangles(-455.0,-441.0,-232.0,-218.0)
+	for z: float in [-454.63,-452.19,-450.07,-449.83,-447.31,-445.17,-442.71,-441.29]:
+		# East of the lane end the tram bed runs along the street. West of
+		# its bend the surveyed boundary moves 1 m west for each metre north.
+		var end_x := -218.5-maxf(0.0,z+450.0)
+		var correct := true
+		for x: float in [-231.09,-230.91,lerpf(-231.0,end_x,0.57),end_x-0.04,end_x+0.04]:
+			var hits := surface_hits(map.on_ground(x,z),triangles)
+			if x>end_x:
+				if not hits.is_empty(): correct=false
+			elif hits.size()!=1 or absf(hits[0]-0.012)>0.01:
+				correct=false
+		_check(correct,"single asphalt surface to the surveyed tram edge at z %.2f"%z)
 
 func surface_hits(p: Vector3, tris: PackedVector3Array) -> Array[float]:
 	var hits: Array[float] = []
@@ -61,20 +92,20 @@ func surface_hits(p: Vector3, tris: PackedVector3Array) -> Array[float]:
 		if hit!=null: hits.append(hit.y-p.y)
 	return hits
 
-func link_gutter_triangles() -> PackedVector3Array:
+func lane_gutter_triangles() -> PackedVector3Array:
 	var points := PackedVector3Array()
 	for edge: Node3D in map.street_edges:
-		if edge.get_meta("edge").name=="homes link lane":
+		if edge.get_meta("edge").get("exact",false):
 			var node: MeshInstance3D=edge.get_node("Edge")
 			points.append_array(node.global_transform*node.mesh.get_faces())
 	return points
 
-func road_triangles(z_min := 442.0,z_max := 454.0) -> PackedVector3Array:
+func road_triangles(z_min := 442.0,z_max := 454.0,x_min := 79.0,x_max := 94.0) -> PackedVector3Array:
 	var points := PackedVector3Array()
 	for node: MeshInstance3D in map.find_children("*","MeshInstance3D",true,false):
 		if node.mesh==null: continue
 		var bounds: AABB = node.global_transform*node.get_aabb()
-		if bounds.end.x<79 or bounds.position.x>94 or bounds.end.z<z_min or bounds.position.z>z_max: continue
+		if bounds.end.x<x_min or bounds.position.x>x_max or bounds.end.z<z_min or bounds.position.z>z_max: continue
 		for surface in node.mesh.get_surface_count():
 			var material := node.get_active_material(surface) as ShaderMaterial
 			if material==null or material.shader!=Asphalt: continue

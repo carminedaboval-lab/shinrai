@@ -17,6 +17,8 @@ func _run() -> void:
 		return
 	var cross_x:=-269.4
 	check_paving_surfaces()
+	await check_west_turns()
+	await check_east_ramps()
 	_check(map.has_node("ShopRowSignals/North") and map.has_node("ShopRowSignals/South"),"opposing pedestrian heads fitted to the original mapped signal posts")
 	for edge: Node3D in map.street_edges:
 		if not edge.has_node("Asphalt"): continue
@@ -95,6 +97,23 @@ func _run() -> void:
 	print("SHOP_ROW_WALK passed=",passed," failed=",failed)
 	quit(1 if failed else 0)
 
+func check_east_ramps() -> void:
+	for z: float in [-456.0,-440.0]:
+		var start: Vector3 = map.on_ground(-235.0,z)
+		var beyond: Vector3 = map.on_ground(-226.0,z)
+		await _put(start+Vector3.UP*0.3,Vector3.RIGHT)
+		_check(await _drive([beyond],false,6),"walked down the east ramp at z %.1f"%z)
+		_check(await _drive([start],false,6),"walked up the east ramp at z %.1f"%z)
+		for across: float in [-0.72,0.0,0.72]:
+			var heights := PackedFloat32Array()
+			for x: float in [-233.5,-232.8,-231.65,-231.55]:
+				heights.append(floor_offset(map.on_ground(x,z+across)))
+			var correct := true
+			var expected := PackedFloat32Array([0.13,0.08,0.03,0.0])
+			for i in expected.size():
+				if absf(heights[i]-expected[i])>0.012: correct=false
+			_check(correct,"east ramp at z %.2f, heights from pavement to ground %s"%[z+across,heights])
+
 func floor_offset(point: Vector3, ignore:=RID()) -> float:
 	var query:=PhysicsRayQueryParameters3D.create(point+Vector3.UP*0.45,point-Vector3.UP*0.6,1)
 	var excluded: Array[RID]=[player.get_rid()]
@@ -103,12 +122,27 @@ func floor_offset(point: Vector3, ignore:=RID()) -> float:
 	var hit:=root.world_3d.direct_space_state.intersect_ray(query)
 	return hit.position.y-point.y if not hit.is_empty() else -INF
 
+## Follow the clear side of each signal post with the actual player, then turn back.
+func check_west_turns() -> void:
+	for sign_z: float in [-1.0,1.0]:
+		var cz:=-448.0+12.5*sign_z
+		var route: Array=[map.on_ground(-460.0,cz-sign_z*4.2)]
+		for i in range(9):
+			var angle:=PI*0.5*i/8.0
+			route.append(map.on_ground(-462.5-4.2*sin(angle),cz-sign_z*4.2*cos(angle)))
+		await _put(route[0]+Vector3.UP*0.3,Vector3.LEFT)
+		_check(await _drive(route.slice(1),false,4),"walk around west signal post to the ring, z %.1f"%cz)
+		route.reverse()
+		_check(await _drive(route.slice(1),false,4),"walk around west signal post back to shops, z %.1f"%cz)
+
 ## Verify what Godot will draw (including overrides), not merely that a material file exists.
 func check_paving_surfaces() -> void:
 	var foot:=preload("res://scripts/map1/map1_shop_footway.tres")
 	var concrete:=preload("res://scripts/map1/map1_shop_forecourt.tres")
 	for edge: Node3D in map.street_edges:
 		var row: bool=edge.get_meta("edge").name=="shop row"
+		var west: bool=edge.get_meta("edge").name=="shop row west"
+		var direction: float=-1.0 if west else 1.0
 		var counts:=[0,0]
 		var spans:=[0.0,0.0]
 		var metric:=true
@@ -132,8 +166,7 @@ func check_paving_surfaces() -> void:
 				for j: int in pts.size():
 					var p:=node.to_global(pts[j])
 					var du:=uvs[j]-uv0
-					# The row runs exactly west to east. Constant offsets in UV space are valid.
-					if absf(du.y-(p.x-p0.x))>0.025 or absf(du.x-(p.z-p0.z)*float(edge.side))>0.025: metric=false
+					if absf(du.y-direction*(p.x-p0.x))>0.025 or absf(du.x-direction*(p.z-p0.z)*float(edge.side))>0.025: metric=false
 					lo=minf(lo,uvs[j].y)
 					hi=maxf(hi,uvs[j].y)
 				spans[type]=maxf(spans[type],hi-lo)
@@ -141,5 +174,8 @@ func check_paving_surfaces() -> void:
 			var shops: bool=edge.forecourt>0
 			_check(counts[0]>0 and spans[0]>160 and (counts[1]>0 and spans[1]>160 if shops else counts[1]==0) and metric,
 				"DETAIL metre-scale pavement and forecourt on %s: surfaces %s spans %s UV valid %s"%[edge.name,counts,spans,metric])
+		elif west:
+			_check(counts[0]>0 and spans[0]>=24.4 and metric and counts[1]==0 and is_zero_approx(edge.forecourt),
+				"west extension carries metre-scale footway paving and no shop forecourt: "+str(edge.name))
 		else:
 			_check(counts==[0,0],"shop paving not applied to "+str(edge.name))
