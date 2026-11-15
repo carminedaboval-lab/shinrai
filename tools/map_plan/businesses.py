@@ -29,6 +29,16 @@ import numpy as np
 REACH = 250.0        # every home should have a corner shop within this
 APART = 120.0        # and corner shops stay this far apart, so each is a landmark
 WORTH = 8            # an existing shop is named a corner shop if it brings this many homes into reach
+## Shops placed by hand. Each turns the house nearest its point (within 3 m) into a shop-house.
+## To take one away again, delete its line and rebuild the map.
+PLACED = [
+    # The north block of the homes area (x 40 to 215, z 330 to 400) had no shop at all, and the
+    # koban lane none along its 228 m: from the middle of lane z378 the nearest shop door was a
+    # 150 m walk (survey with Codex, 2026-11-15). The house on the north-east corner of lane z378
+    # and lane x 85, the block's main crossroads, becomes the neighbourhood's corner shop.
+    {"x": 91.8, "z": 367.2, "what": "tobacco and sweets shop",
+     "why": "the north block's crossroads (lane z378 and lane x 85); the block had no shop, the nearest door was a 150 m walk"},
+]
 WORTH_NEW = 6        # a house is turned into one only if it brings this many
 WIDE = {"ring", "grid", "arterial", "collector", "old"}
 THROUGH = {"ring", "grid", "arterial", "collector"}
@@ -198,6 +208,18 @@ def build(m, meet, doors):
         trades[entry["what"]] = trades.get(entry["what"], 0) + 1
     lines.append("  restaurants: %d of the %d open shop-houses; the other %d shop-houses stay ordinary shops" % (len(eating), len(shops), len(shops) - len(eating) - sum(1 for e in out if e["type"] == "corner shop" and e["was"] == "shop")))
     lines.append("  by trade: " + ", ".join("%s %d" % (name, trades[name]) for name in sorted(trades)))
+    # ---- shops placed by hand, where a walk showed a gap the rules above do not see ----
+    # (Added last and without the dice, so every business above stays exactly as it was.)
+    for place in PLACED:
+        near = [(math.hypot(b[0] - place["x"], b[2] - place["z"]), i) for i, b in enumerate(boxes) if b[7] in ("house", "timber") and b[8] == 0.0]
+        gap, index = min(near, default=(1e9, -1))
+        if gap > 3.0 or any(e["box"] == index for e in out):
+            lines.append("  placed %s at (%.0f, %.0f): no house there to turn; left out" % (place["what"], place["x"], place["z"]))
+            continue
+        box = boxes[index]
+        box[7] = "shop"
+        out.append({"box": index, "x": box[0], "z": box[2], "type": "corner shop", "what": place["what"], "why": place["why"], "was": "house"})
+        lines.append("  placed by hand: %s in the house at (%.0f, %.0f)" % (place["what"], box[0], box[2]))
     return {"list": out, "measure": lines}
 
 
