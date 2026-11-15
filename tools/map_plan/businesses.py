@@ -44,6 +44,12 @@ PLACED = [
     # lane x 329 and lane z497 becomes its shop, a different trade from the north block's.
     {"x": 335.7, "z": 484.9, "what": "rice and liquor shop",
      "why": "the east grid's crossroads (lane x 329 and lane z497); the grid had no shop, the farthest lane point was 120 m from one"},
+    # Lane z435 is cut off from that shop on foot (lanes x 329 and x 370 are dead ends between the
+    # two lanes): from its middle the walk to a shop was 158 m, to the sushi counter on the grid's
+    # east edge. The one-storey house on its south side by the lane's middle becomes a greengrocer.
+    # (A proposal until the owner says yes: delete this entry to take it away.)
+    {"x": 317.9, "z": 445.6, "what": "grocer",
+     "why": "the middle of lane z435, south side; the lane was a 158 m walk from a shop"},
 ]
 WORTH_NEW = 6        # a house is turned into one only if it brings this many
 WIDE = {"ring", "grid", "arterial", "collector", "old"}

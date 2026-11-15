@@ -806,9 +806,11 @@ const COPING_HIGH := 0.06
 const RENDER := Color(0.62, 0.61, 0.58)
 var end_walls := 0
 
-func end_wall(dir: float, reach: float) -> void:
+## ack: how far past the end the wall stands (0: at the end itself). Further back where a
+## house's door would otherwise be cut off by it.
+func end_wall(dir: float, reach: float, back: float = 0.0) -> void:
 	if runs.is_empty(): return
-	var edge_s: float = runs[runs.size() - 1].y if dir > 0.0 else runs[0].x
+	var edge_s: float = (runs[runs.size() - 1].y if dir > 0.0 else runs[0].x) + dir * back
 	var s0 := edge_s if dir > 0.0 else edge_s - END_WALL_THICK
 	var s1 := s0 + END_WALL_THICK
 	var tool := SurfaceTool.new()
@@ -860,7 +862,7 @@ func _solid(tool: SurfaceTool, stand: SurfaceTool, s0: float, s1: float, o0: flo
 ## The paving between this side's footway and another lane's, where the two lanes run so close
 ## that the ground between them would be a trench: from `out0` to `out1` (metres out from the
 ## centre line), `s0` to `s1` along. At footway height, with an upright face at each end.
-func infill(s0: float, s1: float, out0: float, out1: float) -> void:
+func infill(s0: float, s1: float, out0: float, out1: float, outer_face: bool = false) -> void:
 	var look := SurfaceTool.new()
 	look.begin(Mesh.PRIMITIVE_TRIANGLES)
 	look.set_smooth_group(-1)
@@ -878,6 +880,8 @@ func infill(s0: float, s1: float, out0: float, out1: float) -> void:
 	for tool: SurfaceTool in [look, stand]:
 		_upright(tool, Vector2(s0, out0), Vector2(s0, out1), -forward)
 		_upright(tool, Vector2(s1, out0), Vector2(s1, out1), forward)
+		# (Where nothing stands along its outer edge, that edge's own face: the strip before a set-back end wall.)
+		if outer_face: _upright(tool, Vector2(s0, out1), Vector2(s1, out1), at(s0, out1 + 1.0) - at(s0, out1))
 	look.generate_normals()
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true

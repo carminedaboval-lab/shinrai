@@ -45,6 +45,9 @@ var street_reached := false
 var box_height := 0.0
 var floors := 0
 var frontage := 0.0
+## Whether a neighbour hides a blade sign at board height from someone walking along the pavement,
+## from either way (worked out in place()).
+var hemmed_in := false
 
 static func install(map: Node3D) -> void:
 	var group := Node3D.new()
@@ -91,9 +94,58 @@ func place(map: Node3D, b: Array) -> void:
 		position = map.on_ground(wall.x,wall.z,0.035) + out * 0.035
 		rotation.y = atan2(out.x,out.z)
 		frontage = minf(wid-0.28,10.4)
+		hemmed_in = _hidden(map,wall,out,along,wid)
+
+## Fronts where an eye-level picture shows a neighbour's canopy hiding the board-height blade,
+## though no building's footprint crosses the sight line (the map's footprints do not include
+## canopies): 1728, Asahi Shokudo, behind the deep brown canopy next door (look_approach_1728_a).
+const CANOPY_HIDES: Array[int] = [1728]
+## For a comparison picture: every front keeps the ordinary blade.
+static var plain_blades := false
+
+## Is the board-height blade hidden from someone walking along the pavement, from either way? From
+## the nearest place a person can stand on each approach (14 m along and 1.8 m out; nearer, then
+## further out, where a building stands there), the straight line to the blade is followed: hidden
+## if another building's footprint crosses it. Or the front is one of CANOPY_HIDES.
+func _hidden(map: Node3D, wall: Vector3, out: Vector3, along: Vector3, wid: float) -> bool:
+	if building in CANOPY_HIDES: return true
+	var blade := wall + along * minf(wid-0.28,10.4) * 0.44 + out * 0.49
+	for way: float in [-1.0,1.0]:
+		var back := 14.0
+		var wide := 1.8
+		var eye := wall + along * back * way + out * wide
+		while map.world.solid_at(eye.x,eye.z,building) and back > 5.0:
+			back -= 0.5
+			eye = wall + along * back * way + out * wide
+		while map.world.solid_at(eye.x,eye.z,building) and wide < 8.0:
+			wide += 0.5
+			eye = wall + along * back * way + out * wide
+		if map.world.solid_at(eye.x,eye.z,building): continue      # (nowhere to stand on this approach)
+		for n: int in range(1,40):
+			var at := eye.lerp(blade, n/40.0)
+			if map.world.solid_at(at.x,at.z,building): return true
+	return false
 
 func part(x:float,y:float,z:float,w:float,h:float,d:float,c:Color,angle:=0.0) -> void:
 	blocks.append([Transform3D(Basis(Vector3.RIGHT,angle)*Basis.from_scale(Vector3(w,h,d)),Vector3(x,y,z)),c])
+
+## A box that gives its own light (a lightbox sign, a lamp strip): its own small mesh and material,
+## so the rest of the frontage, on the shared vertex-colour material, does not glow.
+func lit(x:float,y:float,z:float,w:float,h:float,d:float,c:Color,energy:float) -> void:
+	var box := BoxMesh.new()
+	box.size = Vector3(w,h,d)
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = c
+	glow.emission_enabled = true
+	glow.emission = c
+	glow.emission_energy_multiplier = energy
+	var node := MeshInstance3D.new()
+	node.name = "Lit%d" % get_child_count()
+	node.mesh = box
+	node.material_override = glow
+	node.position = Vector3(x,y,z)
+	node.visibility_range_end = 185
+	add_child(node)
 
 ## Axially symmetric ceramics and paper lanterns, baked together per frontage.
 func profile(x:float,y:float,z:float,levels:Array, tint:Color, segments:=16) -> void:
@@ -216,6 +268,24 @@ func dress() -> void:
 			for j: int in 3:
 				part(display+(j-1)*dw*0.25,1.39,0.24,dw*0.18,0.49,0.025,CREAM)
 				part(display+(j-1)*dw*0.25,1.43,0.262,dw*0.12,0.09,0.018,colour)
+			if trade == "set-meal diner":
+				# The sample case under the price cards (Claude, with Codex's go-ahead, 2026-11-15):
+				# three set meals on lacquer trays, each a rice bowl, a soup bowl and its main dish,
+				# on a shelf between two side boards and under a top board, at eye level by the door.
+				var cw := minf(dw*0.94,2.3)      # (a sample case is a metre or two wide, however wide the window)
+				part(display,1.01,0.36,cw,0.06,0.40,WOOD)
+				part(display,1.30,0.36,cw+0.06,0.04,0.42,WOOD)
+				for side: int in [-1,1]: part(display+side*cw*0.5,1.155,0.36,0.03,0.25,0.40,WOOD)
+				var mains: Array = [Color("#a8703a"),Color("#c9c1ae"),Color("#7d4a2c")]      # cutlet, grilled fish, simmered beef
+				for n: int in 3:
+					var bx := display+(n-1)*cw*0.31
+					part(bx,1.047,0.37,minf(cw*0.27,0.46),0.014,0.30,Color("#4a1c1a"))
+					# The main dish on its plate, at the back of the tray.
+					profile(bx,1.054,0.30,[Vector2(0.03,0),Vector2(0.105,0.012),Vector2(0.11,0.022),Vector2(0.10,0.022)],PALE)
+					part(bx,1.088,0.30,0.12,0.03,0.07,mains[n])
+					# Rice in its bowl (left) and soup in a dark lacquer bowl (right), at the front.
+					profile(bx-0.085,1.054,0.44,[Vector2(0.028,0),Vector2(0.058,0.045),Vector2(0.060,0.060),Vector2(0.050,0.060),Vector2(0.0,0.075)],CREAM)
+					profile(bx+0.085,1.054,0.44,[Vector2(0.028,0),Vector2(0.056,0.040),Vector2(0.058,0.055),Vector2(0.048,0.055),Vector2(0.0,0.048)],Color("#2a211d"))
 	else:
 		# Projecting striped awning and stocked display at the wall, off the walkway.
 		for j: int in 9:
@@ -231,9 +301,35 @@ func dress() -> void:
 					part(q,0.72,0.39,dw*0.045,0.13,0.14,[Color("#b45036"),Color("#819050"),Color("#c39955")][j])
 	# A double-sided blade is readable when walking parallel to the building.
 	var blade_x := w*0.44
-	part(blade_x,2.50,0.49,0.12,0.82,0.80,colour)
-	for sign_side: int in [-1,1]:
-		words(display_word,short_name,Vector3(blade_x+sign_side*0.068,2.5,0.49),0.69,0.29,sign_side*PI*0.5)
+	if trade == "set-meal diner":
+		# (The sample case's own light, wherever the case is: a strip under its top board and one small
+		# lamp with no shadow, reaching the case only.)
+		lit(w*0.155,1.272,0.40,minf(w*0.57*0.94,2.3)*0.96,0.014,0.035,Color("#ffd9a0"),2.2)
+		var lamp := OmniLight3D.new()
+		lamp.name = "CaseLamp"
+		lamp.light_color = Color("#ffd9a0")
+		lamp.light_energy = 0.9
+		lamp.omni_range = 1.3
+		lamp.shadow_enabled = false
+		lamp.distance_fade_enabled = true
+		lamp.distance_fade_begin = 40.0
+		lamp.distance_fade_length = 10.0
+		lamp.position = Vector3(w*0.155,1.24,0.42)
+		add_child(lamp)
+	if trade == "set-meal diner" and hemmed_in and box_height >= 4.7 and not plain_blades:
+		# (Claude, with Codex's go-ahead, 2026-11-15.) In a tall narrow front between neighbours
+		# with deep canopies, the blade at board height is hidden from along the pavement: here it
+		# is a taller one that reads downwards, from 3.1 to 4.4 m, clear above a neighbour's canopy
+		# and below the first upper window, on two steel arms from the wall.
+		# (A lightbox: its faces give their own light.)
+		lit(blade_x,3.75,0.44,0.10,1.30,0.56,colour,1.1)
+		for arm_y: float in [3.08,4.42]: part(blade_x,arm_y,0.36,0.04,0.04,0.72,Color("#4b4f52"))
+		for sign_side: int in [-1,1]:
+			words("定\n食",short_name,Vector3(blade_x+sign_side*0.058,3.75,0.44),0.44,1.12,sign_side*PI*0.5)
+	else:
+		part(blade_x,2.50,0.49,0.12,0.82,0.80,colour)
+		for sign_side: int in [-1,1]:
+			words(display_word,short_name,Vector3(blade_x+sign_side*0.068,2.5,0.49),0.69,0.29,sign_side*PI*0.5)
 	var multi := MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
 	multi.use_colors = true

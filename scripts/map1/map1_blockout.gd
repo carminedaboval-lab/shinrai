@@ -434,9 +434,9 @@ func _islands() -> void:
 
 ## How far out the wall across a dead end reaches on one side: to the footway's back, and on
 ## across any paved strip between lanes that ends on the same line; short of any building.
-func _end_wall_reach(street: Node3D, dir: float) -> float:
+func _end_wall_reach(street: Node3D, dir: float, back: float = 0.0) -> float:
 	var run: Vector2 = street.runs[street.runs.size() - 1] if dir > 0.0 else street.runs[0]
-	var end_s: float = run.y if dir > 0.0 else run.x
+	var end_s: float = (run.y if dir > 0.0 else run.x) + dir * back
 	var origin: Vector3 = street.at(end_s, 0.0)
 	var heading: Vector3 = (street.at(end_s + 1.0, 0.0) - origin).normalized()
 	var reach := float(street.half) + float(street.footway_wide)
@@ -456,9 +456,62 @@ func _end_wall_reach(street: Node3D, dir: float) -> float:
 	# (A centimetre at a time, so the wall meets the building's face; its coping may run into it.)
 	# (Never off the kerb, though: where a building stands on the kerb's back, the wall's end tucks
 	# into it.)
-	while reach > float(street.half) + Street.KERB_WIDE + 0.001 and _in_a_building(street.at(end_s + dir * Street.END_WALL_THICK * 0.5, reach)):
+	# (A wall set back past the end has no kerb to keep to: it stops at the building's face.)
+	var least := (float(street.half) + Street.KERB_WIDE) if back <= 0.0 else 0.0
+	while reach > least + 0.001 and _in_a_building(street.at(end_s + dir * Street.END_WALL_THICK * 0.5, reach)):
 		reach -= 0.01
 	return reach
+
+
+## How far past a dead end its wall has to stand so that it does not cut off the way in to a
+## house: the door of a made house, from a step inside its wall out to where one stands in front of it, with room for
+## a person either side. 0 where no door is near (the wall stands at the end, as it always has);
+## further back, in steps, until both halves of the wall clear every door, to END_WALL_BACK_MOST.
+## (Found at lane x 219's north end, 2026-11-15: house 1662 stands at 45 degrees with its door on
+## the wall facing the lane's end, and the wall ran into the door.)
+## Every dead end's wall: "<edge name> <+1 or -1>" -> {"back": metres past the end, "house": the box whose door it
+## clears (-1 if none), "door": that door's point}. For checks and surveys.
+var end_wall_backs: Dictionary = {}
+const END_WALL_BACK_MOST := 3.0
+const DOOR_CLEAR := 0.75      # room for a person to pass the wall's end and turn into the door; 0.45 left house 1662's walk out failing (Codex, 2026-11-15)
+func _end_wall_back(street: Node3D, dir: float) -> float:
+	if world == null: return 0.0
+	var run: Vector2 = street.runs[street.runs.size() - 1] if dir > 0.0 else street.runs[0]
+	var end_s: float = run.y if dir > 0.0 else run.x
+	var full := float(street.half) + 2.0
+	var near: Vector3 = street.at(end_s, 0.0)
+	var ways: Array = []          # each door's way in: [from, to, the house's box] on the ground
+	var key := "%s %+d" % [str(street.get_meta("edge").name), int(dir)]
+	end_wall_backs[key] = {"back": 0.0, "house": -1, "door": Vector3.ZERO}
+	for index: int in world.candidates:
+		var box: Array = data.boxes[index]
+		if Vector2(float(box[0]) - near.x, float(box[2]) - near.z).length() > 25.0: continue
+		var site: Dictionary = world.site(index)
+		if not bool(site.ok): continue
+		var door: Vector3 = site.door_point
+		var out: Vector3 = site.street_out
+		# (From inside the door to where one stands in front of it, and no further: past that point a person steps round a wall's end, as at lane z 405's dead end, where nothing was ever in the way.)
+		ways.append([Vector2(door.x - out.x * 1.6, door.z - out.z * 1.6), Vector2(door.x, door.z), index, door])
+	if ways.is_empty(): return 0.0
+	var back := 0.0
+	while back <= END_WALL_BACK_MOST + 0.001:
+		var s := end_s + dir * (back + Street.END_WALL_THICK * 0.5)
+		var a: Vector3 = street.at(s, -full)
+		var b: Vector3 = street.at(s, full)
+		var cut := false
+		for way: Array in ways:
+			for step: int in 13:
+				var p: Vector2 = (way[0] as Vector2).lerp(way[1], float(step) / 12.0)
+				var on_wall := Geometry2D.get_closest_point_to_segment(p, Vector2(a.x, a.z), Vector2(b.x, b.z))
+				# (Only where the wall would really stand: not where a building takes its place.)
+				if p.distance_to(on_wall) < DOOR_CLEAR and not _in_a_building(Vector3(on_wall.x, 0.0, on_wall.y)):
+					cut = true
+					if back == 0.0: end_wall_backs[key] = {"back": 0.0, "house": int(way[2]), "door": way[3]}
+		if not cut:
+			(end_wall_backs[key] as Dictionary)["back"] = back
+			return back
+		back += 0.2
+	return 0.0
 
 
 func _in_a_building(p: Vector3) -> bool:
@@ -579,7 +632,19 @@ func _build_one(street: Node3D) -> void:
 			street.infill(float(piece.s0), float(piece.s1), float(piece.out0), float(piece.out1))
 		var kinds: Array = edge.get("ends", ["joined", "joined"])
 		for end: Array in [[-1.0, kinds[0]], [1.0, kinds[1]]]:
-			if str(end[1]) == "dead": street.end_wall(float(end[0]), _end_wall_reach(street, float(end[0])))
+			if str(end[1]) == "dead":
+				# (Both sides of the lane find the same distance back: the test takes the whole wall.)
+				var back := _end_wall_back(street, float(end[0]))
+				var reach := _end_wall_reach(street, float(end[0]), back)
+				street.end_wall(float(end[0]), reach, back)
+				# The ground between the lane's end and a wall set back from it is paved at the footway's
+				# height right across, up to the wall: so the footway carries on flush to the wall and
+				# its raised end is not left as a corner in front of the door the wall stood back for.
+				# (House 4454 at lane z 405's end: the player's shoulder caught that corner. Codex, 2026-11-15.)
+				if back > 0.0 and reach > 0.05:
+					var run: Vector2 = street.runs[street.runs.size() - 1] if float(end[0]) > 0.0 else street.runs[0]
+					var end_s: float = run.y if float(end[0]) > 0.0 else run.x
+					street.infill(minf(end_s, end_s + float(end[0]) * back), maxf(end_s, end_s + float(end[0]) * back), 0.0, reach, true)
 	elif edge.name == "shop row":
 		# The first wide road: shops stand at the footway, so no gate; the first side lays the road.
 		# The kerb is lowered on both sides where the zebra crossing meets it (six units, 3.6 m,

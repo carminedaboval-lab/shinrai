@@ -38,12 +38,22 @@ func _run() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--views="): only = arg.trim_prefix("--views=").split(",")
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://" + OUT))
+	# (--plain-blades: every tall-building shop front keeps its ordinary blade sign, for comparison.)
+	if "--plain-blades" in OS.get_cmdline_user_args(): load("res://scripts/map1/map1_upper_shopfront.gd").plain_blades = true
 	map = Blockout.new()
 	map.name = "Map1Blockout"
 	map.with_player = false
 	root.add_child(map)
 	world = map.world
 	for label: Label3D in map.labels: label.visible = false
+	# (--dusk: the sun and the sky turned down, to see what gives its own light. Pictures get _dusk.)
+	if "--dusk" in OS.get_cmdline_user_args():
+		for found: Node in map.find_children("*", "DirectionalLight3D", true, false): (found as DirectionalLight3D).light_energy *= 0.06
+		for found: Node in map.find_children("*", "WorldEnvironment", true, false):
+			var env: Environment = (found as WorldEnvironment).environment
+			if env != null:
+				env.background_energy_multiplier *= 0.10
+				env.ambient_light_energy *= 0.25
 	# (--no-mirrors: the same views without the curve mirrors, for a before picture.)
 	if "--no-mirrors" in OS.get_cmdline_user_args() and map.curve_mirrors != null: map.curve_mirrors.visible = false
 	camera = Camera3D.new()
@@ -143,6 +153,66 @@ func _run() -> void:
 	await _shot("mirror_koban_lane", _eye(Vector3(168.4, 0.0, 426.0), 1.7), _eye(Vector3(172.3, 0.0, 409.9), 2.4), 60.0)
 	await _shot("mirror_tram_south", _eye(Vector3(175.1, 0.0, 472.0), 1.7), _eye(Vector3(175.1, 0.0, 496.4), 2.4), 60.0)
 	await _shot("mirror_footway", _eye(Vector3(162.0, 0.0, 409.6), 1.6), _eye(Vector3(178.0, 0.0, 409.6), 1.6), 65.0)
+	# The tram fork's approach (stage A): along lane z 497 to the two lanes that cross it side by
+	# side; up through both mouths from the south; the dead end of lane x 219 by house 1662's door;
+	# and the tram street's new end, towards the fork.
+	await _shot("fork_lane_east", _eye(Vector3(205.0, 0.0, 496.6), 1.7), _eye(Vector3(232.0, 0.0, 496.8), 0.6), 70.0)
+	await _shot("fork_mouths_north", _eye(Vector3(221.5, 0.0, 506.5), 1.7), _eye(Vector3(221.5, 0.0, 488.0), 0.5), 75.0)
+	await _shot("fork_dead_end", _eye(Vector3(219.0, 0.0, 495.5), 1.7), _eye(Vector3(218.2, 0.0, 487.5), 0.9), 70.0)
+	await _shot("fork_tram_end", _eye(Vector3(170.0, 0.0, 493.5), 1.7), _eye(Vector3(196.0, 0.0, 491.0), 0.4), 70.0)
+	# Lane z 405's dead end, from the doorstep of house 4454, whose door's line the wall's end stood on.
+	await _shot("dead_end_z405_door", _eye(Vector3(310.45, 0.0, 399.7), 1.6), _eye(Vector3(310.45, 0.0, 405.0), 0.7), 75.0)
+	# --approach=box,box: each of those businesses as someone walking along its pavement sees it,
+	# 14 m before its front and 1.8 m out from it, looking along the frontage (look_approach_<box>).
+	for arg: String in OS.get_cmdline_user_args():
+		if not arg.begins_with("--approach="): continue
+		for text: String in arg.trim_prefix("--approach=").split(","):
+			var index := int(text)
+			var site: Dictionary = world.site(index)
+			var front := Vector3.ZERO
+			var out := Vector3.ZERO
+			var along := Vector3.ZERO
+			# (A street-level tenant of a tall or shut building has no house plan: its own shop front
+			# says where it stands and which way it faces.)
+			var tenant: Node3D = map.get_node_or_null("TallShopfronts/Tenant_%d" % index)
+			if tenant != null:
+				front = tenant.global_position
+				out = tenant.global_transform.basis.z.normalized()
+				along = Vector3(out.z, 0.0, -out.x)
+			elif bool(site.ok):
+				front = _front_of(site)
+				out = site.street_out
+				along = site.street_along
+			else: continue
+			for way: float in [-1.0, 1.0]:
+				var view := "approach_%d_%s" % [index, "a" if way < 0.0 else "b"]
+				only.append(view)
+				# (Where a walker would be: the nearest place on a pavement, built or painted, from 14 m
+				# along and nearer; failing that the edge of a road, on a shared street; failing that
+				# the approach is left out and said so. Never open ground or a plot.)
+				var best := Vector3.ZERO
+				var best_kind := 0
+				var best_note := ""
+				var back := 14.0
+				while back >= 5.0 and best_kind < 2:
+					for wide: float in [1.8, 1.3, 0.9, 2.5, 3.5, 5.0, 6.5, 8.0]:
+						var stand := front + out * wide + along * back * way
+						if world.solid_at(stand.x, stand.z): continue
+						var kind := _walked(stand)
+						if kind > best_kind:
+							best_kind = kind
+							best = stand
+							best_note = "%.1f m along, %.1f m out, on %s" % [back, wide, "a pavement" if kind == 2 else "the road's edge"]
+						if best_kind == 2: break
+					back -= 0.5
+				if best_kind == 0:
+					print("MAP1_WORLD_CAPTURE %s skipped: no pavement or road within 14 m along that approach" % view)
+					continue
+				print("MAP1_WORLD_CAPTURE %s from %s" % [view, best_note])
+				await _shot(view, _eye(best, 1.6), _eye(front + out * 0.6, 1.4), 65.0)
+			# And its front, from across the street (a wide view, not a walker's approach).
+			only.append("approach_%d_front" % index)
+			await _shot("approach_%d_front" % index, _eye(front + out * 7.0, 1.6), _eye(front, 2.6), 60.0)
 	await _shot("link_lane", _eye(Vector3(91.6, 0.0, 449.5), 1.7), _eye(Vector3(90.6, 0.0, 425.0), 0.6), 70.0)
 	await _shot("link_lane_north", _eye(Vector3(89.5, 0.0, 411.6), 1.7), _eye(Vector3(89.6, 0.0, 424.0), 0.3), 75.0)
 	# The homes block's two clean crossroads.
@@ -229,6 +299,24 @@ func _run() -> void:
 
 
 ## A point on the plan, `lift` above the ground there.
+## What a walker stands on at a point: 2 a pavement (a built street's footway, or the ground
+## picture's pavement colour on a street not built yet), 1 a road, 0 anything else.
+func _walked(point: Vector3) -> int:
+	for street: Node3D in map.street_edges:
+		var out := float(street.out_of(point))
+		if out < float(street.half) + 0.15 or out > float(street.half) + float(street.footway_wide): continue
+		var s := float(street.along_of(point))
+		if not bool(street.beside(point, s)): continue
+		for run: Vector2 in street.runs:
+			if s >= run.x and s <= run.y: return 2
+	var image: Image = map.ground_image
+	if image != null:
+		var frame: Rect2 = map.frame
+		var pixel := image.get_pixel(clampi(int(point.x - frame.position.x), 0, image.get_width() - 1), clampi(int(point.z - frame.position.y), 0, image.get_height() - 1))
+		if pixel.is_equal_approx(Color8(148, 146, 140)): return 2
+	return 1 if world.road_at(point.x, point.z) else 0
+
+
 func _eye(at: Vector3, lift: float) -> Vector3:
 	return map.on_ground(at.x, at.z, lift)
 

@@ -358,6 +358,9 @@ static func _colours(c: Dictionary) -> void:
 
 # ---- what the rooms are -----------------------------------------------------------------------
 
+## Trades whose ground floor is a shop floor seen through a glass front, whatever plan the house has.
+const GLASS_FRONT_TRADES: Array[String] = ["convenience store", "grocer", "rice and liquor shop"]
+
 static func _uses(c: Dictionary) -> void:
 	var look: RandomNumberGenerator = c.look
 	var layout: Dictionary = c.layout
@@ -369,7 +372,9 @@ static func _uses(c: Dictionary) -> void:
 	# A convenience store's ground floor is its shop: where the plan names no shop room, the
 	# largest room on the front gets the shop's glass front. (It keeps its use in the house, so
 	# everything else about the house comes out as it would without the store.)
-	if shop == "" and c.has("business") and str(c.business.what) == "convenience store":
+	# (So for the other trades that sell goods off the shelf, a greengrocer and a rice and liquor
+	# shop: what they sell is seen from the pavement through the glass.)
+	if shop == "" and c.has("business") and str(c.business.what) in GLASS_FRONT_TRADES:
 		for room: Dictionary in ground:
 			if _span(_wall(c, "front", 0), room.rect) != Vector2.ZERO and not bool(room.get("entry", false)):
 				room["glass_front"] = true
@@ -1111,6 +1116,8 @@ static func _bicycle(c: Dictionary, at: Vector3, look: RandomNumberGenerator) ->
 # ---- a trade's shop front -----------------------------------------------------------------------------
 
 const PAPER := Color(0.92, 0.89, 0.80)
+## Bottle glass on a liquor shop's window stand: brown, green, a pale sake blue and a dark amber.
+const BOTTLES: Array[Color] = [Color(0.33, 0.20, 0.10), Color(0.16, 0.34, 0.22), Color(0.62, 0.74, 0.78), Color(0.45, 0.27, 0.08)]
 const LANTERN_RED := Color(0.74, 0.13, 0.10)
 const SOOT := Color(0.10, 0.09, 0.09)
 const BLACKBOARD := Color(0.13, 0.15, 0.14)
@@ -1336,6 +1343,35 @@ static func _shop_front(c: Dictionary) -> void:
 			else: cursor[-1] = minf(float(cursor[-1]), at - w * 0.5 - 0.15)
 			pieces.append("counter")
 			break
+
+	# A rice and liquor shop's window: where its front is glass, a low stepped stand stands just
+	# inside the panes with rows of bottles on it, so the trade is read from the pavement by what
+	# is for sale and the footway stays clear. (Inside the room's front strip, clear of the door.)
+	if str(business.what) == "rice and liquor shop":
+		var pane_from := INF
+		var pane_to := -INF
+		for entry: Dictionary in c.windows:
+			if int(entry.floor) != 0 or str(entry.wall) != "front" or float(entry.sill) != 0.0 or float(entry.width) < 1.0: continue
+			pane_from = minf(pane_from, float(entry.at) - float(entry.width) * 0.5)
+			pane_to = maxf(pane_to, float(entry.at) + float(entry.width) * 0.5)
+		if pane_to - pane_from >= 1.4:
+			var stand_mid := (pane_from + pane_to) * 0.5
+			var stand_wide := pane_to - pane_from - 0.30
+			# Two steps: the lower at the glass, the higher behind it.
+			var steps: Array = [[0.42, 0.30], [0.74, 0.58]]      # [how far inside the wall's outer face, how high]
+			for n: int in steps.size():
+				var inside: float = steps[n][0]
+				var step_high: float = steps[n][1]
+				_block(c, Vector3(stand_mid, L0 + step_high * 0.5, inside), Vector3(stand_wide, step_high, 0.32), timber.darkened(0.15), true)
+				var count := int(floor((stand_wide - 0.10) / 0.17))
+				for k: int in count:
+					var x := stand_mid + (float(k) - float(count - 1) * 0.5) * 0.17
+					var glass: Color = BOTTLES[(k + n * 2) % BOTTLES.size()]
+					# The body, the shoulder's neck, and a paper label round the body.
+					(c.drums as Array).append([Vector3(x, L0 + step_high + 0.115, inside), 0.042, 0.23, 8, glass])
+					(c.drums as Array).append([Vector3(x, L0 + step_high + 0.275, inside), 0.015, 0.09, 6, glass])
+					(c.drums as Array).append([Vector3(x, L0 + step_high + 0.105, inside), 0.0435, 0.085, 8, PAPER])
+			pieces.append("window display")
 
 	for item: String in trade.get("out_front", []):
 		match item:

@@ -155,8 +155,15 @@ func _on_changing(index: int, from: int, to: int, why: int) -> void:
 	if sight > 0:
 		seen.seen_swaps += 1
 		if (seen.seen_notes as Array).size() < 6:
-			(seen.seen_notes as Array).append("box %d at %.0f m, %s, %d open sight lines, said %s" % [index, gap, "to a house" if from == BOX else "to a box", sight, label])
+			# (When, where in the view, and how the two sight tests compare, for whoever reads it.)
+			var since := Engine.get_physics_frames() - int(seen.get("cut_end_frame", Engine.get_physics_frames()))
+			var to_it: Vector3 = world.centre_of(index) - _eye()
+			var off_centre := rad_to_deg((-camera.global_transform.basis.z).angle_to(to_it))
+			(seen.seen_notes as Array).append("box %d at %.0f m, %s, %d open sight lines, said %s, %d frames after the cut ended, %.0f degrees off the view's centre, the world's own test uses %d points; open: %s" % [index, gap, "to a house" if from == BOX else "to a box", sight, label, since, off_centre, world.look_points(index).size(), " | ".join(_open_notes)])
 
+
+## Which points the last _sight_lines call found open (up to six), for a failure's note.
+var _open_notes: PackedStringArray = []
 
 ## How many of this probe's own points on a building the camera has a clear line to.
 func _sight_lines(index: int) -> int:
@@ -187,11 +194,23 @@ func _sight_lines(index: int) -> int:
 	var space := root.get_world_3d().direct_space_state
 	var eye := _eye()
 	var open := 0
-	for point: Vector3 in points:
+	_open_notes.clear()
+	for n: int in points.size():
+		var point := points[n]
 		if not camera.is_position_in_frustum(point): continue
 		var query := PhysicsRayQueryParameters3D.create(eye, point, 1, [player.get_rid()])
 		var hit := space.intersect_ray(query)
-		if hit.is_empty() or (hit.position as Vector3).distance_to(point) < 0.9 or world.outline_gap(index, hit.position) < 1.6 or not world.hides(hit, eye): open += 1
+		if hit.is_empty() or (hit.position as Vector3).distance_to(point) < 0.9 or world.outline_gap(index, hit.position) < 1.6 or not world.hides(hit, eye):
+			open += 1
+			# (Which of the probe's points it was and why the line counts as open, for a failure's note.)
+			if _open_notes.size() < 6:
+				var what := "the roof's shadow, point %d of 9" % (n - 125 + 1)
+				if n < 125:
+					var across := (n / 25) * 0.25
+					var up := ((n / 5) % 5) * 0.25
+					what = ["the -z wall", "the +z wall", "the -x wall", "the +x wall", "the roof"][n % 5] + " (%.2f across, %.2f %s)" % [across, up, "up" if n % 5 < 4 else "deep"]
+				var how := "nothing struck" if hit.is_empty() else ("struck the building itself" if (hit.position as Vector3).distance_to(point) < 0.9 or world.outline_gap(index, hit.position) < 1.6 else "struck something that does not hide: %s, %.0f m from the eye" % [str((hit.collider as Node).get_path()) if hit.collider is Node else str(hit.collider), eye.distance_to(hit.position)])
+				_open_notes.append("%s at (%.1f, %.1f, %.1f): %s" % [what, point.x, point.y, point.z, how])
 	return open
 
 
@@ -1360,6 +1379,7 @@ func _cuts() -> void:
 		_reset_seen()
 		seen.watch_grey = true
 		await _put(place[1], place[2])
+		seen["cut_end_frame"] = Engine.get_physics_frames()
 		var frames := int(world.stats.cut_frames)
 		var worst_here := float(world.stats.cut_worst_usec) / 1000.0
 		# Turn right round at once: nothing grey may show within 150 m.
@@ -1372,7 +1392,10 @@ func _cuts() -> void:
 		longest = maxi(longest, frames)
 		grey_after += int(seen.grey_seen_frames)
 		notes.append("%s: black for %d frames (%.2f s at 60 a second) while %d houses were made, %.0f ms of work in all, the worst frame %.1f ms; then turned right round: a grey box in view within 150 m on %d frames, %d changes in sight nearer than %d m" % [str(place[0]), frames, float(frames) / 60.0 + World.FADE_SECONDS, int(world.stats.cut_looks), float(world.stats.cut_usec) / 1000.0, worst_here, int(seen.grey_seen_frames), int(seen.seen_swaps), int(World.FAR_SWAP)])
-		if int(seen.seen_swaps) > 0: grey_after += 1000
+		if int(seen.seen_swaps) > 0:
+			grey_after += 1000
+			# (Which buildings changed in sight, for whoever reads the failure.)
+			notes.append("%s: changed in sight: %s" % [str(place[0]), "; ".join(PackedStringArray(seen.seen_notes))])
 	_check(worst < 25.0 and longest <= 90, "the start and three jumps: the worst single frame cost %.1f ms (it was up to 1,400 ms in one frame); the picture is black for at most %d frames (%.2f s with the fade), and the game answers all the while" % [worst, longest, float(longest) / 60.0 + World.FADE_SECONDS])
 	_check(grey_after == 0, "after each, turning right round at once: no grey box of a makeable house in view within 150 m, and no change in sight (%d)" % grey_after)
 	for note: String in notes: _info(note)
@@ -1653,6 +1676,13 @@ func _businesses() -> void:
 	var noren_doors := 0
 	var differing: Array[String] = []
 	var glass_fronts := 0
+	# (2026-11-15: the glass front, first the convenience store's alone, is every goods trade's: Dress.GLASS_FRONT_TRADES.)
+	# (The three are named here, not read from the game's own list: if the game drops one, this
+	# check must fail for it, not shrink.)
+	var glass_trades: Array[String] = ["convenience store", "grocer", "rice and liquor shop"]
+	var glass_wanted := 0
+	for trade: String in glass_trades:
+		if sample_of.has(trade): glass_wanted += 1
 	for what: String in sample_of:
 		var dressed: Dictionary = sample_of[what]
 		var bare := _plan_as(int(dressed.index), "")
@@ -1668,18 +1698,28 @@ func _businesses() -> void:
 				for door: Dictionary in [mine[0], theirs[0]]:
 					door.erase("kind")
 					door.erase("style")
-			if key == "windows" and what == "convenience store":
+			if key == "windows" and what in glass_trades:
 				var front_glass := (mine as Array).filter(func(w: Dictionary) -> bool: return int(w.floor) == 0 and str(w.wall) == "front")
 				# (Another room on the same wall, a bathroom say, may keep its small high window.)
 				if front_glass.any(func(w: Dictionary) -> bool: return float(w.sill) == 0.0 and float(w.width) >= 1.0): glass_fronts += 1
-				else: differing.append("convenience store: no glass front")
-				mine = (mine as Array).filter(func(w: Dictionary) -> bool: return not (int(w.floor) == 0 and str(w.wall) == "front"))
-				theirs = (theirs as Array).filter(func(w: Dictionary) -> bool: return not (int(w.floor) == 0 and str(w.wall) == "front"))
+				else: differing.append("%s: no glass front" % what)
+				# Only the display room's own stretch of the front is set aside: the glass itself, and the
+				# bare house's windows that stood where the glass now is. A front window of another room
+				# (a bathroom's, say) is still compared exactly, like every other window.
+				var glass := front_glass.filter(func(w: Dictionary) -> bool: return float(w.sill) == 0.0 and float(w.width) >= 1.0)
+				var pane_low := INF
+				var pane_high := -INF
+				for pane: Dictionary in glass:
+					pane_low = minf(pane_low, float(pane.at) - float(pane.width) * 0.5)
+					pane_high = maxf(pane_high, float(pane.at) + float(pane.width) * 0.5)
+				var in_display := func(w: Dictionary) -> bool: return int(w.floor) == 0 and str(w.wall) == "front" and float(w.at) > pane_low - 0.3 and float(w.at) < pane_high + 0.3
+				mine = (mine as Array).filter(func(w: Dictionary) -> bool: return not in_display.call(w))
+				theirs = (theirs as Array).filter(func(w: Dictionary) -> bool: return not in_display.call(w))
 			if var_to_str(mine) != var_to_str(theirs):
 				planning_differs += 1
 				differing.append("%s: %s" % [what, key])
 				break
-	_check(replanned == Dress.TRADES.size() and planning_differs == 0 and glass_fronts == (1 if sample_of.has("convenience store") else 0), "one shop of each trade planned again with its business taken away: the same rooms, doors, stair, windows, steps and roof in all %d (%d differ); only the front's fittings, signs and paint are the trade's, and on %d noren trades the front door slides, and %d convenience store has a glass front of floor-length windows%s" % [replanned, planning_differs, noren_doors, glass_fronts, "" if differing.is_empty() else " (" + ", ".join(differing) + ")"])
+	_check(replanned == Dress.TRADES.size() and planning_differs == 0 and glass_fronts == glass_wanted, "one shop of each trade planned again with its business taken away: the same rooms, doors, stair, windows, steps and roof in all %d (%d differ); only the front's fittings, signs and paint are the trade's, and on %d noren trades the front door slides, and %d of the %d trades that sell goods behind glass (convenience store, grocer, rice and liquor shop) have a glass front of floor-length windows%s" % [replanned, planning_differs, noren_doors, glass_fronts, glass_wanted, "" if differing.is_empty() else " (" + ", ".join(differing) + ")"])
 
 	# The same picture both ways, and the same two draw calls: one shop of each trade built as
 	# the outside-only house and as the full one.

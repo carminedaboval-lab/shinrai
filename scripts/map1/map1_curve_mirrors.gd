@@ -126,6 +126,7 @@ func _place(map: Node3D, street: Node3D, far: Node3D, crossing: Dictionary, from
 			if past >= 0.0 and past < INTO_RUN + 6.0 and past < best:
 				best = past
 				s = end
+	s = _off_shop_front(map, far, s)
 	var label := "%s at %s, %s arm" % [str(street.get_meta("edge").name), str(crossing.get("with", "?")), "back" if away < 0.0 else "on"]
 	if not _on_footway(far, s):
 		skipped.append("%s: no far footway there" % label)
@@ -151,6 +152,34 @@ func _place(map: Node3D, street: Node3D, far: Node3D, crossing: Dictionary, from
 			(site.heads as Array).append(aim)
 			return
 	sites.append({"at": foot, "heads": [aim], "street": str(street.get_meta("edge").name), "lane": str(crossing.get("with", "?")), "why": why, "blocker": blocker, "far_side": float(far.side), "s": s})
+
+
+## A pole does not stand in front of a shop's door or window: where `s` on `street` lies along the
+## front of one of the map's businesses that stands at the footway, it moves to the nearer end of
+## that front (the wall between it and its neighbour), if that is within SHIFT and still on the
+## footway. Otherwise it stays.
+const SHIFT := 5.0
+func _off_shop_front(map: Node3D, street: Node3D, s: float) -> float:
+	for business: Dictionary in map.data.get("businesses", []):
+		var box: Array = map.data.boxes[int(business.box)]
+		if absf(float(box[0]) - float(street.at(s, 0.0).x)) > 30.0 or absf(float(box[2]) - float(street.at(s, 0.0).z)) > 30.0: continue
+		var low := INF
+		var high := -INF
+		var near := INF
+		for point: Vector2 in _footprint(box):
+			var spot := Vector3(point.x, 0.0, point.y)
+			var along := float(street.along_of(spot))
+			low = minf(low, along)
+			high = maxf(high, along)
+			near = minf(near, float(street.out_of(spot)))
+		# (On this side, its front within 2.5 m of the footway's back, and the pole along its front.)
+		if near < float(street.half) or near > float(street.half) + float(street.footway_wide) + 2.5: continue
+		if s <= low or s >= high: continue
+		var ends: Array[float] = [low - 0.3, high + 0.3]
+		ends.sort_custom(func(a: float, b: float) -> bool: return absf(a - s) < absf(b - s))
+		for end: float in ends:
+			if absf(end - s) <= SHIFT and _on_footway(street, end): return end
+	return s
 
 
 func _on_footway(street: Node3D, s: float) -> bool:

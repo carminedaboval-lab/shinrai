@@ -71,7 +71,14 @@ DIAGONAL_PILOT = (200.0, 452.0, 232.0, 481.5)   # where Tram street south runs d
 NORTH_OF_KOBAN = (40.0, 330.0, 215.0, 400.0)  # north of the koban lane, to clear of the tram street's north-south stretch (west footway back x 221)
 KOBAN_EAST = (180.0, 400.0, 215.0, 425.0)     # and lane x 188.7's last stretch, so it meets the koban lane on the map's lines
 # (The diagonal pilot is left out until the compound junction there is designed: see road-discussion.md, 2026-11-14 evening.)
-BLOCKS = (HOMES_BLOCK, EAST_LANES, NORTH_OF_KOBAN, KOBAN_EAST)
+# The tram fork, stage A (agreed with Codex, owner's yes 2026-11-15): the lane that carries straight on
+# east where Tram street south bends away (lane z 497), from clear of the fork's point at x 195 to
+# where the east grid takes it up at x 240, with the two lanes that cross it at x 218 and x 224.
+# The fork itself (the bend, the south footway's shift, the point between lane and street) is
+# stage B and stays painted.
+FORK_APPROACH = (200.0, 484.0, 240.0, 509.0)
+TRAM_SOUTH_TO = 184.0          # and Tram street south's own edge runs on to here, short of the bend at x 191
+BLOCKS = (HOMES_BLOCK, EAST_LANES, NORTH_OF_KOBAN, KOBAN_EAST, FORK_APPROACH)
 TRAM_SOUTH = (120.0, 490.0)    # Tram street, south: the wide street across the south of the homes block
 KOBAN_LANE = (96.0, 412.0)     # the lane north of the trial street, with the police box and the cafe terrace
 SHOP_ROW = (-340.0, -447.0)    # the wide road in front of the shop row: the first wide road with a real kerb
@@ -1189,7 +1196,7 @@ def main():
         wide_streets = [s for s in getattr(module, "town_streets", []) if s["cls"] in ("ring", "grid", "arterial", "collector")]
         if wide_streets:
             tram = min(wide_streets, key=lambda s: min(math.hypot(x - TRAM_SOUTH[0], z - TRAM_SOUTH[1]) for x, z in s["path"].pts))
-            part = [[round(float(x), 4), round(float(z), 4)] for x, z in tram["path"].pts if HOMES_BLOCK[0] <= x <= HOMES_BLOCK[2] and HOMES_BLOCK[1] <= z <= HOMES_BLOCK[3]]
+            part = [[round(float(x), 4), round(float(z), 4)] for x, z in tram["path"].pts if HOMES_BLOCK[0] <= x <= TRAM_SOUTH_TO and HOMES_BLOCK[1] <= z <= HOMES_BLOCK[3]]
             if len(part) >= 2:
                 middle = part[len(part) // 2]
                 bed = ground.getpixel((int(middle[0] - X0), int(middle[1] - Z0)))[:3] == RAIL_BED

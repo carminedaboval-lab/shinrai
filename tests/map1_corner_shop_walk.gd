@@ -12,7 +12,10 @@ const SHOPS: Array = [
 		{"from": Vector3(111.0, 0.0, 378.24), "via": [], "name": "the middle of lane z378"}]},
 	{"why": "the east grid's crossroads", "walks": [
 		{"from": Vector3(312.0, 0.0, 496.7), "via": [], "name": "the middle of lane z497"}]},
-	# The nearest shop already there that can be walked to from the middle of lane z435: the sushi
+	{"why": "the middle of lane z435", "walks": [
+		{"from": Vector3(290.0, 0.0, 435.1), "via": [], "name": "lane z435, 28 m west of the shop"},
+		{"from": Vector3(360.0, 0.0, 435.1), "via": [], "name": "lane z435, 42 m east of the shop"}]},
+	# The nearest shop that was there before, walked to from the middle of lane z435: the sushi
 	# counter on the grid's east edge (box 2146), along the lane to its east end and up the street
 	# it faces. Traced to say how far lane z435 really is from a shop.
 	{"box": 2146, "why": "lane z435's nearest shop", "walks": [
