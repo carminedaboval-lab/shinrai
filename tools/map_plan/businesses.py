@@ -38,6 +38,12 @@ PLACED = [
     # and lane x 85, the block's main crossroads, becomes the neighbourhood's corner shop.
     {"x": 91.8, "z": 367.2, "what": "tobacco and sweets shop",
      "why": "the north block's crossroads (lane z378 and lane x 85); the block had no shop, the nearest door was a 150 m walk"},
+    # The east grid of lanes (x 240 to 400, z 395 to 530) had none either: lane z435 and lane z497
+    # each ran more than 120 m with no business within 60 m, the farthest point 120 m from one
+    # (same survey; owner's yes 2026-11-15). The two-storey house on the north-east corner of
+    # lane x 329 and lane z497 becomes its shop, a different trade from the north block's.
+    {"x": 335.7, "z": 484.9, "what": "rice and liquor shop",
+     "why": "the east grid's crossroads (lane x 329 and lane z497); the grid had no shop, the farthest lane point was 120 m from one"},
 ]
 WORTH_NEW = 6        # a house is turned into one only if it brings this many
 WIDE = {"ring", "grid", "arterial", "collector", "old"}
