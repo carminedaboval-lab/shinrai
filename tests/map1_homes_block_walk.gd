@@ -5,6 +5,13 @@ const HOMES := Rect2(40.0,400.0,140.0,125.0)
 const NORTH_KOBAN := Rect2(40.0,330.0,175.0,95.0)
 
 const EAST_BLOCK := Rect2(240.0,395.0,160.0,135.0)
+## Distances measured at the collision faces where the lane ends beside a doorway.
+const WALL_SETBACK := {
+	"homes lane 219 a -1": 0.60,
+	"homes lane z405 a +1": 0.80,
+	"homes lane 329 b 2 +1": 0.40,
+	"homes lane 378 a -1": 0.20,
+}
 
 func in_review_area(point: Vector3) -> bool:
 	var flat := Vector2(point.x,point.z)
@@ -54,15 +61,27 @@ func _run() -> void:
 				var sign_out := -1.0 if end_index==0 else 1.0
 				var end_station := 0.0 if end_index==0 else length
 				var closed: bool = ends[end_index]=="dead"
+				var setback: float = WALL_SETBACK.get("%s %+d" % [data.name, int(sign_out)], 0.0)
+				var house_side: bool = data.name == "homes lane 219 a" and end_index == 0 and edge.side > 0
+				if house_side:
+					await _put(edge.at(end_station - sign_out * 2.0, 0.0, 0.25))
 				var correct := true
 				for lateral: float in [0.08,edge.half*0.8,edge.half+0.5*edge.KERB_WIDE,edge.half+0.5*edge.footway_wide]:
 					var from: Vector3 = edge.at(end_station-sign_out*0.6,lateral,0.75)
-					var to: Vector3 = edge.at(end_station+sign_out*0.6,lateral,0.75)
+					var to: Vector3 = edge.at(end_station+sign_out*(setback+0.6),lateral,0.75)
 					var query := PhysicsRayQueryParameters3D.create(from,to,1,[player.get_rid()])
 					var contact := player.get_world_3d().direct_space_state.intersect_ray(query)
 					var on_shared_pavement: bool = edge.has_meta("island_partner") and lateral>edge.half+edge.KERB_WIDE
-					if closed and not on_shared_pavement:
-						correct = correct and not contact.is_empty() and contact.collider.get_parent()==edge and str(contact.collider.name).begins_with("EndWallBody") and absf(from.distance_to(contact.position)-0.6)<0.04
+					if house_side and lateral >= edge.half * 0.79:
+						# The house closes this part of the lane. Its angled facade and usable
+						# front door meet the rays at different distances from the end line.
+						var house: Node3D = world.houses.get(1662)
+						var facade: bool = lateral < edge.half
+						var part := "Shell" if facade else "Door_front/HingedLeaf"
+						var depth := 0.63 if facade else 0.14
+						correct = correct and house != null and not contact.is_empty() and contact.collider == house.get_node_or_null(part) and absf(from.distance_to(contact.position)-0.6-depth)<0.04
+					elif closed and not on_shared_pavement:
+						correct = correct and not contact.is_empty() and contact.collider.get_parent()==edge and str(contact.collider.name).begins_with("EndWallBody") and absf(from.distance_to(contact.position)-0.6-setback)<0.04
 					else:
 						correct = correct and contact.is_empty()
 				_check(correct,"end collision matches %s on %s"%[ends[end_index],label])
@@ -144,6 +163,12 @@ func _run() -> void:
 			_check(await _drive([branch,main],false,8),"walk into branch and back on %s at %.2f"%[label,along])
 			mouths += 1
 	_check(sides>0 and mouths>0,"inspected %d street sides and %d side-road mouths"%[sides,mouths])
+	# The wall beside 1662 and the raised pavement at 4454 each blocked the return
+	# trip even when a player could enter. Exercise both doors with collisions on.
+	for index: int in [1662, 4454]:
+		var visit: Dictionary = await _visit(index)
+		_check(visit["in"] and visit.up and visit.down and visit.out,
+			"house %d at the dead end: entered, used the stairs and returned to the street" % index)
 	print("HOMES_BLOCK_WALK_DONE sides=%d mouths=%d passed=%d failed=%d"%[sides,mouths,passed,failed])
 	quit(1 if failed else 0)
 
