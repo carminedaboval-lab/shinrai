@@ -216,8 +216,13 @@ func _surface_checks(street: Node3D, places: PackedVector3Array, normals: Packed
 	var footway_top: float = street.top(street.pole_at)
 	_check(shaft > 0 and outward == shaft, "the pole's faces show from outside: %d of %d corners" % [outward, shaft])
 	_check(absf(lowest - footway_top) < 0.001 and absf(highest - lowest - Street.POLE_HIGH) < 0.001, "it stands on the footway, not in the air or the ground: its foot %.1f cm from the footway's top, %.1f m tall" % [(lowest - footway_top) * 100.0, highest - lowest])
-	var clear: float = street.half + street.footway_wide - street.pole_out - Street.POLE_FOOT_RADIUS
-	_check(clear >= 0.9, "behind the pole %.2f m of footway is left to walk on (at least 0.90)" % clear)
+	# Room to pass the pole, on whichever side of it the footway is open. (A pole near the kerb
+	# leaves the room behind it; on a narrow footway the pole stands at the back instead, half on
+	# the plot, and the room is in front of it. Either way a walker needs a clear 0.90 m.)
+	var behind: float = street.half + street.footway_wide - street.pole_out - Street.POLE_FOOT_RADIUS
+	var in_front: float = street.pole_out - Street.POLE_FOOT_RADIUS - street.half - Street.KERB_WIDE
+	var clear: float = maxf(behind, in_front)
+	_check(clear >= 0.9, "past the pole %.2f m of footway is left to walk on (%.2f behind it, %.2f in front; at least 0.90)" % [clear, behind, in_front])
 	var ray := PhysicsRayQueryParameters3D.create(foot + Vector3(0.0, 1.0, 0.0) - across * 1.2, foot + Vector3(0.0, 1.0, 0.0) + across * 1.2)
 	var hit := root.world_3d.direct_space_state.intersect_ray(ray)
 	_check(not hit.is_empty() and absf(Vector2(hit.position.x - foot.x, hit.position.z - foot.z).length() - Street.POLE_FOOT_RADIUS) < 0.02, "the pole is solid: a line across it at 1 m stops at its face")
@@ -227,11 +232,20 @@ func _surface_checks(street: Node3D, places: PackedVector3Array, normals: Packed
 ## The lowered kerb at a house's gate (ROAD-003, the first entrance).
 func _entrance_checks(street: Node3D, player: CharacterBody3D) -> void:
 	var gates: Array = map._gates_near(map.data.street_edges[0])
-	var mine: Array = gates.filter(func(gate: Vector3) -> bool: return street.out_of(gate) > street.half)
-	_check(street.drops.size() == 1 and not mine.is_empty(), "one lowered kerb, and a house with a gate on this side to put it at: %d lowered, %d gates on this side of %d along the street" % [street.drops.size(), mine.size(), gates.size()])
+	# The gate the street module itself would choose: the first whose plot this edge fronts.
+	# (This asked for exactly one gate and one lowered kerb until 2026-11-16. Walling most plots
+	# instead of a quarter of them gave the trial street three gates and two lowered kerbs, one of
+	# them a carport's, so pairing them by position no longer works. The standard is unchanged:
+	# the chosen gate must still have a lowered kerb covering its opening. What changed is that
+	# the check now finds that pair instead of assuming it is the first of each.)
+	var mine: Array = gates.filter(func(gate: Vector3) -> bool: return street.plot_gap(gate) < INF)
+	_check(not street.drops.is_empty() and not mine.is_empty(), "a gate on this side and a lowered kerb to put at it: %d lowered, %d gates on this side of %d along the street" % [street.drops.size(), mine.size(), gates.size()])
 	if street.drops.is_empty() or mine.is_empty(): return
 	var gate: Vector3 = mine[0]
+	var gate_at: float = street.along_of(gate)
 	var drop: Vector2 = street.drops[0]
+	for each: Vector2 in street.drops:
+		if absf((each.x + each.y) * 0.5 - gate_at) < absf((drop.x + drop.y) * 0.5 - gate_at): drop = each
 	var middle := (drop.x + drop.y) * 0.5
 	var gate_along: float = street.along_of(gate)
 	# The house, and the opening between its gate pillars as its own plan built it.

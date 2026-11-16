@@ -1,0 +1,12 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://scripts/map1/map1_local_footway_asphalt.gdshader" id="1_shader"]
+[ext_resource type="Texture2D" path="res://assets/environment/roads/shinrai_road/textures/SHINRAI_Road_FineAggregate_BaseColor_2K.png" id="2_aggregate"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/aggregate = ExtResource("2_aggregate")
+shader_parameter/sample_metres = 2.0
+shader_parameter/aggregate_mean_linear = 0.028271220954791766
+shader_parameter/aggregate_mean_srgb = 0.1764264895801918
+shader_parameter/grain_strength = 0.45

@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://scripts/map1/map1_kerb_surface.gdshader" id="1"]
+[ext_resource type="Texture2D" path="res://assets/shinrai/drain_hgu150/ProjectShinrai_HGU150_Drain_GameReady_SHINRAI_PrecastCurb_BaseColor_1K.png" id="2"]
+
+[resource]
+shader = ExtResource("1")
+shader_parameter/cast_detail = ExtResource("2")
+shader_parameter/detail_tile_metres = 1.0
+shader_parameter/detail_linear_mean = 0.118523
+shader_parameter/detail_strength = 0.22
+shader_parameter/contact_height_metres = 0.04
+shader_parameter/contact_strength = 0.25
+shader_parameter/contact_tint = Vector3(0.40, 0.43, 0.36)

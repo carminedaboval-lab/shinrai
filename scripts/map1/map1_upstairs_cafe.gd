@@ -8,6 +8,11 @@ const WALNUT := Color("#684331")
 const GREEN := Color("#355b52")
 const BRASS := Color("#b48451")
 const CERAMIC := Color("#ede4cc")
+## Every text this café letters, so the dressing can cut their glyph outlines at load instead of
+## on the frame a player first sees the place. Six signs on one house made it the most expensive
+## build in the map: 34.1 ms cold against 5.7 ms warm. Keep this list and the `letter()` calls
+## below in step — `tests/probe_sign_warm_cost.gd` fails if a text is drawn that is not here.
+const SIGN_TEXTS: Array[String] = ["2F  喫茶", "2F\n喫茶\n↑", "喫茶\n2F", "日用品", "喫茶  /  COFFEE"]
 
 static func fits(c: Dictionary) -> bool:
 	if c.business.what != "coffee shop" or c.floors != 2 or c.layout.plan != "side_right":

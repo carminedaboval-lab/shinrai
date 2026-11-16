@@ -77,7 +77,10 @@ KOBAN_EAST = (180.0, 400.0, 215.0, 425.0)     # and lane x 188.7's last stretch,
 # The fork itself (the bend, the south footway's shift, the point between lane and street) is
 # stage B and stays painted.
 FORK_APPROACH = (200.0, 484.0, 240.0, 509.0)
-TRAM_SOUTH_TO = 184.0          # and Tram street south's own edge runs on to here, short of the bend at x 191
+TRAM_SOUTH_TO = 187.27         # and Tram street south's own edge runs on to here: where the fork's inner kerb curve begins, 3.7 m short of the bend at x 191 and clear of house 1661's door (x 186.3)
+FORK_KERB_HALF = 1.6           # the fork's south kerb is laid as one side of a narrow strip this far from its line
+FORK_CURVE_FROM = 188.0        # where that kerb's S begins: past house 1661's door and east wall
+FORK_LEAD_EAST = 0.6           # and a unit's length of straight kerb before the lane's built start
 BLOCKS = (HOMES_BLOCK, EAST_LANES, NORTH_OF_KOBAN, KOBAN_EAST, FORK_APPROACH)
 TRAM_SOUTH = (120.0, 490.0)    # Tram street, south: the wide street across the south of the homes block
 KOBAN_LANE = (96.0, 412.0)     # the lane north of the trial street, with the police box and the cafe terrace
@@ -1015,7 +1018,625 @@ def tram_bed_patch(ground, part, wide):
     return [[round(x, 2), round(z, 2)] for x, z in outline]
 
 
+def fork_south_kerb(street_edges):
+    """The tram fork, stage B, south side (agreed with Codex, owner's leave 2026-11-15): where Tram
+    street south bends away north-east, lane z 497 carries straight on east out of its south lane,
+    and its south kerb lies some 3 m south of the street's. The street's south kerb is carried from
+    its built end to the lane's built start on an S of two equal curves, with the footway behind
+    it going from the street's width to the lane's, and the road between the rail bed and the new
+    kerb surfaced up to the lane.
+
+    Laid as one side of a narrow strip (the game lays a kerb as a side of a street): the strip's
+    centre line runs FORK_KERB_HALF inside the kerb's line, and only its south side is built.
+    Returns the export entry, or None if either street is missing.
+    """
+    tram = next((e for e in street_edges if e["name"] == "tram street south"), None)
+    lane = next((e for e in street_edges if e["name"] == "homes lane z497 a"), None)
+    if tram is None or lane is None:
+        return None
+    x0, zc0 = tram["points"][-1]
+    x1, zc1 = lane["points"][0]
+    k0 = zc0 + tram["w"] * 0.5                 # the street's south kerb line
+    k1 = zc1 + lane["w"] * 0.5                 # the lane's south kerb line
+    # A straight lead at each end, so the first and last cross-sections are square to the street
+    # and the lane and meet theirs exactly (the game takes a kerb's direction from the line between
+    # two points: a curve running right to an end arrives turned by half a step, 5 cm out at the
+    # footway). The west lead also keeps the kerb on the street's line past house 1661 (east wall
+    # x 187.3): the curve starts at FORK_CURVE_FROM.
+    xa = max(x0 + 0.3, FORK_CURVE_FROM)
+    xb = x1 - FORK_LEAD_EAST
+    dx, dz = xb - xa, k1 - k0
+    if dx < 4.0 or dz <= 0.0:
+        return None
+    turn = 2.0 * math.atan2(dz, dx)            # each curve turns this much: two equal arcs make the S
+    radius = dx / (2.0 * math.sin(turn))
+    steps = 10
+    kerb = [(x0, k0, 0.0)]                     # (x, z, the way it heads)
+    for k in range(steps + 1):
+        a = turn * k / steps
+        kerb.append((xa + radius * math.sin(a), k0 + radius * (1.0 - math.cos(a)), a))
+    for k in range(steps - 1, -1, -1):
+        a = turn * k / steps
+        kerb.append((xb - radius * math.sin(a), k1 - radius * (1.0 - math.cos(a)), a))
+    kerb.append((x1, k1, 0.0))
+    # (The street's own kerb and footway run to its end, where this one takes over.)
+    tram["joined_end"] = True
+    def off(point, by):
+        # by metres towards the road (north of the kerb's line), square to the way it heads
+        x, z, a = point
+        return [round(x + math.sin(a) * by, 4), round(z - math.cos(a) * by, 4)]
+    lane_fw = float((lane.get("footway") or [lane["pavement"]] * 2)[0])
+    gutter = 0.22
+    # The road to surface: from the rail bed's south edge (3 m south of the street's centre line,
+    # round its mitre at the bend) and the lane's north kerb line, to the new kerb's gutter.
+    bend_x = 191.0
+    bed = zc0 + 3.0
+    lane_north = zc1 - lane["w"] * 0.5
+    tan_half = math.tan(math.radians(22.5))
+    outer_x = bend_x + tram["w"] * 0.5 * tan_half       # where the street's south kerb line would turn
+    gore_x = outer_x + (k0 - lane_north)                # where the lane's north kerb leaves the diagonal's kerb
+    # The patch ends on the lane's own first cross-section, which is square to the lane and not to
+    # the map: the lane bears 0.17 degrees off east, so a patch cut square at x1 leaves a sliver of
+    # bare ground up to 6.5 mm wide on the north half (Codex measured it from the built triangles).
+    lx, lz = lane["points"][1][0] - x1, lane["points"][1][1] - zc1
+    ll = math.hypot(lx, lz)
+    ux, uz = lx / ll, lz / ll
+    def lane_start(t):
+        # the point t metres across the lane's first cross-section (south positive)
+        return [round(x1 - uz * t, 4), round(zc1 + ux * t, 4)]
+    patch = [[x0, bed], [round(bend_x + 3.0 * tan_half, 3), bed], [round(gore_x, 3), round(lane_north, 3)], lane_start(-lane["w"] * 0.5)]
+    patch += [lane_start(lane["w"] * 0.5 - gutter)] + [off(point, gutter) for point in list(reversed(kerb))[1:]]
+    print("tram fork, south kerb: from (%.2f, %.2f) to (%.2f, %.2f), straight to x %.2f and from x %.2f, between them two curves of %.1f degrees, radius %.1f m; footway %.2f to %.2f m; gore point (%.2f, %.2f)" % (
+        x0, k0, x1, k1, xa, xb, math.degrees(turn), radius, tram["pavement"], lane_fw, gore_x, lane_north))
+    return {"name": "tram fork south", "cls": lane["cls"], "w": FORK_KERB_HALF * 2.0, "pavement": lane_fw,
+            "points": [off(point, FORK_KERB_HALF) for point in kerb], "exact": True, "footway": [lane_fw, 0.14], "ends": ["on", "on"],
+            "only_side": 1.0, "footway_from": float(tram["pavement"]), "end_patch": patch}
+
+
+FORK_NOSE_R = 0.6      # the island's rounded tip, at the kerb's road face
+FORK_NOSE_STEPS = 8    # cast pieces round it
+FORK_STUB = 3.0        # the diagonal's kerb, laid this far past the tip for now
+
+
+def fork_island(street_edges, fork):
+    """The tram fork, stage B, the island (outline agreed with Codex 2026-11-15): the tip of the
+    block between lane z 497 (its north kerb) and Tram street's diagonal (its south-east kerb).
+    The two kerb lines meet at 45 degrees; the tip is rounded at FORK_NOSE_R. Laid as two kerbs,
+    each one side of a narrow strip as the fork's south kerb is: the lane's north kerb from the
+    lane's built start west to the tip, turning round it at its end, and FORK_STUB of the
+    diagonal's kerb beyond. Behind them one paved surface (two ordinary footways would lie on top
+    of each other behind the tip), and the fork's road patch redrawn as one outline round the tip.
+    Returns the two export entries."""
+    tram = next((e for e in street_edges if e["name"] == "tram street south"), None)
+    lane = next((e for e in street_edges if e["name"] == "homes lane z497 a"), None)
+    if tram is None or lane is None or fork is None:
+        return []
+    kw, gutter = 0.14, 0.22
+    x0, zc0 = tram["points"][-1]
+    x1, zc1 = lane["points"][0]
+    lx, lz = lane["points"][1][0] - x1, lane["points"][1][1] - zc1
+    ll = math.hypot(lx, lz)
+    ux, uz = lx / ll, lz / ll                          # the lane's heading
+    hw = lane["w"] * 0.5
+    k0 = zc0 + tram["w"] * 0.5
+    tan_half = math.tan(math.radians(22.5))
+    outer_x = 191.0 + tram["w"] * 0.5 * tan_half       # where the street's south kerb line turns north-east
+    dx, dz = math.sqrt(0.5), -math.sqrt(0.5)           # the diagonal's heading
+    p0 = (x1 + uz * hw, zc1 - ux * hw)                 # the lane's north kerb face at its first cross-section
+    det = dx * (-uz) - dz * (-ux)
+    a = ((p0[0] - outer_x) * (-uz) - (p0[1] - k0) * (-ux)) / det
+    g = (outer_x + a * dx, k0 + a * dz)                # where the two kerb lines meet
+    angle = math.acos(dx * ux + dz * uz)
+    tangent = FORK_NOSE_R / math.tan(angle * 0.5)
+    bx, bz = dx + ux, dz + uz
+    bl = math.hypot(bx, bz)
+    bx, bz = bx / bl, bz / bl
+    reach = FORK_NOSE_R / math.sin(angle * 0.5)
+    centre = (g[0] + bx * reach, g[1] + bz * reach)
+    t_lane = (g[0] + ux * tangent, g[1] + uz * tangent)
+    t_diag = (g[0] + dx * tangent, g[1] + dz * tangent)
+    n_lane = (uz, -ux)                                 # into the island from the lane's kerb (north)
+    n_diag = (-dz, dx)                                 # and from the diagonal's (south-east)
+    def go(p, u, s, n, t):
+        return (p[0] + u[0] * s + n[0] * t, p[1] + u[1] * s + n[1] * t)
+    def r4(p):
+        return [round(p[0], 4), round(p[1], 4)]
+    lane_len = (p0[0] - t_lane[0]) * ux + (p0[1] - t_lane[1]) * uz
+    fw = float((lane.get("footway") or [lane["pavement"]] * 2)[0])
+    # Round the tip from the lane's tangent point to the diagonal's: turning by (180 - angle).
+    turn = math.pi - angle
+    a_lane = math.atan2(t_lane[1] - centre[1], t_lane[0] - centre[0])
+    def arc(radius, k):
+        # k steps of FORK_NOSE_STEPS from the lane's tangent point round the west to the diagonal's
+        at = a_lane + turn * k / FORK_NOSE_STEPS
+        return (centre[0] + radius * math.cos(at), centre[1] + radius * math.sin(at))
+    # The paved surface, inside the kerbs: A, B (the cut at the lane's start), C, M (where the two
+    # footway backs meet), D, E (the stub's end), F, and the tip's back arc home to A.
+    m = (g[0] + bx * fw / math.sin(angle * 0.5), g[1] + bz * fw / math.sin(angle * 0.5))
+    paving = [go(t_lane, (ux, uz), 0.0, n_lane, kw), go(t_lane, (ux, uz), lane_len, n_lane, kw), go(t_lane, (ux, uz), lane_len, n_lane, fw), m,
+              go(t_diag, (dx, dz), FORK_STUB, n_diag, fw), go(t_diag, (dx, dz), FORK_STUB, n_diag, kw)]
+    paving += [arc(FORK_NOSE_R - kw, k) for k in range(FORK_NOSE_STEPS, 0, -1)]
+    # The road: the fork's patch, redrawn as one outline. From the rail bed's mitre it follows the
+    # bed's edge up the diagonal (3 m from the street's centre line) to opposite the stub's end,
+    # crosses to the stub's gutter, comes back down it, round the tip and along the lane's north
+    # gutter to the lane's first cross-section.
+    bed_gap = tram["w"] * 0.5 - 3.0                    # from the diagonal's kerb face to the bed's edge
+    stub_end = go(t_diag, (dx, dz), FORK_STUB, n_diag, 0.0)
+    chain = [go(stub_end, (dx, dz), 0.0, n_diag, -bed_gap), go(stub_end, (dx, dz), 0.0, n_diag, -gutter)]
+    chain += [arc(FORK_NOSE_R + gutter, k) for k in range(FORK_NOSE_STEPS, -1, -1)]
+    chain += [go(p0, (ux, uz), 0.0, n_lane, -gutter)]
+    old = fork["end_patch"]
+    fork["end_patch"] = old[:2] + [r4(p) for p in chain] + old[4:]
+    half = FORK_KERB_HALF
+    print("tram fork, island: kerb lines meet at %.2f degrees at (%.3f, %.3f); tip radius %.2f about (%.3f, %.3f), tangent points (%.3f, %.3f) and (%.3f, %.3f); lane kerb %.3f m, stub %.1f m; paving %d points, road patch %d points" % (
+        math.degrees(angle), g[0], g[1], FORK_NOSE_R, centre[0], centre[1], t_lane[0], t_lane[1], t_diag[0], t_diag[1], lane_len, FORK_STUB, len(paving), len(fork["end_patch"])))
+    common = {"cls": lane["cls"], "w": half * 2.0, "pavement": kw, "exact": True, "footway": [kw, kw], "ends": ["on", "on"], "only_side": 1.0}
+    lane_kerb = dict(common, name="tram fork island lane",
+                     points=[r4(go(p0, (ux, uz), 0.0, n_lane, -half)), r4(go(t_lane, (ux, uz), 0.0, n_lane, -half))],
+                     end_fillet=[FORK_NOSE_R, round(math.degrees(turn), 4), FORK_NOSE_STEPS],
+                     paving=[[round(p[0], 6), round(p[1], 6)] for p in paving], paving_faces=[2, 3, 4])
+    stub = dict(common, name="tram fork island stub",
+                points=[r4(go(t_diag, (dx, dz), 0.0, n_diag, -half)), r4(go(t_diag, (dx, dz), FORK_STUB, n_diag, -half))])
+    return [lane_kerb, stub]
+
+
+DIAGONAL_SOUTH_TO = 27.6   # Tram street's diagonal, south-east kerb: laid this far past the island's stub (46 units), short of the mouths of lanes x 224 and z 466
+DIAGONAL_WIDEN = 3.0       # its pavement grows from the island's width to the street's over this length
+
+
+def fork_diagonal_south(street_edges):
+    """Tram street's diagonal past the fork, south-east side (agreed with Codex 2026-11-16): the
+    kerb carried on from the island's stub along the diagonal's kerb line, DIAGONAL_SOUTH_TO
+    metres, stopping short of the compound mouth of lanes x 224 and z 466 (a later stage). Its
+    pavement is the street's own width; over the first DIAGONAL_WIDEN metres it grows from the
+    island's narrower pavement. The road is surfaced from the rail bed's edge to the gutter.
+    Laid as one-sided strips, as the island's kerbs are. Returns the export entries."""
+    tram = next((e for e in street_edges if e["name"] == "tram street south"), None)
+    stub = next((e for e in street_edges if e["name"] == "tram fork island stub"), None)
+    island = next((e for e in street_edges if e["name"] == "tram fork island lane"), None)
+    if tram is None or stub is None or island is None:
+        return []
+    kw, gutter = 0.14, 0.22
+    half = FORK_KERB_HALF
+    dx, dz = math.sqrt(0.5), -math.sqrt(0.5)           # the diagonal's heading
+    nx, nz = -dz, dx                                   # behind its south-east kerb
+    sx, sz = stub["points"][1]
+    face = (sx + nx * half, sz + nz * half)            # the stub's end, at the kerb's road face
+    def go(s, back):
+        return [round(face[0] + dx * s + nx * back, 4), round(face[1] + dz * s + nz * back, 4)]
+    wide = float(tram["pavement"])
+    narrow = float(island.get("paving_footway", 1.5))
+    bed_gap = tram["w"] * 0.5 - 3.0
+    common = {"cls": tram["cls"], "w": half * 2.0, "exact": True, "ends": ["on", "on"], "only_side": 1.0}
+    first = dict(common, name="tram diagonal south a", pavement=narrow, footway=[narrow, kw], footway_to=wide,
+                 points=[go(0.0, -half), go(DIAGONAL_WIDEN, -half)])
+    rest = dict(common, name="tram diagonal south", pavement=wide, footway=[wide, kw], grate=True,
+                points=[go(DIAGONAL_WIDEN, -half), go(DIAGONAL_SOUTH_TO, -half)],
+                end_patch=[go(0.0, -bed_gap), go(DIAGONAL_SOUTH_TO, -bed_gap), go(DIAGONAL_SOUTH_TO, -gutter), go(0.0, -gutter)])
+    # (The island's paving no longer ends in the open at the stub: the pavement carries on from it.)
+    island["paving_faces"] = [f for f in island["paving_faces"] if f != 4]
+    end = go(DIAGONAL_SOUTH_TO, 0.0)
+    print("tram diagonal, south-east kerb: from the stub's end (%.3f, %.3f) %.1f m to (%.3f, %.3f); pavement %.2f m growing to %.2f m over the first %.1f m" % (
+        face[0], face[1], DIAGONAL_SOUTH_TO, end[0], end[1], narrow, wide, DIAGONAL_WIDEN))
+    return [first, rest]
+
+
+MOUTH_TIP_R = 0.839463      # the round tip between the diagonal and lane x 224 (Codex's measured circle)
+MOUTH_TIP_CENTRE = (221.12894, 469.54356)
+MOUTH_TIP_TANGENT_D = (220.53535, 468.94997)   # on the diagonal's south-east kerb face
+MOUTH_TIP_TANGENT_X = (221.96840, 469.54607)   # on lane x 224's west kerb face
+MOUTH_TIP_STEPS = 8
+MOUTH_Z466_FROM = 228.5686  # lane z 466 laid west to here: the square return's tangent on its south kerb
+MOUTH_RETURN_R = 2.0        # that return's radius: the largest that keeps house 4474 out of the pavement
+MOUTH_RETURN_STEPS = 5      # cast pieces round it (0.63 m each at the kerb face)
+MOUTH_RETURN_TO = 470.7205  # and lane x 224's east kerb starts at the return's other tangent
+MOUTH_X224_HOUSE = 4474    # the house that stands within a metre of lane x 224's east kerb
+MOUTH_DOOR_WIDE = 1.8       # three low units fit both 1.2 m ramps before the measured doorway
+MOUTH_DOOR_Z = 474.2523     # the door's centreline, from Codex's in-game measurement of the built house
+MOUTH_X224_TO = 484.0      # lane x 224's west kerb, laid south to the built piece's start
+
+
+def compound_mouth_tip(street_edges):
+    """The compound mouth at the diagonal's far end (agreed with Codex 2026-11-16), first stage:
+    the pointed tip of the block between Tram street's diagonal and lane x 224's west side. The
+    ideal apex lies inside lane z 466's carriageway, so the tip is the one circle that touches
+    all three kerb lines (radius MOUTH_TIP_R, Codex's figures), turning 135.17 degrees. The
+    diagonal's ordinary 2 m pavement runs to the cross-section where its back meets lane x 224's
+    1.5 m back (the island's inner vertex); from there round the tip and down lane x 224 the
+    ground is one traced surface, as at the fork's island. Returns the new export entries."""
+    diag = next((e for e in street_edges if e["name"] == "tram diagonal south"), None)
+    if diag is None:
+        return []
+    kw, gutter, half = 0.14, 0.22, FORK_KERB_HALF
+    dx, dz = math.sqrt(0.5), -math.sqrt(0.5)       # the diagonal's heading
+    nx, nz = -dz, dx                               # behind its south-east kerb
+    face = (198.555, 490.931)                      # the diagonal's station zero, at the kerb face
+    wide = float(diag["pavement"])
+    xw = MOUTH_TIP_TANGENT_X[0]                    # lane x 224's west kerb face here
+    # The island's inner vertex: where the diagonal's and lane x 224's pavement backs meet.
+    # (A footway's back is `footway_wide` out from the kerb's road face, not from its back edge.)
+    back_sum = (face[0] + nx * wide) + (face[1] + nz * wide)
+    xb = xw - 1.5
+    vertex = (xb, back_sum - xb)
+    def st(p):
+        return (p[0] - face[0]) * dx + (p[1] - face[1]) * dz
+    cut = st((vertex[0] - nx * wide, vertex[1] - nz * wide))   # the diagonal station of that cross-section
+    tip_to = st(MOUTH_TIP_TANGENT_D)
+    def on_diag(s, back):
+        return (face[0] + dx * s + nx * back, face[1] + dz * s + nz * back)
+    def arc(radius, k):
+        # k steps from the diagonal's tangent round the tip to lane x 224's
+        a0 = math.atan2(MOUTH_TIP_TANGENT_D[1] - MOUTH_TIP_CENTRE[1], MOUTH_TIP_TANGENT_D[0] - MOUTH_TIP_CENTRE[0])
+        a1 = math.atan2(MOUTH_TIP_TANGENT_X[1] - MOUTH_TIP_CENTRE[1], MOUTH_TIP_TANGENT_X[0] - MOUTH_TIP_CENTRE[0])
+        at = a0 + (a1 - a0) * k / MOUTH_TIP_STEPS
+        return (MOUTH_TIP_CENTRE[0] + radius * math.cos(at), MOUTH_TIP_CENTRE[1] + radius * math.sin(at))
+    turn = math.degrees(math.atan2(MOUTH_TIP_TANGENT_X[1] - MOUTH_TIP_CENTRE[1], MOUTH_TIP_TANGENT_X[0] - MOUTH_TIP_CENTRE[0]) -
+                        math.atan2(MOUTH_TIP_TANGENT_D[1] - MOUTH_TIP_CENTRE[1], MOUTH_TIP_TANGENT_D[0] - MOUTH_TIP_CENTRE[0]))
+    r4 = lambda p: [round(p[0], 4), round(p[1], 4)]
+    # Lane x 224 is not quite true north-south: its west kerb must follow the built lane's own
+    # line, or it stands 43 mm off by the time it reaches the built piece (Codex measured it).
+    built = next((e for e in street_edges if e["name"] == "homes lane 224 a"), None)
+    (bx0, bz0), (bx1, bz1) = built["points"][0], built["points"][1]
+    lane_slope = (bx1 - bx0) / (bz1 - bz0)
+    lane_hw = built["w"] * 0.5
+    def west_face(z):
+        return bx0 + lane_slope * (z - bz0) - lane_hw
+    # The diagonal's own stretch now stops at that cross-section, its road surfaced to the tip.
+    diag["points"][1] = r4(on_diag(cut, -half))
+    diag["end_patch"] = [r4(on_diag(0.0, -(3.0 - (half - 1.6) + 1.6 - 1.6))), r4(on_diag(tip_to, -3.0)), r4(on_diag(tip_to, -gutter)), r4(on_diag(0.0, -gutter))]
+    diag["end_patch"][0] = r4(on_diag(0.0, -3.0))
+    # The tip's kerb: the last of the diagonal, laid as the kerb alone, turning round the tip.
+    paving = [on_diag(cut, kw)] + [arc(MOUTH_TIP_R - kw, k) for k in range(MOUTH_TIP_STEPS + 1)]
+    paving += [(west_face(vertex[1]) - kw, vertex[1]), vertex]
+    tip = {"name": "tram mouth tip", "cls": diag["cls"], "w": half * 2.0, "pavement": kw, "exact": True,
+           "footway": [kw, kw], "ends": ["on", "on"], "only_side": 1.0,
+           "points": [r4(on_diag(cut, -half)), r4(on_diag(tip_to, -half))],
+           "end_fillet": [MOUTH_TIP_R, round(turn, 4), MOUTH_TIP_STEPS], "end_fillet_footway": kw,
+           "paving": [[round(p[0], 6), round(p[1], 6)] for p in paving], "paving_faces": [], "paving_side": 1.0}
+    # Lane x 224's west kerb from the tip south: the kerb alone until the island is wide enough
+    # for the lane's own 1.5 m pavement, then that pavement.
+    west_a = {"name": "homes lane 224 west a", "cls": diag["cls"], "w": half * 2.0, "pavement": kw, "exact": True,
+              "footway": [kw, kw], "ends": ["on", "on"], "only_side": 1.0,
+              "points": [[round(west_face(MOUTH_TIP_TANGENT_X[1]) + half, 4), round(MOUTH_TIP_TANGENT_X[1], 4)], [round(west_face(vertex[1]) + half, 4), round(vertex[1], 4)]]}
+    west_b = {"name": "homes lane 224 west b", "cls": diag["cls"], "w": half * 2.0, "pavement": 1.5, "exact": True,
+              "footway": [1.5, kw], "ends": ["on", "on"], "only_side": 1.0, "grate": True,
+              "points": [[round(west_face(vertex[1]) + half, 4), round(vertex[1], 4)], [round(west_face(MOUTH_X224_TO) + half, 4), MOUTH_X224_TO]]}
+    print("compound mouth, tip: diagonal's pavement to station %.4f, kerb alone to %.4f; tip radius %.6f about (%.5f, %.5f), %d pieces, turning %.3f degrees; island vertex (%.4f, %.4f); lane x 224 west kerb from z %.3f to %.1f" % (
+        cut, tip_to, MOUTH_TIP_R, MOUTH_TIP_CENTRE[0], MOUTH_TIP_CENTRE[1], MOUTH_TIP_STEPS, turn, vertex[0], vertex[1], MOUTH_TIP_TANGENT_X[1], MOUTH_X224_TO))
+    return [tip, west_a, west_b]
+
+
+def compound_mouth_z466(street_edges):
+    """The compound mouth, third stage: lane z 466's unbuilt western length. The built piece is
+    cut at the block's edge at x 240; the ground picture paints the lane on west from there to
+    the diagonal. This lays it as an ordinary two-sided lane from MOUTH_Z466_FROM (the corner
+    where lane x 224's east kerb turns into it) to the built piece, and surfaces its carriageway.
+    The two corners at its west end, and the last of its north kerb out to the diagonal's
+    south-east kerb at the obtuse corner, are the stage after this. Returns the export entry."""
+    built = next((e for e in street_edges if e["name"] == "homes lane z466 a"), None)
+    if built is None:
+        return []
+    (x0, z0), (x1, z1) = built["points"][0], built["points"][-1]
+    slope = (z1 - z0) / (x1 - x0)
+    centre = lambda x: z0 + slope * (x - x0)
+    hw, gutter = built["w"] * 0.5, 0.22
+    west = MOUTH_Z466_FROM
+    # (The lane's own heading, so the new piece lies on the same line as the built one.)
+    # Laid east to west, so that its WEST end is the edge's end and can carry the square return
+    # into lane x 224 (the fillet turns a kerb at the end of its run, not at its start).
+    lane = {"name": "homes lane z466 west", "cls": built["cls"], "w": built["w"], "pavement": 1.5,
+            "exact": True, "footway": [1.5, 1.5], "ends": ["on", "on"],
+            "points": [[round(x0, 4), round(z0, 4)], [round(west, 4), round(centre(west), 4)]],
+            "end_fillet": [MOUTH_RETURN_R, 90.0008, MOUTH_RETURN_STEPS], "end_fillet_side": -1.0, "end_fillet_footway": 1.5,
+            "end_patch": [[round(west, 4), round(centre(west) - hw + gutter, 4)], [round(x0, 4), round(z0 - hw + gutter, 4)],
+                          [round(x0, 4), round(z0 + hw - gutter, 4)], [round(west, 4), round(centre(west) + hw - gutter, 4)]]}
+    print("compound mouth, lane z 466 west: laid from x %.2f to the built cut at x %.1f (%.2f m), centre z %.4f to %.4f, pavement 1.5 m both sides; its two west corners and the obtuse corner on the diagonal are the next stage" % (
+        west, x0, x0 - west, centre(west), z0))
+    return [lane]
+
+
+MOUTH_POINT_R = 0.839463    # the north-east point: the same nose as the tip at the junction's other end
+MOUTH_POINT_STEPS = 8
+MOUTH_DIAGONAL_ON = 10.8    # and the diagonal's south-east kerb carried this far past it (18 units)
+
+
+def compound_mouth_point(street_edges):
+    """Build the agreed north-east point from the two native street bases.
+
+    The 0.84 m kerb radius matches the opposite tip. Pavement widths include
+    the kerb, and the traced fill joins the actual lane and diagonal caps.
+    """
+    lane = next((entry for entry in street_edges if entry["name"] == "homes lane z466 west"), None)
+    diagonal = next((entry for entry in street_edges if entry["name"] == "tram diagonal south"), None)
+    if lane is None or diagonal is None:
+        return []
+    kerb, gutter, half = 0.14, 0.22, FORK_KERB_HALF
+    pavement, unit = 1.5, 0.6
+    lane_start, lane_end = lane["points"]
+    lx, lz = lane_end[0] - lane_start[0], lane_end[1] - lane_start[1]
+    length = math.hypot(lx, lz)
+    lane_direction = (lx / length, lz / length)
+    lane_normal = (-lane_direction[1], lane_direction[0])
+    lane_face = tuple(lane_end[i] + lane_normal[i] * lane["w"] * 0.5 for i in (0, 1))
+    diagonal_start, diagonal_end = diagonal["points"]
+    dx = diagonal_end[0] - diagonal_start[0]
+    dz = diagonal_end[1] - diagonal_start[1]
+    length = math.hypot(dx, dz)
+    diagonal_direction = (dx / length, dz / length)
+    diagonal_normal = (-diagonal_direction[1], diagonal_direction[0])
+    diagonal_face = tuple(diagonal_start[i] + diagonal_normal[i] * diagonal["w"] * 0.5 for i in (0, 1))
+
+    def intersection(origin_a, direction_a, origin_b, direction_b):
+        cross = direction_a[0] * direction_b[1] - direction_a[1] * direction_b[0]
+        delta = (origin_b[0] - origin_a[0], origin_b[1] - origin_a[1])
+        along = (delta[0] * direction_b[1] - delta[1] * direction_b[0]) / cross
+        return tuple(origin_a[i] + direction_a[i] * along for i in (0, 1))
+
+    apex = intersection(lane_face, lane_direction, diagonal_face, diagonal_direction)
+    wedge = math.acos(-sum(lane_direction[i] * diagonal_direction[i] for i in (0, 1)))
+    turn = math.pi - wedge
+    reach = MOUTH_POINT_R / math.tan(wedge * 0.5)
+    lane_tangent = tuple(apex[i] - lane_direction[i] * reach for i in (0, 1))
+    diagonal_tangent = tuple(apex[i] + diagonal_direction[i] * reach for i in (0, 1))
+    bisector = tuple(-lane_direction[i] + diagonal_direction[i] for i in (0, 1))
+    length = math.hypot(*bisector)
+    centre = tuple(apex[i] + bisector[i] / length * MOUTH_POINT_R / math.sin(wedge * 0.5) for i in (0, 1))
+
+    def arc(radius, index):
+        first = math.atan2(lane_tangent[1] - centre[1], lane_tangent[0] - centre[0])
+        last = math.atan2(diagonal_tangent[1] - centre[1], diagonal_tangent[0] - centre[0])
+        if last - first > math.pi:
+            last -= 2.0 * math.pi
+        if first - last > math.pi:
+            last += 2.0 * math.pi
+        angle = first + (last - first) * index / MOUTH_POINT_STEPS
+        return (centre[0] + radius * math.cos(angle), centre[1] + radius * math.sin(angle))
+
+    lane_back = tuple(lane_face[i] + lane_normal[i] * pavement for i in (0, 1))
+    diagonal_back = tuple(diagonal_face[i] + diagonal_normal[i] * pavement for i in (0, 1))
+    vertex = intersection(lane_back, lane_direction, diagonal_back, diagonal_direction)
+    # Full-width paving begins past the meeting of the two backs. The kerb
+    # continues alone until that cap, in whole 60 cm units.
+    needed = sum((vertex[i] - diagonal_tangent[i]) * diagonal_direction[i] for i in (0, 1))
+    lead = max(0.0, math.ceil((needed - 0.000001) / unit) * unit)
+
+    def on_diagonal(station, offset):
+        return tuple(diagonal_tangent[i] + diagonal_direction[i] * station
+                     + diagonal_normal[i] * offset for i in (0, 1))
+
+    def rounded(point):
+        return [round(value, 6) for value in point]
+
+    paving = [tuple(lane_face[i] + lane_normal[i] * kerb for i in (0, 1))]
+    paving.extend(arc(MOUTH_POINT_R - kerb, index) for index in range(MOUTH_POINT_STEPS + 1))
+    paving.extend([on_diagonal(lead, kerb), on_diagonal(lead, pavement), vertex, lane_back])
+    point = {
+        "name": "tram mouth point", "cls": lane["cls"], "w": half * 2.0,
+        "pavement": kerb, "exact": True, "footway": [kerb, kerb],
+        "ends": ["on", "on"], "only_side": 1.0,
+        "points": [
+            rounded(tuple(lane_face[i] - lane_normal[i] * half for i in (0, 1))),
+            rounded(tuple(lane_tangent[i] - lane_normal[i] * half for i in (0, 1))),
+        ],
+        "end_fillet": [MOUTH_POINT_R, round(math.degrees(turn), 6), MOUTH_POINT_STEPS],
+        "end_fillet_footway": kerb,
+        "paving": [rounded(position) for position in paving],
+        "paving_faces": [], "paving_side": 1.0,
+    }
+    result = [point]
+    if lead > 0.0:
+        result.append({
+            "name": "tram mouth point diagonal", "cls": diagonal["cls"],
+            "w": half * 2.0, "pavement": kerb, "exact": True,
+            "footway": [kerb, kerb], "ends": ["on", "on"], "only_side": 1.0,
+            "points": [rounded(on_diagonal(0.0, -half)), rounded(on_diagonal(lead, -half))],
+        })
+    result.append({
+        "name": "tram diagonal south b", "cls": diagonal["cls"],
+        "w": half * 2.0, "pavement": pavement, "exact": True,
+        "footway": [pavement, kerb], "ends": ["on", "on"], "only_side": 1.0, "grate": True,
+        "points": [rounded(on_diagonal(lead, -half)), rounded(on_diagonal(MOUTH_DIAGONAL_ON, -half))],
+        "end_patch": [
+            rounded(on_diagonal(0.0, -3.0)), rounded(on_diagonal(MOUTH_DIAGONAL_ON, -3.0)),
+            rounded(on_diagonal(MOUTH_DIAGONAL_ON, -gutter)), rounded(on_diagonal(0.0, -gutter)),
+        ],
+    })
+    print("compound north-east point: radius %.6f, turn %.6f, centre %s; kerb alone %.3f m, full footway %.3f m; back vertex %s"
+          % (MOUTH_POINT_R, math.degrees(turn), centre, lead, MOUTH_DIAGONAL_ON - lead, vertex))
+    return result
+
+
+def compound_mouth_east(street_edges, boxes):
+    """The compound mouth, second stage: lane x 224's east side, where house MOUTH_X224_HOUSE
+    stands 0.73 to 0.90 m from the kerb face. Beside the house the lane has the kerb alone (no
+    raised footway would fit), and at its front door the kerb is lowered to DROP_HIGH so that its
+    top is flush with the house's own 3 cm slab: the player steps off the road onto the kerb and
+    straight onto the slab. North and south of the house the lane has its ordinary 1.5 m pavement.
+    The lane's carriageway is surfaced between the two gutters. Returns the export entries."""
+    west = next((e for e in street_edges if e["name"] == "homes lane 224 west b"), None)
+    west_top = next((e for e in street_edges if e["name"] == "homes lane 224 west a"), None)
+    built = next((e for e in street_edges if e["name"] == "homes lane 224 a"), None)
+    if west is None or west_top is None or built is None or len(boxes) <= MOUTH_X224_HOUSE:
+        return []
+    kw, gutter, half = 0.14, 0.22, FORK_KERB_HALF
+    (bx0, bz0), (bx1, bz1) = built["points"][0], built["points"][1]
+    slope = (bx1 - bx0) / (bz1 - bz0)
+    hw = built["w"] * 0.5
+    centre = lambda z: bx0 + slope * (z - bz0)
+    b = boxes[MOUTH_X224_HOUSE]
+    a = math.radians(b[6])
+    ca, sa = math.cos(a), math.sin(a)
+    corners = [(b[0] + lx * b[3] * ca + lz * b[5] * sa, b[2] - lx * b[3] * sa + lz * b[5] * ca) for lx, lz in ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5))]
+    face = sorted(sorted(corners, key=lambda p: p[0])[:2], key=lambda p: p[1])   # its two west corners, north then south
+    from_z = round(face[0][1] - 0.5, 3)      # the kerb runs narrow from half a metre before the house
+    to_z = round(face[1][1] + 0.5, 3)
+    top = float(west_top["points"][0][1])   # the lane's new length starts at the tip's tangent
+    door_z = MOUTH_DOOR_Z if from_z < MOUTH_DOOR_Z < to_z else round((face[0][1] + face[1][1]) * 0.5, 3)
+    door_x = face[0][0] + (face[1][0] - face[0][0]) * (door_z - face[0][1]) / (face[1][1] - face[0][1])
+    common = {"cls": built["cls"], "w": half * 2.0, "exact": True, "ends": ["on", "on"], "only_side": -1.0}
+    def strip(name, z0, z1, pavement, extra=None):
+        entry = dict(common, name=name, pavement=pavement, footway=[kw, pavement],
+                     points=[[round(centre(z0) + hw - half, 4), round(z0, 4)], [round(centre(z1) + hw - half, 4), round(z1, 4)]])
+        if extra: entry.update(extra)
+        return entry
+    out = [strip("homes lane 224 east a", MOUTH_RETURN_TO, from_z, 1.5),
+           strip("homes lane 224 east b", from_z, to_z, kw,
+                 {"entrances": [{"x": round(door_x, 4), "z": door_z, "wide": MOUTH_DOOR_WIDE, "what": "door"}]}),
+           strip("homes lane 224 east c", to_z, MOUTH_X224_TO, 1.5)]
+    # The carriageway, between the two gutters, for the whole new length: one patch, laid with the
+    # west kerb so its grain runs down the lane.
+    west["end_patch"] = [[round(centre(z) - hw + gutter, 4), round(z, 4)] for z in (top, MOUTH_X224_TO)]
+    west["end_patch"] += [[round(centre(z) + hw - gutter, 4), round(z, 4)] for z in (MOUTH_X224_TO, top)]
+    print("compound mouth, lane x 224 east: pavement 1.5 m to z %.3f, kerb alone past house %d to z %.3f (kerb face %.3f to %.3f m from its wall), door at z %.3f with a %.1f m lowered kerb, 1.5 m again to z %.1f; carriageway surfaced z %.3f to %.1f" % (
+        from_z, MOUTH_X224_HOUSE, to_z, face[0][0] - (centre(face[0][1]) + hw), face[1][0] - (centre(face[1][1]) + hw), door_z, MOUTH_DOOR_WIDE, MOUTH_X224_TO, top, MOUTH_X224_TO))
+    return out
+
+
+FORK_INNER_R = 3.0  # the inside of the bend: the north kerb's curve, at its road face
+FORK_INNER_STEPS = 5
+FORK_INNER_FOOTWAY = 1.5   # the pavement narrows to this on the curve, and ends there
+
+
+def fork_inner_corner(street_edges):
+    """The tram fork, stage B, the inside of the bend (option (c), agreed with Codex): Tram street's
+    north kerb turns 45 degrees north-east with the street, on a curve of FORK_INNER_R from the
+    street's built end. A building (the curry shop) stands at the back of the street's pavement
+    and its corner stands across the diagonal's kerb line just past the curve, so nothing is laid
+    beyond the curve: the pavement narrows on the curve itself from the street's width to
+    FORK_INNER_FOOTWAY and stops at the curve's end with a closed end, and the road is surfaced
+    between the rail bed and the new gutter up to the curve's last cross-section.
+    Marks Tram street's export entry: its north side turns the curve (kerb alone), and it carries
+    the traced paving and the road patch. Returns nothing."""
+    tram = next((e for e in street_edges if e["name"] == "tram street south"), None)
+    if tram is None:
+        return
+    kw, gutter = 0.14, 0.22
+    x0, zc0 = tram["points"][-1]
+    hw = tram["w"] * 0.5
+    kn = zc0 - hw                                       # the north kerb line
+    tan_half = math.tan(math.radians(22.5))
+    inner = (191.0 - hw * tan_half, kn)                # where the two north kerb lines meet
+    tangent = FORK_INNER_R * tan_half
+    centre = (inner[0] - tangent, kn - FORK_INNER_R)
+    wide0 = float(tram["pavement"])
+    def arc(radius, k):
+        # k steps of FORK_INNER_STEPS round the curve, from the street's end to the diagonal's tangent point
+        at = math.pi * 0.5 - math.radians(45.0) * k / FORK_INNER_STEPS
+        return (centre[0] + radius * math.cos(at), centre[1] + radius * math.sin(at))
+    def back(k):
+        # the pavement's back: from the street's width to FORK_INNER_FOOTWAY, evenly round the curve
+        return arc(FORK_INNER_R - (wide0 + (FORK_INNER_FOOTWAY - wide0) * k / FORK_INNER_STEPS), k)
+    # The paved surface: its back from the street's pavement end round to the curve's end, the
+    # closed end across, and home along the kerb's back. The two points at the street's end are
+    # the existing pavement's own.
+    paving = [(x0, kn - wide0)] + [back(k) for k in range(1, FORK_INNER_STEPS + 1)]
+    paving += [arc(FORK_INNER_R - kw, k) for k in range(FORK_INNER_STEPS, 0, -1)] + [(x0, kn - kw)]
+    faces = list(range(0, FORK_INNER_STEPS + 1))       # its back edges and its end
+    # The road: between the rail bed's north edge (3 m north of the street's centre line, round its
+    # mitre) and the new gutter, from the street's end to the curve's last cross-section.
+    bed = zc0 - 3.0
+    mitre = (191.0 - 3.0 * tan_half, bed)
+    patch = [(x0, bed), mitre, arc(FORK_INNER_R + hw - 3.0, FORK_INNER_STEPS)]
+    patch += [arc(FORK_INNER_R + gutter, k) for k in range(FORK_INNER_STEPS, 0, -1)] + [(x0, kn + gutter)]
+    tram["end_fillet"] = [FORK_INNER_R, 45.0, FORK_INNER_STEPS]
+    tram["end_fillet_side"] = -1.0
+    tram["end_fillet_footway"] = kw
+    tram["paving"] = [[round(p[0], 6), round(p[1], 6)] for p in paving]
+    tram["paving_faces"] = faces
+    tram["paving_side"] = -1.0
+    tram["end_patch"] = [[round(p[0], 4), round(p[1], 4)] for p in patch]
+    end = arc(FORK_INNER_R, FORK_INNER_STEPS)
+    print("tram fork, inner corner: kerb lines meet at (%.3f, %.3f); curve radius %.1f about (%.3f, %.3f), %d pieces, to (%.3f, %.3f); pavement %.2f to %.2f m on the curve, back ends at (%.3f, %.3f); paving %d points, road patch %d points" % (
+        inner[0], inner[1], FORK_INNER_R, centre[0], centre[1], FORK_INNER_STEPS, end[0], end[1], wide0, FORK_INNER_FOOTWAY, back(FORK_INNER_STEPS)[0], back(FORK_INNER_STEPS)[1], len(paving), len(patch)))
+
+
+def compound_mouth_asphalt(street_edges):
+    """The compound mouth, last stage: one traced asphalt surface over the junction's carriageway,
+    so no painted ground is left inside it.
+
+    Every figure here is read back out of the entries the rest of the generator produced, never
+    from a constant: each corner's circle is derived from its own kerb strip's native basis, and
+    each cap cross-section is taken from the neighbouring patch itself. (Codex's review, 2026-11-16:
+    a hard-coded centre was a millimetre out, and running each arc only as far as the neighbouring
+    cap's bearing stopped it short of its own tangent. Each arc now runs tangent to tangent and a
+    straight length of gutter edge carries it on to the cap.) Sets the tip strip's patch."""
+    by = {e["name"]: e for e in street_edges}
+    need = ("tram mouth tip", "tram mouth point", "tram mouth point diagonal", "tram diagonal south",
+            "tram diagonal south b", "homes lane z466 west", "homes lane 224 west a", "homes lane 224 east a")
+    if any(n not in by for n in need):
+        return
+    gutter = 0.22
+    def basis(name, at_end, side=None):
+        """The kerb face at one end of an edge, and the unit normal from the road towards its back."""
+        e = by[name]
+        p0, p1 = (e["points"][-2], e["points"][-1]) if at_end else (e["points"][1], e["points"][0])
+        along = (p1[0] - p0[0], p1[1] - p0[1])
+        L = math.hypot(*along); along = (along[0] / L, along[1] / L)
+        if not at_end: along = (-along[0], -along[1])        # (the edge's own direction, not the way we read it)
+        perp = (-along[1], along[0])
+        s = float(side if side is not None else e.get("only_side", 1.0))
+        n = (perp[0] * s, perp[1] * s)
+        end = p1 if at_end else p1
+        return (end[0] + n[0] * e["w"] * 0.5, end[1] + n[1] * e["w"] * 0.5), n, e["w"] * 0.5
+    def corner(face_a, n_a, face_b, radius):
+        """The circle of a kerb's turn: its centre, from the face and normal where the turn begins."""
+        return (face_a[0] + n_a[0] * radius, face_a[1] + n_a[1] * radius)
+    def out_to(centre, face, radius):
+        """The gutter's outer edge below a point on the kerb face."""
+        dx, dz = face[0] - centre[0], face[1] - centre[1]
+        L = math.hypot(dx, dz)
+        return (centre[0] + dx / L * (radius + gutter), centre[1] + dz / L * (radius + gutter))
+    def arc(centre, radius, p_from, p_to, steps):
+        a0 = math.atan2(p_from[1] - centre[1], p_from[0] - centre[0])
+        a1 = math.atan2(p_to[1] - centre[1], p_to[0] - centre[0])
+        if a1 - a0 > math.pi: a1 -= 2.0 * math.pi
+        if a0 - a1 > math.pi: a1 += 2.0 * math.pi
+        return [(centre[0] + radius * math.cos(a0 + (a1 - a0) * k / steps),
+                 centre[1] + radius * math.sin(a0 + (a1 - a0) * k / steps)) for k in range(steps + 1)]
+    # The three turns, each from its own strip.
+    tip_face_d, tip_n_d, _ = basis("tram mouth tip", True)
+    tip_face_x, tip_n_x, _ = basis("homes lane 224 west a", False)
+    tip_c = corner(tip_face_d, tip_n_d, tip_face_x, MOUTH_TIP_R)
+    pt_face_l, pt_n_l, _ = basis("tram mouth point", True)
+    pt_face_d, _, _ = basis("tram mouth point diagonal", False)
+    pt_c = corner(pt_face_l, pt_n_l, pt_face_d, MOUTH_POINT_R)
+    ret_face_z, ret_n_z, _ = basis("homes lane z466 west", True, side=-1.0)
+    ret_face_x, _, _ = basis("homes lane 224 east a", False)
+    ret_c = corner(ret_face_z, ret_n_z, ret_face_x, MOUTH_RETURN_R)
+    # The four cap cross-sections, taken from the neighbouring patches themselves.
+    diag = by["tram diagonal south"]["end_patch"]
+    beyond = by["tram diagonal south b"]["end_patch"]
+    z466 = by["homes lane z466 west"]["end_patch"]
+    x224 = by["homes lane 224 west b"]["end_patch"]
+    d_bed, d_gut = tuple(diag[1]), tuple(diag[2])
+    p_bed, p_gut = tuple(beyond[0]), tuple(beyond[3])
+    z_north, z_south = tuple(z466[0]), tuple(z466[3])
+    x_east, x_west = tuple(x224[3]), tuple(x224[0])
+    outline = [d_bed, p_bed, p_gut]
+    outline += arc(pt_c, MOUTH_POINT_R + gutter, out_to(pt_c, pt_face_d, MOUTH_POINT_R), out_to(pt_c, pt_face_l, MOUTH_POINT_R), MOUTH_POINT_STEPS)
+    outline += [z_north, z_south]
+    outline += arc(ret_c, MOUTH_RETURN_R + gutter, out_to(ret_c, ret_face_z, MOUTH_RETURN_R), out_to(ret_c, ret_face_x, MOUTH_RETURN_R), MOUTH_RETURN_STEPS)
+    outline += [x_east, x_west]
+    outline += arc(tip_c, MOUTH_TIP_R + gutter, out_to(tip_c, tip_face_x, MOUTH_TIP_R), out_to(tip_c, tip_face_d, MOUTH_TIP_R), MOUTH_TIP_STEPS)
+    if math.hypot(outline[-1][0] - d_gut[0], outline[-1][1] - d_gut[1]) > 0.002: outline.append(d_gut)
+    by["tram mouth tip"]["end_patch"] = [[round(q[0], 4), round(q[1], 4)] for q in outline]
+    print("compound mouth, asphalt: one outline of %d points; turns about (%.6f, %.6f) tip, (%.6f, %.6f) point, (%.6f, %.6f) return, each from its own strip's basis; caps from the four neighbouring patches" % (
+        len(outline), tip_c[0], tip_c[1], pt_c[0], pt_c[1], ret_c[0], ret_c[1]))
+
+
 HOUSE_CLEAR = 0.3      # how far a trimmed house's face stands behind a built street's footway
+SHOP_CLEAR = 0.0       # a shop front belongs AT the footway's back, not set back behind it
+TRIM_LEAST = 0.02      # and nothing is trimmed for less than this much overlap
+
+
+def _to_segment(px, pz, ax, az, bx, bz):
+    """How far the point (px, pz) lies from the segment a-b, not from its ends."""
+    dx, dz = bx - ax, bz - az
+    length = dx * dx + dz * dz
+    if length < 1e-12:
+        return math.hypot(px - ax, pz - az)
+    t = max(0.0, min(1.0, ((px - ax) * dx + (pz - az) * dz) / length))
+    return math.hypot(px - (ax + dx * t), pz - (az + dz * t))
 
 
 def trim_houses_off_streets(boxes, street_edges):
@@ -1027,8 +1648,22 @@ def trim_houses_off_streets(boxes, street_edges):
         pts = edge["points"]
         fw = edge.get("footway")
         for index, b in enumerate(boxes):
-            if not str(b[7]).startswith("house") or b[3] < 3.0 or b[5] < 3.0: continue
-            if min(math.hypot(b[0] - x, b[2] - z) for x, z in pts) > 40.0: continue
+            if b[3] < 3.0 or b[5] < 3.0: continue
+            # A house stands back from the pavement; a shop front stands on it. Both must stay out
+            # of it. (Shops were never tested here until 2026-11-16, so a shop could stand any
+            # distance inside a footway and nothing would move it.)
+            kind = str(b[7])
+            if kind.startswith("house"): clear = HOUSE_CLEAR
+            elif kind.startswith("shop"): clear = SHOP_CLEAR
+            else: continue
+            # Near this street at all? Measured to the nearest point ON the line, not to its
+            # corners. (Until 2026-11-16 this took the distance to the nearest vertex, so on a
+            # long straight street every building near the middle was more than 40 m from both
+            # ends and the trim never looked at that street for it. Tram street south is one
+            # 146.66 m two-point line, which is how three shops stood in its footway unseen.
+            # Codex found it; the game was right and the generator was not.)
+            near = min(_to_segment(b[0], b[2], pts[j][0], pts[j][1], pts[j + 1][0], pts[j + 1][1]) for j in range(len(pts) - 1))
+            if near > 40.0: continue
             a = math.radians(b[6])
             ca, sa = math.cos(a), math.sin(a)
             axes = ((ca, -sa), (sa, ca))          # the box's own x and z directions on the ground
@@ -1048,8 +1683,8 @@ def trim_houses_off_streets(boxes, street_edges):
                         if t < 0.0 or t > length or (j == 0 and t < 1.0) or (j == len(pts) - 2 and t > length - 1.0): continue
                         signed = (px - ax) * -uz + (pz - az) * ux
                         wide = float(fw[0] if signed > 0.0 else fw[1]) if fw else float(edge["pavement"])
-                        short = edge["w"] * 0.5 + wide + HOUSE_CLEAR - abs(signed)
-                        if short <= HOUSE_CLEAR + 0.05: continue      # (not into the footway itself)
+                        short = edge["w"] * 0.5 + wide + clear - abs(signed)
+                        if short <= clear + TRIM_LEAST: continue      # (not into the footway itself)
                         away = (-uz * math.copysign(1.0, signed), ux * math.copysign(1.0, signed))
                         axis = max((0, 1), key=lambda k: abs(axes[k][0] * away[0] + axes[k][1] * away[1]))
                         lean = axes[axis][0] * away[0] + axes[axis][1] * away[1]
@@ -1059,14 +1694,14 @@ def trim_houses_off_streets(boxes, street_edges):
             need, axis, toward = worst
             size = 3 if axis == 0 else 5
             if b[size] - need < 3.0:
-                print("  house box %d stands %.2f m into %s and is too shallow to trim: left as it is" % (index, need, edge["name"]))
+                print("  %s box %d stands %.2f m into %s and is too shallow to trim: left as it is" % (kind, index, need, edge["name"]))
                 continue
             # The face toward the street moves back by `need`: the box is that much shallower and its
             # middle moves half of it away from the street (toward is the side that stays).
             b[size] = round(b[size] - need, 3)
             b[0] = round(b[0] + axes[axis][0] * toward * need * 0.5, 3)
             b[2] = round(b[2] + axes[axis][1] * toward * need * 0.5, 3)
-            print("  house box %d trimmed %.2f m off its side on %s" % (index, need, edge["name"]))
+            print("  %s box %d trimmed %.2f m off its side on %s" % (kind, index, need, edge["name"]))
 
 
 def main():
@@ -1197,6 +1832,9 @@ def main():
         if wide_streets:
             tram = min(wide_streets, key=lambda s: min(math.hypot(x - TRAM_SOUTH[0], z - TRAM_SOUTH[1]) for x, z in s["path"].pts))
             part = [[round(float(x), 4), round(float(z), 4)] for x, z in tram["path"].pts if HOMES_BLOCK[0] <= x <= TRAM_SOUTH_TO and HOMES_BLOCK[1] <= z <= HOMES_BLOCK[3]]
+            # (To the stated end itself, not the last plan point short of it.)
+            if len(part) >= 2 and part[-1][0] < TRAM_SOUTH_TO - 0.05:
+                part.append([TRAM_SOUTH_TO, part[-1][1]])
             if len(part) >= 2:
                 middle = part[len(part) // 2]
                 bed = ground.getpixel((int(middle[0] - X0), int(middle[1] - Z0)))[:3] == RAIL_BED
@@ -1526,6 +2164,17 @@ def main():
         print("homes block: %d lanes in the block, %d pieces laid: %s" % (len(lanes), len(laid), "; ".join("%s %s to %s (%s)" % (e["name"], e["points"][0], e["points"][1], "/".join(e["ends"])) for e in laid)))
         for entry, _ in through:
             print("  %s is crossed at: %s" % (entry["name"], "; ".join("%s %s" % (c["with"], [(s["side"], s["from"], s["to"], s["built"]) for s in c["sides"]]) for c in entry["crossings"])))
+    fork = fork_south_kerb(street_edges)
+    if fork is not None:
+        street_edges.append(fork)
+        street_edges.extend(fork_island(street_edges, fork))
+        fork_inner_corner(street_edges)
+        street_edges.extend(fork_diagonal_south(street_edges))
+        street_edges.extend(compound_mouth_tip(street_edges))
+        street_edges.extend(compound_mouth_east(street_edges, boxes))
+        street_edges.extend(compound_mouth_z466(street_edges))
+        street_edges.extend(compound_mouth_point(street_edges))
+        compound_mouth_asphalt(street_edges)
     trim_houses_off_streets(boxes, street_edges)
     data = {
         "about": "Generated by tools/map_plan/build_map1_blockout.py from data/map1/map1_plan.json. Do not edit by hand.",

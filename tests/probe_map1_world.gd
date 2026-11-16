@@ -19,6 +19,7 @@ const World := preload("res://scripts/map1/map1_world.gd")
 const HouseRules := preload("res://scripts/map1/map1_house_rules.gd")
 const HouseKit := preload("res://scripts/interior_kit/house_kit.gd")
 const Dress := preload("res://scripts/map1/map1_house_dress.gd")
+const TriangleMatch := preload("res://tests/triangle_match.gd")
 const DT := 1.0 / 60.0
 const BOX := World.Level.BOX
 const LOOK := World.Level.LOOK
@@ -83,6 +84,7 @@ func _run() -> void:
 		"street": _street, "long_walk": _long_walk, "enter": _enter, "plans": _plans,
 		"shut_tall": _shut_tall, "stations": _stations, "rooftop": _rooftop, "same_picture": _same_picture,
 		"flight": _flight, "japanese": _japanese, "neighbours": _neighbours, "businesses": _businesses, "kinds": _kinds, "cuts": _cuts,
+		"kerbs": _kerbs,
 	}
 	for label: String in scenarios:
 		if not only.is_empty() and not only.has(label): continue
@@ -926,36 +928,13 @@ func _corners_of(node: Node, frame: Transform3D, into: Array = [], known: Dictio
 
 
 ## How many triangles of one list have no twin in the other (same place, facing, colour, size).
-func _unmatched(first: Array, second: Array, by_quad: bool) -> int:
-	var cells := {}
-	for n: int in second.size():
-		var key := Vector3i((second[n][0] as Vector3 / 0.02).floor())
-		if not cells.has(key): cells[key] = []
-		(cells[key] as Array).append(n)
-	var used := {}
-	var lonely := 0
-	for entry: Array in first:
-		var centre: Vector3 = entry[0]
-		var home := Vector3i((centre / 0.02).floor())
-		var found := -1
-		for dx: int in [-1, 0, 1]:
-			for dy: int in [-1, 0, 1]:
-				for dz: int in [-1, 0, 1]:
-					if found >= 0: break
-					for n: int in cells.get(home + Vector3i(dx, dy, dz), []):
-						if used.has(n): continue
-						var other: Array = second[n]
-						if (other[0] as Vector3).distance_to(centre) > (0.02 if by_quad else 0.0015): continue
-						if (other[1] as Vector3).dot(entry[1]) < 0.999: continue
-						var ca: Color = other[2]
-						var cb: Color = entry[2]
-						if absf(ca.r - cb.r) + absf(ca.g - cb.g) + absf(ca.b - cb.b) > 0.01: continue
-						if not by_quad and absf(float(other[3]) - float(entry[3])) > 0.0005: continue
-						found = n
-						break
-		if found >= 0: used[found] = true
-		else: lonely += 1
-	return lonely + second.size() - used.size()
+## The matching itself lives in `tests/triangle_match.gd`, which is checked on its own against
+## known answers by `tests/probe_matcher.gd` — it has been wrong twice in ways a passing world
+## probe could not show, so it is tested where the right answer is known by hand rather than
+## only through a house. Its limits are written there: it says nothing about a triangle's own
+## corners or winding.
+func _unmatched(first: Array, second: Array, by_quad: bool, lonely_into: Array = []) -> int:
+	return TriangleMatch.new().unmatched(first, second, by_quad, lonely_into)
 
 
 func _same_picture() -> void:
@@ -966,6 +945,7 @@ func _same_picture() -> void:
 	var different := 0
 	var glass_different := 0
 	var triangles := 0
+	var notes: Array[String] = []
 	for index: int in world.houses.keys():
 		var house: Node3D = world.houses[index]
 		var look: Node3D = world.looks[index]
@@ -1009,11 +989,18 @@ func _same_picture() -> void:
 		var glass_b := _corners_of(look_house, look_house.global_transform)
 		compared += 1
 		triangles += solid_b.size() + glass_b.size() * 12 / 8
-		if solid_a.is_empty() or _unmatched(solid_a, solid_b, false) > 0: different += 1
+		var lonely: Array = []
+		if solid_a.is_empty() or _unmatched(solid_a, solid_b, false, lonely) > 0:
+			different += 1
+			if notes.size() < 3:
+				var said := "plan %d:" % world.candidates[n]
+				for one: Array in lonely.slice(0, 3):
+					said += " [%s at %.2f,%.2f,%.2f, colour %.2f,%.2f,%.2f, %.1f cm2]" % [one[0], (one[1] as Vector3).x, (one[1] as Vector3).y, (one[1] as Vector3).z, (one[2] as Color).r, (one[2] as Color).g, (one[2] as Color).b, float(one[3]) * 10000.0]
+				notes.append(said)
 		if glass_a.size() != glass_b.size() or _unmatched(glass_a, glass_b, false) > 0: glass_different += 1
 		full_house.free()
 		look_house.free()
-	_check(in_world >= 5 and compared >= 40 and different == 0 and glass_different == 0, "the %d full houses on the street against the outside-only house each replaced, and %d more from all over the map built both ways: every triangle of one has its twin in the other, in the same place to 1.5 mm, facing the same way, the same colour and size (%d houses differ in walls, doors, stair or roof, %d in glass); %d triangles a house on average, drawn with the same two materials" % [in_world, compared - in_world, different, glass_different, triangles / maxi(compared, 1)])
+	_check(in_world >= 5 and compared >= 40 and different == 0 and glass_different == 0, "the %d full houses on the street against the outside-only house each replaced, and %d more from all over the map built both ways: every triangle of one has its twin in the other, in the same place to 1.5 mm, facing the same way, the same colour and size (%d houses differ in walls, doors, stair or roof, %d in glass); %d triangles a house on average, drawn with the same two materials%s" % [in_world, compared - in_world, different, glass_different, triangles / maxi(compared, 1), ("; " + " ".join(notes)) if not notes.is_empty() else ""])
 	# What the outside-only house costs.
 	var total_usec := 0
 	var total_triangles := 0
@@ -1041,7 +1028,9 @@ func _same_picture() -> void:
 		house.free()
 	var n := float(list.size())
 	_check(nodes == list.size() * 3 and meshes == list.size() * 2, "an outside-only house is %d nodes and %d meshes (one for everything solid, one for the glass): no body, no shape, no script; the grey box's own collision keeps it solid" % [nodes / list.size(), meshes / list.size()])
-	_info("outside-only, average of %d houses of this street: %.0f triangles, %.1f ms to build, about %.0f kB of mesh; %d of them (the budget) are %.1f million triangles, %d draw calls and about %.0f MB" % [list.size(), total_triangles / n, total_usec / n / 1000.0, bytes / n / 1024.0, World.LOOK_BUDGET, total_triangles / n * World.LOOK_BUDGET / 1.0e6, World.LOOK_BUDGET * 2, bytes / n * World.LOOK_BUDGET / 1048576.0])
+	# The raw sum and the sample size as well as the average: a rounded mean cannot be multiplied
+	# back out to a budget figure, and that is what this number is used for.
+	_info("outside-only, %d triangles over %d houses of this street = %.1f each, %.1f ms to build, about %.0f kB of mesh; %d of them (the budget) are %d triangles, %d draw calls and about %.0f MB" % [total_triangles, list.size(), total_triangles / n, total_usec / n / 1000.0, bytes / n / 1024.0, World.LOOK_BUDGET, roundi(total_triangles / n * World.LOOK_BUDGET), World.LOOK_BUDGET * 2, bytes / n * World.LOOK_BUDGET / 1048576.0])
 	_info("a full house of the same street, average of 10: %d nodes, %.1f ms to build" % [full_nodes / 10, full_usec / 10000.0])
 
 
@@ -1767,3 +1756,95 @@ func _businesses() -> void:
 		look_house.free()
 	_check(built == Dress.TRADES.size() and different == 0 and glass_different == 0, "one shop of each of the %d trades built both ways: every triangle of the full house's outside (the sign's letters, the lanterns, the noren, the lattice too) has its twin in the outside-only house, in the same place to 1.5 mm, the same colour and size (%d differ in what is solid, %d in glass)" % [built, different, glass_different])
 	_check(two_meshes == built, "and each outside-only shop is still two meshes of one surface each, so two draw calls as the header says (one for everything solid, the words on the signs in it; one for the glass): %d of %d. A trade's front adds %d triangles on average to a house of %d (the most: %d, the %s); no draw call, no material, no texture" % [two_meshes, built, added / maxi(built, 1), total_triangles / maxi(built, 1), most_added, most_what])
+
+## Every built kerb stands on the line the map drew for it, and on the side its own paving is on.
+##
+## This exists because two kerbs of the tram fork were once built 3.2 m away from their own
+## exported line, from a side flag copied off a lane that ran the other way, and every check we
+## had passed: nothing walks or measures empty ground, so a kerb in open air goes unseen.
+## Two questions, because the first alone cannot see that fault: a kerb on the wrong side of its
+## line is still the right distance from it. The second asks whether the kerb came out beside the
+## paved surface drawn for it, which is what a side flag gets wrong.
+func _kerbs() -> void:
+	var tested := 0
+	var worst := 0.0
+	var worst_name := ""
+	var off: Array[String] = []
+	var paved := 0
+	var astray: Array[String] = []
+	for street: Node3D in map.street_edges:
+		var edge: Dictionary = street.get_meta("edge", {})
+		if edge.is_empty() or street.runs.is_empty() or bool(street.is_round): continue
+		var line: Array[Vector2] = []
+		for point: Array in edge.get("points", []): line.append(Vector2(float(point[0]), float(point[1])))
+		if line.size() < 2: continue
+		var marks: Array[float] = [0.0]
+		for i: int in line.size() - 1: marks.append(marks[i] + line[i].distance_to(line[i + 1]))
+		tested += 1
+		var gap := 0.0
+		for run: Vector2 in street.runs:
+			for k: int in 5:
+				var s: float = lerpf(run.x, run.y, float(k) / 4.0)
+				# The same segment the game itself would use at this distance along.
+				var i := 0
+				while i < marks.size() - 2 and marks[i + 1] < s: i += 1
+				var a := line[i]
+				var b := line[i + 1]
+				var along := (b - a).normalized()
+				var face: Vector3 = street.at(s, float(street.half))
+				var across := absf((Vector2(face.x, face.z) - a).dot(Vector2(-along.y, along.x)))
+				gap = maxf(gap, absf(across - float(street.half)))
+		if gap > worst:
+			worst = gap
+			worst_name = "%s side %d" % [str(edge.name), int(signf(float(street.side)))]
+		if gap > 0.02: off.append("%s side %d by %.2f m" % [str(edge.name), int(signf(float(street.side))), gap])
+		# And where the map drew a paved surface for this kerb, the kerb's back must touch it.
+		if not edge.has("paving"): continue
+		if not is_equal_approx(float(street.side), float(edge.get("paving_side", edge.get("only_side", 1.0)))): continue
+		var outline := PackedVector2Array()
+		for point: Array in edge.paving: outline.append(Vector2(float(point[0]), float(point[1])))
+		if outline.size() < 3: continue
+		paved += 1
+		# The nearest the kerb ever comes to that surface. A paved surface may cover only part of a
+		# long edge (the inside of the fork's bend on Tram street), so the test is that the two meet
+		# somewhere, not everywhere: a kerb built on the wrong side never meets its paving at all.
+		var far := INF
+		for run: Vector2 in street.runs:
+			for k: int in 5:
+				var s: float = lerpf(run.x, run.y, float(k) / 4.0)
+				var back: Vector3 = street.at(s, float(street.half) + 0.14)   # the kerb's back edge
+				var here := Vector2(back.x, back.z)
+				var near := INF
+				for i: int in outline.size():
+					var a := outline[i]
+					var b := outline[(i + 1) % outline.size()]
+					var length := a.distance_to(b)
+					if length < 0.001: continue
+					var t := clampf((here - a).dot(b - a) / (length * length), 0.0, 1.0)
+					near = minf(near, here.distance_to(a.lerp(b, t)))
+				far = minf(far, near)
+		if far > 0.05: astray.append("%s never nearer than %.2f m" % [str(edge.name), far])
+	_check(tested > 0, "there are street edges to test: %d sides" % tested)
+	_check(off.is_empty(), "every built kerb stands its own half-width from its drawn line: %d sides, worst %.3f m (%s)%s" % [
+		tested, worst, worst_name, "" if off.is_empty() else "; OFF: " + ", ".join(off)])
+	_check(astray.is_empty(), "every kerb with a paved surface drawn for it came out beside it: %d of them%s" % [
+		paved, "" if astray.is_empty() else "; ASTRAY: " + ", ".join(astray)])
+	# And nothing is built standing in a pavement. Asked through the game's own room query, the one
+	# the house rules use, so the check and the rules cannot disagree about where a footway's back is.
+	var inside: Array[String] = []
+	var deepest := 0.0
+	var boxes: Array = map.data.get("boxes", [])
+	for index: int in boxes.size():
+		var box: Array = boxes[index]
+		if float(box[3]) < 2.0 or float(box[5]) < 2.0 or float(box[4]) < 2.5: continue
+		var turn := Basis(Vector3.UP, deg_to_rad(float(box[6])))
+		var room := INF
+		for lx: float in [-0.5, 0.0, 0.5]:
+			for lz: float in [-0.5, 0.5]:
+				var corner: Vector3 = Vector3(float(box[0]), 0.0, float(box[2])) + turn * Vector3(lx * float(box[3]), 0.0, lz * float(box[5]))
+				room = minf(room, float(map.footway_gap(corner)))
+		if room < -0.02:
+			deepest = minf(deepest, room)
+			inside.append("box %d by %.2f m" % [index, -room])
+	_check(inside.is_empty(), "no building stands inside a built footway: %d buildings tested, deepest %.2f m%s" % [
+		boxes.size(), -deepest, "" if inside.is_empty() else "; INSIDE: " + ", ".join(inside)])

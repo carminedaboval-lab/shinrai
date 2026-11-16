@@ -66,6 +66,7 @@ extends RefCounted
 
 const Geometry := preload("res://scripts/building_access/geometry.gd")
 const ShellMesh := preload("res://scripts/interior_kit/shell_mesh.gd")
+const GARDEN_WALL_MATERIAL := preload("res://scripts/map1/map1_garden_wall.tres")
 const House := preload("res://scripts/interior_kit/house.gd")
 const KitDoor := preload("res://scripts/interior_kit/door.gd")
 const KitWindow := preload("res://scripts/interior_kit/window.gd")
@@ -455,6 +456,11 @@ static func _build(spec: Dictionary, visuals: bool, look_only: bool) -> Node3D:
 				kit.shell.box(wall.frame, Vector3(along + post * (width * 0.5 - 0.08), mid_y - 0.02, outer + 0.09), Vector3(0.08, tall - 0.04, 0.08), colour)
 		else:
 			kit.shell.box(wall.frame, Vector3(along, mid_y, outer + depth * 0.5), Vector3(width, tall, depth), colour)
+		# A low concrete genkan slab is an ordinary step up from the ground.
+		# An approach ramp cut into it would lie below ground at the outer edge.
+		if is_zero_approx(step_top) and not bool(entry.get("deck", false)):
+			_solid(kit, wall.frame, Vector3(along, mid_y, outer + depth * 0.5), Vector3(width, tall, depth))
+			continue
 		var lip := STEP_RAMP + Stair.SEAM_GAP
 		_solid(kit, wall.frame, Vector3(along, mid_y, outer + (depth + lip) * 0.5), Vector3(width, tall, depth - lip))
 		var slope := PackedVector3Array()
@@ -464,7 +470,9 @@ static func _build(spec: Dictionary, visuals: bool, look_only: bool) -> Node3D:
 	# Plain boxes: the fixtures indoors, and what stands on the plot.
 	for entry: Array in spec.get("blocks", []):
 		var frame := Transform3D(Basis(Vector3.UP, float(entry[4])) if entry.size() > 4 and float(entry[4]) != 0.0 else Basis.IDENTITY, entry[0])
-		kit.shell.box(frame, Vector3.ZERO, entry[1], entry[2])
+		var colour: Color = entry[2]
+		var marked_wall := absf(colour.a - 0.5) < 0.01
+		kit.shell.box(frame, Vector3.ZERO, entry[1], colour, entry[5] if entry.size() > 5 and entry[5] is Dictionary else {}, marked_wall)
 		if bool(entry[3]): _solid(kit, frame, Vector3.ZERO, entry[1])
 	for entry: Array in spec.get("wheels", []):
 		kit.shell.ring(Transform3D(Basis(Vector3.UP, float(entry[2])), entry[0]), float(entry[1]), 0.035, 0.035, 10, entry[3])
@@ -472,7 +480,8 @@ static func _build(spec: Dictionary, visuals: bool, look_only: bool) -> Node3D:
 	for entry: Array in spec.get("drums", []):
 		kit.shell.drum(Transform3D(Basis.IDENTITY, entry[0]), float(entry[1]), float(entry[2]), int(entry[3]), entry[4])
 	for entry: Array in spec.get("signs", []):
-		var shape := sign_shape(str(entry[0]))
+		# A small sign may ask for a coarser cut of its curves (entry 6); a shop's sign does not.
+		var shape := sign_shape(str(entry[0]), float(entry[6]) if entry.size() > 6 else 2.5)
 		var extent: Vector2 = shape.size
 		if extent.x <= 0.0 or extent.y <= 0.0: continue
 		kit.shell.flat(Transform3D(Basis(Vector3.UP, float(entry[2])), entry[1]), shape.corners, minf(float(entry[3]) / extent.x, float(entry[4]) / extent.y), entry[5])
@@ -481,6 +490,7 @@ static func _build(spec: Dictionary, visuals: bool, look_only: bool) -> Node3D:
 		var seen := MeshInstance3D.new()
 		seen.name = "ShellMesh"
 		seen.mesh = kit.shell.commit()
+		(seen.mesh as ArrayMesh).surface_set_material(0, GARDEN_WALL_MATERIAL)
 		house.add_child(seen)
 		var glass: ShellMesh = kit.glass
 		if not glass.is_empty():
@@ -511,6 +521,7 @@ static func _build(spec: Dictionary, visuals: bool, look_only: bool) -> Node3D:
 		var mesh := MeshInstance3D.new()
 		mesh.name = "ShellMesh"
 		mesh.mesh = shell.commit()
+		(mesh.mesh as ArrayMesh).surface_set_material(0, GARDEN_WALL_MATERIAL)
 		house.add_child(mesh)
 	# The ridge is 0.18 m under the top of the bounds.
 	home.bounds = AABB(Vector3(0.0, -0.1, 0.0), Vector3(size.x, eave + rise + float(made.top) + 0.28, size.y))
@@ -622,10 +633,15 @@ static func _plate(kit: Dictionary, under: PackedVector3Array, thick: float) -> 
 ## call of its own: the shapes go into the house's mesh). A new line in the text starts a new
 ## row, so a sign that reads downwards has one letter to a row. Where the computer has no
 ## font with every letter of the text, the shape is empty and the sign stays blank.
-static func sign_shape(text: String) -> Dictionary:
-	if _sign_shapes.has(text): return _sign_shapes[text]
+## `curve_step` is how finely a curved stroke is cut, in degrees of turn: the default 2.5 is for
+## a shop's sign, read from across a street and a metre or more wide. A small sign — a gate's
+## name plate is 12 cm — can take a far coarser cut for the same picture and a fraction of the
+## triangles, so it asks for one. Each coarseness is cut and kept separately.
+static func sign_shape(text: String, curve_step := 2.5) -> Dictionary:
+	var kept := text if is_equal_approx(curve_step, 2.5) else "%s/%.1f" % [text, curve_step]
+	if _sign_shapes.has(kept): return _sign_shapes[kept]
 	var shape := {"corners": PackedVector3Array(), "size": Vector2.ZERO}
-	_sign_shapes[text] = shape
+	_sign_shapes[kept] = shape
 	if _sign_font == null:
 		_sign_font = SystemFont.new()
 		_sign_font.font_names = PackedStringArray(SIGN_FONTS)
@@ -637,7 +653,7 @@ static func sign_shape(text: String) -> Dictionary:
 	words.font_size = 64
 	words.pixel_size = 1.0 / 64.0
 	words.depth = 0.0
-	words.curve_step = 2.5
+	words.curve_step = curve_step
 	words.line_spacing = -12.0
 	words.text = text
 	var arrays: Array = words.get_mesh_arrays()

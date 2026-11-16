@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" load_steps=4 format=3]
+
+[ext_resource type="Shader" path="res://scripts/map1/map1_garden_wall.gdshader" id="1_shader"]
+[ext_resource type="Texture2D" path="res://assets/procedural_textures/concrete_detail.png" id="2_detail"]
+[ext_resource type="Texture2D" path="res://assets/procedural_textures/nameplate_coverage_r8.res" id="3_names"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/concrete_detail = ExtResource("2_detail")
+shader_parameter/use_concrete_detail = true
+shader_parameter/nameplate_coverage = ExtResource("3_names")
+shader_parameter/stone_0 = Vector3(0.85882352941176465, 0.83921568627450982, 0.78823529411764703)
+shader_parameter/stone_1 = Vector3(0.20000000000000001, 0.20000000000000001, 0.20784313725490197)
+shader_parameter/stone_2 = Vector3(0.73725490196078436, 0.69803921568627447, 0.61960784313725492)
+shader_parameter/ink_0 = Vector3(0.098039215686274508, 0.098039215686274508, 0.10980392156862745)
+shader_parameter/ink_1 = Vector3(0.8784313725490196, 0.8666666666666667, 0.83921568627450982)
+shader_parameter/ink_2 = Vector3(0.098039215686274508, 0.098039215686274508, 0.10980392156862745)

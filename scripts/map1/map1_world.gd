@@ -124,7 +124,7 @@ var fast := false
 var covered := false
 var fade := 0.0
 ## Counters a test reads.
-var stats := {"cut_frames": 0, "cut_worst_usec": 0, "cut_looks": 0, "frames": 0, "worst_usec": 0, "worst_what": "", "looks_built": 0, "fulls_built": 0, "cuts": 0, "cut_usec": 0, "tests": 0, "worst_look_usec": 0, "worst_plan_usec": 0, "look_usec": 0, "full_usec": 0, "work_usec": 0, "worst_full_usec": 0, "worst_refresh_usec": 0}
+var stats := {"cut_frames": 0, "cut_worst_usec": 0, "cut_looks": 0, "frames": 0, "worst_usec": 0, "worst_what": "", "looks_built": 0, "fulls_built": 0, "cuts": 0, "cut_usec": 0, "tests": 0, "worst_look_usec": 0, "worst_plan_usec": 0, "look_usec": 0, "plan_usec": 0, "full_usec": 0, "work_usec": 0, "worst_full_usec": 0, "worst_refresh_usec": 0}
 
 var _kinds: PackedStringArray = []
 var _locked: Dictionary = {}
@@ -525,10 +525,15 @@ func _work(started: int) -> String:
 			if looks.size() >= LOOK_BUDGET: break
 			var look_started := Time.get_ticks_usec()
 			if not sites.has(index):
+				# A cached look already used this update's construction slot.
+				if built > 0: break
 				site(index)
-				stats.worst_plan_usec = maxi(int(stats.worst_plan_usec), Time.get_ticks_usec() - look_started)
+				var plan_usec := Time.get_ticks_usec() - look_started
+				stats.plan_usec += plan_usec
+				stats.worst_plan_usec = maxi(int(stats.worst_plan_usec), plan_usec)
 				what = "plan"
-				if not bool(sites[index].ok): continue
+				# Valid and invalid plans are cached. Prepare or skip next update.
+				break
 			_prepare(index)
 			stats.worst_look_usec = maxi(int(stats.worst_look_usec), Time.get_ticks_usec() - look_started)
 			built += 1
@@ -543,7 +548,8 @@ func _work(started: int) -> String:
 		if why >= 0: _to_look(index, why)
 	stats.tests += tests
 	# 3. The player's street: insides, one house a frame.
-	if not fast:
+	# Phase 2 may have activated a ready LOOK; don't build its FULL beside a fresh plan.
+	if not fast and what != "plan":
 		var made := 0
 		for index: int in want_full:
 			if made >= FULL_PER_FRAME: break

@@ -23,6 +23,9 @@ const GUTTER_LIP := 0.02     # the gutter's road edge stands this far above the 
 const GUTTER_LOW := 0.008    # and it falls to this at the kerb's foot
 const FOOT := 0.05           # how far every piece goes down into the ground
 const CONCRETE := Color(0.47, 0.46, 0.43)
+const KERB_ALPHA_BASE := 0.2     # alpha = base + scale * (metres above the road at the kerb face)
+const KERB_ALPHA_SCALE := 2.0    # -0.05 m to +0.13 m of concrete gives 0.10 to 0.46
+const CHANNEL := Color(0.33, 0.34, 0.31)       # the gutter's floor, where the water and the dirt go
 const FOOTWAY := Color(0.17, 0.17, 0.18)      # asphalt too, a little lighter than the road's
 const IRON := Color(0.20, 0.15, 0.12)          # a cast grate, rusted brown
 const PIT := Color(0.02, 0.02, 0.02)           # the dark of the catch pit under it
@@ -49,6 +52,17 @@ const POLE_HIGH := 11.0
 const POLE_FOOT_RADIUS := 0.15
 const POLE_TOP_RADIUS := 0.095
 const POLE_BEHIND_KERB := 0.30   # from the kerb's back to the pole's middle
+const POLE_SPACING := 32.0       # along the street from one pole to the next
+const POLE_NEEDS_FOOTWAY := 0.75 # no pole where the footway is narrower: there would be no way past it
+const POLE_AT_BACK_UNDER := 2.0  # on a footway narrower than this the pole stands at its back edge,
+                                 # half on the plot, so the walking line past it stays clear
+const POLE_CLEAR := 2.0          # clear of a lowered kerb's crossing and of the drain
+const WIRE := Color(0.07, 0.07, 0.08)
+const WIRE_RADIUS := 0.014
+const WIRE_SAG := 0.55           # how far the middle of a span hangs below its ends
+const WIRE_STEPS := 8
+const ARM_BELOW_TOP := 0.6       # the cross-arm, this far below the pole's top
+const ARM_SEATS: Array[float] = [-0.75, -0.3, 0.6]   # the insulators along it
 ## A lowered kerb at an entrance: the kerb and the whole narrow footway dip to 3 cm over three
 ## units, with two units of slope to either side (11 cm in 1.2 m, about one in eleven).
 const FORECOURT := Color(0.36, 0.355, 0.34)    # old concrete paving, darker than the kerb's
@@ -81,10 +95,32 @@ var side := 1.0
 ## given (set before build()). UV is metres: x out from the kerb's road face, y along the
 ## street. Without one the top is plain vertex colour in the edge's one mesh.
 var footway_material: Material
+## Pavement tops on this edge are shaded flat, as the kerb and the traced surfaces are, instead
+## of the smooth default. Only the streets that newly took a paving material set it, so the shop
+## row keeps exactly the shading it has always had. (Codex found 24 triangles shaded smooth where
+## their source was flat, 2026-11-16: the washed, pale look I could see but had misdiagnosed as
+## collapsed UVs.)
+var flat_paving := false
+## The kerb's own vertices carry, in their colour's alpha, how high each one stands above the
+## road at the kerb's face: `KERB_ALPHA_BASE + KERB_ALPHA_SCALE * height`, so a surface shader
+## can lay contact dirt in the channel and leave the top clean. Unmarked geometry keeps alpha 1.
+## Off by default, so every street that has not opted in builds byte-for-byte as it did.
+var marked_kerb := false
+## Whether a corner, fillet or nose takes the batch tone of the straight units it meets, instead
+## of one flat grey. Off by default: it is a colour change a player sees, so it is turned on
+## street by street as a recorded pass, not carried in on the back of something else.
+var cast_corner_tones := false
+## Whether a paved footway keeps the plain `FOOTWAY` tone in its vertex colour for its material
+## to tint from. Off by default, so every footway material installed so far sees exactly what it
+## always saw. (Asked for by Codex for its local asphalt footway, 2026-11-16.)
+var retain_footway_color := false
+## And the material that reads it. Null leaves the kerb on its present vertex-colour material.
+var kerb_surface_material: Material = null
 var forecourt_material: Material
 var _tops := {}      # "Footway" / "Forecourt": its SurfaceTool
 var grate_at := -1.0                # metres along the street to the grate unit's start, or -1
-var pole_at := -1.0                 # metres along the street to the pole, or -1
+var pole_at := -1.0                 # metres along the street to the first pole, or -1
+var poles := PackedFloat32Array()   # every pole on this edge, metres along; wires run between them
 var pole_out := 0.0                 # and how far out from the centre line it stands
 var line_out := 0.0                 # the white line's middle, out from the centre line
 var drops: Array[Vector2] = []
@@ -122,6 +158,8 @@ var round_from := 0.0
 var fillet_at := -1.0
 var fillet_r := 0.0
 var fillet_angle := 0.0
+var fillet_footway := -1.0   # the footway inside the curve, if not the street's own width (the kerb alone where a traced surface paves it)
+var fillet_steps := 3      # the fewest cast pieces round it (a tight tip needs more than its length gives)
 ## The same curve where a street ends at a wider cross road that is not built (the shop row's
 ## west end at the Outer ring): it turns a quarter round into the cross road's kerb line and
 ## stops there, its end closed, with a patch of road out to the corner the two kerb lines make.
@@ -212,6 +250,8 @@ func lay(map: Node3D, edge: Dictionary, which_side: float) -> void:
 	# A piece laid between built streets runs to its own ends, not one unit short of them.
 	# (So does a street at an end where a piece carries it on: the shop row at its west end.)
 	if bool(edge.get("joined_start", false)) and not runs.is_empty() and open[0] and is_equal_approx(runs[0].x, UNIT): runs[0] = Vector2(0.0, runs[0].y)
+	# (And at its far end, where another edge takes over from it: Tram street south at the fork.)
+	if bool(edge.get("joined_end", false)) and not runs.is_empty() and open[count - 1] and is_equal_approx(runs[runs.size() - 1].y, float(count - 1) * UNIT): runs[runs.size() - 1] = Vector2(runs[runs.size() - 1].x, length)
 	if _exact and not runs.is_empty():
 		if open[0] and is_equal_approx(runs[0].x, UNIT): runs[0] = Vector2(0.0, runs[0].y)
 		if open[count - 1] and is_equal_approx(runs[runs.size() - 1].y, float(count - 1) * UNIT): runs[runs.size() - 1] = Vector2(runs[runs.size() - 1].x, length)
@@ -307,7 +347,13 @@ func plot_gap(point: Vector3) -> float:
 	var out := out_of(point)
 	if out < half or out > half + footway_wide + 12.0: return INF
 	var s := along_of(point)
-	if not beside(point, s): return INF
+	# A neighbouring strip can have a different width; its cap must not
+	# claim a frontage point beyond its own length. Internal bends keep
+	# the existing allowance for the outgoing tangent at a polyline vertex.
+	var tolerance := 0.2
+	if not is_round and (s <= 0.001 or s >= _lengths[_lengths.size() - 1] - 0.001):
+		tolerance = 0.001
+	if not beside(point, s, tolerance): return INF
 	for run: Vector2 in runs:
 		if s >= run.x and s <= run.y: return out - half - footway_wide
 	return INF
@@ -316,12 +362,12 @@ func plot_gap(point: Vector3) -> float:
 ## Whether a point is beside this edge at `s` (its nearest place on the centre line), not off past
 ## one of its ends: along_of holds a point beyond an end at that end, and a lane's line, carried on
 ## past its end, would otherwise answer for houses a hundred metres away.
-func beside(point: Vector3, s: float) -> bool:
+func beside(point: Vector3, s: float, along_tolerance: float = 0.2) -> bool:
 	if is_round: return true
 	var foot := at(s, 0.0)
 	var ahead := at(s + 0.01, 0.0) - foot
 	if ahead.length() < 1e-6: return true
-	return absf(Vector2(point.x - foot.x, point.z - foot.z).dot(Vector2(ahead.x, ahead.z).normalized())) < 0.2
+	return absf(Vector2(point.x - foot.x, point.z - foot.z).dot(Vector2(ahead.x, ahead.z).normalized())) < along_tolerance
 
 
 ## How far the paving stands above the ground at a point: the footway's height on the footway,
@@ -393,9 +439,24 @@ func build(entrances: Array = [], with: Array = ["asphalt", "grate", "pole"]) ->
 	for run: Vector2 in runs:
 		if run.y - run.x > longest.y - longest.x: longest = run
 	if with.has("grate") and longest.y - longest.x > GRATE_INTO_RUN + 6.0: grate_at = longest.x + round(GRATE_INTO_RUN / UNIT) * UNIT
-	if with.has("pole") and longest.y - longest.x > POLE_INTO_RUN + 6.0:
-		pole_at = longest.x + POLE_INTO_RUN
-		pole_out = half + KERB_WIDE + POLE_BEHIND_KERB
+	# The pole line: poles down the footway about POLE_SPACING apart, with wires strung between
+	# them. (A Japanese street is read by its poles and wires as much as by its kerb.) A pole
+	# stands only where the footway has room to pass it, and never in a lowered kerb's crossing.
+	pole_out = half + KERB_WIDE + POLE_BEHIND_KERB
+	if footway_wide < POLE_AT_BACK_UNDER: pole_out = half + footway_wide
+	if with.has("pole") and footway_wide >= POLE_NEEDS_FOOTWAY:
+		for run: Vector2 in runs:
+			if run.y - run.x < POLE_INTO_RUN + 6.0: continue
+			var count := maxi(int(round((run.y - run.x - POLE_INTO_RUN - 3.0) / POLE_SPACING)), 0)
+			for i: int in count + 1:
+				var s := run.x + POLE_INTO_RUN + float(i) * POLE_SPACING
+				if s > run.y - 3.0: break
+				var clear := true
+				for drop: Vector2 in drops:
+					if s > drop.x - POLE_CLEAR and s < drop.y + POLE_CLEAR: clear = false
+				if grate_at >= 0.0 and absf(s - grate_at) < POLE_CLEAR: clear = false
+				if clear: poles.append(s)
+	if not poles.is_empty(): pole_at = poles[0]
 	line_out = half - GUTTER_WIDE - LINE_GAP - LINE_WIDE * 0.5
 	for run: Vector2 in runs:
 		var n := int(floor((run.y - run.x) / UNIT + 0.001))
@@ -421,7 +482,8 @@ func build(entrances: Array = [], with: Array = ["asphalt", "grate", "pole"]) ->
 	for corner: Dictionary in corners: _corner(look, stand, corner)
 	for dir: float in noses: _nose(look, stand, dir)
 	if fillet_at >= 0.0: _fillet(look, stand)
-	if pole_at >= 0.0: _pole(look)
+	for s: float in poles: _pole(look, s)
+	_wires(look)
 	look.generate_normals()
 	var mesh := look.commit()
 	triangles = mesh.get_faces().size() / 3
@@ -432,7 +494,9 @@ func build(entrances: Array = [], with: Array = ["asphalt", "grate", "pole"]) ->
 	var instance := MeshInstance3D.new()
 	instance.name = "Edge"
 	instance.mesh = mesh
-	instance.material_override = material
+	# The kerb's own surface material where a street has been given one; otherwise exactly the
+	# vertex-colour material it has always had.
+	instance.material_override = kerb_surface_material if kerb_surface_material != null else material
 	add_child(instance)
 	for which: String in _tops:
 		var top_tool: SurfaceTool = _tops[which]
@@ -449,20 +513,20 @@ func build(entrances: Array = [], with: Array = ["asphalt", "grate", "pole"]) ->
 	var shape := CollisionShape3D.new()
 	shape.shape = stand.commit().create_trimesh_shape()
 	body.add_child(shape)
-	if pole_at >= 0.0:
+	for s: float in poles:
 		var shaft := CylinderShape3D.new()
 		shaft.radius = POLE_FOOT_RADIUS
 		shaft.height = POLE_HIGH
 		var pole := CollisionShape3D.new()
 		pole.name = "Pole"
 		pole.shape = shaft
-		pole.position = _lifted(pole_at, pole_out, top(pole_at) + POLE_HIGH * 0.5)
+		pole.position = _lifted(s, pole_out, top(s) + POLE_HIGH * 0.5)
 		body.add_child(pole)
 	add_child(body)
 	_mouth_asphalt()
 	_edge_line = not with.has("no line")
 	if with.has("asphalt"): _asphalt()
-	if with.has("asphalt") and end_patch.size() >= 3: _end_patch_asphalt()
+	if (with.has("asphalt") or with.has("patch")) and end_patch.size() >= 3: _end_patch_asphalt()
 	if fillet_end and fillet_at >= 0.0: _end_corner_asphalt()
 
 
@@ -543,6 +607,25 @@ func _road(s: float, out: float) -> bool:
 
 
 ## One precast unit from s0 to s1: the gutter and the kerb, with both its ends.
+## The shade of the batch a unit came out of. Kerb units arrive by the lorry-load, so a street
+## is laid in runs of one casting batch, then the next batch, each a little different: that is
+## why a real kerb line is a quiet patchwork and not either one flat grey or a speckle. The runs
+## are BATCH units long and their tone comes from where the run lies, so the same stretch is the
+## same colour every time the map is built.
+const BATCH := 14                              # units laid from one delivery before the next
+func _casting(s: float) -> Color:
+	var run_at: float = floor(s / (float(BATCH) * UNIT))
+	# (A kerb round a turning circle keeps no point list: take its centre instead.)
+	var from: Vector2 = round_centre if _points.is_empty() else _points[0]
+	var seed_point: Vector2 = from + Vector2(run_at * 37.0, run_at * 61.0)
+	var n: float = sin(seed_point.x * 12.9898 + seed_point.y * 78.233) * 43758.5453
+	var roll: float = n - floor(n)
+	var m: float = sin(seed_point.x * 39.3468 + seed_point.y * 11.1357) * 24634.6345
+	var warm: float = (m - floor(m)) - 0.5
+	var lift: float = 0.95 + roll * 0.10
+	return Color(CONCRETE.r * lift + warm * 0.010, CONCRETE.g * lift, CONCRETE.b * lift - warm * 0.010)
+
+
 func _unit(tool: SurfaceTool, s0: float, s1: float, inlet := false) -> void:
 	# The outline across the street: metres out from the kerb's road face, metres above the
 	# road at that face. Clockwise seen from the street's start on side +1.
@@ -554,7 +637,11 @@ func _unit(tool: SurfaceTool, s0: float, s1: float, inlet := false) -> void:
 	if inlet:
 		outline = outline.slice(2)
 		outline[0] = Vector2(0.0, -FOOT)
-	tool.set_color(CONCRETE)
+	# Each unit is its own casting, so each is its own shade: a real kerb is never one flat colour
+	# down a street. The tone comes from where the unit lies, so it is the same every run, and the
+	# channel is darker than the kerb above it, as a channel that carries water always is.
+	var tint := _casting(s0)
+	tool.set_color(tint)
 	var y0 := at(s0, half).y
 	var y1 := at(s1, half).y
 	var near: Array[Vector3] = []
@@ -563,13 +650,31 @@ func _unit(tool: SurfaceTool, s0: float, s1: float, inlet := false) -> void:
 	# lowered by as much as the kerb is, at each end by its own amount.
 	var less0 := KERB_HIGH - kerb_high(s0)
 	var less1 := KERB_HIGH - kerb_high(s1)
+	# Each end keeps its own height: at a ramp the near and far tops are lowered by different
+	# amounts, so one shared set of alphas would tag a lowered top as full height.
+	var near_high: Array[float] = []
+	var far_high: Array[float] = []
 	for p: Vector2 in outline:
 		var a := at(s0, half + p.x)
 		var b := at(s1, half + p.x)
 		var kerb_top := p.y > GUTTER_LIP + 0.001
-		near.append(Vector3(a.x, y0 + p.y - (less0 if kerb_top else 0.0), a.z))
-		far.append(Vector3(b.x, y1 + p.y - (less1 if kerb_top else 0.0), b.z))
-	for i: int in outline.size() - 1: _quad(tool, near[i], near[i + 1], far[i + 1], far[i])
+		var up0 := p.y - (less0 if kerb_top else 0.0)
+		var up1 := p.y - (less1 if kerb_top else 0.0)
+		near.append(Vector3(a.x, y0 + up0, a.z))
+		far.append(Vector3(b.x, y1 + up1, b.z))
+		near_high.append(KERB_ALPHA_BASE + KERB_ALPHA_SCALE * up0)
+		far_high.append(KERB_ALPHA_BASE + KERB_ALPHA_SCALE * up1)
+	for i: int in outline.size() - 1:
+		# The gutter's floor and its outer face take the channel's darker tone.
+		var face := tint.darkened(0.16).lerp(CHANNEL, 0.35) if (i < 2 and not inlet) else tint
+		if marked_kerb:
+			_quad_marked(tool, face, near[i], near[i + 1], far[i + 1], far[i], near_high[i], near_high[i + 1], far_high[i + 1], far_high[i])
+		else:
+			if not inlet: tool.set_color(face)
+			_quad(tool, near[i], near[i + 1], far[i + 1], far[i])
+	# The end fans are left unmarked: they are seen only through a 6 mm joint. Restoring the tint
+	# here also clears the marked colour state, which would otherwise leak into them.
+	tool.set_color(tint)
 	# The two ends, seen through the joints. The outline has a step in it (gutter, then kerb),
 	# so each end is closed in two pieces that have none: the gutter's, then the kerb's, both
 	# fanned from the point under the kerb's face.
@@ -658,8 +763,10 @@ func _foot_tri(tool: SurfaceTool, a: Vector2, b: Vector2, c: Vector2) -> void:
 	if not _tops.has("Footway"):
 		var fresh := SurfaceTool.new()
 		fresh.begin(Mesh.PRIMITIVE_TRIANGLES)
+		if flat_paving: fresh.set_smooth_group(-1)
 		_tops["Footway"] = fresh
 	var paved: SurfaceTool = _tops["Footway"]
+	if retain_footway_color: paved.set_color(FOOTWAY)
 	var order: Array[Vector2] = [a, b, c]
 	if (_high(b) - _high(a)).cross(_high(c) - _high(a)).y * _cross_sign < 0.0: order = [a, c, b]
 	for point: Vector2 in order:
@@ -679,15 +786,29 @@ func _piece(tool: SurfaceTool, near_of: Callable, far_of: Callable) -> void:
 		Vector2(-GUTTER_WIDE, -FOOT), Vector2(-GUTTER_WIDE, GUTTER_LIP), Vector2(0.0, GUTTER_LOW),
 		Vector2(0.0, KERB_HIGH - CHAMFER), Vector2(CHAMFER, KERB_HIGH), Vector2(KERB_WIDE - CHAMFER, KERB_HIGH),
 		Vector2(KERB_WIDE, KERB_HIGH - CHAMFER), Vector2(KERB_WIDE, -FOOT)]
-	tool.set_color(CONCRETE)
+	# A curved kerb is cast and delivered like a straight one, so it belongs to the batch its
+	# neighbours came from, not to a grey of its own: the tone is taken at the piece's own
+	# distance along, which puts it in the same `_casting` run as the units it meets.
+	# Off by default and independent of `marked_kerb`, so a street's colours are exactly what they
+	# always were until someone asks for this, and marking can still be proved to leave RGB alone.
+	var tint := _casting(float(near_of.call(0.0).x)) if cast_corner_tones else CONCRETE
+	tool.set_color(tint)
 	var near: Array[Vector3] = []
 	var far: Array[Vector3] = []
+	# Each end of the piece keeps its own height, as in `_unit`: a curve that runs into a lowered
+	# kerb comes down across the piece, so one shared set of alphas would tag the low end as full.
+	var near_high: Array[float] = []
+	var far_high: Array[float] = []
 	for p: Vector2 in outline:
 		var a: Vector2 = near_of.call(p.x)
 		var b: Vector2 = far_of.call(p.x)
 		var kerb_top := p.y > GUTTER_LIP + 0.001
-		near.append(at(a.x, a.y, p.y - ((KERB_HIGH - kerb_high(a.x)) if kerb_top else 0.0)))
-		far.append(at(b.x, b.y, p.y - ((KERB_HIGH - kerb_high(b.x)) if kerb_top else 0.0)))
+		var up0 := p.y - ((KERB_HIGH - kerb_high(a.x)) if kerb_top else 0.0)
+		var up1 := p.y - ((KERB_HIGH - kerb_high(b.x)) if kerb_top else 0.0)
+		near.append(at(a.x, a.y, up0))
+		far.append(at(b.x, b.y, up1))
+		near_high.append(KERB_ALPHA_BASE + KERB_ALPHA_SCALE * up0)
+		far_high.append(KERB_ALPHA_BASE + KERB_ALPHA_SCALE * up1)
 	var n0: Vector2 = near_of.call(0.0)
 	var n1: Vector2 = near_of.call(1.0)
 	var f0: Vector2 = far_of.call(0.0)
@@ -696,8 +817,20 @@ func _piece(tool: SurfaceTool, near_of: Callable, far_of: Callable) -> void:
 	for i: int in outline.size() - 1:
 		var step := outline[i + 1] - outline[i]
 		var toward := inward * (-step.y) + Vector3.UP * step.x
-		_facing(tool, near[i], near[i + 1], far[i + 1], toward)
-		_facing(tool, near[i], far[i + 1], far[i], toward)
+		# The gutter's floor and its outer face take the channel's darker tone, as they do on the
+		# straight: the water and the dirt go round the corner too. Only with the tones asked for.
+		var face := tint
+		if cast_corner_tones and i < 2: face = tint.darkened(0.16).lerp(CHANNEL, 0.35)
+		if marked_kerb:
+			_facing_marked(tool, face, near[i], near[i + 1], far[i + 1], toward, near_high[i], near_high[i + 1], far_high[i + 1])
+			_facing_marked(tool, face, near[i], far[i + 1], far[i], toward, near_high[i], far_high[i + 1], far_high[i])
+		else:
+			if cast_corner_tones: tool.set_color(face)
+			_facing(tool, near[i], near[i + 1], far[i + 1], toward)
+			_facing(tool, near[i], far[i + 1], far[i], toward)
+	# The end fans are left unmarked, as in `_unit`. Restoring the colour here also clears the
+	# marked alpha, which the last tagged triangle would otherwise leave behind in the tool.
+	tool.set_color(tint)
 	# The two ends, each closed in two pieces fanned from the point under the kerb's face.
 	var near_foot := at(n0.x, n0.y, -FOOT)
 	var far_foot := at(f0.x, f0.y, -FOOT)
@@ -900,6 +1033,81 @@ func infill(s0: float, s1: float, out0: float, out1: float, outer_face: bool = f
 	add_child(body)
 
 
+## A wedge of paving behind the footway from s0 to s1: from inner out to outer0 at s0 and to
+## outer1 at s1, at the footway's height, with its outer face and its two ends. Where a footway
+## carries on from a wider one and the difference is taken up along its length.
+## One triangle of pavement top for a surface built after `build()` has finished, with the same
+## metre UVs `_foot_tri` uses: across is metres out from the kerb's road face, up is metres along
+## the street. `wedge()` and `paving()` make their own meshes, so they cannot write into `_tops`.
+func _top_tri(tool: SurfaceTool, a: Vector2, b: Vector2, c: Vector2) -> void:
+	var order: Array[Vector2] = [a, b, c]
+	if (_high(b) - _high(a)).cross(_high(c) - _high(a)).y * _cross_sign < 0.0: order = [a, c, b]
+	for point: Vector2 in order:
+		tool.set_uv(Vector2(point.y - half, point.x))
+		tool.add_vertex(_high(point))
+
+
+func wedge(s0: float, s1: float, inner: float, outer0: float, outer1: float) -> void:
+	var look := SurfaceTool.new()
+	look.begin(Mesh.PRIMITIVE_TRIANGLES)
+	look.set_smooth_group(-1)
+	var stand := SurfaceTool.new()
+	stand.begin(Mesh.PRIMITIVE_TRIANGLES)
+	look.set_color(FOOTWAY)
+	# Where the street has a paving material, the wedge's top is split off into its own surface
+	# with UVs so it matches the footway it carries on from; the upright faces and every triangle
+	# of the collider stay exactly as they were.
+	var paved_top: SurfaceTool = null
+	if footway_material != null:
+		paved_top = SurfaceTool.new()
+		paved_top.begin(Mesh.PRIMITIVE_TRIANGLES)
+		paved_top.set_smooth_group(-1)      # as the surface it was split out of always was
+	var steps := maxi(int(ceil((s1 - s0) / UNIT)), 1)
+	for i: int in steps:
+		var a := lerpf(s0, s1, float(i) / float(steps))
+		var b := lerpf(s0, s1, float(i + 1) / float(steps))
+		var oa := lerpf(outer0, outer1, float(i) / float(steps))
+		var ob := lerpf(outer0, outer1, float(i + 1) / float(steps))
+		if paved_top != null:
+			_top_tri(paved_top, Vector2(a, inner), Vector2(a, oa), Vector2(b, ob))
+			_top_tri(paved_top, Vector2(a, inner), Vector2(b, ob), Vector2(b, inner))
+			_facing(stand, _high(Vector2(a, inner)), _high(Vector2(a, oa)), _high(Vector2(b, ob)), Vector3.UP)
+			_facing(stand, _high(Vector2(a, inner)), _high(Vector2(b, ob)), _high(Vector2(b, inner)), Vector3.UP)
+		else:
+			for tool: SurfaceTool in [look, stand]:
+				_facing(tool, _high(Vector2(a, inner)), _high(Vector2(a, oa)), _high(Vector2(b, ob)), Vector3.UP)
+				_facing(tool, _high(Vector2(a, inner)), _high(Vector2(b, ob)), _high(Vector2(b, inner)), Vector3.UP)
+		for tool: SurfaceTool in [look, stand]:
+			_upright(tool, Vector2(a, oa), Vector2(b, ob), at(a, oa + 1.0) - at(a, oa))
+	var forward := at(s1, inner) - at(s0, inner)
+	for tool: SurfaceTool in [look, stand]:
+		if outer0 - inner > 0.01: _upright(tool, Vector2(s0, inner), Vector2(s0, outer0), -forward)
+		if outer1 - inner > 0.01: _upright(tool, Vector2(s1, inner), Vector2(s1, outer1), forward)
+	look.generate_normals()
+	var material := StandardMaterial3D.new()
+	material.vertex_color_use_as_albedo = true
+	material.vertex_color_is_srgb = true
+	material.roughness = 0.92
+	if paved_top != null:
+		paved_top.generate_normals()
+		var paved := MeshInstance3D.new()
+		paved.name = "WedgeTop"
+		paved.mesh = paved_top.commit()
+		paved.material_override = footway_material
+		add_child(paved)
+	var instance := MeshInstance3D.new()
+	instance.name = "Wedge"
+	instance.mesh = look.commit()
+	instance.material_override = material
+	add_child(instance)
+	var body := StaticBody3D.new()
+	body.name = "WedgeBody"
+	var shape := CollisionShape3D.new()
+	shape.shape = stand.commit().create_trimesh_shape()
+	body.add_child(shape)
+	add_child(body)
+
+
 ## Makes this edge the kerb round a turning circle: centre, the kerb face's radius, from one
 ## angle round to the other (radians, increasing), and the footway's width outside it.
 func make_round(map: Node3D, centre: Vector2, kerb_r: float, from_angle: float, to_angle: float, footway: float) -> void:
@@ -914,7 +1122,95 @@ func make_round(map: Node3D, centre: Vector2, kerb_r: float, from_angle: float, 
 
 
 func fillet_pieces() -> int:
-	return maxi(int(ceil(fillet_r * fillet_angle / 0.5)), 3)
+	return maxi(int(ceil(fillet_r * fillet_angle / 0.5)), fillet_steps)
+
+
+## One paved surface over an outline in the world (the tip of the block at the tram fork, behind
+## its two kerbs, where two footways would overlap): at the kerb's height, to walk on, with an
+## upright face down into the ground along each edge of the outline listed in `faces` (edge i
+## runs from point i to the next).
+func paving(outline: PackedVector2Array, faces: PackedInt32Array) -> void:
+	var look := SurfaceTool.new()
+	look.begin(Mesh.PRIMITIVE_TRIANGLES)
+	look.set_smooth_group(-1)
+	look.set_color(FOOTWAY)
+	var stand := SurfaceTool.new()
+	stand.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var high := func(p: Vector2) -> Vector3: return Vector3(p.x, float(_map.ground_height(p.x, p.y)) + KERB_HIGH, p.y)
+	var low := func(p: Vector2) -> Vector3: return Vector3(p.x, float(_map.ground_height(p.x, p.y)) - FOOT, p.y)
+	# (A triangle's front is the side its corners run clockwise on: p, q, r faces `toward` when
+	# (q - p) x (r - p) points away from it.)
+	var add := func(p: Vector3, q: Vector3, r: Vector3, toward: Vector3) -> void:
+		var order: Array[Vector3] = [p, q, r]
+		if (q - p).cross(r - p).dot(toward) >= 0.0: order = [p, r, q]
+		for tool: SurfaceTool in [look, stand]:
+			for point: Vector3 in order: tool.add_vertex(point)
+	# The top takes the street's paving material where there is one, with the same metre UVs as a
+	# straight footway so the grain runs on across a corner or an island. The carrier's own line
+	# gives those coordinates, projected WITHOUT clamping: a traced surface overhangs its carrier's
+	# ends, and `along_of` saturates there, which would squash the texture over the overhang.
+	var paved_top: SurfaceTool = null
+	var straight: bool = _points.size() == 2
+	var base: Vector2 = round_centre if _points.is_empty() else _points[0]
+	var along_dir := Vector2.RIGHT
+	var out_dir := Vector2.DOWN
+	if straight:
+		along_dir = (_points[1] - _points[0]).normalized()
+		out_dir = Vector2(-along_dir.y, along_dir.x) * side
+	if footway_material != null:
+		paved_top = SurfaceTool.new()
+		paved_top.begin(Mesh.PRIMITIVE_TRIANGLES)
+		paved_top.set_smooth_group(-1)      # as the surface it was split out of always was
+	var uv_of := func(p: Vector3) -> Vector2:
+		if straight:
+			var flat := Vector2(p.x, p.z) - base
+			return Vector2(flat.dot(out_dir) - half, flat.dot(along_dir))
+		return Vector2(float(out_of(p)) - half, float(along_of(p)))
+	var add_top := func(p: Vector3, q: Vector3, r: Vector3) -> void:
+		var order: Array[Vector3] = [p, q, r]
+		if (q - p).cross(r - p).dot(Vector3.UP) >= 0.0: order = [p, r, q]
+		for point: Vector3 in order:
+			if paved_top != null:
+				paved_top.set_uv(uv_of.call(point))
+				paved_top.add_vertex(point)
+			else:
+				look.add_vertex(point)
+			stand.add_vertex(point)
+	var corners := Geometry2D.triangulate_polygon(outline)
+	for i: int in range(0, corners.size(), 3):
+		add_top.call(high.call(outline[corners[i]]), high.call(outline[corners[i + 1]]), high.call(outline[corners[i + 2]]))
+	for i: int in faces:
+		var a := outline[i]
+		var b := outline[(i + 1) % outline.size()]
+		var across := Vector2(-(b - a).y, (b - a).x).normalized()
+		# (Outward: the side of the edge that is not inside the outline.)
+		if Geometry2D.is_point_in_polygon((a + b) * 0.5 + across * 0.02, outline): across = -across
+		var toward := Vector3(across.x, 0.0, across.y)
+		add.call(low.call(a), high.call(a), high.call(b), toward)
+		add.call(low.call(a), high.call(b), low.call(b), toward)
+	look.generate_normals()
+	var material := StandardMaterial3D.new()
+	material.vertex_color_use_as_albedo = true
+	material.vertex_color_is_srgb = true
+	material.roughness = 0.92
+	if paved_top != null:
+		paved_top.generate_normals()
+		var paved := MeshInstance3D.new()
+		paved.name = "PavingTop"
+		paved.mesh = paved_top.commit()
+		paved.material_override = footway_material
+		add_child(paved)
+	var instance := MeshInstance3D.new()
+	instance.name = "Paving"
+	instance.mesh = look.commit()
+	instance.material_override = material
+	add_child(instance)
+	var body := StaticBody3D.new()
+	body.name = "PavingBody"
+	var shape := CollisionShape3D.new()
+	shape.shape = stand.commit().create_trimesh_shape()
+	body.add_child(shape)
+	add_child(body)
 
 
 func fillet_point(radius: float, angle: float) -> Vector2:
@@ -928,17 +1224,18 @@ func _fillet(look: SurfaceTool, stand: SurfaceTool) -> void:
 	var centre := Vector2(fillet_at, half + fillet_r)
 	var pieces := fillet_pieces()
 	var joint := JOINT * 0.5 / fillet_r
+	var wide := footway_wide if fillet_footway < 0.0 else fillet_footway
 	for k: int in pieces:
 		var a0 := fillet_angle * float(k) / float(pieces)
 		var a1 := fillet_angle * float(k + 1) / float(pieces)
 		_piece(look,
 			func(inward: float) -> Vector2: return fillet_point(fillet_r - inward, a0 + joint),
 			func(inward: float) -> Vector2: return fillet_point(fillet_r - inward, a1 - joint))
-		_foot_quad(look, fillet_point(fillet_r - KERB_WIDE, a0), fillet_point(fillet_r - footway_wide, a0), fillet_point(fillet_r - footway_wide, a1), fillet_point(fillet_r - KERB_WIDE, a1))
+		_foot_quad(look, fillet_point(fillet_r - KERB_WIDE, a0), fillet_point(fillet_r - wide, a0), fillet_point(fillet_r - wide, a1), fillet_point(fillet_r - KERB_WIDE, a1))
 		var f0 := fillet_point(fillet_r, a0)
 		var f1 := fillet_point(fillet_r, a1)
-		var b0 := fillet_point(fillet_r - footway_wide, a0)
-		var b1 := fillet_point(fillet_r - footway_wide, a1)
+		var b0 := fillet_point(fillet_r - wide, a0)
+		var b1 := fillet_point(fillet_r - wide, a1)
 		_facing(stand, _high(f0), _high(b0), _high(b1), Vector3.UP)
 		_facing(stand, _high(f0), _high(b1), _high(f1), Vector3.UP)
 		_upright(stand, f0, f1, at(f0.x, f0.y) - at(centre.x, centre.y))
@@ -1050,8 +1347,17 @@ func _paved(which: String, p0: Array, p1: Array, p2: Array, p3: Array) -> void:
 	if not _tops.has(which):
 		var fresh := SurfaceTool.new()
 		fresh.begin(Mesh.PRIMITIVE_TRIANGLES)
+		# The footway's shading policy has to be set where the tool is MADE, and a straight run makes
+		# it here before `_foot_tri` ever sees it. (Codex, 2026-11-16: I set it in the other creation
+		# path only, so 22 triangles of straight pavement kept the smooth default.) Forecourts keep
+		# their own shading either way.
+		if flat_paving and which == "Footway": fresh.set_smooth_group(-1)
 		_tops[which] = fresh
 	var tool: SurfaceTool = _tops[which]
+	# A paved footway normally carries no vertex colour: the material is the whole look. Where a
+	# material wants the footway's own tone to tint from, this hands it on. Footway only — a
+	# forecourt keeps what it had. (Codex's interface request, 2026-11-16.)
+	if retain_footway_color and which == "Footway": tool.set_color(FOOTWAY)
 	var corners: Array = [p0, p1, p2, p3]
 	var order := PackedInt32Array([0, 1, 2, 0, 2, 3]) if side < 0.0 else PackedInt32Array([0, 2, 1, 0, 3, 2])
 	for index: int in order:
@@ -1090,6 +1396,37 @@ func _lifted(s: float, out: float, height: float) -> Vector3:
 
 ## Faces are given so that they show from outside on side +1; the other side is the mirror,
 ## so its faces are turned.
+## A quad whose four corners each carry their own alpha: the kerb's height encoding. Separate
+## from `_quad` on purpose — that one has 41 callers and none of the others wants this.
+func _quad_marked(tool: SurfaceTool, tint: Color, a: Vector3, b: Vector3, c: Vector3, d: Vector3, aa: float, ab: float, ac: float, ad: float) -> void:
+	_tri_marked(tool, tint, a, b, c, aa, ab, ac)
+	_tri_marked(tool, tint, a, c, d, aa, ac, ad)
+
+
+func _tri_marked(tool: SurfaceTool, tint: Color, a: Vector3, b: Vector3, c: Vector3, aa: float, ab: float, ac: float) -> void:
+	# The same winding as `_tri`: a, b, c on side -1 and a, c, b on side +1. Each alpha travels
+	# with its own vertex, so reordering cannot separate them. (Codex caught this in review before
+	# it ever ran: without the side test every marked face on side +1 would have faced inwards,
+	# and the defaults-off probe could not have seen it.)
+	var order: Array = [[a, aa], [b, ab], [c, ac]] if side < 0.0 else [[a, aa], [c, ac], [b, ab]]
+	for pair: Array in order:
+		tool.set_color(Color(tint.r, tint.g, tint.b, float(pair[1])))
+		tool.add_vertex(pair[0])
+
+
+## `_facing` with an alpha on each corner, for the cast pieces of `_piece`. It repeats `_facing`'s
+## own turn test rather than `_tri`'s side rule, because that is what the faces beside it use: a
+## corner's piece is wound by where its outline step points, not by which side of the street it is
+## on. Each alpha travels with its own vertex, so the swap cannot separate them.
+func _facing_marked(tool: SurfaceTool, tint: Color, p: Vector3, q: Vector3, r: Vector3, toward: Vector3, ap: float, aq: float, ar: float) -> void:
+	var order: Array = [[p, ap], [q, aq], [r, ar]]
+	if (q - p).cross(r - p).dot(toward) * _cross_sign < 0.0:
+		order = [[p, ap], [r, ar], [q, aq]]
+	for pair: Array in order:
+		tool.set_color(Color(tint.r, tint.g, tint.b, float(pair[1])))
+		tool.add_vertex(pair[0])
+
+
 func _quad(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	_tri(tool, a, b, c)
 	_tri(tool, a, c, d)
@@ -1145,7 +1482,7 @@ func _slab(tool: SurfaceTool, s0: float, s1: float, out0: float, out1: float, lo
 ## The utility pole: a tapered concrete shaft out of the footway, a galvanised cable riser
 ## clamped to it by two bands, and a cross-arm with three insulators near the top. No wires:
 ## they wait for the rest of the pole line.
-func _pole(tool: SurfaceTool) -> void:
+func _pole(tool: SurfaceTool, pole_at: float) -> void:
 	var foot := _lifted(pole_at, pole_out, top(pole_at))
 	var along := (at(pole_at + 1.0, 0.0) - at(pole_at, 0.0)).normalized()
 	var across := (at(pole_at, 1.0) - at(pole_at, 0.0)).normalized()
@@ -1167,13 +1504,47 @@ func _pole(tool: SurfaceTool) -> void:
 		_tube(tool, clamp_foot, 0.031, clamp_foot + Vector3.UP * 0.03, 0.031, 10, false)
 	tool.set_smooth_group(-1)
 	# The cross-arm, across the street's direction, and its three insulators.
-	var arm := foot + Vector3.UP * (POLE_HIGH - 0.6) + along * (POLE_TOP_RADIUS + 0.05)
+	var arm := foot + Vector3.UP * (POLE_HIGH - ARM_BELOW_TOP) + along * (POLE_TOP_RADIUS + 0.05)
 	_box(tool, arm, along * 0.0375, Vector3.UP * 0.0375, across * side * 0.9)
 	tool.set_smooth_group(2)
 	tool.set_color(PORCELAIN)
-	for offset: float in [-0.75, -0.3, 0.6]:
+	for offset: float in ARM_SEATS:
 		var seat := arm + across * offset + Vector3.UP * 0.0375
 		_tube(tool, seat, 0.045, seat + Vector3.UP * 0.13, 0.03, 10, true)
+	tool.set_smooth_group(-1)
+
+
+## Where a wire is tied on, at one pole: the top of each insulator on its cross-arm.
+func _wire_seats(pole_at: float) -> Array[Vector3]:
+	var foot := _lifted(pole_at, pole_out, top(pole_at))
+	var along := (at(pole_at + 1.0, 0.0) - at(pole_at, 0.0)).normalized()
+	var across := (at(pole_at, 1.0) - at(pole_at, 0.0)).normalized()
+	var arm := foot + Vector3.UP * (POLE_HIGH - ARM_BELOW_TOP) + along * (POLE_TOP_RADIUS + 0.05)
+	var seats: Array[Vector3] = []
+	for offset: float in ARM_SEATS: seats.append(arm + across * offset + Vector3.UP * (0.0375 + 0.13))
+	return seats
+
+
+## The wires between one pole and the next on this edge: each hangs in a curve, lowest in the
+## middle of the span, the way a cable hangs under its own weight. Nothing is strung past the
+## last pole: that span waits for the next street's poles.
+func _wires(tool: SurfaceTool) -> void:
+	if poles.size() < 2: return
+	tool.set_smooth_group(3)
+	tool.set_color(WIRE)
+	for i: int in poles.size() - 1:
+		var near := _wire_seats(poles[i])
+		var far := _wire_seats(poles[i + 1])
+		var span := poles[i + 1] - poles[i]
+		# (A short span hangs less than a long one, as the same cable would.)
+		var sag := WIRE_SAG * minf(span / POLE_SPACING, 1.0)
+		for w: int in near.size():
+			var last := near[w]
+			for k: int in range(1, WIRE_STEPS + 1):
+				var t := float(k) / float(WIRE_STEPS)
+				var point := near[w].lerp(far[w], t) - Vector3.UP * (sag * 4.0 * t * (1.0 - t))
+				_tube(tool, last, WIRE_RADIUS, point, WIRE_RADIUS, 5, false)
+				last = point
 	tool.set_smooth_group(-1)
 
 
@@ -1462,12 +1833,17 @@ func _asphalt() -> void:
 	var with_line: ShaderMaterial = ASPHALT.duplicate()
 	with_line.set_shader_parameter("edge_line_offset", line_out if _edge_line else 1000.0)
 	with_line.set_shader_parameter("line_width", LINE_WIDE)
+	# Metres: corridor-centre magnitude (0 for a shared narrow lane), median half-width.
+	# Both ribbon surfaces need it: shop-row crossing paint also covers the no-line surface.
+	var wear_layout := Vector2(0.0 if half < 3.0 and median <= 0.0 else (line_out + median) * 0.5, median)
+	with_line.set_shader_parameter("traffic_wear_layout", wear_layout)
 	mesh.surface_set_material(0, with_line)
 	if any_plain:
 		plain.generate_normals()
 		plain.commit(mesh)
 		var no_line: ShaderMaterial = ASPHALT.duplicate()
 		no_line.set_shader_parameter("edge_line_offset", 1000.0)
+		no_line.set_shader_parameter("traffic_wear_layout", wear_layout)
 		mesh.surface_set_material(1, no_line)
 	var instance := MeshInstance3D.new()
 	instance.name = "Asphalt"

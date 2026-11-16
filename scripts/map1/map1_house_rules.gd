@@ -59,6 +59,8 @@ const ROOF_LEAST := 0.09
 const FRONT_CLEAR_MIN := 1.0
 const DROP_MAX := 1.3
 const STEP_GOING := 0.31
+const STEP_OFF_FOOTWAY := 0.02   # a doorstep stops this far short of a built footway's back edge
+const STEP_LEAST := 0.45         # and is never shortened below this: a step has to be stood on
 const REACH := 10.0
 ## The four sides of a box, in its own axes: the way out, and the way along the wall.
 const OUTWARD: Array[Vector3] = [Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0)]
@@ -260,6 +262,17 @@ static func _on_side(world: Object, base: Dictionary, box: Array, facing: Dictio
 		if porch > 0.0:
 			width = minf(1.6, float(layout.recess.x1) - float(layout.recess.x0) - 0.1)
 			step_x = clampf(door_x, float(layout.recess.x0) + width * 0.5, float(layout.recess.x1) - width * 0.5)
+		# A doorstep may not reach past the back of a built kerb or footway in front of it: its
+		# slab would stand on the pavement, or, on a lane too narrow for one, out in the road.
+		# Measured at the step's own two ends and middle, not along the whole front, since a house
+		# seldom stands square to its lane. (House 4474 on lane x 224: its wall is 0.73 m from the
+		# kerb face, and its 0.90 m slab crossed the kerb into the carriageway.)
+		var their_map: Object = world.get("map")
+		if their_map != null and their_map.has_method("footway_gap"):
+			var room := INF
+			for edge_x: float in [step_x - width * 0.5, step_x, step_x + width * 0.5]:
+				room = minf(room, float(their_map.footway_gap(frame * Vector3(edge_x, 0.0, 0.0))))
+			if room < INF: depth = minf(depth, maxf(room - STEP_OFF_FOOTWAY, STEP_LEAST))
 		var step_out: Vector3 = frame * Vector3(step_x, 0.0, 0.0)
 		for pass_index: int in range(5):
 			var edge := step_out + out * depth
@@ -738,6 +751,11 @@ static func _finish(world: Object, site: Dictionary, box: Array, layout: Diction
 		"plot_gap": _plot_gap(world, frame, size.x),
 		"windows": [], "blocks": [], "wheels": [], "lean_tos": [], "items": [], "features": {}, "clear": wall_clear,
 		"drums": [], "signs": [],
+		# Where each gate leaf's blocks lie in `blocks`, and the gate they hang in. Written so a
+		# check does not have to guess which boxes are a leaf from their size and where they
+		# stand: guessing absorbed a thin prop into a leaf and excused its clash, and averaging
+		# a single surviving pillar put the gate's middle 0.94 m out. (Codex, 2026-11-16.)
+		"gate_leaves": [],
 	}
 	# A shop-house the map plan names a business in is dressed as that trade's shop.
 	var business: Dictionary = world.business_of(index) if world.has_method("business_of") else {}
@@ -758,6 +776,7 @@ static func _finish(world: Object, site: Dictionary, box: Array, layout: Diction
 	# (Only a business has these: a house without one is described exactly as before.)
 	if not (c.drums as Array).is_empty(): spec["drums"] = c.drums
 	if not (c.signs as Array).is_empty(): spec["signs"] = c.signs
+	if not (c.gate_leaves as Array).is_empty(): spec["gate_leaves"] = c.gate_leaves
 	if c.has("business"): site["business"] = c.business
 	if has_low:
 		spec["low"] = layout.low

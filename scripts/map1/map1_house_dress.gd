@@ -1,4 +1,4 @@
-extends RefCounted
+﻿extends RefCounted
 ## What makes a Map 1 house one particular Japanese house (called by map1_house_rules.gd
 ## once its rooms are laid out). All of it by rule, from the house's kind, its box, the
 ## ground and the neighbours round it, and its own seed:
@@ -60,7 +60,25 @@ const GUTTERS: Array[Color] = [Color(0.25, 0.21, 0.18), Color(0.78, 0.78, 0.76),
 const CURTAINS: Array[Color] = [Color(0.84, 0.82, 0.76), Color(0.78, 0.78, 0.74), Color(0.70, 0.72, 0.70), Color(0.76, 0.70, 0.62)]
 const APPLIANCE := Color(0.84, 0.84, 0.82)
 const BLOCK_WALL := Color(0.60, 0.60, 0.58)
+const COPING := 0.055                          # the capping stone along a block wall's top
 const STEEL := Color(0.52, 0.53, 0.54)
+## The name on a gate's plate. Every Japanese front gate carries one, and it is read from closer
+## than anything else on the plot. Common surnames, one per house from the house's own dice.
+## **Every one of these has to render whole**: `TextMesh` silently drops a letter whose convex
+## decomposition fails, and what is left is still a shape, so a plate came out reading 木 for
+## 鈴木 until it was caught by eye. `tests/probe_sign_shape.gd` now measures each name's width
+## against its letter count and fails if one is missing. Check a new name there before adding it.
+const SURNAMES: Array[String] = ["田中", "佐藤", "山田", "高橋", "渡辺", "山本", "中村", "小林", "加藤", "吉田", "松本", "井上", "清水", "石川"]
+## How far a gate leaf's ironmongery reaches either side of the leaf's own middle plane. The
+## hinges stand out towards the pillar, the handle the other way, and the handle is the longer
+## reach of the two — a guard of ±55 mm round the leaf left a 10 mm band of handle outside it.
+## Kept here beside `_gate_leaf` so the guard and the parts it guards cannot drift apart.
+## (Codex measured the gap out of the source, 2026-11-16.)
+## Codex's installed name-plate renderer: it turns a surname and a stone colour into the face
+## metadata its shell reads, and gives back nothing for a name or palette it does not hold.
+const NameplateAtlas := preload("res://scripts/interior_kit/nameplate_atlas.gd")
+const LEAF_TO_PILLAR := 0.052      # hinge: 14.5 mm out of plane, 37.5 mm of half-depth
+const LEAF_TO_INSIDE := 0.065      # handle: 40 mm in, 25 mm of half-depth
 const FUSUMA := Color(0.87, 0.85, 0.78)
 const TATAMI := Color(0.62, 0.61, 0.45)
 const CABINET := Color(0.82, 0.80, 0.75)
@@ -118,7 +136,88 @@ static func turned_plot(frame: Transform3D, size: Vector2) -> bool:
 	return posmod(floori((middle.dot(frame.basis.x) + 4.5 * float(row)) / 9.0), 2) == 0
 
 
+## Every sign text the map can draw, as a set. Taken from where the strings actually live — the
+## trade table and the upstairs café — and not by dressing houses to find out: dressing all
+## 2,003 of them to collect 26 strings takes 7.7 seconds. `tests/probe_sign_warm_cost.gd` checks
+## this set against the one a fully dressed map really produces, so the two cannot drift apart.
+## A shape is cached per text AND per coarseness, so the key is the pair: cutting 喫茶 at 2.5
+## degrees does nothing for 喫茶 at 16. Keyed "text|step" here and split again when cutting.
+static func sign_keys() -> Dictionary:
+	var keys := {}
+	for what: String in TRADES:
+		var trade: Dictionary = TRADES[what]
+		var word := str(trade.get("word", ""))
+		for text: String in [word, str(trade.get("down", "")), str(trade.get("stand", word))]:
+			if text != "": keys[sign_key(text, 2.5)] = true
+	for text: String in UpstairsCafe.SIGN_TEXTS: keys[sign_key(text, 2.5)] = true
+	# The gate plate's fallback, and only where it can actually be reached: a surname the
+	# installed atlas cannot draw in any of its palettes falls back to cut letters at 16
+	# degrees. With all fourteen covered this adds nothing; add a name the atlas does not
+	# carry and its shape starts being cut at load instead of on the frame it is first seen.
+	for surname: String in SURNAMES:
+		var covered := false
+		for stone: Color in [Color(0.86, 0.84, 0.79), Color(0.20, 0.20, 0.21), Color(0.74, 0.70, 0.62)]:
+			if not NameplateAtlas.metadata_for(surname, stone).is_empty(): covered = true
+		if not covered: keys[sign_key(surname, 16.0)] = true
+	return keys
+
+
+static func sign_key(text: String, curve_step: float) -> String:
+	return "%s|%.1f" % [text, curve_step]
+
+
+## Cut every one of them now, so that no frame in play has to. A sign's glyph outlines are cut
+## the first time anything asks for that exact text and kept after, which puts the whole bill on
+## whichever frame first builds a house carrying new text: for the upstairs café, six signs at
+## once, that was 26.7 ms on the frame a player first came within sight of it. The work does not
+## get cheaper here; it stops being paid where anyone can see it.
+##
+## Where this runs: `map1_world.gd`'s setup calls `cut_words()` while the world is being built,
+## before a single house is dressed and before the player exists. So it is inside the Blockout's
+## own build time, not in any interactive frame — and not, as an earlier comment of mine claimed,
+## inside the 1.6 s black screen of a later cut, which is a different thing entirely.
+##
+## It is one pass, not one key a frame, for Codex's own reason: a single cold key can cost more
+## than a whole frame's budget, so spreading them would turn one stall into several.
+##
+## `warmed_usec` is the measured cost of the pass and `warmed_slowest_usec` the worst single
+## key. Whether the pass really found an empty cache is **counted, not timed**: `warmed_hits`
+## and `warmed_misses` are read from the kit's own store key by key as it goes, and
+## `tests/probe_sign_warm_cost.gd` fails unless every key was a miss. Elapsed time cannot tell
+## 27 cuts from 20 cuts and 7 hits, and a fast enough machine would have read as a failure.
+## (Shape and accounting agreed with Codex, 2026-11-16, after it showed the same cold cost
+## exists in the pre-atlas implementation: 40.634 ms frozen against 38.535 ms installed.)
+static var _signs_cut := false
+static var warmed_usec := 0
+static var warmed_keys := 0
+static var warmed_slowest_usec := 0
+static var warmed_hits := 0        # keys already in the kit's cache when this ran
+static var warmed_misses := 0      # keys this pass actually cut
+static func warm_signs() -> void:
+	if _signs_cut: return
+	_signs_cut = true
+	var keys := sign_keys()
+	var began := Time.get_ticks_usec()
+	for key: String in keys:
+		var split := key.rsplit("|", true, 1)
+		var text: String = split[0]
+		var step := float(split[1])
+		# Whether the kit already holds this shape, read from its own store without touching it.
+		# The key rule is mirrored from `HouseKit.sign_shape`: the bare text at the default
+		# coarseness, "text/step" otherwise. Mirrored rather than asked for, because the kit is
+		# Codex's; if it would rather expose a `has_sign_shape()` this is the one line to change.
+		var kept: String = text if is_equal_approx(step, 2.5) else "%s/%.1f" % [text, step]
+		if (HouseKit._sign_shapes as Dictionary).has(kept): warmed_hits += 1
+		else: warmed_misses += 1
+		var one := Time.get_ticks_usec()
+		HouseKit.sign_shape(text, step)
+		warmed_slowest_usec = maxi(warmed_slowest_usec, Time.get_ticks_usec() - one)
+	warmed_usec = Time.get_ticks_usec() - began
+	warmed_keys = keys.size()
+
+
 static func dress(c: Dictionary) -> void:
+	warm_signs()
 	_colours(c)
 	if c.has("business"): _trade_paint(c)
 	_uses(c)
@@ -233,6 +332,22 @@ static func _free(c: Dictionary, p: Vector2, road_too: bool = true) -> bool:
 ## How much a wall faces the sun: 1 due south (the map's +z), -1 due north.
 static func _sun(c: Dictionary, n: Vector2) -> float:
 	return ((c.frame as Transform3D).basis * Vector3(n.x, 0.0, n.y)).z
+
+
+## Whether a box of space on the plot has nothing of the plot's own standing in it. The wall and
+## its pillars are passed over: they carry the wall marker in their colour's alpha, and whatever
+## asks this question is being hung on them. Everything else — a carport post, a laundry pole, a
+## planter, a bicycle, a hedge length — counts.
+static func _slab_free(c: Dictionary, centre: Vector3, size: Vector3) -> bool:
+	for entry: Array in (c.blocks as Array):
+		if absf(float((entry[2] as Color).a) - 0.5) < 0.01: continue
+		var at: Vector3 = entry[0]
+		var theirs: Vector3 = entry[1]
+		var clear := false
+		for axis: int in 3:
+			if (size[axis] + theirs[axis]) * 0.5 - absf(centre[axis] - at[axis]) <= 0.0: clear = true
+		if not clear: return false
+	return true
 
 
 static func _block(c: Dictionary, centre: Vector3, size: Vector3, colour: Color, solid: bool = false) -> void:
@@ -1022,6 +1137,16 @@ static func _plot(c: Dictionary) -> void:
 	var has_street := float(c.road_gap) < 10.0
 	var wall_roll := look.randf()
 	var wall_height := snappedf(look.randf_range(1.0, 1.45), 0.05)
+	# No two front walls on a street are the same grey: they were rendered in different years by
+	# different people, and they weather on the side the rain comes from. One tone per house, from
+	# the house's own dice, so a run of plots reads as a row of separate properties and not as one
+	# long wall painted in a single go.
+	var wall_tone := BLOCK_WALL.lerp(Color(0.52, 0.51, 0.47), look.randf() * 0.55).lightened(look.randf() * 0.10 - 0.03)
+	# Marked for the wall surface: the kit replaces this alpha with the vertex's height above the
+	# block's own foot, so the shader can run concrete courses up it and lay dirt along its base.
+	# 0.5 in, 0.20 to 0.74 out; 0.9 and over stays "not a wall". The material is opaque, so the
+	# mark changes nothing until that shader exists. (Codex's encoding, agreed 2026-11-16.)
+	wall_tone.a = 0.5
 	var port_roll := look.randf()
 	var bike_roll := look.randf()
 	var bike_place := look.randf()
@@ -1047,12 +1172,33 @@ static func _plot(c: Dictionary) -> void:
 					_on_plan(c, Rect2(x0, -0.3 - deep, 5.0, deep), -0.12, 0.0, HouseKit.COLOURS.concrete)
 					front_taken.append(port)
 					items.append("carport")
-		if yard >= 1.4 and wall_roll < 0.6:
+		# Nearly every plot on a Japanese residential street is bounded: a block wall, or a wall with
+		# a railing on it, right at the pavement. Ours bounded under a quarter of them, which is the
+		# largest single thing still missing against the street the owner set as the mark. A plot only
+		# goes unwalled where there is genuinely no room for one.
+		if yard >= 1.0 and wall_roll < 0.88:
 			var x0 := -minf(float(open.left) * 0.5, 0.6)
 			var x1 := size.x + minf(float(open.right) * 0.5, 0.6)
-			var gaps: Array = [Vector2(door_x - 0.8, door_x + 0.8)]
+			# The gateway, and then the gate pillars standing at its edges. A pillar is 28 cm
+			# square and its inner face is where the wall used to start, so the wall's first
+			# 28 cm — and the coping and the railing on top of it — ran straight through the
+			# pillar. 1,297 rails crossed a pillar on 738 plots, by as much as 151 mm, and from
+			# the gate you could see a fence rail going into a concrete post and out the other
+			# side. A real railing stops at the pillar. So the gap is widened to the pillar's
+			# OUTER face wherever a pillar will actually stand, and the pillar fills what the
+			# wall gives up. Where the ground refuses a pillar the wall closes up as before.
+			# (Found by tests/probe_gate_clear.gd, 2026-11-16.)
+			var pillar_sides: Array[float] = []
+			if str(c.kind) != "shop":
+				for side: float in [-1.0, 1.0]:
+					if _free(c, Vector2(door_x + side * 0.94, -line)): pillar_sides.append(side)
+			var gaps: Array = [Vector2(door_x - (1.08 if pillar_sides.has(-1.0) else 0.8), door_x + (1.08 if pillar_sides.has(1.0) else 0.8))]
 			if port != Vector2.ZERO: gaps.append(port)
 			var built := 0
+			var railed := look.randf() < 0.62
+			var planted := look.randf() < 0.72
+			var rail_dice := RandomNumberGenerator.new()
+			rail_dice.seed = look.seed ^ 0x5A17
 			for stretch: Vector2 in _minus(x0, x1, gaps):
 				# In lengths that each stand on their own ground, as a block wall steps.
 				var pieces := maxi(1, ceili((stretch.y - stretch.x) / 1.8))
@@ -1063,20 +1209,116 @@ static func _plot(c: Dictionary) -> void:
 					var middle := Vector2((from + to) * 0.5, -line)
 					var foot := _gy(c, middle)
 					if _free(c, middle) and foot > -0.5:
-						_block(c, Vector3(middle.x, foot - 0.1 + (wall_height + 0.1) * 0.5, middle.y), Vector3(to - from, wall_height + 0.1, 0.12), BLOCK_WALL, true)
+						_block(c, Vector3(middle.x, foot - 0.1 + (wall_height + 0.1) * 0.5, middle.y), Vector3(to - from, wall_height + 0.1, 0.12), wall_tone, true)
+						# The capping stone along its top: a little wider than the wall and a shade paler,
+						# which is what a block wall is finished with and what a railing is bolted through.
+						# Without it the wall ends in a bare cut edge, which shows at a gate.
+						_block(c, Vector3(middle.x, foot + wall_height + COPING * 0.5, middle.y), Vector3(to - from, COPING, 0.17), _capping(wall_tone), true)
 						built += 1
+				if planted and stretch.y - stretch.x >= 0.8:
+					_planting(c, stretch.x, stretch.y, line, _gy(c, Vector2((stretch.x + stretch.y) * 0.5, -line)) + wall_height, rail_dice)
+				if railed and stretch.y - stretch.x >= 0.6:
+					var rail_foot := _gy(c, Vector2((stretch.x + stretch.y) * 0.5, -line)) + wall_height + COPING
+					_railing(c, stretch.x, stretch.y, -line, rail_foot, rail_dice)
 			if built >= 2:
-				items.append("block wall")
-				for side: float in [-1.0, 1.0]:
+				items.append(("block wall with a railing" if railed else "block wall") + (", planted" if planted else ""))
+				# The pillars themselves, on the sides the wall already made room for.
+				for side: float in pillar_sides:
 					var p := Vector2(door_x + side * 0.94, -line)
-					if not _free(c, p): continue
 					var foot := _gy(c, p)
-					_block(c, Vector3(p.x, foot - 0.1 + (wall_height + 0.35) * 0.5, p.y), Vector3(0.28, wall_height + 0.35, 0.28), BLOCK_WALL, true)
+					_block(c, Vector3(p.x, foot - 0.1 + (wall_height + 0.35) * 0.5, p.y), Vector3(0.28, wall_height + 0.35, 0.28), wall_tone.darkened(0.04), true)
 					gate = true
 					if side > 0.0 and mail_roll < 0.85:
 						_block(c, Vector3(p.x, foot + 1.0, p.y - 0.17), Vector3(0.24, 0.20, 0.08), STEEL)
 						items.append("mailbox at the gate")
-				if gate: items.append("gate pillars")
+					# The other pillar carries the name plate and the intercom. That is where they go on
+					# a Japanese front gate and what you stand in front of at one: the post box on the
+					# one pillar, these two on the other.
+					if side < 0.0:
+						var plate_dice := RandomNumberGenerator.new()
+						plate_dice.seed = look.seed ^ 0x51A7
+						var plate_y := foot + minf(wall_height + 0.05, 1.35)
+						var stone: Color = _choice(plate_dice, [Color(0.86, 0.84, 0.79), Color(0.20, 0.20, 0.21), Color(0.74, 0.70, 0.62)])
+						var plate_at: int = (c.blocks as Array).size()
+						_block(c, Vector3(p.x, plate_y, p.y - 0.146), Vector3(0.17, 0.085, 0.014), stone)
+						var ink := Color(0.10, 0.10, 0.11) if stone.get_luminance() > 0.4 else Color(0.88, 0.87, 0.84)
+						# The name is chosen once, in the same order off the same dice as before, so no
+						# plot's surname changes. Codex's installed renderer draws it from a font atlas
+						# off the plate's own face, which costs the house no triangles at all: the
+						# lettering was 260 of them a plate, about 95,000 across the ring. Where the
+						# atlas does not know a name or a palette it hands back nothing, and the cut
+						# letters are built exactly as they were. (Its interface, its call order,
+						# agreed 2026-11-16.)
+						var surname := str(_choice(plate_dice, SURNAMES))
+						var plate_faces: Dictionary = NameplateAtlas.metadata_for(surname, stone)
+						if plate_faces.is_empty():
+							# Cut coarsely: at 12.5 cm a stroke's curve is a pixel, and the fine cut
+							# costs 76 triangles a plate for a picture nobody can tell apart.
+							_words(c, surname, Vector3(p.x, plate_y, p.y - 0.154), PI, 0.125, 0.052, ink, 16.0)
+						else:
+							((c.blocks as Array)[plate_at] as Array).append(plate_faces)
+						# The intercom below it, with the dark of its speaker panel.
+						_block(c, Vector3(p.x, plate_y - 0.26, p.y - 0.152), Vector3(0.085, 0.125, 0.026), Color(0.84, 0.83, 0.79))
+						_block(c, Vector3(p.x, plate_y - 0.295, p.y - 0.166), Vector3(0.050, 0.030, 0.008), Color(0.26, 0.26, 0.27))
+						items.append("name plate and intercom")
+				if gate:
+					items.append("gate pillars")
+					# And a leaf hung in the gateway. Two pillars with nothing between them is a
+					# gateway, not a gate, and it is the first thing you see standing at one.
+					# Its own dice, so hanging it shifts nothing else on the street.
+					var gate_dice := RandomNumberGenerator.new()
+					gate_dice.seed = look.seed ^ 0x6A7E
+					# A leaf hangs on a pillar, so it is hung only where a pillar was actually built:
+					# one side's ground can refuse its pillar while the other takes it, and a leaf on
+					# the refused side would be hinged to nothing. (Codex caught this, 2026-11-16.)
+					# And a gate in use stands open: a shut leaf would seal the one way in off the
+					# street, since the wall runs the whole frontage and 1.0 to 1.45 m of block with a
+					# railing on top is not something the player's 32 cm step gets over. Open against
+					# its own pillar needs 1.05 m of yard to swing into; a shallower plot keeps its
+					# bare pillars rather than fold a leaf out over the footway.
+					if gate_dice.randf() < 0.74 and line >= 1.05:
+						var leaf_tone: Color = _choice(gate_dice, [Color(0.58, 0.59, 0.60), Color(0.33, 0.29, 0.25), Color(0.44, 0.44, 0.42)])
+						var leaf_high := snappedf(gate_dice.randf_range(0.95, 1.15), 0.05)
+						var leaf_foot := _gy(c, Vector2(door_x, -line))
+						var leaves := 0
+						for side: float in pillar_sides:
+							# Hung on the pillar's inner face and standing in at a right angle, so its
+							# hanging edge is inside the pillar's own depth and the hinges have something
+							# to bridge to. 77 cm out leaves the paved path from the gate untouched.
+							var base := Vector2(door_x + side * 0.77, -line - 0.10)
+							var along := Vector2(0.0, 1.0)
+							var through := Vector2(side, 0.0)
+							var clear := true
+							for u: float in [0.30, 0.55, 0.76]:
+								if not _free(c, base + along * u, false): clear = false
+							# `_free` asks the WORLD whether a building stands there. It knows nothing
+							# about what this plot has already put down, and a leaf sweeps 68 cm into a
+							# yard that may already hold a carport post, a laundry pole or a planter. So
+							# the leaf's own slab is asked of the plot's blocks too: anything standing in
+							# it that is not the wall or a pillar means no leaf on that side, because a
+							# hinge is let into its pillar on purpose and nothing else belongs there.
+							# (tests/probe_gate_clear.gd found a stile through a 3.86 m pole, 2026-11-16.)
+							# The envelope is the leaf's own reach, not a round number: the handle
+							# stands 65 mm inward and the hinges 52 mm towards the pillar, so a
+							# symmetric guard of ±55 mm left a 10 mm band of handle unguarded.
+							var span := LEAF_TO_PILLAR + LEAF_TO_INSIDE
+							var off := (LEAF_TO_PILLAR - LEAF_TO_INSIDE) * 0.5 * side
+							if clear and not _slab_free(c, Vector3(base.x + off, leaf_foot + 0.62, -line - 0.10 + 0.39), Vector3(span, 1.24, 0.80)): clear = false
+							if not clear: continue
+							var first_block: int = (c.blocks as Array).size()
+							_gate_leaf(c, base, along, through, leaf_foot, leaf_high, railed, leaf_tone)
+							# Which blocks that leaf just became, so a check never has to guess.
+							(c.gate_leaves as Array).append({"side": side, "at": door_x, "line": line,
+								"plane": base.x, "foot": leaf_foot, "from": first_block, "to": (c.blocks as Array).size()})
+							leaves += 1
+						if leaves > 0:
+							items.append("gate %s, %d leaf open against its pillar" % ["barred" if railed else "panelled", leaves])
+					# And a paved path from the gate in to the door. Nobody walks up bare earth to their
+					# own front door, and the hedge already leaves this gap for it. It stops short of the
+					# wall line so the gate's own threshold shows, and the doorstep sits on its far end.
+					if line > 0.45 and _free(c, Vector2(door_x, -line * 0.5)):
+						_on_plan(c, Rect2(door_x - 0.72, -line + 0.08, 1.44, line - 0.08), -0.12, 0.0, HouseKit.COLOURS.concrete)
+						items.append("path from the gate")
 	if not gate and mail_roll < 0.8 and str(c.kind) != "shop" and not layout.has("recess"):
 		var side := -1.0 if door_x - 0.9 > 0.2 else 1.0
 		_on_wall(c, front, door_x + side * 0.72, 0.06, L0 + 1.05, 0.30, 0.22, 0.11, STEEL)
@@ -1095,6 +1337,133 @@ static func _plot(c: Dictionary) -> void:
 			_bicycle(c, Vector3(at + float(n) * 0.12, foot, -out), look)
 			placed += 1
 		if placed > 0: items.append("bicycles %d" % placed)
+
+
+## A steel railing along the top of a block wall: a rail under the cap, another at the bars'
+## feet, upright bars between them, and a stouter post at each end. What a Japanese front wall
+## nearly always carries, and what ours were missing against the street the owner set as the mark
+## (docs/art_targets/street_target_01.webp).
+## A clipped hedge in the strip between the front wall and the house, showing over the wall. A
+## Japanese front garden is nearly always planted and ours were bare ground. It is built as a run
+## of lengths with no gaps between them, each its own width, height and depth, because that is
+## what a clipped hedge is: one mass with an uneven top, not a row of separate balls. (It was a
+## row of prisms first. Twelve of them per frontage cost 462 triangles a house and still read as
+## separate blobs; this reads better and costs a tenth of it.)
+static func _planting(c: Dictionary, from_x: float, to_x: float, line: float, wall_top: float, dice: RandomNumberGenerator) -> void:
+	var room: float = line - 0.30
+	if room < 0.44 or to_x - from_x < 0.8: return            # no strip to plant, or no run to plant it along
+	var deep: float = clampf(room, 0.30, 0.75)
+	var out: float = line - 0.06 - deep * 0.5                # just inside the wall
+	var at: float = from_x + 0.05
+	var far: float = to_x - 0.05
+	while at < far - 0.25:
+		var wide: float = minf(dice.randf_range(0.45, 0.95), far - at)
+		var middle := Vector2(at + wide * 0.5, -out)
+		if _free(c, middle):
+			var foot: float = _gy(c, middle)
+			# Clipped to the wall, which is what "clipped" means: a front hedge in a half-metre
+			# strip is kept at the wall's own height and a little over, because the point of it
+			# is to show above the coping, not to hide the house. It stood up to 80 cm proud of a
+			# 1.45 m wall before, which from the gate read as a flat green slab taller than the
+			# pillars, and a 2.25 m hedge in a 60 cm bed is not a thing anyone grows.
+			var top: float = minf(wall_top + dice.randf_range(0.05, 0.42), wall_top + 0.45)
+			var green: Color = SHRUB.lightened(dice.randf() * 0.18 - 0.06)
+			# Its own depth and its own set-out, so the face of the run is broken instead of one flat
+			# plane: at a gate you stand two metres from it and a plane is the giveaway.
+			var thick: float = deep * dice.randf_range(0.55, 1.0)
+			var shift: float = (deep - thick) * dice.randf_range(-0.5, 0.5)
+			_block(c, Vector3(middle.x, foot + (top - foot) * 0.5, middle.y + shift),
+				Vector3(wide, top - foot, thick), green)
+		at += wide
+
+
+## The capping stone's colour: the wall's own tone a shade paler, and **not** marked for the wall
+## surface. A coping is a smooth cast stone, not blockwork: it carries no courses, and because the
+## mark also encodes height above a piece's own foot, leaving it on a 55 mm slab would read as the
+## very bottom of a wall and come out the dirtiest thing on the plot. (Codex caught this, 2026-11-16.)
+static func _capping(tone: Color) -> Color:
+	var pale := tone.lightened(0.07)
+	pale.a = 1.0
+	return pale
+
+
+static func _railing(c: Dictionary, from_x: float, to_x: float, z: float, foot: float, dice: RandomNumberGenerator) -> void:
+	var span := to_x - from_x
+	if span < 0.4: return
+	var tall := snappedf(dice.randf_range(0.55, 0.85), 0.05)
+	var bar := 0.014
+	var post := 0.032
+	for high: float in [foot + 0.05, foot + tall]:
+		_block(c, Vector3((from_x + to_x) * 0.5, high, z), Vector3(span, bar * 1.6, bar * 1.6), STEEL)
+	# 140 mm between bars, not 110. A real wall-top railing is made anywhere between about 100
+	# and 140, so both are right, but at 110 the bars cost 513 triangles a house — more than the
+	# gate leaves, the name plates and all their lettering put together, and 267,000 across the
+	# 520-house ring against the 120,471 the ring is over by. The two look the same from the
+	# street; the triangles do not. (Measured by tests/probe_house_cost.gd, 2026-11-16.)
+	var count := maxi(int(round(span / 0.14)), 2)
+	for i: int in range(1, count):
+		var at := lerpf(from_x, to_x, float(i) / float(count))
+		_block(c, Vector3(at, foot + (0.05 + tall) * 0.5, z), Vector3(bar, tall - 0.05, bar), STEEL)
+	for at: float in [from_x + post * 0.5, to_x - post * 0.5]:
+		_block(c, Vector3(at, foot + tall * 0.5, z), Vector3(post, tall, post), STEEL)
+
+
+## One leaf of a front gate, built as a flat frame standing in its own plane. `base` is the point
+## on the leaf's middle plane at its hanging end and on the ground, `along` the way its width runs
+## and `through` the way its thickness does — both axis unit vectors in the plot's own x/z, so
+## every member below is a plain box and none has to be turned.
+##
+## A Japanese residential gate is an aluminium or bronzed frame about a metre high: two stiles, a
+## rail top and bottom, and either uprights or a sheet between them. Which it is follows the wall
+## it hangs on. A plot whose wall carries a railing had a fabricator in to make that railing, and
+## the gate came off the same van, so it is barred to match; a plain wall takes the panelled gate.
+static func _gate_leaf(c: Dictionary, base: Vector2, along: Vector2, through: Vector2, foot: float, high: float, barred: bool, tone: Color) -> void:
+	var wide := 0.78
+	var thick := 0.045
+	var stile := 0.05
+	var rail := 0.055
+	var low := foot + 0.11                      # the gap a gate is hung with, so it swings clear of the ground
+	var top := foot + high
+	# A box `w` along the leaf, `h` high and `d` through it, `u` metres from the hanging end and
+	# `shift` out of the leaf's middle plane.
+	var put := func(u: float, y: float, w: float, h: float, d: float, shift: float, colour: Color, solid: bool) -> void:
+		var p: Vector2 = base + along * u + through * shift
+		_block(c, Vector3(p.x, y, p.y),
+			Vector3(absf(along.x) * w + absf(through.x) * d, h, absf(along.y) * w + absf(through.y) * d),
+			colour, solid)
+	put.call(stile * 0.5, (low + top) * 0.5, stile, top - low, thick, 0.0, tone, true)
+	put.call(wide - stile * 0.5, (low + top) * 0.5, stile, top - low, thick, 0.0, tone, true)
+	put.call(wide * 0.5, top - rail * 0.5, wide, rail, thick, 0.0, tone, true)
+	put.call(wide * 0.5, low + rail * 0.5, wide, rail, thick, 0.0, tone, true)
+	var inner_lo := low + rail
+	var inner_hi := top - rail
+	if barred:
+		for i: int in range(1, 6):
+			put.call(lerpf(stile, wide - stile, float(i) / 6.0), (inner_lo + inner_hi) * 0.5, 0.018, inner_hi - inner_lo, 0.018, 0.0, tone, false)
+	else:
+		# The panelled gate: a sheet across the lower half, a mid rail, and uprights above it. The
+		# top is left open because you want to see who is at your gate before you reach it, which
+		# is why a gate solid to its full height is a thing you hardly ever see on a house.
+		var mid := lerpf(inner_lo, inner_hi, 0.46)
+		put.call(wide * 0.5, (inner_lo + mid) * 0.5, wide - stile * 2.0, mid - inner_lo, thick * 0.55, 0.0, tone.lightened(0.03), false)
+		put.call(wide * 0.5, mid, wide, rail * 0.8, thick, 0.0, tone, false)
+		# The uprights run from the mid rail's own top to the top rail's underside. They used to
+		# be set out from the mid rail's middle plus four tenths of a rail, which left their feet
+		# 22 mm above the rail they are supposed to be welded to — a gate with its bars hanging in
+		# the air. Taking the interval from the rail's actual top closes it and changes nothing
+		# else: same frame, same silhouette, same three bars. (Codex read this out of the source,
+		# 2026-11-16; no screenshot would have shown 22 mm.)
+		var above := mid + rail * 0.4
+		for i: int in range(1, 4):
+			put.call(lerpf(stile, wide - stile, float(i) / 4.0), (above + inner_hi) * 0.5, 0.018, inner_hi - above, 0.018, 0.0, tone, false)
+	# Two hinges at the hanging end and a handle at the other. Without them a gate is a frame
+	# leaning in a gap: the ironmongery is what says it swings. Each hinge reaches from inside the
+	# leaf's own stile across the 20 mm knuckle gap and 22 mm into the pillar's face, because a
+	# hinge that stops short of its post is a hinge bolted to the air. (Codex measured mine
+	# floating 31.6 mm clear of the pillar, 2026-11-16: the span was wrong, not the triangles.)
+	for y: float in [low + 0.08, top - 0.12]:
+		put.call(stile * 0.5, y, 0.07, 0.05, 0.075, 0.0145, tone.darkened(0.12), false)
+	put.call(wide - stile * 0.5, low + (top - low) * 0.52, 0.04, 0.16, 0.05, -0.04, tone.darkened(0.05), false)
 
 
 ## A town bicycle (mamachari) standing along the wall: two tyres, a frame, a basket.
@@ -1157,13 +1526,13 @@ const TRADES := {
 }
 
 
-## Cuts the letters of every trade's signs now (a few milliseconds each, once), so that the
-## first shop made in play does not wait for them.
+## The name `map1_world.gd`'s setup calls, kept so its call site does not change. It is now one
+## entry into the single guarded pass below, because there were two: this one cut 22 trade keys
+## and `warm_signs()` cut 27, which left the second measuring only its own remainder and me
+## reporting that as the whole cost. One implementation, one set, one number. (Codex read the
+## call order out of the source and caught it, 2026-11-16.)
 static func cut_words() -> void:
-	for what: String in TRADES:
-		for key: String in ["word", "down", "stand"]:
-			var text := str((TRADES[what] as Dictionary).get(key, ""))
-			if text != "": HouseKit.sign_shape(text)
+	warm_signs()
 
 
 ## Cladding: the ground floor of some trades is boarded (an izakaya's dark boards, a sushi
@@ -1179,8 +1548,8 @@ static func _trade_paint(c: Dictionary) -> void:
 
 ## The words of a sign: fitted into `wide` by `tall` round `centre`, seen from the way `yaw`
 ## turns +z (HouseKit.sign_shape cuts the letters).
-static func _words(c: Dictionary, text: String, centre: Vector3, yaw: float, wide: float, tall: float, colour: Color) -> void:
-	(c.signs as Array).append([text, centre, yaw, wide, tall, colour])
+static func _words(c: Dictionary, text: String, centre: Vector3, yaw: float, wide: float, tall: float, colour: Color, curve_step := 2.5) -> void:
+	(c.signs as Array).append([text, centre, yaw, wide, tall, colour, curve_step])
 
 
 ## Room at the front for something `wide` along the wall and `deep` out from it: the next

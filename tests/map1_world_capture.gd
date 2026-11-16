@@ -160,6 +160,44 @@ func _run() -> void:
 	await _shot("fork_mouths_north", _eye(Vector3(221.5, 0.0, 506.5), 1.7), _eye(Vector3(221.5, 0.0, 488.0), 0.5), 75.0)
 	await _shot("fork_dead_end", _eye(Vector3(219.0, 0.0, 495.5), 1.7), _eye(Vector3(218.2, 0.0, 487.5), 0.9), 70.0)
 	await _shot("fork_tram_end", _eye(Vector3(170.0, 0.0, 493.5), 1.7), _eye(Vector3(196.0, 0.0, 491.0), 0.4), 70.0)
+	# The tram fork's south kerb (stage B): from the street looking east along it, from the lane
+	# looking back west, and across it from the road towards house 1661's door.
+	await _shot("fork_south_east", _eye(Vector3(180.0, 0.0, 494.6), 1.7), _eye(Vector3(198.0, 0.0, 498.6), 0.3), 70.0)
+	await _shot("fork_south_west", _eye(Vector3(205.0, 0.0, 496.8), 1.7), _eye(Vector3(187.0, 0.0, 496.2), 0.3), 70.0)
+	await _shot("fork_south_1661", _eye(Vector3(190.0, 0.0, 492.5), 1.7), _eye(Vector3(187.5, 0.0, 498.5), 0.6), 75.0)
+	# The island at the fork: its tip from the road west of it, from above, and its stub end.
+	await _shot("fork_island_tip", _eye(Vector3(190.5, 0.0, 495.0), 1.7), _eye(Vector3(197.5, 0.0, 493.2), 0.2), 60.0)
+	await _shot("fork_island_above", _eye(Vector3(194.0, 0.0, 496.5), 6.0), _eye(Vector3(198.0, 0.0, 492.8), 0.0), 60.0)
+	# The inside of the bend, by the curry shop: along the north pavement, from above, and from the diagonal.
+	await _shot("fork_inner_walk", _eye(Vector3(182.5, 0.0, 483.0), 1.7), _eye(Vector3(190.0, 0.0, 482.8), 0.2), 65.0)
+	await _shot("fork_inner_above", _eye(Vector3(188.5, 0.0, 487.5), 6.5), _eye(Vector3(189.2, 0.0, 483.0), 0.0), 60.0)
+	await _shot("fork_inner_back", _eye(Vector3(194.5, 0.0, 484.5), 1.7), _eye(Vector3(189.0, 0.0, 483.2), 0.2), 65.0)
+	# The diagonal past the fork, south-east kerb: along it from the island, back from its far end, and from above the join.
+	await _shot("diagonal_south_along", _eye(Vector3(199.5, 0.0, 492.3), 1.7), _eye(Vector3(212.0, 0.0, 478.5), 0.3), 70.0)
+	await _shot("diagonal_south_back", _eye(Vector3(220.5, 0.0, 471.5), 1.7), _eye(Vector3(206.0, 0.0, 484.5), 0.3), 70.0)
+	await _shot("diagonal_south_join", _eye(Vector3(197.0, 0.0, 487.0), 7.0), _eye(Vector3(201.0, 0.0, 489.5), 0.0), 60.0)
+	# The compound mouth's tip, where the diagonal meets lane x 224.
+	await _shot("mouth_tip_above", _eye(Vector3(217.5, 0.0, 474.0), 6.0), _eye(Vector3(221.3, 0.0, 469.3), 0.0), 60.0)
+	await _shot("mouth_tip_eye", _eye(Vector3(216.0, 0.0, 466.5), 1.7), _eye(Vector3(221.4, 0.0, 470.0), 0.3), 65.0)
+	# Lane x 224 past house 4474: along the narrow east side, and the lowered kerb at its front door.
+	await _shot("mouth_x224_along", _eye(Vector3(224.2, 0.0, 470.5), 1.7), _eye(Vector3(224.6, 0.0, 482.0), 0.6), 70.0)
+	await _shot("mouth_x224_door", _eye(Vector3(222.6, 0.0, 476.6), 1.7), _eye(Vector3(227.2, 0.0, 474.2), 0.1), 65.0)
+	# Lane z 466's new western length, and the whole mouth from above.
+	await _shot("mouth_z466_along", _eye(Vector3(228.0, 0.0, 466.3), 1.7), _eye(Vector3(242.0, 0.0, 466.6), 0.5), 70.0)
+	await _shot("mouth_z466_west", _eye(Vector3(238.0, 0.0, 467.5), 1.7), _eye(Vector3(224.0, 0.0, 466.0), 0.4), 70.0)
+	await _shot("mouth_wide", _eye(Vector3(214.0, 0.0, 480.0), 30.0), _eye(Vector3(228.0, 0.0, 468.0), 0.0), 60.0)
+	# A frontage with a walled, railed plot on it, to judge the wall and railing work against
+	# docs/art_targets/street_target_01.webp.
+	await _shot("frontage_wall", _eye(Vector3(140.0, 0.0, 487.0), 1.7), _eye(Vector3(134.0, 0.0, 481.0), 1.1), 60.0)
+	# Standing at a gate, which is how close a player gets to a frontage: the test of the wall,
+	# railing, hedge, path and door together against docs/art_targets/street_target_01.webp.
+	await _shot("frontage_gate", _eye(Vector3(132.0, 0.0, 485.4), 1.65), _eye(Vector3(133.6, 0.0, 481.2), 1.2), 58.0)
+	# A gate with its leaves hung and standing open, which the frontage_gate plot's yard is too
+	# shallow for. Plot 156 on the south row: a railed wall, so a barred gate, with two leaves.
+	# (tests/probe_find_gates.gd lists the plots that have one.)
+	await _shot("gate_leaf", _eye(Vector3(-408.2, 0.0, -690.2), 1.65), _eye(Vector3(-408.2, 0.0, -683.8), 1.0), 52.0)
+	await _shot("mouth_tip_wide",_eye(Vector3(212.0, 0.0, 478.0), 22.0), _eye(Vector3(221.0, 0.0, 470.0), 0.0), 60.0)
+	await _shot("fork_island_stub",_eye(Vector3(201.5, 0.0, 488.5), 1.7), _eye(Vector3(197.5, 0.0, 492.6), 0.2), 65.0)
 	# Lane z 405's dead end, from the doorstep of house 4454, whose door's line the wall's end stood on.
 	await _shot("dead_end_z405_door", _eye(Vector3(310.45, 0.0, 399.7), 1.6), _eye(Vector3(310.45, 0.0, 405.0), 0.7), 75.0)
 	# --approach=box,box: each of those businesses as someone walking along its pavement sees it,

@@ -1,4 +1,4 @@
-extends Node3D
+﻿extends Node3D
 ## Map 1 grey blockout: the whole 5 km² plan at true size, to walk and fly through.
 ## It is a layout test, not art. Everything comes from two generated files
 ## (tools/map_plan/build_map1_blockout.py, from data/map1/map1_plan.json):
@@ -31,6 +31,12 @@ const STREET_TRIAL_AT := Vector2(112.0, 447.0)
 const SHOP_ROW_CROSSING := 168.6
 ## The paved apron between a footway and a plaza behind it: it falls from the footway's
 ## height to the plaza's over this distance (about 1 in 15).
+## The ten edges that make Tram street's one continuous pavement, from its straight length through
+## the fork and the compound mouth to the diagonal beyond. They share the shop row's footway
+## material; everything else keeps its own finish.
+const TRAM_PAVED: Array[String] = ["tram street south", "tram fork south", "tram fork island lane",
+	"tram fork island stub", "tram mouth tip", "tram mouth point", "tram mouth point diagonal",
+	"tram diagonal south a", "tram diagonal south", "tram diagonal south b"]
 const PLAZA_APRON := 2.0
 const PLAN_PATH := "res://data/map1/map1_plan.json"
 const DATA_PATH := "res://data/map1/generated/map1_blockout.json"
@@ -89,6 +95,10 @@ func _ready() -> void:
 	var started := Time.get_ticks_msec()
 	plan = _read_json(PLAN_PATH)
 	data = _read_json(DATA_PATH)
+	# (A test may name another export to compare builds without touching the map's own:
+	# -- --map1-export=<path>.)
+	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with("--map1-export="): data = _read_json(arg.trim_prefix("--map1-export="))
 	if plan.is_empty() or data.is_empty():
 		push_error("Map 1 blockout: run  python tools/map_plan/build_map1_blockout.py  first")
 		return
@@ -256,6 +266,16 @@ func _lay_street_edges() -> void:
 			add_child(street)
 			street.lay(self, edge, side)
 			street.set_meta("edge", edge)
+			# (A kerb laid as one side of a narrow strip, the tram fork's south kerb: the other side is not there.)
+			if edge.has("only_side"):
+				if not is_equal_approx(side, float(edge.only_side)):
+					street.runs.clear()
+					street.corners.clear()
+				elif street.end_patch.is_empty():
+					for point: Array in edge.get("end_patch", []): street.end_patch.append(Vector2(float(point[0]), float(point[1])))
+			elif edge.name == "tram street south" and side == STREET_TRIAL_SIDE:
+				# (The road round the inside of the fork's bend, past the street's end: laid with its road.)
+				for point: Array in edge.get("end_patch", []): street.end_patch.append(Vector2(float(point[0]), float(point[1])))
 			street.median = float(edge.get("median", 0.0))
 			# A lane has a footway only where there is room for one: where a building stands
 			# nearer its kerb than the footway is wide, the footway is as wide as the room, and
@@ -282,9 +302,27 @@ func _lay_street_edges() -> void:
 				# that carries on on the other; the road's surface runs on to the tram bed's edge.
 				if not street.runs.is_empty(): street.low_end_at = (street.runs[street.runs.size() - 1] as Vector2).y
 				for point: Array in edge.get("end_patch", []): street.end_patch.append(Vector2(float(point[0]), float(point[1])))
+			elif str(edge.name) in TRAM_PAVED:
+				# Tram street and its fork take the same fine asphalt footway as the shop row: it is
+				# a main street, and the residential lanes it meets keep their plainer finish, so the
+				# change at lane x 224's mouth is a real boundary between two kinds of street rather
+				# than a seam. (Scope agreed with Codex, 2026-11-16.)
+				if ResourceLoader.exists("res://scripts/map1/map1_shop_footway.tres"): street.footway_material = load("res://scripts/map1/map1_shop_footway.tres")
+				street.flat_paving = true
 			elif edge.name == "shop row west":
 				# The shop row carried on to the Outer ring: the same paving, no shops, so no forecourt.
 				if ResourceLoader.exists("res://scripts/map1/map1_shop_footway.tres"): street.footway_material = load("res://scripts/map1/map1_shop_footway.tres")
+			# The kerb's own surface, on every street. The shared material is Codex's, the height
+			# marking it reads out of the vertex alpha and the casting tones round the curves are
+			# this side's; all three default off, so this assignment is the only thing that turns
+			# them on anywhere. It began on Tram street's ten edges alone and was accepted there
+			# on both sides, which left every other kerb in the city flat grey beside a street
+			# that looked like precast concrete — a worse mismatch than the one it fixed. Judged
+			# again on three streets of other kinds before it was widened. (2026-11-16.)
+			if ResourceLoader.exists("res://scripts/map1/map1_kerb_surface.tres"):
+				street.kerb_surface_material = load("res://scripts/map1/map1_kerb_surface.tres")
+				street.marked_kerb = true
+				street.cast_corner_tones = true
 			if edge.has("end_corner_r"):
 				# Its far end turns a quarter round into the cross road's kerb line and stops there.
 				var length := 0.0
@@ -296,6 +334,14 @@ func _lay_street_edges() -> void:
 				street.fillet_end = true
 				# (The road's surface runs on to the cross road's kerb line, where its gutter's outer edge is.)
 				street.ribbon_end = length + street.fillet_r + Street.GUTTER_WIDE
+			if edge.has("end_fillet") and not street.runs.is_empty() and (not edge.has("end_fillet_side") or is_equal_approx(side, float(edge.end_fillet_side))):
+				# A kerb that turns round a rounded tip at its end and hands on to another (the
+				# tram fork's island): radius, degrees turned, pieces round it.
+				street.fillet_at = (street.runs[street.runs.size() - 1] as Vector2).y
+				street.fillet_r = float(edge.end_fillet[0])
+				street.fillet_angle = deg_to_rad(float(edge.end_fillet[1]))
+				street.fillet_steps = int(edge.end_fillet[2])
+				if edge.has("end_fillet_footway"): street.fillet_footway = float(edge.end_fillet_footway)
 			street_edges.append(street)
 		var south: Node3D = street_edges[-2]
 		var north: Node3D = street_edges[-1]
@@ -303,6 +349,7 @@ func _lay_street_edges() -> void:
 		south.opposite_zones = north.mouth_zones()
 		if edge.name == "homes street trial": _turning_circle(edge, south, north)
 	_islands()
+	_cache_edge_reach()
 
 
 ## Where a street ends in a turning circle (the map's space of that kind at its last point):
@@ -311,6 +358,8 @@ func _lay_street_edges() -> void:
 const CIRCLE_KERB_R := 9.0
 const CIRCLE_FLARE_R := 3.0
 var circle_edge: Node3D
+## The two street sides that run into the circle, kept from where they are built.
+var circle_sides: Array[Node3D] = []
 
 func _turning_circle(edge: Dictionary, first: Node3D, second: Node3D) -> void:
 	var last: Array = edge.points[edge.points.size() - 1]
@@ -347,6 +396,18 @@ func _turning_circle(edge: Dictionary, first: Node3D, second: Node3D) -> void:
 		to_angle = keep + TAU
 	var ring := Street.new()
 	ring.name = "TurningCircleEdge"
+	# The round carrier is built by its own path and so never saw the kerb assignment the other
+	# 95 families get — one plain kerb in a city of precast ones, which is the mismatch the
+	# widening existed to remove. It takes the same three properties, set here before the arc is
+	# made. `make_round` feeds the arc through `_unit`, which already writes each exposed
+	# vertex's height above the ground sampled at the kerb face and resets the caps and footway
+	# to alpha 1, so no Street change is needed; and because the ring never touches `_piece`,
+	# `cast_corner_tones` adds no colour of its own here. (Codex checked that path before
+	# clearing this, 2026-11-16; the ring gets its own native pair.)
+	if ResourceLoader.exists("res://scripts/map1/map1_kerb_surface.tres"):
+		ring.kerb_surface_material = load("res://scripts/map1/map1_kerb_surface.tres")
+		ring.marked_kerb = true
+		ring.cast_corner_tones = true
 	add_child(ring)
 	ring.make_round(self, centre, CIRCLE_KERB_R, from_angle, to_angle, float(first.footway_wide))
 	var room := _room_behind(ring)
@@ -354,14 +415,34 @@ func _turning_circle(edge: Dictionary, first: Node3D, second: Node3D) -> void:
 	ring.set_meta("edge", {"name": "turning circle", "exact": false, "points": [[centre.x - 12.0, centre.y - 12.0], [centre.x + 12.0, centre.y + 12.0]]})
 	street_edges.append(ring)
 	circle_edge = ring
+	# The two sides that actually run into this circle, kept because they are known here and
+	# nowhere else. `_circle_asphalt()` used to look for them by gathering every edge in the map
+	# with `fillet_at >= 0` and giving up unless exactly two came back — but `end_corner_r` and
+	# `end_fillet` set that same flag on shop and tram corners that have nothing to do with the
+	# circle. Nine edges carry it, so the selector gave up every time and the circle's road was
+	# never laid: flat picture ground beside textured approaches, for want of knowing which two.
+	# (Codex spotted the selector, 2026-11-16; tests/probe_circle_asphalt.gd counted the nine.)
+	circle_sides = [first, second]
+	# The ring and its own two approaches take Codex's local asphalt footway: the approved
+	# street photograph has a dark granular footway here and ours is still flat FOOTWAY vertex
+	# colour, which is what shows beside the textured road in the circle views. Not the shop
+	# row's tiles — this is a residential end, and it keeps its own finish. The three of them
+	# get the material, the vertex tone for it to tint from, and flat shading, and nothing else
+	# in the map changes. Guarded, so a checkout without Codex's resource still builds.
+	# (Its interface request, 2026-11-16; the shader and material are its own.)
+	if ResourceLoader.exists("res://scripts/map1/map1_local_footway_asphalt.tres"):
+		for street: Node3D in [ring, first, second]:
+			street.footway_material = load("res://scripts/map1/map1_local_footway_asphalt.tres")
+			street.retain_footway_color = true
+			street.flat_paving = true
 
 
 ## The circle's road surface, after both sides and the ring are built.
 func _circle_asphalt() -> void:
 	if circle_edge == null: return
-	var sides: Array[Node3D] = []
-	for street: Node3D in street_edges:
-		if float(street.fillet_at) >= 0.0: sides.append(street)
+	# The circle's own two approach sides, recorded where they were known, rather than every
+	# edge in the map that happens to carry a fillet.
+	var sides: Array[Node3D] = circle_sides
 	if sides.size() != 2: return
 	var lays: Node3D = sides[0] if sides[0].side == STREET_TRIAL_SIDE else sides[1]
 	var other: Node3D = sides[1] if lays == sides[0] else sides[0]
@@ -398,7 +479,9 @@ func _circle_asphalt() -> void:
 func _islands() -> void:
 	var exact: Array[Node3D] = []
 	for street: Node3D in street_edges:
-		if bool((street.get_meta("edge") as Dictionary).get("exact", false)) and not street.runs.is_empty(): exact.append(street)
+		var its: Dictionary = street.get_meta("edge")
+		# (Not a kerb laid on its own: it is no lane with a neighbour.)
+		if bool(its.get("exact", false)) and not street.runs.is_empty() and not its.has("only_side"): exact.append(street)
 	var narrow: Array = []
 	var wide: Array = []
 	for a: Node3D in exact:
@@ -606,6 +689,15 @@ func _build_street_edges() -> void:
 	_find_noses()
 	for street: Node3D in street_edges:
 		_build_one(street)
+		# One traced paved surface, where footways would overlap or a wall stands in the way (the tram
+		# fork's island and the inside of its bend): built with the side that carries it.
+		var edge: Dictionary = street.get_meta("edge")
+		if edge.has("paving") and not street.runs.is_empty() and is_equal_approx(float(street.side), float(edge.get("paving_side", edge.get("only_side", 1.0)))):
+			var outline := PackedVector2Array()
+			for point: Array in edge.paving: outline.append(Vector2(float(point[0]), float(point[1])))
+			var faces := PackedInt32Array()
+			for index: Variant in edge.get("paving_faces", []): faces.append(int(index))
+			street.paving(outline, faces)
 	_circle_asphalt()
 
 
@@ -614,19 +706,43 @@ func _build_one(street: Node3D) -> void:
 	var first: bool = street.side == STREET_TRIAL_SIDE
 	var entrances: Array = _carports_near(edge)
 	entrances.append_array(street.car_parks(4.2))
+	# A lowered kerb the map asks for by name: at a front door that opens straight onto a lane too
+	# narrow for a footway, so the kerb's top meets the house's own doorstep (lane x 224, house 4474).
+	for entry: Dictionary in edge.get("entrances", []):
+		entrances.append({"at": Vector3(float(entry.x), 0.0, float(entry.z)), "wide": float(entry.get("wide", 1.8)), "what": str(entry.get("what", "door"))})
 	if edge.name == KobanLane.EDGE.name:
 		# A drain and a walking edge serve the terrace. The existing police beacon is the landmark here.
 		if first: street.build(entrances, ["grate","asphalt"])
 		else: street.build(entrances, [])
 	elif edge.name == "turning circle":
 		street.build(entrances, [])
+	elif edge.has("only_side"):
+		# A kerb on its own (the tram fork's south kerb): no ribbon of road, but the patch of road
+		# given with it; and behind its footway a wedge of paving where the footway it carries on
+		# from is wider, narrowing to nothing at its far end.
+		if street.runs.is_empty(): return
+		var kit: Array = ["patch", "pole"]
+		if bool(edge.get("grate", false)): kit.append("grate")
+		street.build(entrances, kit)
+		var wider := float(edge.get("footway_from", float(street.footway_wide))) - float(street.footway_wide)
+		if wider > 0.02:
+			var run: Vector2 = street.runs[0]
+			var back := float(street.half) + float(street.footway_wide)
+			street.wedge(run.x, run.y, back, back + wider, back)
+		# (Or the other way: the footway it hands on to is wider, and the wedge grows to it.)
+		var grows := float(edge.get("footway_to", float(street.footway_wide))) - float(street.footway_wide)
+		if grows > 0.02:
+			var run: Vector2 = street.runs[0]
+			var back := float(street.half) + float(street.footway_wide)
+			street.wedge(run.x, run.y, back, back, back + grows)
 	elif edge.name == "shop row west":
 		# The shop row's road carried on: its edge line too. The first side lays the road.
 		if first: street.build(entrances, ["asphalt"])
 		else: street.build(entrances, [])
 	elif bool(edge.get("exact", false)):
 		# A lane laid between built streets: too narrow for an edge line.
-		if first: street.build(entrances, ["asphalt", "no line"])
+		# (The pole line goes down one side of a lane, as it does on a real one: the first side.)
+		if first: street.build(entrances, ["asphalt", "no line", "pole"])
 		else: street.build(entrances, [])
 		for piece: Dictionary in street.get_meta("infill", []):
 			street.infill(float(piece.s0), float(piece.s1), float(piece.out0), float(piece.out1))
@@ -703,9 +819,72 @@ func _forecourt_deep(street: Node3D) -> float:
 
 
 ## How high the paving of a built street stands above the ground at a point (0 off it).
+## The reach of each built edge, worked out once, so a room query does not run the full
+## calculation against every street in the map. These are conservative bounds and nothing more:
+## whatever they let through is still decided by the edge's own `plot_gap` and `lift_at`, which
+## are unchanged. (Asked for by Codex 2026-11-16, after its count showed these two queries scan
+## every side in the map for every house. The bounds are built only after `_lay_street_edges` has
+## finished, because `_islands` and the forecourt rules change widths during that setup.)
+## On the map as it stands that is 191 sides: 183 with a box and 8 always asked.
+##
+## A straight edge and a round one get a box; a bent one gets none and is always asked, because
+## at an internal bend `beside` combines one segment's frame with the next one's tangent, and a
+## box round the centre line grown by the lateral reach is not provably conservative there.
+## Bounds are inclusive at both ends, not Rect2's half-open maximum.
+var _gap_reach: Array = []        # [street, min_x, min_z, max_x, max_z]
+var _lift_reach: Array = []
+var _gap_always: Array[Node3D] = []
+var _lift_always: Array[Node3D] = []
+const GAP_BEYOND := 12.0          # plot_gap answers out to half + footway + this
+## And a box must reach past the centre line's own ends as well as out to its side: `beside`
+## lets a point stand `along_tolerance` (0.2 m) beyond an end and still count, so a rotated
+## frontage can be answered by a cap that a radius-only box would have rejected. 1 mm of slack
+## on top for the arithmetic. (Codex's correction, 2026-11-16.)
+const BESIDE_SLACK := 0.201
+
+func _cache_edge_reach() -> void:
+	_gap_reach.clear()
+	_lift_reach.clear()
+	_gap_always.clear()
+	_lift_always.clear()
+	for street: Node3D in street_edges:
+		var gap_out := float(street.half) + float(street.footway_wide) + GAP_BEYOND
+		var lift_out := float(street.half) + float(street.footway_wide) + float(street.forecourt)
+		var does_lift: bool = float(street.forecourt) > 0.0      # lift_at returns 0 without one
+		if bool(street.is_round):
+			var middle: Vector2 = street.round_centre
+			_gap_reach.append([street, middle.x - gap_out, middle.y - gap_out, middle.x + gap_out, middle.y + gap_out])
+			if does_lift: _lift_reach.append([street, middle.x - lift_out, middle.y - lift_out, middle.x + lift_out, middle.y + lift_out])
+			continue
+		var edge: Dictionary = street.get_meta("edge", {})
+		var pts: Array = edge.get("points", [])
+		if pts.size() != 2:
+			_gap_always.append(street)
+			if does_lift: _lift_always.append(street)
+			continue
+		var ax := float(pts[0][0])
+		var az := float(pts[0][1])
+		var bx := float(pts[1][0])
+		var bz := float(pts[1][1])
+		# A line of no length is not a straight edge we can certify: hand it to the always-asked
+		# list and let the unchanged narrow phase keep whatever it answers today.
+		if absf(bx - ax) < 1e-6 and absf(bz - az) < 1e-6:
+			_gap_always.append(street)
+			if does_lift: _lift_always.append(street)
+			continue
+		gap_out += BESIDE_SLACK
+		lift_out += BESIDE_SLACK
+		_gap_reach.append([street, minf(ax, bx) - gap_out, minf(az, bz) - gap_out, maxf(ax, bx) + gap_out, maxf(az, bz) + gap_out])
+		if does_lift: _lift_reach.append([street, minf(ax, bx) - lift_out, minf(az, bz) - lift_out, maxf(ax, bx) + lift_out, maxf(az, bz) + lift_out])
+
+
 func paving_lift(x: float, z: float) -> float:
 	var lift := 0.0
-	for street: Node3D in street_edges: lift = maxf(lift, float(street.lift_at(Vector3(x, 0.0, z))))
+	var point := Vector3(x, 0.0, z)
+	for entry: Array in _lift_reach:
+		if x < float(entry[1]) or x > float(entry[3]) or z < float(entry[2]) or z > float(entry[4]): continue
+		lift = maxf(lift, float((entry[0] as Node3D).lift_at(point)))
+	for street: Node3D in _lift_always: lift = maxf(lift, float(street.lift_at(point)))
 	return lift
 
 
@@ -713,7 +892,10 @@ func paving_lift(x: float, z: float) -> float:
 ## built edge runs in front of it.
 func footway_gap(front: Vector3) -> float:
 	var gap := INF
-	for street: Node3D in street_edges: gap = minf(gap, float(street.plot_gap(front)))
+	for entry: Array in _gap_reach:
+		if front.x < float(entry[1]) or front.x > float(entry[3]) or front.z < float(entry[2]) or front.z > float(entry[4]): continue
+		gap = minf(gap, float((entry[0] as Node3D).plot_gap(front)))
+	for street: Node3D in _gap_always: gap = minf(gap, float(street.plot_gap(front)))
 	return gap
 
 
@@ -920,20 +1102,83 @@ func _build_shapes() -> void:
 		add_child(body)
 
 
+## A fixed wobble, so the one mesh every tree shares is not symmetrical. Deterministic, because
+## 9,776 instances share it: the variety between trees comes from their own turn, scale and
+## squash, and this only has to stop each single tree from being a solid of revolution.
+static func _tree_wobble(a: int, b: int) -> float:
+	var n: float = sin(float(a) * 12.9898 + float(b) * 78.233) * 43758.5453
+	return (n - floor(n)) - 0.5
+
+
+## The crown. It was a sphere — 8 segments by 5 rings, 2.5 m across and 6.4 m tall, which is a
+## balloon on a stick and reads as one from any angle. Same ring and segment counts, so the same
+## 80 triangles for 9,776 instances, but the profile is pushed about: each ring takes its own
+## radius, every vertex is nudged in and out, and the whole thing is flattened to 4.2 m because
+## a street tree is broader than it is tall. The outline is what tells you it is not a ball, and
+## the outline costs nothing. (Street trees, agreed split with Codex, 2026-11-16.)
+static func _tree_crown_mesh() -> ArrayMesh:
+	var radial := 8
+	var rings := 5
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var point := func(ring: int, seg: int) -> Vector3:
+		var phi: float = PI * float(ring) / float(rings)
+		var theta: float = TAU * float(seg % radial) / float(radial)
+		# Each ring its own width, so the mass is uneven up the tree rather than tapering evenly.
+		var belly: float = 1.0 + 0.18 * _tree_wobble(ring, 11)
+		var out: float = sin(phi) * 2.5 * belly * (1.0 + 0.16 * _tree_wobble(ring, seg % radial))
+		var up: float = cos(phi) * 2.1
+		# The lower edge droops, as foliage does under its own weight.
+		if phi > PI * 0.55: up -= 0.35 * sin(phi)
+		return Vector3(cos(theta) * out, up, sin(theta) * out)
+	for ring: int in rings:
+		for seg: int in radial:
+			var a: Vector3 = point.call(ring, seg)
+			var b: Vector3 = point.call(ring + 1, seg)
+			var c: Vector3 = point.call(ring + 1, seg + 1)
+			var d: Vector3 = point.call(ring, seg + 1)
+			for v: Vector3 in [a, b, c]: tool.add_vertex(v)
+			for v: Vector3 in [a, c, d]: tool.add_vertex(v)
+	tool.generate_normals()
+	return tool.commit()
+
+
+## The trunk: five sided, tapered, with a flare where it meets the ground, and no cap on top
+## because the crown sits over it. 30 triangles against the six-sided cylinder's 36.
+##
+## The two triangles of each band are wound `a, c, b` and `a, d, c`, which is the opposite hand
+## from the crown's. Written the crown's way first, every one of the thirty faces and all ninety
+## normals pointed **inward** and the trunk was inside out — invisible in a 1600x900 street shot,
+## obvious to a mesh check. (Codex, 2026-11-16, which also said not to reach for double-sided
+## culling to hide it: the winding was wrong, not the convention.)
+static func _tree_trunk_mesh() -> ArrayMesh:
+	var sides := 5
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	tool.set_smooth_group(-1)
+	var rung: Array[float] = [-1.6, -1.1, 0.4, 1.6]          # metres about the trunk's middle
+	var wide: Array[float] = [0.38, 0.26, 0.20, 0.15]        # the flare, then a steady taper
+	var point := func(level: int, seg: int) -> Vector3:
+		var theta: float = TAU * float(seg % sides) / float(sides)
+		var out: float = wide[level] * (1.0 + 0.10 * _tree_wobble(level, seg % sides))
+		return Vector3(cos(theta) * out, rung[level], sin(theta) * out)
+	for level: int in rung.size() - 1:
+		for seg: int in sides:
+			var a: Vector3 = point.call(level, seg)
+			var b: Vector3 = point.call(level + 1, seg)
+			var c: Vector3 = point.call(level + 1, seg + 1)
+			var d: Vector3 = point.call(level, seg + 1)
+			for v: Vector3 in [a, c, b]: tool.add_vertex(v)
+			for v: Vector3 in [a, d, c]: tool.add_vertex(v)
+	tool.generate_normals()
+	return tool.commit()
+
+
 func _build_trees() -> void:
 	var list: Array = data.trees
 	if list.is_empty(): return
-	var trunk_mesh := CylinderMesh.new()
-	trunk_mesh.top_radius = 0.16
-	trunk_mesh.bottom_radius = 0.26
-	trunk_mesh.height = 3.2
-	trunk_mesh.radial_segments = 6
-	trunk_mesh.rings = 1
-	var crown_mesh := SphereMesh.new()
-	crown_mesh.radius = 2.5
-	crown_mesh.height = 6.4
-	crown_mesh.radial_segments = 8
-	crown_mesh.rings = 5
+	var trunk_mesh := _tree_trunk_mesh()
+	var crown_mesh := _tree_crown_mesh()
 	var trunks := MultiMesh.new()
 	trunks.transform_format = MultiMesh.TRANSFORM_3D
 	trunks.mesh = trunk_mesh
@@ -952,10 +1197,22 @@ func _build_trees() -> void:
 		var turn := Basis(Vector3.UP, rng.randf() * TAU)
 		trunks.set_instance_transform(i, Transform3D(turn * Basis.from_scale(Vector3(scale, scale, scale)), at + Vector3.UP * 1.6 * scale))
 		var squash := Vector3(scale * rng.randf_range(0.85, 1.2), scale * rng.randf_range(0.85, 1.25), scale * rng.randf_range(0.85, 1.2))
-		crowns.set_instance_transform(i, Transform3D(turn * Basis.from_scale(squash), at + Vector3.UP * (3.0 * scale + 2.4 * squash.y)))
-		# Muted olive, each a little different.
-		var tone := rng.randf_range(-0.035, 0.035)
-		crowns.set_instance_color(i, Color(0.27 + tone, 0.33 + tone, 0.20 + tone * 0.5))
+		# The crown is 4.2 m tall now rather than 6.4, so it sits lower to keep its underside
+		# overlapping the trunk's top by about the same amount as before.
+		crowns.set_instance_transform(i, Transform3D(turn * Basis.from_scale(squash), at + Vector3.UP * (3.0 * scale + 1.5 * squash.y)))
+		# Every crown was one muted olive within 0.035 of its neighbour, which at nine thousand
+		# instances reads as a plantation of one clone. A real run of trees varies in how deep
+		# the green is and in how warm it is — a sycamore beside a zelkova beside something
+		# half in shade — so both move here, independently: how light the whole crown is, and
+		# how far it leans to yellow or to blue-green. The spread is wide enough to break the
+		# clone and narrow enough that none of them stops looking like a tree.
+		# One draw from the stream, as the single `tone` draw was, and the second value from a
+		# hash of the tree's own index. Two draws would advance the stream twice and every tree
+		# after the first would get a different turn and squash than it had — a silent re-roll
+		# of the whole map's poses, smuggled in by a colour change. (Codex, 2026-11-16.)
+		var light := rng.randf_range(0.78, 1.28)
+		var warm := lerpf(-0.035, 0.055, _tree_wobble(i, 7) + 0.5)
+		crowns.set_instance_color(i, Color((0.27 + warm) * light, 0.33 * light, (0.20 - warm * 0.6) * light))
 	var trunk_instance := MultiMeshInstance3D.new()
 	trunk_instance.name = "TreeTrunks"
 	trunk_instance.multimesh = trunks

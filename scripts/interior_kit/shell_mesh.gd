@@ -78,15 +78,28 @@ func triangle(a: Vector3, b: Vector3, c: Vector3, outward: Vector3, color: Color
 
 ## A box of `size` centred on `centre`, both in the space of `frame`. `faces` may give a
 ## different colour to one side: keys "+x" "-x" "+y" "-y" "+z" "-z" (the frame's own axes).
-func box(frame: Transform3D, centre: Vector3, size: Vector3, color: Color, faces: Dictionary = {}) -> void:
+func box(frame: Transform3D, centre: Vector3, size: Vector3, color: Color, faces: Dictionary = {}, encode_wall_height: bool = false) -> void:
 	var h := size * 0.5
 	var at: Array[Vector3] = []
 	at.resize(8)
 	for n: int in 8: at[n] = frame * (centre + _CORNERS[n] * h)
 	var plain := faces.is_empty()
+	# Explicit plate metadata only. Other box output keeps the native path.
+	var plate_ticks := Rect2i()
+	var plate_palette := -1
+	if faces.has("_nameplate"):
+		var metadata: Variant = faces["_nameplate"]
+		if not encode_wall_height and metadata is Dictionary and str(metadata.get("face", "")) == "-z" and metadata.get("ticks") is Rect2i:
+			plate_ticks = metadata.ticks
+			plate_palette = int(metadata.get("palette", -1))
+			if plate_ticks.position.x < 0 or plate_ticks.position.y < 0 or plate_ticks.end.x > 255 or plate_ticks.end.y > 255 or plate_ticks.size.x <= 0 or plate_ticks.size.y <= 0 or plate_palette < 0 or plate_palette > 2:
+				plate_palette = -1
+		if plate_palette < 0:
+			push_error("Nameplate metadata requires an unmarked -z face, valid byte-grid ticks and palette0..2")
 	for side: Array in _SIDES:
 		var normal: Vector3 = frame.basis[int(side[4])] * float(side[5])
 		var paint: Color = color if plain else faces.get(side[6], color)
+		var plate_face := plate_palette >= 0 and str(side[6]) == "-z"
 		var first := points.size()
 		points.push_back(at[side[0]])
 		points.push_back(at[side[1]])
@@ -94,7 +107,17 @@ func box(frame: Transform3D, centre: Vector3, size: Vector3, color: Color, faces
 		points.push_back(at[side[3]])
 		for i: int in 4:
 			normals.push_back(normal)
-			colors.push_back(paint)
+			var vertex_colour := paint
+			if encode_wall_height:
+				var height := (_CORNERS[int(side[i])].y + 1.0) * h.y
+				vertex_colour.a = 0.2 + 0.3 * height
+			elif plate_face:
+				var corner: Vector3 = _CORNERS[int(side[i])]
+				var u := plate_ticks.end.x if corner.x < 0.0 else plate_ticks.position.x
+				var v := plate_ticks.position.y if corner.y > 0.0 else plate_ticks.end.y
+				# Prebias preserves the intended endpoint bytes through RGBA8 truncation.
+				vertex_colour = Color((float(u) + 0.5) / 255.0, (float(v) + 0.5) / 255.0, (float(plate_palette) + 0.5) / 255.0, 0.8)
+			colors.push_back(vertex_colour)
 		indices.push_back(first)
 		indices.push_back(first + 2)
 		indices.push_back(first + 1)

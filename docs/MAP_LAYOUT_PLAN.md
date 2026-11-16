@@ -1,5 +1,7 @@
 # Shinrai map layout: recommendation
 
+> **Older plan (note added 2026-11-12).** The owner has since chosen one landscape map of 5 km² with up to 43 players and a 46-minute raid; see `docs/MAP1_MEASURED_PLAN.md` and `docs/GAME_DESIGN.md`. The map sizes, player counts, spawns and extracts below are superseded. The XP, skill and extract-type ideas and the fight-rate maths are still useful: nothing newer has replaced them.
+
 ## Your three questions
 
 **How big?** Plan the world at the full 9.6 km² from `CITY_DISTRICTS_PLAN.md`, but keep each raid map to about 1.0–1.5 km². The first map, **Midori Ward**, is about 1.1 km². What makes a raid feel alive is how many separate groups share each square kilometre. Your trailer default of 12 players in squads of 4 on 9.6 km² comes to about 0.3 groups per km², or one fight every 3+ hours. Gray Zone Warfare got "giant empty map" complaints at a similar density. So the world is big, and each raid is dense. You can see the rest of the city from inside the raid, and you unlock it by levelling up.
